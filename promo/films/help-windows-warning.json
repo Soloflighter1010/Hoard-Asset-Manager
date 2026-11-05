@@ -1,0 +1,300 @@
+{
+ "title": "Help: \"Windows protected your PC\"",
+ "wiki": "Troubleshooting#windows-protected-your-pc",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "“Windows protected your PC”",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Choose More info",
+    "Choose Run anyway",
+    "If security software stops Hoard, allow it there"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "「WindowsによってPCが保護されました」",
+   "steps": [
+    "詳細情報を選ぶ",
+    "実行を選ぶ",
+    "セキュリティソフトが止めるなら、そこで許可する"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "“Windows의 PC 보호”",
+   "steps": [
+    "추가 정보 고르기",
+    "실행 고르기",
+    "보안 프로그램이 막으면 거기서 허용하기"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "“Windows protected your PC”",
+     "body": "Or your antivirus stops Hoard. What it means, and what to do."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "「WindowsによってPCが保護されました」",
+     "body": "またはアンチウイルスがHoardを止める。その意味と、すること。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "“Windows의 PC 보호”",
+     "body": "또는 백신이 Hoard를 막아요. 그 뜻과 할 일이에요."
+    }
+   }
+  },
+  {
+   "type": "hwindow",
+   "bars": 3.5,
+   "kind": "dialog",
+   "step": 1,
+   "clicks": [
+    "l0"
+   ],
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Choose More info",
+     "body": "Windows says this about apps from a publisher it doesn't know well yet. Hoard is code-signed.",
+     "win": [
+      {
+       "title": "Windows protected your PC",
+       "links": [
+        "More info"
+       ],
+       "buttons": [
+        {
+         "t": "Don't run"
+        }
+       ]
+      }
+     ],
+     "bar": "Hoard-Setup.exe"
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "詳細情報を選ぶ",
+     "body": "Windowsは、まだよく知らない発行元のアプリにこう表示します。Hoardにはコード署名があります。",
+     "win": [
+      {
+       "title": "WindowsによってPCが保護されました",
+       "links": [
+        "詳細情報"
+       ],
+       "buttons": [
+        {
+         "t": "実行しない"
+        }
+       ]
+      }
+     ],
+     "bar": "Hoard-Setup.exe"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "추가 정보 고르기",
+     "body": "Windows는 아직 잘 모르는 게시자의 앱에 이렇게 표시해요. Hoard는 코드 서명이 되어 있어요.",
+     "win": [
+      {
+       "title": "Windows의 PC 보호",
+       "links": [
+        "추가 정보"
+       ],
+       "buttons": [
+        {
+         "t": "실행 안 함"
+        }
+       ]
+      }
+     ],
+     "bar": "Hoard-Setup.exe"
+    }
+   }
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "dialog",
+   "step": 2,
+   "clicks": [
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Choose Run anyway",
+     "body": "The publisher shows as Hoard's maintainer. The warning fades as more people install Hoard.",
+     "win": [
+      {
+       "title": "Windows protected your PC",
+       "facts": [
+        [
+         "App:",
+         "Hoard-Setup.exe"
+        ],
+        [
+         "Publisher:",
+         "Hoard's maintainer"
+        ]
+       ],
+       "buttons": [
+        {
+         "t": "Run anyway"
+        },
+        {
+         "t": "Don't run"
+        }
+       ]
+      }
+     ],
+     "note": "Hoard's setup opens.",
+     "bar": "Hoard-Setup.exe"
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "実行を選ぶ",
+     "body": "発行元にはHoardのメンテナーが表示されます。インストールする人が増えるにつれて、警告は出なくなります。",
+     "win": [
+      {
+       "title": "WindowsによってPCが保護されました",
+       "facts": [
+        [
+         "アプリ:",
+         "Hoard-Setup.exe"
+        ],
+        [
+         "発行元:",
+         "Hoardのメンテナー"
+        ]
+       ],
+       "buttons": [
+        {
+         "t": "実行"
+        },
+        {
+         "t": "実行しない"
+        }
+       ]
+      }
+     ],
+     "note": "Hoardのセットアップが開きます。",
+     "bar": "Hoard-Setup.exe"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "실행 고르기",
+     "body": "게시자로 Hoard의 관리자가 보여요. 설치하는 사람이 늘수록 경고는 사라져요.",
+     "win": [
+      {
+       "title": "Windows의 PC 보호",
+       "facts": [
+        [
+         "앱:",
+         "Hoard-Setup.exe"
+        ],
+        [
+         "게시자:",
+         "Hoard의 관리자"
+        ]
+       ],
+       "buttons": [
+        {
+         "t": "실행"
+        },
+        {
+         "t": "실행 안 함"
+        }
+       ]
+      }
+     ],
+     "note": "Hoard 설치 프로그램이 열려요.",
+     "bar": "Hoard-Setup.exe"
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 4,
+   "image": "help-blocked-stores",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Allow Hoard in your security software",
+     "body": "If an antivirus, firewall or VPN stops Hoard connecting, Stores says so. Allow Hoard and the browser it installs."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "セキュリティソフトでHoardを許可",
+     "body": "アンチウイルスやファイアウォール、VPNがHoardの接続を止めると、ストアにそう表示されます。Hoardと、Hoardがインストールするブラウザーを許可してください。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "보안 프로그램에서 Hoard 허용",
+     "body": "백신이나 방화벽, VPN이 Hoard의 연결을 막으면 스토어에 그렇게 나와요. Hoard와 Hoard가 설치하는 브라우저를 허용하세요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "error",
+     "pad": 6,
+     "lens": "booth"
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "To be sure",
+     "title": "Check the download",
+     "body": "Hoard is code-signed and open source, and VirusTotal scans every release. The wiki shows how to check a file.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "念のために",
+     "title": "ダウンロードを確かめる",
+     "body": "Hoardにはコード署名があり、オープンソースで、すべてのリリースはVirusTotalでスキャンされます。ファイルの確かめ方はwikiにあります。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "확실히 하려면",
+     "title": "다운로드 확인하기",
+     "body": "Hoard는 코드 서명이 되어 있고 오픈 소스이며, 모든 릴리스는 VirusTotal로 검사해요. 파일을 확인하는 방법은 위키에 있어요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

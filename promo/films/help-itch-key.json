@@ -1,0 +1,343 @@
+{
+ "title": "Help: itch.io's API key",
+ "wiki": "Troubleshooting#itchio-didnt-accept-the-api-key",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "itch.io “didn't accept the API key”",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Make a new API key on itch.io",
+    "Choose Change API key on itch.io's row",
+    "Paste it, then choose Save key"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "itch.io「APIキーを受け付けませんでした」",
+   "steps": [
+    "itch.ioで新しいAPIキーを作る",
+    "itch.ioの行でAPIキーを変更を選ぶ",
+    "貼り付けて、キーを保存を選ぶ"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "itch.io “API 키를 받아들이지 않았어요”",
+   "steps": [
+    "itch.io에서 새 API 키 만들기",
+    "itch.io 줄에서 API 키 변경 고르기",
+    "붙여 넣고 키 저장 고르기"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "itch.io didn't accept the API key",
+     "body": "It was mistyped, cut short, or deleted on itch.io. A new one fixes it."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "itch.ioがAPIキーを受け付けませんでした",
+     "body": "入力の間違いか、途中で切れたか、itch.ioで削除されたか。新しいキーで直ります。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "itch.io가 API 키를 받아들이지 않았어요",
+     "body": "잘못 입력했거나, 잘렸거나, itch.io에서 지웠어요. 새 키로 고쳐져요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-itch-stores",
+   "text": {
+    "en": {
+     "kicker": "What you'll see",
+     "title": "It's on itch.io's row",
+     "body": "In Stores. Hoard reads itch.io with an API key, as itch.io's own app does."
+    },
+    "ja": {
+     "kicker": "表示されるもの",
+     "title": "itch.ioの行に出ます",
+     "body": "ストアに。Hoardはitch.ioのアプリと同じように、APIキーでitch.ioを読みます。"
+    },
+    "ko": {
+     "kicker": "보이는 것",
+     "title": "itch.io 줄에 나와요",
+     "body": "스토어에서요. Hoard는 itch.io 앱처럼 API 키로 itch.io를 읽어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "error",
+     "pad": 6,
+     "lens": "itch"
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "browser",
+   "address": "itch.io/user/settings/api-keys",
+   "step": 1,
+   "clicks": [
+    "b0",
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Make a new API key",
+     "body": "In your usual browser, in your itch.io settings: API keys, then Generate new API key. Copy it.",
+     "win": [
+      {
+       "title": "API keys",
+       "lines": [
+        "Keys for apps that use your account."
+       ],
+       "buttons": [
+        {
+         "t": "Generate new API key",
+         "primary": true
+        }
+       ]
+      },
+      {
+       "title": "API keys",
+       "fields": [
+        {
+         "label": "Your new key",
+         "value": "q7Xz2Lm9…made-up…Rt4Kp"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Copy"
+        }
+       ]
+      }
+     ],
+     "note": "Copied."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "新しいAPIキーを作る",
+     "body": "ふだんのブラウザーで、itch.ioの設定のAPI keysからGenerate new API keyを選び、コピーします。",
+     "win": [
+      {
+       "title": "API keys",
+       "lines": [
+        "Keys for apps that use your account."
+       ],
+       "buttons": [
+        {
+         "t": "Generate new API key",
+         "primary": true
+        }
+       ]
+      },
+      {
+       "title": "API keys",
+       "fields": [
+        {
+         "label": "Your new key",
+         "value": "q7Xz2Lm9…made-up…Rt4Kp"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Copy"
+        }
+       ]
+      }
+     ],
+     "note": "コピーしました。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "새 API 키 만들기",
+     "body": "평소 브라우저에서 itch.io 설정의 API keys에서 Generate new API key를 고르고 복사하세요.",
+     "win": [
+      {
+       "title": "API keys",
+       "lines": [
+        "Keys for apps that use your account."
+       ],
+       "buttons": [
+        {
+         "t": "Generate new API key",
+         "primary": true
+        }
+       ]
+      },
+      {
+       "title": "API keys",
+       "fields": [
+        {
+         "label": "Your new key",
+         "value": "q7Xz2Lm9…made-up…Rt4Kp"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Copy"
+        }
+       ]
+      }
+     ],
+     "note": "복사했어요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-itch-stores",
+   "step": 2,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Choose Change API key",
+     "body": "It's on itch.io's row, in Stores."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "APIキーを変更を選ぶ",
+     "body": "ストアの、itch.ioの行にあります。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "API 키 변경 고르기",
+     "body": "스토어의 itch.io 줄에 있어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "change",
+     "pad": 6,
+     "click": true,
+     "lens": "itch"
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-itch-key",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Paste it, then Save key",
+     "body": "Hoard keeps it protected by your computer, and only ever sends it to itch.io."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "貼り付けて、キーを保存",
+     "body": "Hoardはキーをコンピューターで守って保管し、itch.ioにだけ送ります。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "붙여 넣고 키 저장",
+     "body": "Hoard는 키를 컴퓨터로 보호해서 보관하고, itch.io에만 보내요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "key",
+     "pad": 6
+    },
+    {
+     "at": 7,
+     "box": "save",
+     "pad": 6,
+     "click": true
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-itch-fixed",
+   "text": {
+    "en": {
+     "kicker": "Done",
+     "title": "itch.io reads again",
+     "body": "Its row says how many items it read, and when."
+    },
+    "ja": {
+     "kicker": "完了",
+     "title": "itch.ioがまた読める",
+     "body": "行に、読み込んだ数と日時が表示されます。"
+    },
+    "ko": {
+     "kicker": "완료",
+     "title": "itch.io를 다시 읽어요",
+     "body": "줄에 읽은 개수와 때가 나와요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "meta",
+     "pad": 4,
+     "lens": "itch"
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Still refused?",
+     "title": "Check your security software",
+     "body": "If Hoard says something on this computer stopped it connecting to itch.io, allow Hoard in your antivirus, firewall or VPN.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "それでも拒否される?",
+     "title": "セキュリティソフトを確かめる",
+     "body": "このコンピューターの何かがitch.ioへの接続を止めたと表示されたら、アンチウイルスやファイアウォール、VPNでHoardを許可してください。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "그래도 거부되나요?",
+     "title": "보안 프로그램 확인하기",
+     "body": "이 컴퓨터의 무언가가 itch.io 연결을 막았다고 나오면, 백신이나 방화벽, VPN에서 Hoard를 허용하세요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

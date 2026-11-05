@@ -1,0 +1,336 @@
+{
+ "title": "Help: Payhip's bot check",
+ "wiki": "Troubleshooting#payhip-keeps-showing-a-bot-check",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "Payhip keeps showing a bot check",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Complete the check in the window Payhip opens in",
+    "Or save each shop's library page yourself",
+    "Choose Import pages on Payhip's row"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "Payhipがボットのチェックを何度も表示する",
+   "steps": [
+    "Payhipが開いたウィンドウでチェックを済ませる",
+    "または各ショップのライブラリページを自分で保存",
+    "Payhipの行でページを取り込むを選ぶ"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "Payhip이 봇 확인을 계속 보여 줘요",
+   "steps": [
+    "Payhip이 연 창에서 확인 마치기",
+    "또는 상점마다 라이브러리 페이지를 직접 저장",
+    "Payhip 줄에서 페이지 가져오기 고르기"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "Payhip keeps showing a bot check",
+     "body": "Payhip checks for automated browsers. You can pass the check, or go round it."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "Payhipがボットのチェックを何度も表示する",
+     "body": "Payhipは自動のブラウザーをチェックします。チェックを通るか、回り道をします。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "Payhip이 봇 확인을 계속 보여 줘요",
+     "body": "Payhip은 자동 브라우저를 확인해요. 확인을 통과하거나, 돌아가면 돼요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-payhip-stores",
+   "text": {
+    "en": {
+     "kicker": "What you'll see",
+     "title": "Payhip blocked the browser",
+     "body": "When the check isn't completed, Stores says so on Payhip's row."
+    },
+    "ja": {
+     "kicker": "表示されるもの",
+     "title": "Payhipがブラウザーを止めた",
+     "body": "チェックが済まなかったとき、ストアのPayhipの行にそう表示されます。"
+    },
+    "ko": {
+     "kicker": "보이는 것",
+     "title": "Payhip이 브라우저를 막았어요",
+     "body": "확인을 마치지 못하면 스토어의 Payhip 줄에 그렇게 나와요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "error",
+     "pad": 6,
+     "lens": "payhip"
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 3.5,
+   "kind": "browser",
+   "address": "payhip.com",
+   "step": 1,
+   "clicks": [
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Complete the check",
+     "body": "Do it in the window Payhip opens in. Hoard waits up to 3 minutes, then carries on.",
+     "win": [
+      {
+       "title": "Checking your browser",
+       "lines": [
+        "Complete the check to carry on."
+       ],
+       "buttons": [
+        {
+         "t": "Verify",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard carries on by itself."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "チェックを済ませる",
+     "body": "Payhipが開いたウィンドウで済ませます。Hoardは最大3分待って、続けます。",
+     "win": [
+      {
+       "title": "ブラウザーを確認しています",
+       "lines": [
+        "続けるにはチェックを済ませてください。"
+       ],
+       "buttons": [
+        {
+         "t": "確認",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoardがそのまま続けます。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "확인 마치기",
+     "body": "Payhip이 연 창에서 하세요. Hoard는 최대 3분 기다렸다가 이어서 해요.",
+     "win": [
+      {
+       "title": "브라우저를 확인하고 있어요",
+       "lines": [
+        "계속하려면 확인을 마치세요."
+       ],
+       "buttons": [
+        {
+         "t": "확인",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard가 알아서 이어서 해요."
+    }
+   }
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "dialog",
+   "step": 2,
+   "clicks": [
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Or save the pages yourself",
+     "body": "If Payhip still won't let Hoard in, open each shop's library in your usual browser, scroll to the bottom, and press Ctrl+S.",
+     "win": [
+      {
+       "fields": [
+        {
+         "label": "File name",
+         "value": "Library.html"
+        },
+        {
+         "label": "Save as type",
+         "value": "Webpage, Single File"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Save",
+         "primary": true
+        },
+        {
+         "t": "Cancel"
+        }
+       ]
+      }
+     ],
+     "note": "Each page, of each shop.",
+     "bar": "Save as"
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "またはページを自分で保存",
+     "body": "それでも通れないときは、ふだんのブラウザーで各ショップのライブラリを開き、いちばん下までスクロールしてCtrl+Sを押します。",
+     "win": [
+      {
+       "fields": [
+        {
+         "label": "ファイル名",
+         "value": "Library.html"
+        },
+        {
+         "label": "ファイルの種類",
+         "value": "ウェブページ、1つのファイル"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "保存",
+         "primary": true
+        },
+        {
+         "t": "キャンセル"
+        }
+       ]
+      }
+     ],
+     "note": "各ショップの、各ページを。",
+     "bar": "名前を付けて保存"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "또는 페이지를 직접 저장",
+     "body": "그래도 안 되면 평소 브라우저에서 상점마다 라이브러리를 열고, 맨 아래까지 스크롤한 다음 Ctrl+S를 누르세요.",
+     "win": [
+      {
+       "fields": [
+        {
+         "label": "파일 이름",
+         "value": "Library.html"
+        },
+        {
+         "label": "파일 형식",
+         "value": "웹페이지, 단일 파일"
+        }
+       ],
+       "buttons": [
+        {
+         "t": "저장",
+         "primary": true
+        },
+        {
+         "t": "취소"
+        }
+       ]
+      }
+     ],
+     "note": "상점마다, 페이지마다요.",
+     "bar": "다른 이름으로 저장"
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-payhip-stores",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Choose Import pages",
+     "body": "On Payhip's row in Stores. Import a folder takes them all at once."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "ページを取り込むを選ぶ",
+     "body": "ストアのPayhipの行にあります。フォルダーを取り込むなら、まとめて取り込めます。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "페이지 가져오기 고르기",
+     "body": "스토어의 Payhip 줄에 있어요. 폴더 가져오기는 한꺼번에 가져와요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "import",
+     "pad": 6,
+     "click": true,
+     "lens": "payhip"
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Still stuck?",
+     "title": "Create a support report",
+     "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "それでも解決しない?",
+     "title": "サポートレポートを作成",
+     "body": "設定でサポートレポートを作成を選び、GitHubでissueを開いて添付してください。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "그래도 안 되나요?",
+     "title": "지원 보고서 만들기",
+     "body": "설정에서 지원 보고서 만들기를 고르고, GitHub에서 이슈를 열어 첨부하세요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

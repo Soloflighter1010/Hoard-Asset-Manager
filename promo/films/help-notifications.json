@@ -1,0 +1,224 @@
+{
+ "title": "Help: notifications through Apprise",
+ "wiki": "Troubleshooting#notifications-through-apprise-dont-arrive",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "Notifications through Apprise don't arrive",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "In Settings, choose Send a test",
+    "Read what the service answered",
+    "Check the address on Apprise's page for it"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "Appriseでの通知が届かない",
+   "steps": [
+    "設定でテストを送るを選ぶ",
+    "サービスの答えを読む",
+    "Appriseのそのサービスのページでアドレスを確かめる"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "Apprise 알림이 오지 않아요",
+   "steps": [
+    "설정에서 테스트 보내기 고르기",
+    "서비스의 답 읽기",
+    "Apprise의 그 서비스 페이지에서 주소 확인"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "Notifications through Apprise don't arrive",
+     "body": "A test says which service didn't take it, and what it answered."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "Appriseでの通知が届かない",
+     "body": "テストを送ると、どのサービスが受け付けなかったか、何と答えたかがわかります。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "Apprise 알림이 오지 않아요",
+     "body": "테스트를 보내면 어느 서비스가 받지 않았는지, 뭐라고 답했는지 알 수 있어요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "settings-apprise",
+   "step": 1,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Send a test",
+     "body": "In Settings, under Notifications through Apprise."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "テストを送る",
+     "body": "設定の、Appriseで通知にあります。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "테스트 보내기",
+     "body": "설정의 Apprise로 알림에 있어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "test",
+     "pad": 6,
+     "click": true,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 4,
+   "image": "help-apprise-test",
+   "step": 2,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Read the answer",
+     "body": "It says what the service answered: 401 is a wrong token, 404 an address that isn't there."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "答えを読む",
+     "body": "サービスの答えが表示されます。401はトークンの誤り、404は存在しないアドレスです。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "답 읽기",
+     "body": "서비스가 뭐라고 답했는지 나와요. 401은 잘못된 토큰, 404는 없는 주소예요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "toast",
+     "pad": 6
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "browser",
+   "address": "appriseit.com/services",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Check the address",
+     "body": "Against the service's page in Apprise's documentation, and that this computer can reach the service.",
+     "win": [
+      {
+       "title": "Discord",
+       "lines": [
+        "An address for Discord looks like this:"
+       ],
+       "fields": [
+        {
+         "value": "discord://webhook_id/webhook_token"
+        }
+       ]
+      }
+     ]
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "アドレスを確かめる",
+     "body": "Appriseのドキュメントのそのサービスのページと見比べ、このコンピューターからサービスにつながるか確かめます。",
+     "win": [
+      {
+       "title": "Discord",
+       "lines": [
+        "Discordのアドレスはこういう形です:"
+       ],
+       "fields": [
+        {
+         "value": "discord://webhook_id/webhook_token"
+        }
+       ]
+      }
+     ]
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "주소 확인하기",
+     "body": "Apprise 문서의 그 서비스 페이지와 비교하고, 이 컴퓨터에서 서비스에 연결되는지 확인하세요.",
+     "win": [
+      {
+       "title": "Discord",
+       "lines": [
+        "Discord 주소는 이렇게 생겼어요:"
+       ],
+       "fields": [
+        {
+         "value": "discord://webhook_id/webhook_token"
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Running Hoard from its source?",
+     "title": "Run Setup again",
+     "body": "If Settings says Apprise isn't installed, Setup installs it.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "ソースからHoardを動かしている?",
+     "title": "セットアップをもう一度",
+     "body": "設定にAppriseがインストールされていないと表示されたら、セットアップがインストールします。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "소스에서 Hoard를 실행하나요?",
+     "title": "설정 프로그램을 다시 실행",
+     "body": "설정에 Apprise가 설치되어 있지 않다고 나오면, 설정 프로그램이 설치해요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

@@ -71,6 +71,31 @@ html, body { background: #000; overflow: hidden; }
 .step.now { color: var(--bone); }
 .step.now .n { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
 .step.done .n { background: var(--stone); border-color: var(--stone); color: var(--bone); }
+/* a drawing of a window outside Hoard (a store's page, a system dialog, a terminal): plain shapes and words, never
+   anyone's own design */
+.dw { position: absolute; display: flex; flex-direction: column; gap: 20px; color: #211C18; }
+.dw .wt { font-family: var(--display); font-weight: var(--display-weight, 400); font-size: 40px; line-height: 1.12; }
+.dw .wl { font-size: 25px; line-height: 1.45; color: #6B6157; }
+.dw .wfl { font-size: 21px; font-weight: 700; color: #6B6157; margin-bottom: 8px; }
+.dw .wbox { height: 58px; border-radius: 12px; background: #FFFFFF; border: 2px solid #D2CCC3; display: flex; align-items: center;
+  padding: 0 18px; font-size: 24px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; }
+.dw .wbtns { display: flex; gap: 14px; flex-wrap: wrap; }
+.dw .wb { height: 58px; padding: 0 28px; border-radius: 12px; border: 2px solid #D2CCC3; background: #FFFFFF; font-weight: 700;
+  font-size: 24px; display: flex; align-items: center; white-space: nowrap; }
+.dw .wb.primary { background: #E3DFD8; border-color: #E3DFD8; }
+.dw .wlk { color: #8A5F00; text-decoration: underline; text-underline-offset: .18em; font-weight: 700; font-size: 25px; align-self: flex-start; }
+.dw .wrow { display: flex; align-items: center; gap: 20px; padding: 16px 20px; border-radius: 16px; background: #FFFFFF; border: 2px solid #E3DFD8; }
+.dw .wrow .ic { width: 64px; height: 64px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #211C18; }
+.dw .wrow b { display: block; font-size: 28px; } .dw .wrow span { font-size: 21px; color: #6B6157; }
+.dw .wsr { height: 64px; border-radius: 32px; background: #FFFFFF; border: 2px solid #D2CCC3; display: flex; align-items: center; gap: 14px;
+  padding: 0 24px; font-size: 27px; }
+.dw .wkv { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; font-size: 24px; } .dw .wkv dt { color: #6B6157; } .dw .wkv dd { font-weight: 700; }
+.dw .wterm { font-family: "DejaVu Sans Mono", "Noto Sans Mono CJK JP", monospace; font-size: 23px; line-height: 1.6; color: #E3DACB; white-space: pre-wrap; word-break: break-all; }
+.dw .wterm .m { color: #F0B429; border-radius: 6px; }
+.dw .on { box-shadow: 0 0 0 4px #F0B429; }
+.dw .wb.on { background: #F0B429; border-color: #F0B429; color: #2A1D00; }
+.lookchip { position: absolute; padding: .3em .8em .36em; border-radius: 999px; background: var(--ledge); border: 2px solid var(--seam);
+  font-weight: 700; white-space: nowrap; box-shadow: 0 10px 26px rgba(0,0,0,.4); }
 </style>
 </head>
 <body>
@@ -200,9 +225,10 @@ function lensPlace(s, r, pad) {   // the lens: its size, its place on the frame,
   const sx = wx + (r[0] + r[2] / 2) * z, sy = wy + (r[1] - pad) * z, sb = wy + (r[1] + r[3] + pad) * z;
   const x = HELP ? clamp(sx - lw / 2, wx + 14, wx + ww - 14 - lw) : clamp(sx - lw / 2, Math.max(24, wx - 30), Math.min(W - 24, wx + ww + 30) - lw);
   const bottom = Math.min(H - (HELP ? 50 : 70), wy + wh + 50);
+  const top = HELP ? wy + 8 : 24;   // (in a help video, never over its header)
   let y = sb + 24;
   if (y + lh > bottom) y = sy - 24 - lh;
-  if (y < 24) y = clamp(sb + 24, 24, bottom - lh);
+  if (y < top) y = clamp(sb + 24, top, bottom - lh);
   return { x, y, lw, lh, L, cx: sx, cy: (sy + sb) / 2 };
 }
 function screenDraw(s, t, o) {   // o: { tout, move }
@@ -376,17 +402,60 @@ DRAW.shot = (s, t) => {
   s.pts.forEach((p, i) => { rise(p, t, pts[i], tout, { x: right ? -26 : 26, y: 0, di: .5 }); p.classList.toggle("on", t >= pts[i] && (i === s.pts.length - 1 || t < pts[i + 1])); });
 };
 
+// Hoard's looks: a screen in each of several layouts and colour themes, one after another, each named.
+BUILD.looks = (s, root) => {
+  const tx = T(s.text), right = s.side !== "right";
+  const tw = PORTRAIT ? 480 : 540, th = tw * 950 / 1600, gap = PORTRAIT ? 40 : 36;
+  const gx = PORTRAIT ? (W - 2 * tw - gap) / 2 : (right ? 1830 - 2 * tw - gap : 90), gy = PORTRAIT ? 250 : (H - 2 * th - gap) / 2 + 10;
+  s.tiles = s.images.map((img, i) => {
+    const x = gx + (i % 2) * (tw + gap), y = gy + Math.floor(i / 2) * (th + gap);
+    const w = el("div", "window", `left:${x}px;top:${y}px;width:${tw}px;height:${th}px;opacity:0`,
+      `<img class="shotimg" src="${F.shots}/${img}-${F.film.theme || "dark"}${LANG === "en" ? "" : "-" + LANG}.png" style="transform:scale(${tw / 1600})">`);
+    const c = el("div", "lookchip", `left:${x + 18}px;top:${y + th - 30}px;font-size:${PORTRAIT ? 26 : 24}px;opacity:0`, esc((tx.labels || [])[i] || ""));
+    root.append(w, c);
+    return { w, c };
+  });
+  s.gridBox = [gx, gy, 2 * tw + gap, 2 * th + gap];
+  const capW = PORTRAIT ? W - 120 : 500;
+  const fsT = PORTRAIT ? 88 : 72, fsB = PORTRAIT ? 38 : 32, fsK = PORTRAIT ? 32 : 27;
+  s.cap = el("div", "abs cap", `width:${capW}px`);
+  s.k = el("div", "kicker", `font-size:${fsK}px`, `<b></b>${esc(tx.kicker || "")}`);
+  s.t = words(el("div", "title", `font-size:${fsT}px;margin-top:${fsK * .7}px`, esc(tx.title)));
+  s.b = el("div", "body", `font-size:${fsB}px;margin-top:${fsB * .7}px`, esc(tx.body || ""));
+  s.cap.append(s.k, s.t, s.b);
+  root.appendChild(s.cap);
+  if (PORTRAIT) { s.cap.style.left = "60px"; s.cap.style.top = (gy + 2 * th + gap + 120) + "px"; }
+  else s.cap.style.left = (right ? 120 : W - 120 - capW) + "px";
+};
+DRAW.looks = (s, t) => {
+  const d = s.dur, out = eIn3(P(t, d - .5, d - .05)), tout = d - .55;
+  s.tiles.forEach(({ w, c }, i) => {
+    const t0 = .3 + i * BEAT * 1.25, p = eBack(P(t, t0, t0 + .6), 1.6);
+    w.style.opacity = (P(t, t0, t0 + .2) * (1 - out)).toFixed(3);
+    w.style.transform = `translateY(${30 * (1 - p)}px) scale(${.9 + .1 * p})`;
+    c.style.opacity = (P(t, t0 + .35, t0 + .55) * (1 - out)).toFixed(3);
+    c.style.transform = `translateY(${12 * (1 - eOut3(P(t, t0 + .35, t0 + .8)))}px)`;
+  });
+  if (!PORTRAIT) s.cap.style.top = Math.max(150, (H - s.cap.offsetHeight) / 2 + 10) + "px";
+  rise(s.k, t, .25, tout, { y: 22 });
+  reveal(s.t, t, .35, tout);
+  rise(s.b, t, .75, tout);
+};
+
 BUILD.end = (s, root) => {
   const tx = T(s.text), lw = PORTRAIT ? 900 : 860;
   s.logo = el("div", "abs", `left:${(W - lw) / 2}px;top:${PORTRAIT ? 560 : 170}px;width:${lw}px`, heapSVG(true));
   s.boxes = [...s.logo.querySelectorAll(".hb")];
-  const y0 = PORTRAIT ? 960 : 500;
-  s.l1 = words(el("div", "abs center display", `top:${y0}px;font-size:${PORTRAIT ? 80 : 70}px;padding:0 60px`, esc(tx.line)));
-  s.l2 = el("div", "abs center", `top:${y0 + (PORTRAIT ? 140 : 112)}px;font-size:${PORTRAIT ? 40 : 36}px;font-weight:700;color:var(--dust)`, esc(tx.platforms));
-  s.l3 = el("div", "abs", `left:0;right:0;top:${y0 + (PORTRAIT ? 240 : 200)}px;display:flex;justify-content:center`, `<span class="pill" style="padding:.38em .95em .45em;font-size:${PORTRAIT ? 60 : 56}px">hoard.furryup.link</span>`);
-  s.l4 = el("div", "abs center", `top:${y0 + (PORTRAIT ? 420 : 358)}px;font-size:${PORTRAIT ? 34 : 30}px;color:var(--dust)`, "English · 日本語 · 한국어");
+  // the words under the logo, one under another, however many lines each takes
+  const col = el("div", "abs", `left:0;right:0;top:${PORTRAIT ? 960 : 500}px;display:flex;flex-direction:column;align-items:center;padding:0 60px`);
+  s.l1 = words(el("div", "center display", `font-size:${PORTRAIT ? 76 : 70}px`, esc(tx.line)));
+  s.l2 = el("div", "center", `margin-top:${PORTRAIT ? 34 : 26}px;font-size:${PORTRAIT ? 40 : 36}px;font-weight:700;color:var(--dust)`, esc(tx.platforms));
+  s.l3 = el("div", "", `margin-top:${PORTRAIT ? 44 : 36}px;display:flex;justify-content:center`, `<span class="pill" style="padding:.38em .95em .45em;font-size:${PORTRAIT ? 60 : 56}px">hoard.furryup.link</span>`);
+  s.l4 = el("div", "center", `margin-top:${PORTRAIT ? 56 : 44}px;font-size:${PORTRAIT ? 34 : 30}px;color:var(--dust)`, "English · 日本語 · 한국어");
+  col.append(s.l1, s.l2, s.l3, s.l4);
   s.l5 = el("div", "abs center", `top:${H - (PORTRAIT ? 190 : 110)}px;font-size:${PORTRAIT ? 22 : 20}px;line-height:1.6;color:rgba(179,166,149,.6);padding:0 60px`, esc(tx.fine).replace(/\n/g, "<br>"));
-  root.append(s.logo, s.l1, s.l2, s.l3, s.l4, s.l5);
+  s.col = col;
+  root.append(s.logo, col, s.l5);
 };
 DRAW.end = (s, t) => {
   s.boxes.forEach((b, i) => { const t0 = .02 + i * .07, p = spring(P(t, t0, t0 + .8)); b.style.opacity = P(t, t0, t0 + .05); b.style.transform = `translate(0,${-18 * (1 - p)}px)`; });
@@ -441,8 +510,101 @@ DRAW.hshot = (s, t) => {
   helpPanelDraw(s, t);
 };
 // A step outside Hoard's pages (a store's sign-in window): a plain drawing of a window, never the store's own page.
+// With "win" in its words, it's drawn from them: a browser's page, a system's dialog, a search for an app or a
+// terminal, in one or more states, each with what's clicked in it ("clicks": b0 its first button, l0 its first link,
+// f0 its first field, r0 its first result, m0 its marked line); "done" ends it with a tick and its note.
+const MAG = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#6B6157" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>`;
+function drawnState(st, kind) {   // one state's words, as plain shapes
+  const k = (pre, i) => `data-k="${pre}${i}"`;
+  let h = "";
+  if (kind === "terminal")
+    return `<div class="wterm">${(st.lines || []).map((l, i) => i === st.mark ? `<span class="m" ${k("m", 0)}>${esc(l)}</span>` : esc(l)).join("\n")}</div>`;
+  if (st.search != null) h += `<div class="wsr">${MAG}<span>${esc(st.search)}</span></div>`;
+  if (st.title) h += `<div class="wt">${esc(st.title)}</div>`;
+  (st.lines || []).forEach(l => { h += `<div class="wl">${esc(l)}</div>`; });
+  if (st.facts) h += `<dl class="wkv">${st.facts.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>`;
+  (st.fields || []).forEach((f, i) => { h += `<div>${f.label ? `<div class="wfl">${esc(f.label)}</div>` : ""}<div class="wbox" ${k("f", i)}>${f.dots ? "&#9679;".repeat(f.dots) : esc(f.value || "")}</div></div>`; });
+  (st.results || []).forEach((r, i) => { h += `<div class="wrow" ${k("r", i)}><div class="ic">${r.heap ? `<div style="width:48px">${heapSVG(false)}</div>` : ""}</div><div><b>${esc(r.name)}</b><span>${esc(r.sub || "")}</span></div></div>`; });
+  (st.links || []).forEach((l, i) => { h += `<div class="wlk" ${k("l", i)}>${esc(l)}</div>`; });
+  if (st.buttons) h += `<div class="wbtns" style="justify-content:${kind === "dialog" ? "flex-end" : "flex-start"}">${st.buttons.map((b, i) => `<div class="wb${b.primary ? " primary" : ""}" ${k("b", i)}>${esc(b.t)}</div>`).join("")}</div>`;
+  return h;
+}
+function drawnWindow(s, root, tx) {
+  const box = HELP_BOX(), ww = box[2], wh = ww * 950 / 1600, kind = s.kind || "browser", dark = kind === "terminal";
+  s.box = [box[0], box[1], ww, wh];
+  s.win = el("div", "window", `left:${box[0]}px;top:${box[1]}px;width:${ww}px;height:${wh}px;background:${dark ? "#1B1714" : "#F7F5F1"}`);
+  const barH = kind === "launcher" ? 0 : 66;
+  if (kind === "browser") s.win.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:#FFFFFF;border-bottom:2px solid #E3DFD8"></div>` +
+    `<div class="abs" style="left:26px;right:26px;top:13px;height:40px;border-radius:20px;background:#EEECE8;display:flex;align-items:center;gap:10px;padding:0 18px;font-size:22px;color:#6B6157">` +
+    `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6B6157" stroke-width="2.2"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>${esc(s.address || "")}</div>`;
+  else if (barH) s.win.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:${dark ? "#2B2520" : "#FFFFFF"};border-bottom:2px solid ${dark ? "#372F28" : "#E3DFD8"};display:flex;align-items:center;padding:0 26px;font-size:22px;font-weight:700;color:${dark ? "#B3A695" : "#6B6157"}">${esc(tx.bar || "")}</div>`;
+  const fw = kind === "terminal" ? ww - 100 : kind === "dialog" ? Math.min(800, ww - 160) : Math.min(700, ww - 160);
+  s.states = (tx.win || []).map(st => {
+    const c = el("div", "dw", `left:${(ww - fw) / 2}px;width:${fw}px;opacity:0`, drawnState(st, kind));
+    s.win.appendChild(c);
+    return { el: c };
+  });
+  s.area = [barH, wh];
+  s.clicks = s.clicks || [];
+  s.wok = el("div", "abs", `left:50%;top:${wh / 2 - 110}px;width:140px;height:140px;margin-left:-70px;opacity:0`, CHECK);
+  s.wok.firstChild.style.cssText = "width:100%;height:100%";
+  s.wnote = el("div", "abs center", `top:${wh / 2 + 60}px;font-size:${PORTRAIT ? 30 : 27}px;color:#6B6157;opacity:0;padding:0 40px`, esc(tx.note || ""));
+  s.win.append(s.wok, s.wnote);
+  s.cursor = el("div", "cursor", "", CURSOR); s.ripple = el("div", "ripple");
+  root.append(s.win, s.ripple, s.cursor);
+  helpAbout(s, tx);
+  // when each state shows, and when its click is
+  const n = s.states.length, seg = (s.dur - 1.0) / (n + (s.done ? .7 : 0));
+  s.times = []; let t0 = 0;
+  for (let i = 0; i < n; i++) {
+    const c = s.clicks[i] ? .5 + seg * (i + .7) : null;
+    s.times.push({ show: t0, click: c });
+    t0 = c != null ? c + .45 : .5 + seg * (i + 1);
+  }
+  s.doneAt = s.done && s.times.length && s.times[n - 1].click != null ? s.times[n - 1].click + .45 : null;
+}
+function drawnDraw(s, t) {
+  const d = s.dur, n = s.states.length;
+  s.win.style.opacity = fadeIO(t, helpIn(s), helpOut(s) - (helpOut(s) === s.dur ? XF : 0), helpIn(s) ? XF : .45).toFixed(3);
+  if (!s.laid) {   // each state's place (in the middle of the window), and where its click lands, once it's laid out
+    s.laid = true;
+    s.states.forEach((st, i) => {
+      const h = st.el.offsetHeight, [top, bottom] = s.area;
+      st.el.style.top = (s.kind === "launcher" ? top + 60 : s.kind === "terminal" ? top + 40 : top + Math.max(40, (bottom - top - h) / 2)) + "px";
+      const k = s.clicks[i] && st.el.querySelector(`[data-k="${s.clicks[i]}"]`);
+      if (k) { const r = k.getBoundingClientRect(), f = $("stage").getBoundingClientRect(); st.at = [r.left - f.left + r.width / 2, r.top - f.top + r.height / 2]; st.target = k; }
+    });
+  }
+  s.states.forEach((st, i) => {
+    const show = s.times[i].show, next = i + 1 < n ? s.times[i + 1].show : s.doneAt;
+    st.el.style.opacity = (P(t, show, show + .35) * (next != null ? 1 - P(t, next - .05, next + .3) : 1)).toFixed(3);
+    if (st.target) st.target.classList.toggle("on", t > s.times[i].click - .05 && (next == null || t < next + .3));
+  });
+  if (s.doneAt != null) {
+    const ok = eBack(P(t, s.doneAt + .1, s.doneAt + .65), 2.2);
+    s.wok.style.opacity = P(t, s.doneAt + .1, s.doneAt + .22); s.wok.style.transform = `scale(${.4 + .6 * ok})`;
+    s.wnote.style.opacity = fadeIO(t, s.doneAt + .5, d - .45).toFixed(3);
+  }
+  // the pointer: from the window's corner to each click in turn
+  const clicks = s.states.map((st, i) => st.at && s.times[i].click != null ? { at: st.at, t: s.times[i].click } : null).filter(Boolean);
+  if (!clicks.length) { s.cursor.style.opacity = 0; s.ripple.style.opacity = 0; }
+  else {
+    let px = s.box[0] + s.box[2] * .78, py = s.box[1] + s.box[3] * .86;
+    clicks.forEach(c => { const m = eIO3(P(t, c.t - 1.3, c.t - .15)); px = lerp(px, c.at[0] + 34, m); py = lerp(py, c.at[1] + 6, m); });
+    const end = s.doneAt != null ? s.doneAt + .3 : d - .5;
+    s.cursor.style.opacity = (P(t, clicks[0].t - 1.7, clicks[0].t - 1.4) * (1 - P(t, end, end + .3))).toFixed(3);
+    const press = clicks.reduce((a, c) => Math.max(a, Math.sin(Math.PI * P(t, c.t - .1, c.t + .15))), 0);
+    s.cursor.style.transform = `translate(${px - 6}px,${py - 4}px) scale(${1 - .12 * press})`;
+    const last = clicks.filter(c => t >= c.t - .1).pop();
+    const c = last ? P(t, last.t - .1, last.t + .6) : 0, rr = 16 + 46 * eOut3(c);
+    s.ripple.style.cssText = `left:${px - rr}px;top:${py - rr}px;width:${rr * 2}px;height:${rr * 2}px;opacity:${c > 0 && c < 1 ? (1 - c).toFixed(3) : 0}`;
+  }
+  helpPanelDraw(s, t);
+}
 BUILD.hwindow = (s, root) => {
-  const tx = T(s.text), box = HELP_BOX(), ww = box[2], wh = ww * 950 / 1600;
+  const tx = T(s.text);
+  if (tx.win) return drawnWindow(s, root, tx);
+  const box = HELP_BOX(), ww = box[2], wh = ww * 950 / 1600;
   s.box = [box[0], box[1], ww, wh];
   s.win = el("div", "window", `left:${box[0]}px;top:${box[1]}px;width:${ww}px;height:${wh}px;background:#F7F5F1`);
   const fw = Math.min(520, ww - 200), mid = wh / 2 - 30;
@@ -461,6 +623,7 @@ BUILD.hwindow = (s, root) => {
   helpAbout(s, tx);
 };
 DRAW.hwindow = (s, t) => {
+  if (s.states) return drawnDraw(s, t);
   const d = s.dur, press = .5 * d, done = press + 1.0;
   s.win.style.opacity = fadeIO(t, helpIn(s), helpOut(s) - (helpOut(s) === s.dur ? XF : 0), helpIn(s) ? XF : .45).toFixed(3);
   s.wf.style.opacity = (1 - P(t, done - .1, done + .3)).toFixed(3);
@@ -565,6 +728,7 @@ window.checkFrame = function () {
       if (over(l, r)) bad.push(`${s.image}: the lens covers what it shows (${fmt(l)} over ${fmt(r)})`);
       if (!HELP && s.cap && over(l, s.cap.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the words`);
       if (HELP && over(l, HF.panel.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the steps`);
+      if (HELP && over(l, HF.head.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the header`);
     }
     if (s.ring && +s.ring.style.opacity > .5) {
       const r = s.ring.getBoundingClientRect();
@@ -575,6 +739,25 @@ window.checkFrame = function () {
       if (off(c)) bad.push(`${s.image}: the words run off the frame (${fmt(c)})`);
       if (over(c, w)) bad.push(`${s.image}: the words run into the screen`);
     }
+  });
+  SC.forEach(s => {   // the end card's words stay on the frame, above its fine print
+    if (s.type !== "end" || s.root.style.display === "none") return;
+    const f = s.l5.getBoundingClientRect();
+    [s.l1, s.l2, s.l3.firstChild, s.l4].forEach(n => { const c = n.getBoundingClientRect();
+      if (off(c) || c.bottom > f.top - 10) bad.push(`end: "${n.textContent.slice(0, 30)}" runs off or into the fine print (${fmt(c)})`); });
+  });
+  SC.forEach(s => {   // Hoard's looks stay on the frame, clear of the words
+    if (s.type !== "looks" || s.root.style.display === "none") return;
+    const c = s.cap.getBoundingClientRect();
+    if (off(c)) bad.push(`looks: the words run off the frame (${fmt(c)})`);
+    s.tiles.forEach(({ w }, i) => { const r = w.getBoundingClientRect(); if (+w.style.opacity > .9 && off(r)) bad.push(`looks: ${s.images[i]} runs off the frame`);
+      if (+w.style.opacity > .9 && over(r, c)) bad.push(`looks: ${s.images[i]} runs into the words`); });
+  });
+  SC.forEach(s => {   // a drawn window's words fit in it
+    if (!s.states || s.root.style.display === "none") return;
+    const w = s.win.getBoundingClientRect();
+    s.states.forEach((st, i) => { if (+st.el.style.opacity > .5) { const r = st.el.getBoundingClientRect();
+      if (r.left < w.left || r.right > w.right || r.top < w.top || r.bottom > w.bottom - 10) bad.push(`window ${s.i}: state ${i + 1} runs out of the window (${fmt(r)})`); } });
   });
   if (HELP) {
     const p = HF.panel.getBoundingClientRect(), l = HF.list.getBoundingClientRect();

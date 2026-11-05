@@ -1,0 +1,641 @@
+{
+ "title": "Hoard, every part of it",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "scenes": [
+  {
+   "type": "intro",
+   "bars": 5,
+   "text": {
+    "en": {
+     "stores": "Five stores,",
+     "projects": "your Unity projects,",
+     "local": "and your own files.",
+     "chip": "Your own files",
+     "projectsChip": "Projects",
+     "tag": "Local",
+     "tagline": "One library for everything you own."
+    },
+    "ja": {
+     "stores": "5つのストア、",
+     "projects": "Unityのプロジェクト、",
+     "local": "そして自分のファイル。",
+     "chip": "自分のファイル",
+     "projectsChip": "プロジェクト",
+     "tag": "ローカル",
+     "tagline": "持っているものすべてを、ひとつのライブラリに。"
+    },
+    "ko": {
+     "stores": "다섯 개의 스토어,",
+     "projects": "Unity 프로젝트,",
+     "local": "그리고 내 파일까지.",
+     "chip": "내 파일",
+     "projectsChip": "프로젝트",
+     "tag": "로컬",
+     "tagline": "가진 모든 것을 하나의 라이브러리에."
+    }
+   }
+  },
+  {
+   "type": "shot",
+   "bars": 3.5,
+   "image": "library",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Library",
+     "title": "Everything you own",
+     "body": "What you bought on Booth, Gumroad, Jinxxy, Payhip and itch.io, and your own files, in one place.",
+     "points": [
+      "Search every store at once",
+      "Filter by store, tag or kind",
+      "Tags suggested for each product"
+     ]
+    },
+    "ja": {
+     "kicker": "ライブラリ",
+     "title": "持っているものすべて",
+     "body": "Booth、Gumroad、Jinxxy、Payhip、itch.ioで買ったものと自分のファイルを、ひとつの場所に。",
+     "points": [
+      "すべてのストアを一度に検索",
+      "ストア、タグ、種類で絞り込み",
+      "商品ごとにおすすめのタグ"
+     ]
+    },
+    "ko": {
+     "kicker": "라이브러리",
+     "title": "가진 모든 것",
+     "body": "Booth, Gumroad, Jinxxy, Payhip, itch.io에서 산 것과 내 파일을 한곳에.",
+     "points": [
+      "모든 스토어를 한 번에 검색",
+      "스토어, 태그, 종류로 거르기",
+      "상품마다 추천 태그"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "search",
+     8
+    ],
+    [
+     5.5,
+     "storetabs",
+     4
+    ],
+    [
+     9.5,
+     "tags",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "stores",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Sync",
+     "title": "Sign in once",
+     "body": "Hoard reads what you bought, signed in as you, and keeps your library up to date.",
+     "points": [
+      "Every store with one button",
+      "Quick refresh reads just what's new"
+     ]
+    },
+    "ja": {
+     "kicker": "同期",
+     "title": "サインインは一度だけ",
+     "body": "Hoardはあなたとしてサインインして買ったものを読み、ライブラリを最新に保ちます。",
+     "points": [
+      "ボタンひとつで全ストア",
+      "クイック更新は新しいものだけ読む"
+     ]
+    },
+    "ko": {
+     "kicker": "동기화",
+     "title": "로그인은 한 번만",
+     "body": "Hoard가 내 계정으로 로그인해서 산 것을 읽고, 라이브러리를 최신으로 유지해요.",
+     "points": [
+      "버튼 하나로 모든 스토어",
+      "빠른 새로고침은 새것만 읽어요"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "booth",
+     6
+    ],
+    [
+     6.5,
+     "quick",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "files",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Downloads",
+     "title": "Only the files you want",
+     "body": "Before a product downloads, Hoard says what it contains, and asks what to save.",
+     "points": [
+      "Leave out the Quest version, or the PSDs",
+      "It remembers what you left out"
+     ]
+    },
+    "ja": {
+     "kicker": "ダウンロード",
+     "title": "ほしいファイルだけ",
+     "body": "商品をダウンロードする前に、中身を示して、どれを保存するか聞きます。",
+     "points": [
+      "Quest版やPSDを外せる",
+      "外したものを覚えている"
+     ]
+    },
+    "ko": {
+     "kicker": "다운로드",
+     "title": "원하는 파일만",
+     "body": "상품을 다운로드하기 전에 무엇이 들었는지 보여 주고, 무엇을 저장할지 물어요.",
+     "points": [
+      "Quest 버전이나 PSD는 빼기",
+      "뺀 것을 기억해요"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "has",
+     8
+    ],
+    [
+     6.5,
+     "off",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "updates",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Updates",
+     "title": "Know when it changes",
+     "body": "Hoard checks for files a creator added or changed, and downloads just those.",
+     "points": [
+      "It checks by itself",
+      "Update one, or all of them"
+     ]
+    },
+    "ja": {
+     "kicker": "アップデート",
+     "title": "変わったらわかる",
+     "body": "作者が追加・変更したファイルを確かめて、それだけをダウンロードします。",
+     "points": [
+      "自動で確認",
+      "ひとつずつでも、すべてでも"
+     ]
+    },
+    "ko": {
+     "kicker": "업데이트",
+     "title": "바뀌면 알려 줘요",
+     "body": "제작자가 추가하거나 바꾼 파일을 확인하고, 그것만 다운로드해요.",
+     "points": [
+      "알아서 확인해요",
+      "하나씩도, 모두 한꺼번에도"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "bar",
+     6
+    ],
+    [
+     6.5,
+     "update",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "inside",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Look inside",
+     "title": "See what's in it",
+     "body": "Open a Unity package or a zip without unpacking it: every folder and file, before you import it.",
+     "points": [
+      "Packages, zips and folders"
+     ]
+    },
+    "ja": {
+     "kicker": "中身を見る",
+     "title": "中に何がある?",
+     "body": "Unityパッケージやzipを展開せずに開いて、取り込む前にすべてのフォルダーとファイルを。",
+     "points": [
+      "パッケージ、zip、フォルダー"
+     ]
+    },
+    "ko": {
+     "kicker": "내용 보기",
+     "title": "안에 뭐가 있을까",
+     "body": "Unity 패키지나 zip을 풀지 않고 열어서, 가져오기 전에 모든 폴더와 파일을 봐요.",
+     "points": [
+      "패키지, zip, 폴더"
+     ]
+    }
+   },
+   "focus": [
+    {
+     "at": 1.5,
+     "box": "window",
+     "pad": 4,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "local",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Local",
+     "title": "Your own files too",
+     "body": "Add a commission, or a package from anywhere else, and Hoard keeps it with the rest.",
+     "points": [
+      "Copied in, or left where it is"
+     ]
+    },
+    "ja": {
+     "kicker": "ローカル",
+     "title": "自分のファイルも",
+     "body": "依頼した作品や、ほかで手に入れたパッケージを追加すると、ほかと一緒に管理します。",
+     "points": [
+      "コピーしても、その場所のままでも"
+     ]
+    },
+    "ko": {
+     "kicker": "로컬",
+     "title": "내 파일도",
+     "body": "커미션이나 다른 곳에서 얻은 패키지를 추가하면, 다른 것과 함께 관리해요.",
+     "points": [
+      "복사해도, 그 자리 그대로도"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "tile",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "set",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Sets",
+     "title": "What goes together",
+     "body": "An avatar and its outfits, in a set: download it, put it in a project, or share it.",
+     "points": [
+      "Shared by a short link"
+     ]
+    },
+    "ja": {
+     "kicker": "セット",
+     "title": "いっしょに使うもの",
+     "body": "アバターと衣装をセットに。ダウンロードも、プロジェクトへの追加も、共有も。",
+     "points": [
+      "短いリンクで共有"
+     ]
+    },
+    "ko": {
+     "kicker": "세트",
+     "title": "함께 쓰는 것",
+     "body": "아바타와 의상을 세트로. 다운로드도, 프로젝트에 넣기도, 공유도.",
+     "points": [
+      "짧은 링크로 공유"
+     ]
+    }
+   },
+   "focus": [
+    {
+     "at": 1.5,
+     "box": "products",
+     "pad": 6,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "wishlist-prices",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Wishlists",
+     "title": "Know when it's cheaper",
+     "body": "Your wishlists from each store, with their prices, and any product added by its link.",
+     "points": [
+      "Hoard says what got cheaper"
+     ]
+    },
+    "ja": {
+     "kicker": "ほしい物リスト",
+     "title": "安くなったらわかる",
+     "body": "各ストアのほしい物リストを価格つきで。リンクで追加した商品も。",
+     "points": [
+      "安くなったものを教えてくれる"
+     ]
+    },
+    "ko": {
+     "kicker": "위시리스트",
+     "title": "싸지면 알려 줘요",
+     "body": "스토어마다 위시리스트를 가격과 함께. 링크로 추가한 상품도요.",
+     "points": [
+      "싸진 것을 알려 줘요"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "cheaper",
+     8,
+     "card"
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "mix",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Mix and match",
+     "title": "Try a new look",
+     "body": "Hoard picks an avatar and clothes from your library, to try together.",
+     "points": [
+      "Pick again, or keep one"
+     ]
+    },
+    "ja": {
+     "kicker": "組み合わせ",
+     "title": "新しい見た目を試す",
+     "body": "ライブラリからアバターと服を選んで、組み合わせてみます。",
+     "points": [
+      "選び直しも、キープも"
+     ]
+    },
+    "ko": {
+     "kicker": "조합하기",
+     "title": "새 모습 입어 보기",
+     "body": "라이브러리에서 아바타와 옷을 골라 함께 맞춰 봐요.",
+     "points": [
+      "다시 고르기도, 남겨 두기도"
+     ]
+    }
+   },
+   "focus": [
+    {
+     "at": 1.5,
+     "box": "picks",
+     "pad": 6,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3.5,
+   "image": "project-details",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Projects",
+     "title": "Into your Unity projects",
+     "body": "Make projects, add VPM packages, and put in products from your library, with what they need.",
+     "points": [
+      "The VRChat Creator Companion's projects",
+      "Hoard for Unity credits what a project uses"
+     ]
+    },
+    "ja": {
+     "kicker": "プロジェクト",
+     "title": "Unityのプロジェクトへ",
+     "body": "プロジェクトを作り、VPMパッケージを追加し、ライブラリの商品を必要なものと一緒に入れます。",
+     "points": [
+      "VRChat Creator Companionと同じプロジェクト",
+      "Hoard for Unityが使った商品をクレジット"
+     ]
+    },
+    "ko": {
+     "kicker": "프로젝트",
+     "title": "Unity 프로젝트로",
+     "body": "프로젝트를 만들고, VPM 패키지를 추가하고, 라이브러리의 상품을 필요한 것과 함께 넣어요.",
+     "points": [
+      "VRChat Creator Companion과 같은 프로젝트",
+      "Hoard for Unity가 쓴 상품을 크레디트로"
+     ]
+    }
+   },
+   "focus": [
+    {
+     "at": 1.5,
+     "box": "detail",
+     "pad": 4,
+     "lens": false
+    },
+    [
+     8,
+     "unity",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "hidden",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Hidden library",
+     "title": "Out of sight",
+     "body": "Hide products behind a PIN: they stay out of view everywhere in Hoard until you unlock them.",
+     "points": [
+      "Recovery words, if you forget the PIN"
+     ]
+    },
+    "ja": {
+     "kicker": "非表示ライブラリ",
+     "title": "見えないところに",
+     "body": "PINの向こうに商品を隠すと、ロックを解除するまでHoardのどこにも表示されません。",
+     "points": [
+      "PINを忘れても復元ワードで"
+     ]
+    },
+    "ko": {
+     "kicker": "숨긴 라이브러리",
+     "title": "보이지 않게",
+     "body": "PIN 뒤에 상품을 숨기면, 잠금을 풀 때까지 Hoard 어디에도 보이지 않아요.",
+     "points": [
+      "PIN을 잊어도 복구 단어로"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "bar",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "settings-apprise",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Notifications",
+     "title": "News on your phone",
+     "body": "Through Apprise, to Discord, Telegram, ntfy, email and more: new products, updates, prices.",
+     "points": [
+      "Counts only, never a product's name"
+     ]
+    },
+    "ja": {
+     "kicker": "通知",
+     "title": "スマホにお知らせ",
+     "body": "Appriseで、Discord、Telegram、ntfy、メールなどへ。新しい商品、アップデート、価格。",
+     "points": [
+      "送るのは数だけ。商品名は送りません"
+     ]
+    },
+    "ko": {
+     "kicker": "알림",
+     "title": "휴대폰으로 소식을",
+     "body": "Apprise로 Discord, Telegram, ntfy, 이메일 등에. 새 상품, 업데이트, 가격.",
+     "points": [
+      "보내는 건 개수뿐, 상품 이름은 보내지 않아요"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "list",
+     6
+    ],
+    [
+     6.5,
+     "events",
+     6
+    ]
+   ]
+  },
+  {
+   "type": "looks",
+   "bars": 3.5,
+   "side": "left",
+   "images": [
+    "look-treasure",
+    "look-workbench",
+    "look-synthwave",
+    "look-moss"
+   ],
+   "text": {
+    "en": {
+     "kicker": "Looks",
+     "title": "Make it yours",
+     "body": "Three layouts and eleven colour themes, each in light and dark.",
+     "labels": [
+      "Treasure · Dragonfire",
+      "Workbench · Frost Cave",
+      "Synthwave",
+      "Mossy Ruins"
+     ]
+    },
+    "ja": {
+     "kicker": "見た目",
+     "title": "自分好みに",
+     "body": "3つのレイアウトと11のカラーテーマ。それぞれライトとダーク。",
+     "labels": [
+      "トレジャー · ドラゴンファイア",
+      "ワークベンチ · 氷の洞窟",
+      "シンセウェーブ",
+      "苔むした遺跡"
+     ]
+    },
+    "ko": {
+     "kicker": "모양",
+     "title": "내 마음대로",
+     "body": "레이아웃 3가지와 색상 테마 11가지. 각각 라이트와 다크로.",
+     "labels": [
+      "트레저 · 드래곤파이어",
+      "워크벤치 · 얼음 동굴",
+      "신스웨이브",
+      "이끼 낀 유적"
+     ]
+    }
+   }
+  },
+  {
+   "type": "end",
+   "bars": 2.5,
+   "ending": true,
+   "text": {
+    "en": {
+     "line": "Free and open source.",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "Products shown are from the maintainer's own library, pictured by their creators: hoard.furryup.link/credits.html\nNot affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io."
+    },
+    "ja": {
+     "line": "無料でオープンソース。",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "紹介している商品はメンテナー自身のライブラリのもので、画像は各作者のものです: hoard.furryup.link/credits.html\nVRChat、Booth、Gumroad、Jinxxy、Payhip、itch.ioとは関係ありません。"
+    },
+    "ko": {
+     "line": "무료이고 오픈 소스예요.",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "보여 드린 상품은 관리자 본인의 라이브러리에 있는 것이고, 이미지는 각 제작자의 것이에요: hoard.furryup.link/credits.html\nVRChat, Booth, Gumroad, Jinxxy, Payhip, itch.io와는 관계가 없어요."
+    }
+   }
+  }
+ ]
+}

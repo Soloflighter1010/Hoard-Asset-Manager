@@ -92,9 +92,13 @@ class Films(unittest.TestCase):
                         self.assertIn(lens, REGIONS[s["image"]], f"{name}: {s['image']} has no {lens}")
 
     def test_every_screen_is_taken(self):
-        # each screen regions.json names is one scripts/screenshots.py photographs
-        for image in REGIONS:
-            self.assertRegex(SHOTS_PY, rf'snap\(\s*"{re.escape(image)}"|"{re.escape(image)}"\)', image)
+        # each screen regions.json names, and each a film shows, is one scripts/screenshots.py photographs: on the
+        # way round the website's pictures, or among the videos' own (VIDEO_SHOTS)
+        video = _literal("VIDEO_SHOTS")
+        shown = set(REGIONS) | {i for f in FILMS.values() for s in f["scenes"] for i in s.get("images", [])}
+        for image in shown:
+            if image not in video:
+                self.assertRegex(SHOTS_PY, rf'snap\(\s*"{re.escape(image)}"|"{re.escape(image)}"\)', image)
 
     def test_every_word_in_each_language(self):
         for name, film in FILMS.items():
@@ -142,12 +146,16 @@ class Music(unittest.TestCase):
         self.assertGreater(z[:100].max(), .5)   # the echo of the last samples is heard at the start
 
 
-def _region_boxes() -> str:
-    """screenshots.py's REGION_BOXES (read without importing it: importing it makes a made-up data folder)."""
+def _literal(name: str):
+    """One of screenshots.py's constants (read without importing it: importing it makes a made-up data folder)."""
     for node in ast.parse(SHOTS_PY).body:
-        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "REGION_BOXES":
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == name:
             return ast.literal_eval(node.value)
-    raise AssertionError("no REGION_BOXES in scripts/screenshots.py")
+    raise AssertionError(f"no {name} in scripts/screenshots.py")
+
+
+def _region_boxes() -> str:
+    return _literal("REGION_BOXES")
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")

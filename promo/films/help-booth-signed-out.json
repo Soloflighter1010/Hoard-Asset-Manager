@@ -4,38 +4,252 @@
  "style": "help",
  "theme": "light",
  "bpm": 100,
- "music": {"start_bar": 0, "lufs": -20},
- "credit": {
-  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html"
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
  },
- "text": {"en": {"label": "Help:", "problem": "“Not signed in to Booth”", "stepsLabel": "How to fix it",
-                 "steps": ["Choose Sign in on Booth's row", "Sign in to Booth in the window that opens", "Choose Refresh"]}},
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "“Not signed in to Booth”",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Choose Sign in on Booth's row",
+    "Sign in to Booth in the window that opens",
+    "Choose Refresh"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "「Boothにサインインしていません」",
+   "steps": [
+    "Boothの行でサインインを選ぶ",
+    "開いたウィンドウでBoothにサインイン",
+    "更新を選ぶ"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "“Booth에 로그인하지 않았어요”",
+   "steps": [
+    "Booth 줄에서 로그인 고르기",
+    "열린 창에서 Booth에 로그인",
+    "새로고침 고르기"
+   ]
+  }
+ },
  "scenes": [
-  {"type": "hcard", "bars": 2.5,
-   "text": {"en": {"kicker": "Hoard help", "title": "“Not signed in to Booth”",
-                   "body": "Or “session expired”. Here's the fix, in three steps."}}},
-  {"type": "hshot", "bars": 3, "image": "help-booth-library",
-   "text": {"en": {"kicker": "What you'll see", "title": "A dot on Menu",
-                   "body": "Hoard can't read Booth until you sign in again. Nothing in your library is lost."}},
-   "focus": [{"at": 2, "box": "menu", "pad": 8, "lens": "barend"}]},
-  {"type": "hshot", "bars": 3, "image": "help-booth-stores",
-   "text": {"en": {"kicker": "Why", "title": "Booth ended the sign-in",
-                   "body": "Stores do that from time to time. In Menu, Stores says so on Booth's row."}},
-   "focus": [{"at": 2, "box": "error", "pad": 6, "lens": "booth"}]},
-  {"type": "hshot", "bars": 3.5, "image": "help-booth-stores", "step": 1,
-   "text": {"en": {"kicker": "Step 1", "title": "Choose Sign in", "body": "It's on Booth's row, in Stores."}},
-   "focus": [{"at": 3, "box": "signin", "pad": 6, "click": true, "lens": "booth"}]},
-  {"type": "hwindow", "bars": 3.5, "step": 2, "address": "booth.pm",
-   "text": {"en": {"kicker": "Step 2", "title": "Sign in to Booth",
-                   "body": "In the window that opens, sign in as you would in your usual browser.",
-                   "note": "Hoard keeps the sign-in on this computer."}}},
-  {"type": "hshot", "bars": 4, "image": "help-booth-fixed", "step": 3,
-   "text": {"en": {"kicker": "Step 3", "title": "Choose Refresh",
-                   "body": "Booth's row then says when it was read, and Sync works again."}},
-   "focus": [{"at": 3, "box": "refresh", "pad": 6, "click": true, "lens": "booth"}, {"at": 7, "box": "boothmeta", "pad": 3, "lens": "booth"}]},
-  {"type": "hcard", "bars": 3, "ending": true,
-   "text": {"en": {"kicker": "Still stuck?", "title": "Create a support report",
-                   "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
-                   "link": "hoard.furryup.link", "linkNote": "More help: the wiki's Troubleshooting page"}}}
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "“Not signed in to Booth”",
+     "body": "Or “session expired”. Here's the fix, in three steps."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "「Boothにサインインしていません」",
+     "body": "または「セッションが切れました」。3つのステップで直せます。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "“Booth에 로그인하지 않았어요”",
+     "body": "또는 “세션이 만료됐어요”. 세 단계로 고칠 수 있어요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-booth-library",
+   "text": {
+    "en": {
+     "kicker": "What you'll see",
+     "title": "A dot on Menu",
+     "body": "Hoard can't read Booth until you sign in again. Nothing in your library is lost."
+    },
+    "ja": {
+     "kicker": "表示されるもの",
+     "title": "メニューに点",
+     "body": "もう一度サインインするまで、HoardはBoothを読めません。ライブラリは何も失われていません。"
+    },
+    "ko": {
+     "kicker": "보이는 것",
+     "title": "메뉴에 점",
+     "body": "다시 로그인할 때까지 Hoard가 Booth를 읽을 수 없어요. 라이브러리에서 잃은 건 없어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "menu",
+     "pad": 8,
+     "lens": "barend"
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-booth-stores",
+   "text": {
+    "en": {
+     "kicker": "Why",
+     "title": "Booth ended the sign-in",
+     "body": "Stores do that from time to time. In Menu, Stores says so on Booth's row."
+    },
+    "ja": {
+     "kicker": "理由",
+     "title": "Boothがサインインを終わらせた",
+     "body": "ストアはときどきそうします。メニューのストアで、Boothの行にそう表示されます。"
+    },
+    "ko": {
+     "kicker": "이유",
+     "title": "Booth가 로그인을 끝냈어요",
+     "body": "스토어는 가끔 그렇게 해요. 메뉴의 스토어에서 Booth 줄에 그렇게 나와요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "error",
+     "pad": 6,
+     "lens": "booth"
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-booth-stores",
+   "step": 1,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Choose Sign in",
+     "body": "It's on Booth's row, in Stores."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "サインインを選ぶ",
+     "body": "ストアの、Boothの行にあります。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "로그인 고르기",
+     "body": "스토어의 Booth 줄에 있어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "signin",
+     "pad": 6,
+     "click": true,
+     "lens": "booth"
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 3.5,
+   "step": 2,
+   "address": "booth.pm",
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Sign in to Booth",
+     "body": "In the window that opens, sign in as you would in your usual browser.",
+     "note": "Hoard keeps the sign-in on this computer."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "Boothにサインイン",
+     "body": "開いたウィンドウで、ふだんのブラウザーと同じようにサインインします。",
+     "note": "Hoardはサインインをこのコンピューターに保存します。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "Booth에 로그인",
+     "body": "열린 창에서 평소 브라우저에서처럼 로그인하세요.",
+     "note": "Hoard는 로그인을 이 컴퓨터에 보관해요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 4,
+   "image": "help-booth-fixed",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Choose Refresh",
+     "body": "Booth's row then says when it was read, and Sync works again."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "更新を選ぶ",
+     "body": "Boothの行に読み込んだ日時が表示され、同期がまた使えます。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "새로고침 고르기",
+     "body": "Booth 줄에 읽은 때가 나오고, 동기화가 다시 돼요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "refresh",
+     "pad": 6,
+     "click": true,
+     "lens": "booth"
+    },
+    {
+     "at": 7,
+     "box": "boothmeta",
+     "pad": 3,
+     "lens": "booth"
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Still stuck?",
+     "title": "Create a support report",
+     "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "それでも解決しない?",
+     "title": "サポートレポートを作成",
+     "body": "設定でサポートレポートを作成を選び、GitHubでissueを開いて添付してください。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "그래도 안 되나요?",
+     "title": "지원 보고서 만들기",
+     "body": "설정에서 지원 보고서 만들기를 고르고, GitHub에서 이슈를 열어 첨부하세요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
  ]
 }

@@ -1,0 +1,192 @@
+{
+ "title": "Help: a download that keeps failing",
+ "wiki": "Troubleshooting#a-download-keeps-failing-or-is-skipped",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "A download keeps failing",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Open Tasks, and the download",
+    "Read why each one failed or was skipped",
+    "Sync again: a stopped file picks up where it was"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "ダウンロードが何度も失敗する",
+   "steps": [
+    "タスクを開き、そのダウンロードを開く",
+    "失敗やスキップの理由を読む",
+    "もう一度同期:止まったファイルは続きから"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "다운로드가 계속 실패해요",
+   "steps": [
+    "작업을 열고 그 다운로드 열기",
+    "실패하거나 건너뛴 이유 읽기",
+    "다시 동기화: 멈춘 파일은 이어서"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "A download keeps failing, or is skipped",
+     "body": "Hoard says why, for each one. Here's where to look."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "ダウンロードが何度も失敗する、スキップされる",
+     "body": "Hoardはひとつずつ理由を表示します。見る場所はここです。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "다운로드가 계속 실패하거나 건너뛰어져요",
+     "body": "Hoard가 하나하나 이유를 알려 줘요. 볼 곳은 여기예요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-download-tasks",
+   "step": 1,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Open Tasks",
+     "body": "Each download is listed there when it's done. Open it for its summary."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "タスクを開く",
+     "body": "ダウンロードは終わるとここに並びます。開くとまとめが見られます。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "작업 열기",
+     "body": "다운로드가 끝나면 여기에 나와요. 열면 요약이 보여요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "summary",
+     "pad": 6,
+     "click": true,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-download-tasks",
+   "step": 2,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Read the reasons",
+     "body": "On Gumroad, “no download page” means a refund or a membership that ended. Products you removed are skipped on purpose."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "理由を読む",
+     "body": "Gumroadの「no download page」は、返金か終了したメンバーシップ。ライブラリから削除した商品は、意図的にスキップします。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "이유 읽기",
+     "body": "Gumroad의 “no download page”는 환불이나 끝난 멤버십이에요. 라이브러리에서 삭제한 상품은 일부러 건너뛰어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "log",
+     "pad": 6,
+     "lens": false
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-download-tasks",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Sync again",
+     "body": "“The download stopped at … bytes”: the connection ended. Nothing is lost: the next sync picks up where it stopped."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "もう一度同期",
+     "body": "「The download stopped at … bytes」は接続が切れたということ。何も失われず、次の同期が止まったところから続けます。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "다시 동기화",
+     "body": "“The download stopped at … bytes”는 연결이 끊겼다는 뜻이에요. 잃은 건 없고, 다음 동기화가 멈춘 곳부터 이어서 해요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "problems",
+     "pad": 6
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Still failing?",
+     "title": "Create a support report",
+     "body": "Choose Create support report beside the failed download, or in Settings, and attach it to an issue on GitHub.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "まだ失敗する?",
+     "title": "サポートレポートを作成",
+     "body": "失敗したダウンロードの横か、設定でサポートレポートを作成を選び、GitHubのissueに添付してください。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "아직 실패하나요?",
+     "title": "지원 보고서 만들기",
+     "body": "실패한 다운로드 옆이나 설정에서 지원 보고서 만들기를 고르고, GitHub 이슈에 첨부하세요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

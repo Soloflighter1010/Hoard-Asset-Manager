@@ -88,7 +88,10 @@
   "panel": "#stores",
   "booth": "#storeRows .store-row",
   "boothmeta": "#storeRows .store-row .meta",
-  "refresh": "#storeRows [data-refresh=booth]"
+  "refresh": "#storeRows [data-refresh=booth]",
+  "signin": "#storeRows [data-login=booth]",
+  "all": "#refreshAll",
+  "quick": "#quickRefresh"
  },
  "settings": {
   "panel": "#settingsPanel"
@@ -114,5 +117,116 @@
   "boothmeta": "#storeRows .store-row .meta",
   "refresh": "#storeRows [data-refresh=booth]",
   "signout": "#storeRows [data-logout=booth]"
+ },
+ "files": {
+  "dialog": "#filesDialog",
+  "has": "#filesHas",
+  "list": "#filesList",
+  "off": "#filesList label:has(input:not(:checked))",
+  "all": "#filesAll"
+ },
+ "updates": {
+  "tab": "#views [data-view=\"updates\"]",
+  "bar": "#viewBar",
+  "tile": ".slot",
+  "update": "#detail .update",
+  "button": "#detail [data-act=update-one]"
+ },
+ "hidden": {
+  "tab": "#views [data-view=\"hidden\"]",
+  "bar": "#viewBar",
+  "lock": "#viewBar [data-privacy=\"lock\"]",
+  "tile": ".slot"
+ },
+ "settings-apprise": {
+  "part": "#part-apprise",
+  "list": "#appriseList",
+  "events": "#appriseEvents",
+  "test": "#appriseTest"
+ },
+ "help-apprise-test": {
+  "toast": "#toast",
+  "test": "#appriseTest",
+  "list": "#appriseList",
+  "part": "#part-apprise"
+ },
+ "help-blocked-stores": {
+  "booth": "#storeRows .store-row:has(.dot.booth)",
+  "error": "#storeRows .store-row:has(.dot.booth) .err",
+  "report": "#storeRows .store-row:has(.dot.booth) [data-report-store]"
+ },
+ "help-payhip-stores": {
+  "payhip": "#storeRows .store-row:has(.dot.payhip)",
+  "error": "#storeRows .store-row:has(.dot.payhip) .err",
+  "import": "#storeRows [data-import=payhip]"
+ },
+ "help-itch-stores": {
+  "itch": "#storeRows .store-row:has(.dot.itch)",
+  "error": "#storeRows .store-row:has(.dot.itch) .err",
+  "change": "#storeRows [data-login=itch]"
+ },
+ "help-itch-key": {
+  "dialog": "#itchDialog",
+  "steps": "#itchDialog .keysteps",
+  "key": "#itchKey",
+  "save": "#itchSave"
+ },
+ "help-itch-fixed": {
+  "itch": "#storeRows .store-row:has(.dot.itch)",
+  "meta": "#storeRows .store-row:has(.dot.itch) .meta"
+ },
+ "help-download-tasks": {
+  "task": "#tasksBody details[data-id=\"j0\"]",
+  "summary": "#tasksBody details[data-id=\"j0\"] summary",
+  "problems": "#tasksBody details[data-id=\"j0\"] .problems",
+  "log": "#tasksBody details[data-id=\"j0\"] pre"
+ },
+ "help-nokey": {
+  "empty": "#empty",
+  "message": "#empty p"
+ },
+ "help-pin-unlock": {
+  "dialog": "#pinDialog",
+  "pin": "#pinInput",
+  "forgot": "#pinForgot"
+ },
+ "help-pin-recover": {
+  "dialog": "#pinDialog",
+  "words": "#recoverWords",
+  "pin": "#pinInput",
+  "again": "#pinAgain",
+  "ok": "#pinOk"
+ },
+ "help-pin-fixed": {
+  "toast": "#toast",
+  "tab": "#views [data-view=\"hidden\"]",
+  "tile": ".slot"
+ },
+ "help-pin-wait": {
+  "dialog": "#pinDialog",
+  "note": "#pinNote",
+  "pin": "#pinInput"
+ },
+ "settings-look": {
+  "part": "#part-look",
+  "modes": "#setModeSystem",
+  "themes": "#themeChoices",
+  "styles": "#styleChoices"
+ },
+ "look-treasure": {
+  "search": "#q",
+  "grid": "#grid"
+ },
+ "look-workbench": {
+  "search": "#q",
+  "grid": "#grid"
+ },
+ "look-synthwave": {
+  "search": "#q",
+  "grid": "#grid"
+ },
+ "look-moss": {
+  "search": "#q",
+  "grid": "#grid"
  }
 }

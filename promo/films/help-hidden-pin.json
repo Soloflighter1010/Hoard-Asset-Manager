@@ -1,0 +1,225 @@
+{
+ "title": "Help: the hidden library's PIN",
+ "wiki": "Troubleshooting#the-hidden-library",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "Forgot the hidden library's PIN",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Choose Forgot your PIN?",
+    "Enter your 6 recovery words, and a new PIN",
+    "Your hidden items are unlocked"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "非表示ライブラリのPINを忘れた",
+   "steps": [
+    "PINを忘れましたか?を選ぶ",
+    "6つの復元ワードと新しいPINを入力",
+    "非表示のものが表示される"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "숨긴 라이브러리의 PIN을 잊었어요",
+   "steps": [
+    "PIN을 잊었나요? 고르기",
+    "복구 단어 6개와 새 PIN 입력",
+    "숨긴 것의 잠금이 풀려요"
+   ]
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "Forgot your PIN?",
+     "body": "Your 6 recovery words set a new one. Nothing is lost."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "PINを忘れましたか?",
+     "body": "6つの復元ワードで新しいPINを設定できます。何も失われません。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "PIN을 잊었나요?",
+     "body": "복구 단어 6개로 새 PIN을 정할 수 있어요. 잃는 건 없어요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-pin-unlock",
+   "step": 1,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Choose Forgot your PIN?",
+     "body": "It's under the PIN, when Hoard asks for it."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "PINを忘れましたか?を選ぶ",
+     "body": "HoardがPINを聞くとき、その下にあります。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "PIN을 잊었나요? 고르기",
+     "body": "Hoard가 PIN을 물을 때 그 아래에 있어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "forgot",
+     "pad": 6,
+     "click": true
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 4,
+   "image": "help-pin-recover",
+   "step": 2,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Your words, then a new PIN",
+     "body": "Enter the 6 recovery words you wrote down, in order, then a new PIN twice."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "ワードと新しいPIN",
+     "body": "書き留めた6つの復元ワードを順番に入力し、新しいPINを2回入力します。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "단어와 새 PIN",
+     "body": "적어 둔 복구 단어 6개를 순서대로 입력하고, 새 PIN을 두 번 입력하세요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "words",
+     "pad": 6
+    },
+    {
+     "at": 7,
+     "box": "ok",
+     "pad": 6,
+     "click": true
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-pin-fixed",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Unlocked",
+     "body": "Your hidden items are still hidden, and unlocked in this browser."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "表示されました",
+     "body": "非表示のものは非表示のままで、このブラウザーでロックが解除されています。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "잠금이 풀렸어요",
+     "body": "숨긴 것은 그대로 숨겨져 있고, 이 브라우저에서 잠금이 풀렸어요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "toast",
+     "pad": 6
+    }
+   ]
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "help-pin-wait",
+   "text": {
+    "en": {
+     "kicker": "Too many tries?",
+     "title": "Wait a little",
+     "body": "After five wrong tries, each try waits longer: 30 seconds, then twice as long each time, up to an hour."
+    },
+    "ja": {
+     "kicker": "間違えすぎた?",
+     "title": "少し待つ",
+     "body": "5回間違えると、試すたびに待ち時間が長くなります。30秒から倍々に、最大1時間。"
+    },
+    "ko": {
+     "kicker": "너무 많이 틀렸나요?",
+     "title": "조금 기다리기",
+     "body": "다섯 번 틀리면 시도할 때마다 더 오래 기다려야 해요. 30초부터 두 배씩, 최대 한 시간."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "note",
+     "pad": 6
+    }
+   ]
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Lost the words too?",
+     "title": "Start again",
+     "body": "The only way out deletes the hidden items from Hoard's list, without showing them. Their files stay on disk.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "ワードもなくした?",
+     "title": "やり直す",
+     "body": "抜け出す方法はひとつだけで、非表示のアイテムを表示せずにHoardの一覧から削除します。ファイルはディスクに残ります。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "단어도 잃어버렸나요?",
+     "title": "다시 시작하기",
+     "body": "빠져나가는 방법은 하나뿐이에요. 숨긴 아이템을 보여 주지 않고 Hoard의 목록에서 지워요. 파일은 디스크에 남아요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}
