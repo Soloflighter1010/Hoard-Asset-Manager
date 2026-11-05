@@ -9,6 +9,102 @@
   "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
   "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
  },
+ "thumb": {
+  "look": "tour",
+  "images": [
+   "project-details",
+   "mix",
+   "wishlist-prices",
+   "library"
+  ],
+  "features": [
+   {
+    "en": "Library",
+    "ja": "ライブラリ",
+    "ko": "라이브러리"
+   },
+   {
+    "en": "Sync",
+    "ja": "同期",
+    "ko": "동기화"
+   },
+   {
+    "en": "Downloads",
+    "ja": "ダウンロード",
+    "ko": "다운로드"
+   },
+   {
+    "en": "Updates",
+    "ja": "アップデート",
+    "ko": "업데이트"
+   },
+   {
+    "en": "Look inside",
+    "ja": "中身を見る",
+    "ko": "내용 보기"
+   },
+   {
+    "en": "Local",
+    "ja": "ローカル",
+    "ko": "로컬"
+   },
+   {
+    "en": "Sets",
+    "ja": "セット",
+    "ko": "세트"
+   },
+   {
+    "en": "Wishlists",
+    "ja": "ほしい物リスト",
+    "ko": "위시리스트"
+   },
+   {
+    "en": "Mix and match",
+    "ja": "組み合わせ",
+    "ko": "조합하기"
+   },
+   {
+    "en": "Projects",
+    "ja": "プロジェクト",
+    "ko": "프로젝트"
+   },
+   {
+    "en": "Hidden library",
+    "ja": "非表示ライブラリ",
+    "ko": "숨긴 라이브러리"
+   },
+   {
+    "en": "Notifications",
+    "ja": "通知",
+    "ko": "알림"
+   },
+   {
+    "en": "Looks",
+    "ja": "見た目",
+    "ko": "모양"
+   }
+  ],
+  "text": {
+   "en": {
+    "title": [
+     "Everything",
+     "Hoard does"
+    ]
+   },
+   "ja": {
+    "title": [
+     "Hoardの",
+     "すべて"
+    ]
+   },
+   "ko": {
+    "title": [
+     "Hoard의",
+     "모든 것"
+    ]
+   }
+  }
+ },
  "scenes": [
   {
    "type": "intro",

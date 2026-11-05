@@ -1,8 +1,9 @@
 """Hoard's videos (promo/: issues #273, #274, #291): every scene is one promo/video/film.html draws, a whole or half
 number of bars long, so its cuts land on the beat; what a film points at is something promo/regions.json finds on a
 screen scripts/screenshots.py takes; a film has every word in each language it has; the videos' Heap is the one
-hoard/heap.py draws everywhere; the music's loop wraps round with no seam; and a thing's box on a screen holds all it
-draws, so a close-up of it never cuts it off."""
+hoard/heap.py draws everywhere; the music's loop wraps round with no seam; a thing's box on a screen holds all it
+draws, so a close-up of it never cuts it off; and every video has a thumbnail, its title (in Japanese) broken only
+between phrases."""
 from __future__ import annotations
 
 import ast
@@ -96,6 +97,7 @@ class Films(unittest.TestCase):
         # way round the website's pictures, or among the videos' own (VIDEO_SHOTS)
         video = _literal("VIDEO_SHOTS")
         shown = set(REGIONS) | {i for f in FILMS.values() for s in f["scenes"] for i in s.get("images", [])}
+        shown |= {i for f in FILMS.values() for i in [f["thumb"].get("image"), *f["thumb"].get("images", [])] if i}
         for image in shown:
             if image not in video:
                 self.assertRegex(SHOTS_PY, rf'snap\(\s*"{re.escape(image)}"|"{re.escape(image)}"\)', image)
@@ -122,6 +124,50 @@ class Films(unittest.TestCase):
         self.assertEqual(parts["boxes"][-1]["box"], "gold")   # your own files, on top
         self.assertIn("projects", [b["box"] for b in parts["boxes"]])
         self.assertEqual(parts["svg"], heap.boxes_svg(heap.FULL))
+
+
+class Thumbnails(unittest.TestCase):
+    def test_every_video_has_one(self):
+        page = (PROMO / "video" / "thumb.html").read_text("utf-8")
+        looks = set(re.findall(r"^LOOK\.(\w+) =", page, re.M))
+        for name, film in FILMS.items():
+            self.assertIn("thumb", film, f"{name}: no thumbnail")
+            self.assertIn(film["thumb"]["look"], looks, name)
+            self.assertEqual(film["thumb"]["look"] == "help", film.get("style") == "help", f"{name}: a help video's has the help look")
+
+    def test_a_help_thumbnail_shows_one_of_its_steps(self):
+        for name, film in FILMS.items():
+            th = film["thumb"]
+            if th["look"] != "help":
+                continue
+            s = film["scenes"][th["scene"]]
+            self.assertIn(s["type"], ("hshot", "hwindow"), name)
+            if s["type"] == "hshot":
+                self.assertLess(th.get("focus", 0), len(s["focus"]), name)
+            else:
+                for lang, tx in s["text"].items():
+                    self.assertLess(th.get("state", 0), len(tx["win"]), f"{name} ({lang})")
+
+    def test_named_like_its_video(self):
+        thumbs = load("promo_thumbs", PROMO / "thumbs.py")
+        self.assertEqual(thumbs.SIZES["landscape"], (1280, 720))   # YouTube's size for a video's
+        self.assertEqual(thumbs.SIZES["portrait"], (1080, 1920))   # a Short's
+        self.assertIn('f"hoard-{tag}.jpg"', (PROMO / "thumbs.py").read_text("utf-8"))
+        self.assertIn('f"hoard-{tag}.mp4"', (PROMO / "build.py").read_text("utf-8"))
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_a_japanese_title_breaks_between_phrases(self):
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            page.goto((PROMO / "video" / "thumb.html").as_uri())
+            got = {t: page.evaluate("t => jaPhrases(t)", t) for t in
+                   ("「Boothにサインインしていません」", "itch.ioがAPIキーを受け付けない", "ダウンロードが何度も失敗する")}
+            browser.close()
+        self.assertEqual(got["「Boothにサインインしていません」"], ["「", "Boothに", "サインインして", "いません」"])
+        self.assertEqual(got["itch.ioがAPIキーを受け付けない"], ["itch.ioが", "APIキーを", "受け付けない"])
+        self.assertEqual(got["ダウンロードが何度も失敗する"], ["ダウンロードが", "何度も", "失敗する"])
 
 
 @unittest.skipUnless(MUSIC, "needs numpy and SciPy (pip install -r promo/requirements.txt)")

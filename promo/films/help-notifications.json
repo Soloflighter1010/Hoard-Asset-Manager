@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "Apprise notifications don't arrive"
+   },
+   "ja": {
+    "title": "Appriseの通知が届かない"
+   },
+   "ko": {
+    "title": "Apprise 알림이 오지 않아요"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "Sign in with Google, Discord or X"
+   },
+   "ja": {
+    "title": "Google、Discord、Xでサインイン"
+   },
+   "ko": {
+    "title": "Google, Discord, X로 로그인"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

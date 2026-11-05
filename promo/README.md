@@ -11,6 +11,7 @@ as `hoard/heap.py` draws it everywhere); the music is notes written out in `musi
 | `films/` | One file a video: its scenes, each a number of bars long, with its words in English, Japanese and Korean |
 | `video/film.html` | Draws a film, one frame at a time |
 | `build.py` | Takes a picture of every frame, checks it, and puts the video together with the music |
+| `video/thumb.html`, `thumbs.py` | Each video's thumbnail, for YouTube: drawn, checked and saved |
 | `music/loop.py` | The music: a loop of 32 bars with no seam, and the chord a video ends on |
 | `regions.json` | Things on Hoard's pages a film can point at, by name, found again in every language |
 | `requirements.txt` | What these need beyond Hoard's own requirements: numpy, SciPy and Pillow, hash-checked |
@@ -26,6 +27,7 @@ python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --
 python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --lang=ko --regions=promo/regions.json
 python promo/music/loop.py
 python promo/build.py promo-short promo-long help-booth-signed-out ... --lang=en,ja,ko --shape=landscape,portrait
+python promo/thumbs.py
 ```
 
 ## The videos
@@ -52,6 +54,24 @@ made only in the languages it has its words in.
 `python promo/build.py FILM --preview=2,9.5,14` takes pictures of a few moments instead, to look at while writing a
 film. Each frame is checked as it's drawn: a highlight or a picture that would run off the frame, or out of its window,
 stops the build and says where.
+
+## The thumbnails
+
+`promo/thumbs.py` makes a thumbnail for each video, named like it: `build/promo/thumbs/hoard-<film>-<lang>-<shape>.jpg`.
+A landscape one is 1280 × 720, YouTube's size for a video's thumbnail; a portrait one is 1080 × 1920, for a Short.
+Each is under 2 MB, YouTube's limit. They're drawn as the videos are, from the same screens, the Heap and words, by
+`video/thumb.html`, from each film's `"thumb"`:
+
+- `"look": "short"`: the title, the stores, Projects and your own files, and the Heap over Hoard's library (`"image"`).
+- `"look": "tour"`: the title, what Hoard does (`"features"`, the long promo's own words) and a fan of Hoard's
+  screens (`"images"`, the first at the back).
+- `"look": "help"`: the problem (`"title"`, short), **How to fix it**, and a lens close in on one of the video's
+  steps (`"scene"`): on a Hoard screen, its first focus (or `"focus"`), at the screen's own size or closer; on a
+  drawn window, its state `"state"`, with what's clicked in it lit.
+
+Each is checked as it's drawn: a title too long for its room, anything off the picture or under the lens, or a lens
+that cuts off what it's about, and it isn't made (`--draft` makes it anyway, to look at). A title is as large as it
+fits, in at most three lines; a Japanese one breaks only between its phrases.
 
 ## Writing a film
 

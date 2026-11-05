@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 2,
+  "text": {
+   "en": {
+    "title": "A download keeps failing"
+   },
+   "ja": {
+    "title": "ダウンロードが何度も失敗する"
+   },
+   "ko": {
+    "title": "다운로드가 계속 실패해요"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

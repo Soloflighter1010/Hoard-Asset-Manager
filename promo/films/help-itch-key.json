@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "itch.io didn't accept the API key"
+   },
+   "ja": {
+    "title": "itch.ioがAPIキーを受け付けない"
+   },
+   "ko": {
+    "title": "itch.io가 API 키를 받아들이지 않아요"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

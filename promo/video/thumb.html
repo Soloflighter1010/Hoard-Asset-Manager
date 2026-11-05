@@ -1,0 +1,332 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hoard thumbnail</title>
+<!-- A video's thumbnail (for YouTube), drawn here: promo/thumbs.py opens this page, calls setup() with a film's
+     "thumb" from promo/films/, a language and a shape, checks it with check() and takes its picture. Like the videos,
+     it's Hoard's own screenshots, the Heap and words, drawn in HTML and SVG: nothing generated.
+     Three looks: "short" (the Heap over Hoard's library), "tour" (a fan of Hoard's screens) and "help" (light, like
+     the help videos: the problem, and a close look at where it shows in Hoard). -->
+<style>
+@font-face { font-family: "Dela Gothic One"; src: url(../../hoard/web/fonts/DelaGothicOne-Regular.woff2) format("woff2"); }
+@font-face { font-family: "Zen Maru Gothic"; font-weight: 500; src: url(../../hoard/web/fonts/ZenMaruGothic-Medium.woff2) format("woff2"); }
+@font-face { font-family: "Zen Maru Gothic"; font-weight: 700; src: url(../../hoard/web/fonts/ZenMaruGothic-Bold.woff2) format("woff2"); }
+:root {
+  --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
+  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00;
+  --display: "Dela Gothic One", "Noto Sans CJK JP", sans-serif;
+  --body: "Zen Maru Gothic", "Noto Sans CJK JP", sans-serif;
+}
+:root[lang=ja] #stage { word-break: auto-phrase; }
+:root[lang=ko] #stage { word-break: keep-all; }
+:root[lang=ko] { --display: "Noto Sans CJK KR", sans-serif; --display-weight: 900; --body: "Noto Sans CJK KR", sans-serif; }
+.help { --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3; --bone: #211C18; --dust: #6B6157; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #000; overflow: hidden; }
+#stage { position: relative; overflow: hidden; background: var(--cave); color: var(--bone); font-family: var(--body); font-weight: 500; }
+.abs { position: absolute; }
+.glow { position: absolute; border-radius: 50%; }
+#grain { position: absolute; inset: 0; background: url(../../build/promo/grain.png); opacity: .07; mix-blend-mode: overlay; }
+#vig { position: absolute; inset: 0; background: radial-gradient(ellipse 80% 75% at 50% 50%, rgba(0,0,0,0) 55%, rgba(8,6,5,.6) 100%); }
+.help #grain, .help #vig { display: none; }
+.display { font-family: var(--display); font-weight: var(--display-weight, 400); line-height: 1.04; letter-spacing: -.01em; }
+.title .line { display: block; width: max-content; white-space: nowrap; }
+.title.mid .line { margin: 0 auto; }
+.chips { display: flex; flex-wrap: wrap; }
+.chip { display: flex; align-items: center; gap: .42em; padding: 0 .8em 0 .62em; height: 1.9em; border-radius: 999px;
+  background: var(--ledge); border: 2px solid var(--seam); font-weight: 700; white-space: nowrap; }
+.chip i { width: .5em; height: .5em; border-radius: 50%; display: block; flex: none; }
+.chip svg { width: .9em; height: .9em; flex: none; }
+.chip .tag { font-size: .62em; padding: .16em .55em .2em; border-radius: .5em; background: var(--gold); color: var(--gold-ink); }
+.window { position: absolute; overflow: hidden; border-radius: 18px; border: 2px solid var(--seam); background: var(--ledge); }
+.window img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+.pill { display: inline-flex; align-items: center; gap: .45em; border-radius: 999px; background: var(--gold); color: var(--gold-ink);
+  font-family: var(--display); font-weight: var(--display-weight, 400); white-space: nowrap; padding: .34em .9em .42em .7em; }
+.pill svg { width: .78em; height: .78em; flex: none; }
+/* the help look's close-up: a lens, like the videos', on what the help is about */
+.lens { position: absolute; overflow: hidden; border-radius: 26px; background: var(--ledge);
+  box-shadow: 0 0 0 5px var(--gold), 0 30px 70px rgba(60,40,20,.22), 0 6px 18px rgba(60,40,20,.12); }
+.surface { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.ring { position: absolute; border-radius: 12px; box-shadow: 0 0 0 4px var(--gold), 0 0 30px 6px rgba(240,180,41,.3); }
+.cursor { position: absolute; width: 56px; height: 56px; filter: drop-shadow(0 4px 6px rgba(0,0,0,.25)); }
+/* a drawing of a window outside Hoard (as the help videos draw it): plain shapes and words */
+.dw { position: absolute; display: flex; flex-direction: column; gap: 20px; color: #211C18; }
+.dw .wt { font-family: var(--display); font-weight: var(--display-weight, 400); font-size: 40px; line-height: 1.12; }
+.dw .wl { font-size: 25px; line-height: 1.45; color: #6B6157; }
+.dw .wbtns { display: flex; gap: 14px; flex-wrap: wrap; }
+.dw .wb { height: 58px; padding: 0 28px; border-radius: 12px; border: 2px solid #D2CCC3; background: #FFFFFF; font-weight: 700;
+  font-size: 24px; display: flex; align-items: center; white-space: nowrap; }
+.dw .wlk { color: #8A5F00; text-decoration: underline; text-underline-offset: .18em; font-weight: 700; font-size: 25px; align-self: flex-start; }
+.dw .wkv { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; font-size: 24px; } .dw .wkv dt { color: #6B6157; } .dw .wkv dd { font-weight: 700; }
+.dw .on { box-shadow: 0 0 0 4px #F0B429; }
+.dw .wb.on { background: #F0B429; border-color: #F0B429; color: #2A1D00; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const el = (tag, cls, css, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const C = { booth: "#FF6259", gumroad: "#FF8AD8", jinxxy: "#56D1DC", payhip: "#95A0FF", itch: "#7ED67A", gold: "#F0B429" };
+const STORES = [["booth", "Booth"], ["gumroad", "Gumroad"], ["jinxxy", "Jinxxy"], ["payhip", "Payhip"], ["itch", "itch.io"]];
+const CUBE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><path d="M4 7.4l8 4.6 8-4.6M12 12v9.2"/></svg>';
+const PLAY = '<svg viewBox="0 0 24 24"><path d="M6 3.5v17l14.5-8.5z" fill="currentColor"/></svg>';
+const CURSOR = '<svg viewBox="0 0 24 24" width="56" height="56"><path d="M4 2.5l15.5 11.2-6.6 1.1 3.9 6.7-3 1.7-3.9-6.8-5 4.4z" fill="#FFFFFF" stroke="#211C18" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
+let F, LANG, W, H, PORTRAIT, N = {};
+const T = s => (s && typeof s === "object" && !Array.isArray(s) && "en" in s) ? (s[LANG] ?? s.en) : s;
+const shot = (image, theme) => `${F.shots}/${image}-${theme}${LANG === "en" ? "" : "-" + LANG}.png`;
+
+// ---------------- the Heap (hoard/heap.py's, passed in by thumbs.py), with or without its wordmark, or the word alone
+function heapSVG(withWord, ink = "#F4EDE3") {
+  const boxes = `<g>${F.heap.svg}</g>`;
+  if (!withWord) return `<svg viewBox="0 8 64 48" style="overflow:visible;width:100%;height:auto;display:block">${boxes}</svg>`;
+  return `<svg viewBox="0 0 226 64" style="overflow:visible;width:100%;height:auto;display:block">${boxes}<g fill="${ink}">${F.heap.word}</g></svg>`;
+}
+
+// ---------------- words
+// A title whose lines are given (a list) keeps them, each on one line, as large as they fit in its box; a title given
+// as one string wraps (between words: in Japanese, phrases), balanced, as large as it fits in its box's width and
+// height in at most three lines (so a short word is never left alone on a line of its own), or four if it must.
+function fitTitle(node, box, max, min) {
+  const fits = (fs, most) => {
+    node.style.fontSize = fs + "px";
+    const lines = [...node.querySelectorAll(".line")];
+    const wide = lines.length ? Math.max(...lines.map(l => l.scrollWidth)) : node.scrollWidth;
+    return wide <= box.w && node.offsetHeight <= box.h && (lines.length || Math.round(node.offsetHeight / (fs * 1.04)) <= most);
+  };
+  for (const most of [3, 4]) for (let fs = max; fs >= min; fs -= 2) if (fits(fs, most)) return fs;
+  node.style.fontSize = min + "px";
+  return min;
+}
+// Japanese in phrases: each word with the particles and marks after it (as film.html's), a word in katakana, kanji or
+// letters kept whole (サインイン, 何度, itch.io, APIキー: not サイン / イン, 何 / 度), and a phrase ended after て
+// (サインインして / いません)
+function jaPhrases(text) {
+  const out = [], toks = [];
+  let closed = false;
+  for (const { segment: t, isWordLike } of new Intl.Segmenter("ja", { granularity: "word" }).segment(text)) {
+    if (t.length > 1 && t[0] === "て" && /^[ぁ-ゖー]+$/.test(t)) toks.push(["て", true], [t.slice(1), true]);   // (てい: て, い)
+    else toks.push([t, isWordLike]);
+  }
+  for (const [t, isWordLike] of toks) {
+    if (/^\s+$/.test(t)) { out.push(t); closed = false; continue; }
+    const last = out[out.length - 1];
+    const kana = /^[ぁ-ゖー]+$/.test(t);
+    const whole = last && ((/[ァ-ヺー]$/.test(last) && /^[ァ-ヺー]/.test(t)) || (/[一-龯々]$/.test(last) && /^[一-龯々]/.test(t)) ||
+      (/[A-Za-z0-9.]$/.test(last) && /^[A-Za-z0-9]/.test(t)) || (/[A-Za-z]$/.test(last) && /^[ァ-ヺー]/.test(t)));   // (itch.io, APIキー)
+    if (last && !/^\s+$/.test(last) && (whole || !isWordLike || (kana && !closed))) out[out.length - 1] = last + t;
+    else out.push(t);
+    closed = t === "て";
+  }
+  return out;
+}
+// A title: its lines, or its words to wrap (a Japanese one only between its phrases), an opening quote hung in the margin
+function title(text, css) {
+  const n = el("div", "abs display title", css);
+  if (Array.isArray(text)) text.forEach(l => n.appendChild(el("span", "line", "", esc(l))));
+  else {
+    if (LANG === "ja") n.innerHTML = jaPhrases(text).map(p => `<span style="white-space:nowrap">${esc(p)}</span>`).join("");
+    else n.textContent = text;
+    n.style.textWrap = "balance";
+    if (/^[“「"]/.test(text)) n.style.textIndent = "-.45em";
+  }
+  return n;
+}
+function chipsFor(tx, features) {   // the stores, Projects and your own files; or, for the tour, what Hoard does
+  if (features) return features.map(f => `<div class="chip"><i style="background:var(--gold)"></i>${esc(f)}</div>`).join("");
+  return STORES.map(([k, name]) => `<div class="chip"><i style="background:${C[k]}"></i>${esc(name)}</div>`).join("") +
+    `<div class="chip" style="color:#EDE4D3">${CUBE}<span style="color:var(--bone)">${esc(tx.projectsChip)}</span></div>` +
+    `<div class="chip"><i style="background:var(--gold)"></i>${esc(tx.chip)}<span class="tag">${esc(tx.tag)}</span></div>`;
+}
+function backdrop(stage) {   // the cave's warm light: the stores' colours, soft
+  [["gold", .3, .74, .62, 900], ["booth", .16, .06, .16, 760], ["jinxxy", .15, .9, .08, 760], ["payhip", .17, .42, 1.04, 820], ["gumroad", .14, 1.0, .92, 760]]
+    .forEach(([c, a, x, y, r]) => {
+      const k = PORTRAIT ? 1.5 : 1;
+      stage.appendChild(el("div", "glow", `left:${x * W - r * k / 2}px;top:${y * H - r * k / 2}px;width:${r * k}px;height:${r * k}px;opacity:${a};` +
+        `background:radial-gradient(circle,${C[c]} 0%,rgba(0,0,0,0) 62%)`));
+    });
+}
+
+// ---------------- the looks
+const LOOK = {};
+const bottom = n => n.getBoundingClientRect().bottom;
+// The short promo: what it says, the stores (and Projects, and your own files) it brings together, and the Heap they
+// make, over Hoard's library. Landscape: the words on the left, the Heap on the library's corner. Portrait: the words,
+// the Heap, the chips and the library, down the middle.
+LOOK.short = (stage, th, tx) => {
+  backdrop(stage);
+  N.win = el("div", "window", "", `<img src="${shot(th.image, "dark")}">` +
+    '<div class="abs" style="inset:0;background:linear-gradient(200deg,rgba(33,28,24,0) 40%,rgba(33,28,24,.55))"></div>');
+  const glow = el("div", "glow", "background:radial-gradient(circle,rgba(240,180,41,.34) 0%,rgba(240,180,41,0) 60%)");
+  N.heap = el("div", "abs", "filter:drop-shadow(0 26px 40px rgba(0,0,0,.55))", heapSVG(false));
+  stage.append(N.win, glow, N.heap);
+  words(stage, tx, chipsFor(T(F.intro)), false);
+  let ww = 780, wx = 660, wy = 96, hw = 380, hx = 600, hy = 340;
+  if (PORTRAIT) {
+    hw = 560; hx = (W - hw) / 2; hy = bottom(N.title) + 80;
+    N.chips.style.top = (hy + hw * .75 + 70) + "px";
+    ww = 1040; wx = 110; wy = bottom(N.chips) + 80;
+  }
+  N.win.style.cssText = `left:${wx}px;top:${wy}px;width:${ww}px;height:${ww * 950 / 1600}px;transform-origin:0 50%;` +
+    `transform:perspective(2000px) rotateY(${PORTRAIT ? -10 : -18}deg) rotateZ(2deg);box-shadow:0 50px 120px rgba(0,0,0,.6)`;
+  glow.style.cssText = `left:${hx - hw / 2}px;top:${hy + hw * .375 - hw}px;width:${hw * 2}px;height:${hw * 2}px;` + glow.style.cssText;
+  Object.assign(N.heap.style, { left: hx + "px", top: hy + "px", width: hw + "px" });
+};
+// The long promo: what it says, what Hoard does, and a fan of Hoard's screens (the first at the back).
+LOOK.tour = (stage, th, tx) => {
+  backdrop(stage);
+  const imgs = th.images, n = imgs.length;
+  N.wins = imgs.map((im, i) => el("div", "window", "", `<img src="${shot(im, "dark")}">` +
+    `<div class="abs" style="inset:0;background:rgba(20,16,13,${((n - 1 - i) * .16).toFixed(2)})"></div>`));
+  stage.append(...N.wins);
+  words(stage, tx, chipsFor(null, th.features.map(T)), true);
+  const ww = PORTRAIT ? 860 : 600, x0 = PORTRAIT ? 70 : 640, y0 = PORTRAIT ? bottom(N.chips) + 90 : 70, dx = PORTRAIT ? 50 : 88, dy = PORTRAIT ? 110 : 92;
+  N.wins.forEach((w, i) => { w.style.cssText = `left:${x0 + i * dx}px;top:${y0 + i * dy}px;width:${ww}px;height:${ww * 950 / 1600}px;` +
+    `transform:rotate(${(i - (n - 1) / 2) * (PORTRAIT ? 2.5 : 3)}deg);box-shadow:0 40px 90px rgba(0,0,0,.6)`; });
+};
+// The words of the promo looks: Hoard's name, the title, and the chips under it.
+function words(stage, tx, chips, lockup) {
+  const mx = PORTRAIT ? 80 : 64;
+  N.mark = el("div", "abs", PORTRAIT ? `left:${(W - 340) / 2}px;top:120px;width:340px` : `left:${mx}px;top:52px;width:${lockup ? 210 : 196}px`, heapSVG(true));
+  if (!lockup) {   // the word alone, since the Heap is right there, large
+    const svg = N.mark.firstChild;
+    svg.setAttribute("viewBox", "70 0 156 64");
+    svg.querySelector("g").remove();
+  }
+  stage.appendChild(N.mark);
+  N.title = title(tx.title, PORTRAIT ? `left:${mx}px;right:${mx}px;top:290px;text-align:center` : `left:${mx}px;top:170px;width:560px`);
+  if (PORTRAIT) N.title.classList.add("mid");
+  stage.appendChild(N.title);
+  N.titleBox = PORTRAIT ? { w: W - 2 * mx, h: 420 } : { w: 540, h: 300 };
+  fitTitle(N.title, N.titleBox, PORTRAIT ? 150 : 104, 48);
+  N.chips = el("div", "abs chips", PORTRAIT
+    ? `left:${mx}px;right:${mx}px;justify-content:center;gap:14px;font-size:34px`
+    : `left:${mx}px;width:max-content;max-width:530px;gap:10px;font-size:22px`, chips);
+  stage.appendChild(N.chips);
+  N.chips.style.top = (bottom(N.title) + (PORTRAIT ? 50 : 36)) + "px";
+}
+// A help video's: Hoard, "Help", the problem, how to fix it, and a lens on where it shows (as the video's first step
+// shows it, or the window it draws).
+LOOK.help = (stage, th, tx) => {
+  const ftx = T(F.film.text), mx = 72;
+  N.mark = el("div", "abs", `left:${mx}px;top:48px;display:flex;align-items:center;gap:22px;height:52px`,
+    `<div style="width:168px;flex:none">${heapSVG(true, "#211C18")}</div><div style="width:2px;height:36px;background:var(--seam)"></div>` +
+    `<div style="font-size:28px;font-weight:700;color:var(--dust);white-space:nowrap">${esc(String(ftx.label).replace(/[:：]\s*$/, ""))}</div>`);
+  stage.appendChild(N.mark);
+  N.title = title(tx.title, `left:${mx}px;top:150px;width:530px`);
+  stage.appendChild(N.title);
+  N.titleBox = { w: 530, h: 380 };
+  fitTitle(N.title, N.titleBox, 84, 40);
+  N.pill = el("div", "abs", `left:${mx}px;font-size:34px`, `<span class="pill">${PLAY}<span>${esc(ftx.stepsLabel)}</span></span>`);
+  stage.appendChild(N.pill);
+  N.pill.style.top = (N.title.getBoundingClientRect().bottom + 40) + "px";
+  N.lens = el("div", "lens", `left:${LENS[0]}px;top:${LENS[1]}px;width:${LENS[2]}px;height:${LENS[3]}px;transform:rotate(1.2deg)`);
+  stage.appendChild(N.lens);
+  lensOn(N.lens, F.film.scenes[th.scene], th);
+};
+const LENS = [632, 96, 700, 528];   // the lens runs off the right edge: what it's about goes in the part that's seen
+function lensOn(lens, s, th) {   // what the lens shows: a Hoard screen, close in on a thing on it; or a drawn window
+  const LW = LENS[2], LH = LENS[3], VW = 1280 - LENS[0], tx = T(s.text);
+  let surf, roi, ring = null, click = null;
+  if (s.type === "hshot") {
+    const reg = F.regions[s.image] || {}, f = s.focus[th.focus || 0];
+    const box = reg[f.box], look = typeof f.lens === "string" ? reg[f.lens] : box, pad = f.pad ?? 8;
+    if (!box || !look) { window.warnings.push(`${s.image}: no box for "${f.box}"`); return; }
+    surf = el("div", "surface", "width:1600px;height:950px", `<img src="${shot(s.image, "light")}" style="width:1600px;height:950px;display:block">`);
+    roi = [look[0] - 60, look[1] - 50, look[2] + 120, look[3] + 100];
+    ring = [box[0] - pad, box[1] - pad, box[2] + 2 * pad, box[3] + 2 * pad];
+    if (f.click) click = [box[0] + box[2] / 2, box[1] + box[3] * .6];
+    lens._size = [1600, 950];
+  } else {   // a drawn window, in the state the thumb names, with what's clicked in it lit
+    const st = tx.win[th.state || 0], kind = s.kind || "browser", ww = 1240, wh = 735;
+    surf = el("div", "surface", `width:${ww}px;height:${wh}px;background:#F7F5F1`);
+    surf.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:#FFFFFF;border-bottom:2px solid #E3DFD8;display:flex;align-items:center;padding:0 26px;font-size:22px;font-weight:700;color:#6B6157">${esc(tx.bar || "")}</div>`;
+    const fw = 720;   // (narrower than the video's, so the lens comes closer)
+    surf.firstChild.style.paddingLeft = (ww - fw) / 2 + "px";   // (its name in line with what's in it, so it's on the lens)
+    const d = el("div", "dw", `left:${(ww - fw) / 2}px;width:${fw}px;top:0`, drawn(st, kind));
+    surf.appendChild(d);
+    lens.appendChild(surf);
+    d.style.top = (66 + Math.max(40, (wh - 66 - d.offsetHeight) / 2)) + "px";
+    const k = (s.clicks || [])[th.state || 0], hit = k && d.querySelector(`[data-k="${k}"]`);
+    if (hit) { hit.classList.add("on"); click = [hit.offsetLeft + d.offsetLeft + hit.offsetWidth / 2 + 30, hit.offsetTop + d.offsetTop + hit.offsetHeight * .6]; }
+    roi = [d.offsetLeft - 50, d.offsetTop - 50, d.offsetWidth + 100, d.offsetHeight + 100];
+    lens._size = [ww, wh];
+  }
+  // as close as it fits, the thing in the middle, the lens always full; a Hoard screen at least at its own size (a
+  // row too wide for that shows from its start, as it reads), never so close it goes soft
+  const [SW, SH] = lens._size;
+  let z = Math.min(VW / roi[2], LH / roi[3], 1.3);
+  z = Math.max(z, LW / SW, LH / SH, s.type === "hshot" ? 1 : 0);
+  const cx = roi[0] + roi[2] / 2, cy = roi[1] + roi[3] / 2;
+  const fx = roi[2] * z > VW ? -roi[0] * z : VW / 2 - cx * z, fy = roi[3] * z > LH ? -roi[1] * z : LH / 2 - cy * z;
+  const ox = clamp(fx, LW - SW * z, 0), oy = clamp(fy, LH - SH * z, 0);
+  surf.style.transform = `translate(${ox}px,${oy}px) scale(${z})`;
+  if (!surf.parentNode) lens.appendChild(surf);
+  lens._z = z;
+  if (ring) lens.appendChild(lens._ring = el("div", "ring", `left:${ox + ring[0] * z}px;top:${oy + ring[1] * z}px;width:${ring[2] * z}px;height:${ring[3] * z}px`));
+  const k = ring || roi;   // what has to be seen: its start, top and bottom (it can run on past the lens's right edge)
+  lens._about = [ox + k[0] * z, oy + k[1] * z, ox + (k[0] + k[2]) * z, oy + (k[1] + k[3]) * z];
+  if (click) lens.appendChild(el("div", "cursor", `left:${ox + click[0] * z - 6}px;top:${oy + click[1] * z - 4}px`, CURSOR));
+}
+function drawn(st, kind) {   // one state of a drawn window, as the help videos draw it (film.html's drawnState)
+  const k = (pre, i) => `data-k="${pre}${i}"`;
+  let h = "";
+  if (st.title) h += `<div class="wt">${esc(st.title)}</div>`;
+  (st.lines || []).forEach(l => { h += `<div class="wl">${esc(l)}</div>`; });
+  if (st.facts) h += `<dl class="wkv">${st.facts.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>`;
+  (st.links || []).forEach((l, i) => { h += `<div class="wlk" ${k("l", i)}>${esc(l)}</div>`; });
+  if (st.buttons) h += `<div class="wbtns" style="justify-content:${kind === "dialog" ? "flex-end" : "flex-start"}">${st.buttons.map((b, i) => `<div class="wb" ${k("b", i)}>${esc(b.t)}</div>`).join("")}</div>`;
+  return h;
+}
+
+// ---------------- the thumbnail
+window.warnings = [];
+window.setup = function (cfg) {
+  F = cfg; LANG = cfg.lang; PORTRAIT = cfg.shape === "portrait";
+  document.documentElement.lang = LANG;
+  W = PORTRAIT ? 1080 : 1280; H = PORTRAIT ? 1920 : 720;
+  const stage = $("stage"), th = cfg.film.thumb;
+  stage.style.width = W + "px"; stage.style.height = H + "px";
+  stage.classList.toggle("help", th.look === "help");
+  document.body.style.width = W + "px"; document.body.style.height = H + "px";
+  LOOK[th.look](stage, th, T(th.text));
+  stage.append(el("div", "", "", "<div id='grain'></div>").firstChild, Object.assign(el("div"), { id: "vig" }));
+  return { warnings: window.warnings };
+};
+
+// what's wrong with it, if anything: words too long for their room, or off the picture, or over the lens; a picture
+// that didn't load
+window.check = function () {
+  const bad = [], m = 24, R = n => n.getBoundingClientRect();
+  const off = r => r.left < m || r.top < m || r.right > W - m || r.bottom > H - m;
+  const over = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const lines = [...N.title.querySelectorAll(".line")].map(R);   // the title's own words, not its box
+  const tb = lines.length ? { left: Math.min(...lines.map(r => r.left)), right: Math.max(...lines.map(r => r.right)), top: lines[0].top, bottom: lines[lines.length - 1].bottom } : R(N.title);
+  [...N.title.querySelectorAll(".line")].forEach(l => { if (l.scrollWidth > N.titleBox.w + 1) bad.push(`the title's line "${l.textContent}" is too long for its room`); });
+  if (!N.title.querySelector(".line") && N.title.scrollWidth > N.title.clientWidth + 1) bad.push("a word in the title is too long for its room");
+  if (N.title.offsetHeight > N.titleBox.h) bad.push(`the title is too tall for its room (${N.title.offsetHeight} px)`);
+  if (off(tb)) bad.push("the title runs off the picture");
+  [["mark", N.mark], ["chips", N.chips], ["pill", N.pill]].forEach(([k, n]) => { if (n && off(R(n))) bad.push(`the ${k} runs off the picture`); });
+  if (N.chips && over(R(N.chips), tb)) bad.push("the chips run into the title");
+  if (N.chips && N.heap && over(R(N.chips), R(N.heap))) bad.push("the chips run into the Heap");
+  if (N.lens) {
+    const l = R(N.lens);
+    [["title", tb], ["pill", R(N.pill)], ["header", R(N.mark)]].forEach(([k, r]) => { if (over(l, r)) bad.push(`the lens covers the ${k}`); });
+    if (!N.lens.querySelector(".surface")) bad.push("the lens is empty");
+    const a = N.lens._about;   // what the lens is about is on it: its start, its top and its bottom
+    if (a && (a[0] < -2 || a[1] < -2 || a[0] > W - LENS[0] - 60 || a[3] > LENS[3] + 2)) bad.push("the lens cuts off what it's about");
+  }
+  if (N.wins) N.wins.forEach((w, i) => { if (over(R(w), tb) && !PORTRAIT) bad.push(`screen ${i + 1} runs into the title`); });
+  if (N.win && !PORTRAIT && over(R(N.win), tb)) bad.push("the screen runs into the title");
+  if (PORTRAIT) [...(N.wins || []), N.win].filter(Boolean).forEach((w, i) => { if (over(R(w), R(N.chips))) bad.push(`screen ${i + 1} runs into the chips`); });
+  document.querySelectorAll("img").forEach(i => { if (!i.naturalWidth) bad.push(`a picture didn't load: ${i.src.split("/").pop()}`); });
+  return bad.concat(window.warnings);
+};
+</script>
+</body>
+</html>

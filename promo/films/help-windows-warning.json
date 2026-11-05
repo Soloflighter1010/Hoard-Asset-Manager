@@ -48,6 +48,22 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 2,
+  "state": 0,
+  "text": {
+   "en": {
+    "title": "“Windows protected your PC”"
+   },
+   "ja": {
+    "title": "「WindowsによってPCが保護されました」"
+   },
+   "ko": {
+    "title": "“Windows의 PC 보호”"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

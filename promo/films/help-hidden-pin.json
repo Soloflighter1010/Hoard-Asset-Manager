@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "Forgot your PIN?"
+   },
+   "ja": {
+    "title": "PINを忘れましたか?"
+   },
+   "ko": {
+    "title": "PIN을 잊었나요?"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

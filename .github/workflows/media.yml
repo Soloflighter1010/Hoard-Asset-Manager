@@ -1,7 +1,7 @@
 name: Media
 
-# Makes Hoard's videos and their music (promo/: issues #273, #274, #291) and puts them on the "media" release, where
-# their addresses stay the same, so the wiki can link them:
+# Makes Hoard's videos, their thumbnails and their music (promo/: issues #273, #274, #291) and puts them on the "media"
+# release, where their addresses stay the same, so the wiki can link them:
 # https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/<file>
 # Run it by hand (Actions > Media > Run workflow) after promo/ changes. It films every video frame by frame, so it
 # takes an hour or two.
@@ -45,18 +45,19 @@ jobs:
           for lang in en ja ko; do
             python scripts/screenshots.py promo/products build/shots --themes=dark,light --lang=$lang --regions=promo/regions.json
           done
-      - name: Make the music and the videos
+      - name: Make the music, the videos and their thumbnails
         run: |
           python promo/music/loop.py
           python promo/build.py $(cd promo/films && ls *.json | sed 's/\.json$//') --lang=en,ja,ko --shape=landscape,portrait --workers=3
+          python promo/thumbs.py
       - name: Put them on the media release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/promo/music/hoard-loop.wav build/promo/out/
-          files=(build/promo/out/*.mp4 build/promo/out/hoard-loop.wav)
-          (cd build/promo/out && sha256sum *.mp4 hoard-loop.wav) > build/promo/out/SHA256SUMS.txt
-          notes="Hoard's videos and their music, made in code from Hoard's own screens (promo/ in the repository). No diffusion: Hoard's screens, shapes, words and music synthesised note by note. Made from ${GITHUB_SHA::12}."
+          cp build/promo/music/hoard-loop.wav build/promo/thumbs/*.jpg build/promo/out/
+          files=(build/promo/out/*.mp4 build/promo/out/*.jpg build/promo/out/hoard-loop.wav)
+          (cd build/promo/out && sha256sum *.mp4 *.jpg hoard-loop.wav) > build/promo/out/SHA256SUMS.txt
+          notes="Hoard's videos, their thumbnails and their music, made in code from Hoard's own screens (promo/ in the repository). No diffusion: Hoard's screens, shapes, words and music synthesised note by note. Made from ${GITHUB_SHA::12}."
           if gh release view media --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload media "${files[@]}" build/promo/out/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit media --notes "$notes" --latest=false --repo "$GITHUB_REPOSITORY"

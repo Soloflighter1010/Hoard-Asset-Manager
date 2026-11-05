@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "“Hoard didn't recognise this page”"
+   },
+   "ja": {
+    "title": "「Hoardがこのページを認識できませんでした」"
+   },
+   "ko": {
+    "title": "“Hoard가 이 페이지를 알아보지 못했어요”"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

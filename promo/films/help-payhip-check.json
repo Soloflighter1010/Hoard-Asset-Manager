@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "Payhip keeps showing a bot check"
+   },
+   "ja": {
+    "title": "Payhipでボットのチェックが何度も出る"
+   },
+   "ko": {
+    "title": "Payhip이 봇 확인을 계속 보여 줘요"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",

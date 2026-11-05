@@ -9,6 +9,30 @@
   "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
   "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
  },
+ "thumb": {
+  "look": "short",
+  "image": "library",
+  "text": {
+   "en": {
+    "title": [
+     "5 stores.",
+     "1 library."
+    ]
+   },
+   "ja": {
+    "title": [
+     "5つのストアが、",
+     "ひとつに。"
+    ]
+   },
+   "ko": {
+    "title": [
+     "스토어 5곳이",
+     "하나로."
+    ]
+   }
+  }
+ },
  "scenes": [
   {
    "type": "intro",

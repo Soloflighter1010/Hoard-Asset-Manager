@@ -48,6 +48,21 @@
    ]
   }
  },
+ "thumb": {
+  "look": "help",
+  "scene": 2,
+  "text": {
+   "en": {
+    "title": "“Not signed in to Booth”"
+   },
+   "ja": {
+    "title": "「Boothにサインインしていません」"
+   },
+   "ko": {
+    "title": "“Booth에 로그인하지 않았어요”"
+   }
+  }
+ },
  "scenes": [
   {
    "type": "hcard",
