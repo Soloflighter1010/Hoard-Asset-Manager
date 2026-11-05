@@ -624,8 +624,10 @@ class LookInsidePage(unittest.TestCase):
         """Issue #303: Look inside says what code a package holds, marks each, and Only code lists just them; a
         download's file with code has a Code mark, once the background reader has read it."""
         from hoard import needs
-        tools = Path(self.srv.cfg["root"]) / "Booth" / "Kitsu Studio" / "Hoodie" / "Tools.unitypackage"
-        self.srv.needs_index.put(str(tools), needs.read_file(tools))
+        # (read as the background reader reads it, by the downloads index's own path: on Windows, the long form of the
+        # temporary folder, which a test's own path may give in its short form, RUNNER~1)
+        [tools] = [p for p, _a in needs.package_files(self.srv.index()["assets"]) if p.endswith("Tools.unitypackage")]
+        self.srv.needs_index.put(tools, needs.read_file(Path(tools)))
         self.srv.forget_index()
         page = self.open_hoodie()
         rows = page.locator("#detail .files li")
