@@ -1,0 +1,31 @@
+{
+ "title": "Hoard in 40 seconds",
+ "bpm": 100,
+ "music": {"start_bar": 14},
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html"
+ },
+ "scenes": [
+  {"type": "intro", "bars": 5,
+   "text": {"en": {"stores": "Five stores,", "local": "and your own files.", "chip": "Your own files", "tag": "Local",
+                   "tagline": "One library for everything you own."}}},
+  {"type": "shot", "bars": 3, "image": "library", "side": "left",
+   "text": {"en": {"kicker": "Library", "title": "Find anything",
+                   "body": "Everything you own from every store, together.",
+                   "points": ["Search it all at once", "Filter by store, tag or type"]}},
+   "focus": [[1.5, "search", 8], [6.5, "storetabs", 4]]},
+  {"type": "shot", "bars": 3, "image": "downloads-details", "side": "right",
+   "text": {"en": {"kicker": "Downloads", "title": "Always up to date",
+                   "body": "Hoard downloads what's new, and notices when a creator updates something.",
+                   "points": ["Only the new files", "Look inside before you import"]}},
+   "focus": [[1.5, "tile", 6], [6.5, "inside", 6, "file"]]},
+  {"type": "shot", "bars": 3, "image": "wishlist", "side": "left",
+   "text": {"en": {"kicker": "Sets and wishlists", "title": "What goes together",
+                   "body": "Sets of what you use together, and wishlists from each store.",
+                   "points": ["See what got cheaper", "Share a set as a link"]}},
+   "focus": [[1.5, "cheaper", 8, "card"], [6.5, "share", 6, "buttons"]]},
+  {"type": "end", "bars": 2.5, "ending": true,
+   "text": {"en": {"line": "Free and open source.", "platforms": "Windows · macOS · Linux",
+                   "fine": "Products shown are from the maintainer's own library, pictured by their creators: hoard.furryup.link/credits.html\nNot affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io."}}}
+ ]
+}

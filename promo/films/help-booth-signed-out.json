@@ -1,0 +1,41 @@
+{
+ "title": "Help: \"Not signed in to Booth\"",
+ "wiki": "Troubleshooting#not-signed-in-to-booth-or-session-expired",
+ "style": "help",
+ "theme": "light",
+ "bpm": 100,
+ "music": {"start_bar": 0, "lufs": -20},
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html"
+ },
+ "text": {"en": {"label": "Help:", "problem": "“Not signed in to Booth”", "stepsLabel": "How to fix it",
+                 "steps": ["Choose Sign in on Booth's row", "Sign in to Booth in the window that opens", "Choose Refresh"]}},
+ "scenes": [
+  {"type": "hcard", "bars": 2.5,
+   "text": {"en": {"kicker": "Hoard help", "title": "“Not signed in to Booth”",
+                   "body": "Or “session expired”. Here's the fix, in three steps."}}},
+  {"type": "hshot", "bars": 3, "image": "help-booth-library",
+   "text": {"en": {"kicker": "What you'll see", "title": "A dot on Menu",
+                   "body": "Hoard can't read Booth until you sign in again. Nothing in your library is lost."}},
+   "focus": [{"at": 2, "box": "menu", "pad": 8, "lens": "barend"}]},
+  {"type": "hshot", "bars": 3, "image": "help-booth-stores",
+   "text": {"en": {"kicker": "Why", "title": "Booth ended the sign-in",
+                   "body": "Stores do that from time to time. In Menu, Stores says so on Booth's row."}},
+   "focus": [{"at": 2, "box": "error", "pad": 6, "lens": "booth"}]},
+  {"type": "hshot", "bars": 3.5, "image": "help-booth-stores", "step": 1,
+   "text": {"en": {"kicker": "Step 1", "title": "Choose Sign in", "body": "It's on Booth's row, in Stores."}},
+   "focus": [{"at": 3, "box": "signin", "pad": 6, "click": true, "lens": "booth"}]},
+  {"type": "hwindow", "bars": 3.5, "step": 2, "address": "booth.pm",
+   "text": {"en": {"kicker": "Step 2", "title": "Sign in to Booth",
+                   "body": "In the window that opens, sign in as you would in your usual browser.",
+                   "note": "Hoard keeps the sign-in on this computer."}}},
+  {"type": "hshot", "bars": 4, "image": "help-booth-fixed", "step": 3,
+   "text": {"en": {"kicker": "Step 3", "title": "Choose Refresh",
+                   "body": "Booth's row then says when it was read, and Sync works again."}},
+   "focus": [{"at": 3, "box": "refresh", "pad": 6, "click": true, "lens": "booth"}, {"at": 7, "box": "boothmeta", "pad": 6, "lens": "booth"}]},
+  {"type": "hcard", "bars": 3, "ending": true,
+   "text": {"en": {"kicker": "Still stuck?", "title": "Create a support report",
+                   "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
+                   "link": "hoard.furryup.link", "linkNote": "More help: the wiki's Troubleshooting page"}}}
+ ]
+}

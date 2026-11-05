@@ -1,6 +1,7 @@
 """Screenshots of every part of Hoard, for the website and the README, made from real products you choose.
 
     python scripts/screenshots.py PRODUCTS_FOLDER [OUT_FOLDER] [--style=treasure] [--themes=dark] [--only=library,set]
+                                  [--lang=ja] [--regions=promo/regions.json]
 
 PRODUCTS_FOLDER holds each product's picture (PNG, JPEG, WebP or GIF) and products.json, listing them:
 
@@ -17,9 +18,13 @@ KINDS get that kind (avatar, clothing...), which Mix and match picks from.
 Hoard runs on a made-up data folder of its own (never yours): those products are your library, most of them
 downloaded, with a Local item, sets and wishlists of them, two Unity projects (with VRChat's packages, backups, and
 what Hoard put in them), a finished check and a few tasks. Then each part is photographed, in the dark and light
-themes, at 1600x950: OUT_FOLDER/<part>-<theme>.png (and .webp, at 1600, 1200 and 800 wide, for the website).
+themes, at 1600x950: OUT_FOLDER/<part>-<theme>.png (help-<...> parts: a problem as Hoard shows it, for the help
+videos) (and .webp, at 1600, 1200 and 800 wide, for the website).
 --style takes them in the Treasure or Workbench style (Settings, Appearance), named
-<part>-<style>-<theme>; --themes and --only take fewer of them. Nothing is fetched from the internet: the pictures
+<part>-<style>-<theme>; --themes and --only take fewer of them. --lang takes them in Japanese (ja) or Korean (ko),
+named <part>-<theme>-<lang> (the promo and help videos use them: promo/README.md). --regions names, for some
+parts, things on the page ({"library": {"search": "#q"}}): each one's box is saved beside the picture, in
+<picture>.json ({"search": [x, y, width, height]}), so the videos can point at it in every language. Nothing is fetched from the internet: the pictures
 come from the folder. Paths on the pages are shown as
 C:\\Users\\you\\..., as a usual computer's would be.
 """
@@ -31,6 +36,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tarfile
@@ -64,6 +70,13 @@ PICTURE_HOST = {"booth": "https://booth.pximg.net/screens/", "gumroad": "https:/
 SETS = (("Photo studio", ("撮影スタジオ", "Mobile Studio", "VRChat Studio Lights", "PIXON400")),   # (name, products: words in their names)
         ("Night world", ("The Deep Dusk", "Moonlit Perch", "ClockCounter", "EDJ")),
         ("Rave look", ("AVIA X2", "Round Glasses", "Plumbob", "Flatcap")))
+
+
+def new_spots() -> list[str]:
+    """The "New: ..." notes the pages show once after an update (issue #244), all marked seen: none in the pictures."""
+    js = (REPO / "hoard" / "web" / "shared.js").read_text("utf-8")
+    block = js.split("const NEW_SPOTS = [", 1)[1].split("];", 1)[0]
+    return re.findall(r'\bid: "([\w-]+)"', block)
 
 
 def products(folder: Path) -> list[dict]:
@@ -253,7 +266,7 @@ def build(items: list[dict]) -> tuple[Path, dict]:
     for tag in {t for p in items if not p.get("wishlist") for t in p.get("tags") or ()}:   # what each tag is about
         if tag in KINDS:
             tags.change({"action": "type", "name": tag, "type": KINDS[tag]})
-    cfg = {**config.load_config(), "root": str(root), "setup_done": True, "ui": {"toured": True}}
+    cfg = {**config.load_config(), "root": str(root), "setup_done": True, "ui": {"toured": True, "spots_seen": new_spots()}}
     own = WORK / "My Texture Set"   # your own: a texture set, copied into Local (no one else's picture)
     (own / "Textures").mkdir(parents=True)
     (own / "My Texture Set.unitypackage").write_bytes(texture_package())
@@ -317,15 +330,30 @@ SHOW_PATHS = """work => {
 SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })()"   # (Mix and match's picks, the same each time)
 
 
-def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None) -> None:
+LOCALES = {"en": "en-US", "ja": "ja-JP", "ko": "ko-KR"}   # --lang: Hoard's language, and the window's, for dates
+
+
+REGION_BOXES = """sels => Object.fromEntries(Object.entries(sels).map(([k, sel]) => {
+  const el = [...document.querySelectorAll(sel)].find(e => { const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; });
+  if (!el) return [k, null];
+  const r = el.getBoundingClientRect();
+  return [k, [r.x, r.y, r.width, r.height].map(v => Math.round(v))];
+}))"""   # --regions: where each named thing is on the page, the first one that shows
+
+
+def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None,
+          lang: str = "en", regions: dict | None = None) -> None:
     """Take every screenshot, in each theme, from a made-up library of the products."""
     from playwright.sync_api import sync_playwright
     root, made = build(items)
-    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style}
+    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style, "language": lang}
     # what a usual computer says (this one may have no keyring, and its folders are made up for the pictures)
     server.signin_protection = lambda cfg: "encrypted by your Windows account"
     from pathlib import PureWindowsPath
     server.signins_root = lambda cfg: PureWindowsPath(r"C:\Users\you\AppData\Local\Hoard\sign-ins")
+    signed = set()   # the stores signed in, in the pictures (none, but for the help videos' Booth)
+    server.signed_in = lambda cfg, store: store in signed
     srv = server.AppServer(("127.0.0.1", 0), made["cfg"], lan=False)
     now = made["now"]
     with srv.lib.lock:   # in memory only
@@ -352,7 +380,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for theme in themes:
-            page = browser.new_page(viewport=SIZE, color_scheme=theme)
+            page = browser.new_page(viewport=SIZE, color_scheme=theme, locale=LOCALES[lang])
             page.add_init_script(SEEDED)
 
             def snap(name, settle=500):
@@ -362,12 +390,22 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
                 page.wait_for_timeout(settle)
                 page.evaluate(SHOW_PATHS, str(WORK))
-                path = out / (f"{name}-{theme}.png" if style == "standard" else f"{name}-{style}-{theme}.png")
+                path = out / ((f"{name}-{theme}" if style == "standard" else f"{name}-{style}-{theme}")
+                              + ("" if lang == "en" else f"-{lang}") + ".png")
                 page.screenshot(path=str(path))
                 shots.append(path)
+                if regions and name in regions:
+                    boxes = page.evaluate(REGION_BOXES, regions[name])
+                    missing = [k for k, v in boxes.items() if v is None]
+                    if missing:
+                        print(f"{path.name}: nothing shows for {', '.join(missing)}")
+                    path.with_suffix(".json").write_text(json.dumps(boxes, indent=1), "utf-8")
 
             def click(selector, wait=None):
-                """Click something, and wait for what it opens."""
+                """Click something, and wait for what it opens: opening Menu first for what's in it (Tags, Stores,
+                Settings: issue #270)."""
+                if page.locator(f"#barMenu {selector}").count() and not page.locator("#barMenu").is_visible():
+                    page.locator("#menuBtn").click()
                 page.locator(selector).first.click()
                 if wait:
                     page.locator(wait).first.wait_for()
@@ -384,15 +422,45 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 click(button)
                 snap(name, 700)
                 page.keyboard.press("Escape")
+            # for the help videos (issue #274): Booth ended Hoard's sign-in, as Hoard shows it
+            if not only or {"help-booth-library", "help-booth-stores", "help-booth-fixed"} & set(only):
+                with srv.lib.lock:
+                    srv.lib.data["stores"]["booth"] = {**srv.lib.data["stores"]["booth"], "error": "Not signed in to Booth"}
+                page.goto(srv.entry_url())
+                page.reload()   # (the same address: a reload, so the page reads the library again)
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(1200)
+                snap("help-booth-library", 600)
+                click("#storesBtn")
+                snap("help-booth-stores", 700)
+                page.keyboard.press("Escape")
+                with srv.lib.lock:   # and signed in again: Booth's row as it is then
+                    srv.lib.data["stores"]["booth"]["error"] = None
+                signed.add("booth")
+                page.goto(srv.entry_url())
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(900)
+                click("#storesBtn")
+                snap("help-booth-fixed", 700)
+                page.keyboard.press("Escape")
+                signed.discard("booth")
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(600)
             # Projects: the list, a project's packages, a new project, and the backups
-            click("#projectsTab", "[data-pj=manage]")
+            click("#projectsTab", "[data-pj=details]")
             page.locator("#pjSplash").wait_for(state="detached")   # (its splash, the first time it's opened)
             snap("projects", 900)
+            click("[data-pj=details]", "[data-pj=manage]")   # a project's details, where its Manage is
+            snap("project-details", 700)
             for button, name in (("[data-pj=manage]", "project-manage"), ("[data-pj=new]", "project-new"),
                                  ("[data-pj=backups]", "project-backups")):
+                if not page.locator(button).first.is_visible():
+                    click("[data-pj=details]", button)
                 click(button, "[data-pj=back]")
                 snap(name, 900)
-                click("[data-pj=back]", "[data-pj=manage]")
+                click("[data-pj=back]", "[data-pj=details]")
             page.keyboard.press("Escape")
             # Sets: every set and wishlist, a set opened, a wishlist with its prices, and Mix and match
             click('#storeSeg [data-store="Sets"]', "[data-setopen]")
@@ -451,11 +519,12 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
 if __name__ == "__main__":
     given = [a for a in sys.argv[1:] if not a.startswith("--")]
     opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
-    if not given or opts.get("style", "standard") not in server.themes.STYLES:
+    if not given or opts.get("style", "standard") not in server.themes.STYLES or opts.get("lang", "en") not in LOCALES:
         sys.exit(__doc__)
     try:
         shoot(products(Path(given[0])), Path(given[1]) if len(given) > 1 else REPO / "build" / "screenshots",
               opts.get("style", "standard"), tuple(opts.get("themes", "dark,light").split(",")),
-              set(opts["only"].split(",")) if opts.get("only") else None)
+              set(opts["only"].split(",")) if opts.get("only") else None, opts.get("lang", "en"),
+              json.loads(Path(opts["regions"]).read_text("utf-8")) if opts.get("regions") else None)
     finally:
         shutil.rmtree(WORK, ignore_errors=True)
