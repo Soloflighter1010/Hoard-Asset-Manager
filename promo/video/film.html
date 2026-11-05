@@ -256,9 +256,10 @@ function screenDraw(s, t, o) {   // o: { tout, move }
 // ---------------- the promo's scenes
 const BUILD = {}, DRAW = {};
 const CHIP_ORDER = ["booth", "gumroad", "jinxxy", "payhip", "itch", "projects", "gold"];   // the order they pop up in
-const CHIP_AT = {   // where each chip pops up
-  landscape: { booth: [400, 620], gumroad: [900, 700], jinxxy: [1450, 615], payhip: [560, 850], itch: [1130, 860], projects: [1580, 800], gold: [870, 985] },
-  portrait: { booth: [290, 900], gumroad: [790, 990], jinxxy: [280, 1110], payhip: [800, 1220], itch: [300, 1340], projects: [790, 1450], gold: [540, 1600] } };
+const CHIP_AT = {   // where each chip pops up: under the Heap, so a box waiting its turn is never where one lands
+  landscape: { booth: [400, 700], gumroad: [930, 760], jinxxy: [1480, 700], payhip: [560, 880], itch: [1180, 890], projects: [1620, 850], gold: [880, 975] },
+  portrait: { booth: [290, 1180], gumroad: [790, 1260], jinxxy: [280, 1380], payhip: [800, 1460], itch: [300, 1580], projects: [790, 1660], gold: [540, 1775] } };
+const HEAP_AT = { landscape: [960, 400, 9.5], portrait: [540, 760, 14] };   // the Heap's middle, and its size
 
 // The opening: the stores one by one, your projects, then your own files; each turns into its box and drops into
 // the Heap, the bottom row first and your files last, on top.
@@ -269,9 +270,9 @@ BUILD.intro = (s, root) => {
   s.l2 = words(el("div", "", "", esc(tx.projects)));
   s.l3 = words(el("div", "", "color:var(--gold)", esc(tx.local)));
   s.lines.append(s.l1, s.l2, s.l3);
-  s.tag = words(el("div", "abs center display", `top:${PORTRAIT ? 1300 : 770}px;font-size:${PORTRAIT ? 70 : 60}px;padding:0 70px`, esc(tx.tagline)));
+  s.tag = words(el("div", "abs center display", `top:${PORTRAIT ? 1150 : 700}px;font-size:${PORTRAIT ? 70 : 60}px;padding:0 70px`, esc(tx.tagline)));
   root.append(s.lines, s.tag);
-  const k = PORTRAIT ? 14 : 9.5, x0 = W / 2 - 32 * k, y0 = (PORTRAIT ? 900 : 470) - 32 * k;   // the Heap's 64 x 64 square
+  const [hx, hy, k] = HEAP_AT[PORTRAIT ? "portrait" : "landscape"], x0 = hx - 32 * k, y0 = hy - 32 * k;   // its 64 x 64 square
   s.k = k;
   s.items = F.heap.boxes.map((b, drop) => {
     const c = b.box, i = CHIP_ORDER.indexOf(c), inner = b.size * k;
@@ -327,6 +328,7 @@ DRAW.intro = (s, t) => {
       x = (1 - q) * (1 - q) * it.at[0] + 2 * (1 - q) * q * mx + q * q * it.slot[0];
       y = fall < .42 ? lerp(it.at[1], apex, eOut3(fall / .42)) : lerp(apex, it.slot[1], eIn2((fall - .42) / .58));
     }
+    it.now = fall >= 1 ? "landed" : fall > 0 ? "falling" : "waiting";
     const land = P(t, tDrop + .7, tDrop + 1.05);
     const squash = land > 0 && land < 1 ? Math.sin(Math.PI * land) * .13 : 0;
     const rot = lerp(it.r0, it.rot, Math.max(morph, eOut3(fall)));
@@ -583,6 +585,10 @@ window.checkFrame = function () {
   if (!HELP) SC.forEach(s => {   // the opening's chips and boxes stay on the frame
     if (s.type !== "intro" || s.root.style.display === "none") return;
     s.items.forEach(it => { if (+it.chip.style.opacity > .9) { const r = it.chip.getBoundingClientRect(); if (off(r, 4)) bad.push(`intro: ${it.c} runs off the frame (${fmt(r)})`); } });
+    // a box waiting for its turn is never in the way of one that has landed
+    const near = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    s.items.filter(a => a.now === "landed").forEach(a => s.items.filter(b => b.now === "waiting").forEach(b => {
+      if (near(a.chip.getBoundingClientRect(), b.chip.getBoundingClientRect())) bad.push(`intro: ${b.c}, waiting, is over ${a.c}, landed`); }));
   });
   return bad;
 };

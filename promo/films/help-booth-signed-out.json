@@ -32,7 +32,7 @@
   {"type": "hshot", "bars": 4, "image": "help-booth-fixed", "step": 3,
    "text": {"en": {"kicker": "Step 3", "title": "Choose Refresh",
                    "body": "Booth's row then says when it was read, and Sync works again."}},
-   "focus": [{"at": 3, "box": "refresh", "pad": 6, "click": true, "lens": "booth"}, {"at": 7, "box": "boothmeta", "pad": 6, "lens": "booth"}]},
+   "focus": [{"at": 3, "box": "refresh", "pad": 6, "click": true, "lens": "booth"}, {"at": 7, "box": "boothmeta", "pad": 3, "lens": "booth"}]},
   {"type": "hcard", "bars": 3, "ending": true,
    "text": {"en": {"kicker": "Still stuck?", "title": "Create a support report",
                    "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
