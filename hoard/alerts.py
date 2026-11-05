@@ -110,7 +110,12 @@ def _tail(text: str, n: int = 4) -> str:
 def _host(part: str) -> str:
     """A server's name from an address's first part (anything before an @ left out: it can be a name and password)."""
     host = part.rsplit("@", 1)[-1]
-    return host if re.fullmatch(r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?::\d{1,5})?|localhost(?::\d{1,5})?|[\d.]+(?::\d{1,5})?", host) else ""
+    name, colon, port = host.partition(":")
+    if colon and not re.fullmatch(r"\d{1,5}", port):
+        return ""
+    head, dot, last = name.rpartition(".")   # (a name: its last part letters only, as example.com)
+    named = dot and head and re.fullmatch(r"[A-Za-z0-9.-]+", head) and re.fullmatch(r"[A-Za-z]{2,}", last)
+    return host if name == "localhost" or re.fullmatch(r"[\d.]+", name) or named else ""
 
 
 def describe(url: str) -> dict:

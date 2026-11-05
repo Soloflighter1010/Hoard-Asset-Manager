@@ -1855,5 +1855,57 @@ class CodeScanningFindings(unittest.TestCase):
         self.assertEqual(asked, ["https://kitsu.itch.io/tail-pack"], "the address as Hoard put it together")
 
 
+class CodeScanningNovember(unittest.TestCase):
+    """The CodeQL findings on 5.2.0 beta 4 (code-scanning alerts 56-59): what each pattern was is read in its parts
+    now, each part checked whole, so none can take longer than the text's length; each says the same as before."""
+
+    def _quick(self, fn, texts):
+        started = time.monotonic()
+        for t in texts:
+            try:
+                fn(t)
+            except Exception:   # (refused, as it should be: only how long it took matters here)
+                pass
+        self.assertLess(time.monotonic() - started, 2)
+
+    def test_a_remotes_address_is_read_as_it_was(self):
+        """Alerts 57, 58: a Git remote's scheme, and user@host:path, in their parts (the same addresses taken)."""
+        from hoard.vpm import git
+        for u in ("https://github.com/you/p.git", "ssh://git@host/p", "git@github.com:you/p.git", "a.b-c_d@h-1.x:p/q",
+                  "file:///srv/repo.git", "a@b.c:d:e@f", "x@y:z://w", "HTTPS://Example.com/p"):
+            self.assertEqual(git.check_url(u), u)
+        for u in ("git+ssh://host/p", "ab:x://host", "a@b@c:d", "a@b:", "@b:c", "a@:c", "a@b", "1http://x", "a_b@c_d:e",
+                  "https://you:token@github.com/p", "https:///p", "ext::sh -c x"):
+            with self.assertRaises(git.GitError, msg=u):
+                git.check_url(u)
+        self._quick(git.check_url, ["A" * 1990 + "!", "a" * 1990 + ":/", "a@" + "-" * 1990, "a@" + "-" * 1990 + "!"])
+
+    def test_a_servers_name_is_read_as_it_was(self):
+        """Alert 56: a notification address's server, in its parts (its port, its last label)."""
+        from hoard import alerts
+        was = re.compile(r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?::\d{1,5})?|localhost(?::\d{1,5})?|[\d.]+(?::\d{1,5})?")
+        for host in ("example.com", "ntfy.sh", "a-b.c.example.org:8080", "localhost", "localhost:80", "10.0.0.2:443",
+                     "1.2.3.4", "example.c", "example.", ".com", "x.com:", "x.com:123456", "x.com:8a", "x.com:1:2",
+                     "local", "LOCALHOST", "-.--", "a_b.com", "a.b.c1", "", ":80", "user:pw@example.com", "x@y@z.com:9"):
+            self.assertEqual(alerts._host(host), host.rsplit("@", 1)[-1] if was.fullmatch(host.rsplit("@", 1)[-1]) else "", host)
+        started = time.monotonic()
+        for host in ("-" * 50000, "-" * 50000 + ".", "a" + "-." * 25000 + "1", "1" * 50000 + ":x"):
+            alerts._host(host)
+        self.assertLess(time.monotonic() - started, 2)
+
+    def test_a_pages_data_is_read_as_it_was(self):
+        """Alert 59: the strings in a page's data are read by JSON's own scanner, to their closing quote."""
+        page = 'x.push({"a": "q\\"uote\\\\", "b": [1, undefined, "u{n}"], "c": "\\u00e9"}) rest'
+        start = page.index("(") + 1
+        value, end = library.js_data(page, start)
+        self.assertEqual(value, {"a": 'q"uote\\', "b": [1, None, "u{n}"], "c": "\u00e9"})
+        self.assertEqual(page[end:], ") rest")
+        for bad in ('{"a": "unfinished', '{"a": "\\q"}', '{"a": 1'):
+            with self.assertRaises(ValueError, msg=bad):
+                library.js_data(bad, 0)
+        self._quick(lambda t: library.js_data(t, 0), ['{"' + '\\"' * 100000, '{"a": "' + "x" * 200000,
+                                                      "[" + '"\\\\",' * 50000])
+
+
 if __name__ == "__main__":
     unittest.main()

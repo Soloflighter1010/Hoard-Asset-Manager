@@ -1947,6 +1947,7 @@ async function load() {
     applyDisplay(DATA.display);
     applyUi(DATA.ui);
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
+    syncBrowse();   // (Browse... buttons on what was opened before the page knew it's in Hoard's window)
   } catch (e) {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };
   }

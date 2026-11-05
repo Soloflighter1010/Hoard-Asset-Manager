@@ -309,7 +309,7 @@ def where(folder) -> dict:
     git_dir, common = (Path(folder, x) if x and not os.path.isabs(x) else Path(x) for x in (git_dir, common))
     if top and _same(top, folder):
         return {"repo": True, "root": str(folder), "parent": None, "worktree": not _same(git_dir, common)}
-    return {"repo": False, "root": None, "parent": top or None, "worktree": False}
+    return {"repo": False, "root": None, "parent": os.path.normpath(top) if top else None, "worktree": False}   # (C:\\...)
 
 
 # ---- the ignore rules a project starts with
@@ -962,9 +962,9 @@ def check_url(url) -> str:
         raise GitError("Type the remote's address.")
     if "::" in u.split("/", 1)[0]:
         raise GitError("That kind of address isn't one Hoard uses.")
-    m = re.match(r"([A-Za-z][A-Za-z0-9+.-]*)://", u)
-    if m:
-        scheme = m.group(1).lower()
+    scheme, sep, _ = u.partition("://")
+    if sep and re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*", scheme):
+        scheme = scheme.lower()
         if scheme not in ("https", "http", "ssh", "git", "file"):
             raise GitError("That kind of address isn't one Hoard uses.")
         parts = urlsplit(u)
@@ -974,8 +974,10 @@ def check_url(url) -> str:
         if scheme != "file" and not parts.hostname:
             raise GitError("That address has no server in it.")
         return u
-    if re.fullmatch(r"[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[^\s]+", u):   # (ssh, as git@github.com:you/project.git)
-        return u
+    user, at, rest = u.partition("@")
+    host, colon, where_ = rest.partition(":")
+    if at and colon and where_ and re.fullmatch(r"[A-Za-z0-9._-]+", user) and re.fullmatch(r"[A-Za-z0-9.-]+", host):
+        return u   # (ssh, as git@github.com:you/project.git; no spaces, as checked above)
     if os.path.isabs(u):   # (a repository in a folder: on this computer, or a shared drive)
         return u
     raise GitError("That isn't an address Hoard can use: an https:// or ssh:// address, user@host:path, or a folder.")

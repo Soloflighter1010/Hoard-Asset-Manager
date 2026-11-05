@@ -30,15 +30,6 @@ from hoard.safety import ACCESS_HEADER  # noqa: E402
 from test_vpm_projects import SAMPLE, make_unitypackage  # noqa: E402
 
 
-
-def _same_folder_here(a, b) -> bool:
-    """Whether two paths are one folder (a drive that doesn't tell case apart)."""
-    import os
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return False
-
 class _Repo(http.server.BaseHTTPRequestHandler):
     files: dict = {}
 
@@ -585,8 +576,8 @@ class Server(unittest.TestCase):
         self.assertEqual(status, 400, answer)
         self.assertEqual(sorted(p.name for p in unity.iterdir()), ["Other", "Taken", "fresh idea"])
         # on a drive that tells case apart, another folder named the same but for its case is another folder
-        (unity / "OTHER").mkdir()
-        if not _same_folder_here(unity / "OTHER", other):
+        if not (unity / "OTHER").exists():   # (Windows' drives and a Mac's don't: OTHER is Other there)
+            (unity / "OTHER").mkdir()
             status, answer = self.call("POST", "/api/vpm/rename", {"path": str(other), "name": "OTHER"})
             self.assertEqual((status, answer.get("error")), (400, "A folder with that name is already there."))
             self.assertTrue(other.is_dir() and (unity / "OTHER").is_dir())

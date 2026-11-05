@@ -579,7 +579,7 @@ JX_DATA_JS = r"""() => {
 JX_NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")    # a Jinxxy username, as its addresses use it
 JX_SLUG = re.compile(r"[A-Za-z0-9_.~-]{1,200}")  # a product's own part of its address
 JX_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")       # an inventory item's id (/my/inventory/<id>)
-_JS_TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|[{}\[\]]|undefined\b|[^"{}\[\]u]+|u')
+_JS_TOKEN = re.compile(r'[{}\[\]]|undefined\b|[^"{}\[\]u]+|u')   # (and strings: json's own scanner reads them)
 
 
 def js_data(text: str, start: int) -> tuple[object, int]:
@@ -592,6 +592,11 @@ def js_data(text: str, start: int) -> tuple[object, int]:
         raise ValueError("not an object")
     parts, depth = [], 0
     while i < len(text):
+        if text[i] == '"':   # a string, to its closing quote (JSON's escapes: anything else isn't JSON anyway)
+            end = json.decoder.scanstring(text, i + 1, True)[1]   # (ValueError when it doesn't end, or isn't JSON)
+            tok, i = text[i:end], end
+            parts.append(tok)
+            continue
         m = _JS_TOKEN.match(text, i)
         if not m:
             raise ValueError("unreadable")
