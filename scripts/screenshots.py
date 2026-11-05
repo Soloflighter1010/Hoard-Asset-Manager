@@ -1,6 +1,7 @@
 """Screenshots of every part of Hoard, for the website and the README, made from real products you choose.
 
     python scripts/screenshots.py PRODUCTS_FOLDER [OUT_FOLDER] [--style=treasure] [--themes=dark] [--only=library,set]
+                                  [--lang=ja] [--regions=promo/regions.json]
 
 PRODUCTS_FOLDER holds each product's picture (PNG, JPEG, WebP or GIF) and products.json, listing them:
 
@@ -19,9 +20,14 @@ downloaded, with a Local item, sets and wishlists of them, two Unity projects (w
 what Hoard put in them), a finished check and a few tasks. Then each part is photographed, in the dark and light
 themes, at 1600x950: OUT_FOLDER/<part>-<theme>.png (and .webp, at 1600, 1200 and 800 wide, for the website).
 --style takes them in the Treasure or Workbench style (Settings, Appearance), named
-<part>-<style>-<theme>; --themes and --only take fewer of them. Nothing is fetched from the internet: the pictures
-come from the folder. Paths on the pages are shown as
-C:\\Users\\you\\..., as a usual computer's would be.
+<part>-<style>-<theme>; --themes and --only take fewer of them. --lang takes them in Japanese (ja) or Korean (ko),
+named <part>-<theme>-<lang> (the promo and help videos use them: promo/README.md). --regions names, for some
+parts, things on the page ({"library": {"search": "#q"}}): each one's box (all it draws) is saved beside the
+picture, in <picture>.json ({"search": [x, y, width, height]}), so the videos can point at it in every language; it
+also takes a few pictures for the videos alone: help-booth-library, -stores and -fixed (Booth's sign-in ended, as
+Hoard shows it, and then signed in again), and wishlist-prices and downloads-files, scrolled so what they look at
+closely is whole. Nothing is fetched from the internet: the pictures come from the folder. Paths on the pages are
+shown as C:\\Users\\you\\..., as a usual computer's would be.
 """
 from __future__ import annotations
 
@@ -304,15 +310,59 @@ NO_VERSION = ("document.addEventListener('DOMContentLoaded', () => { const s = d
 SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })()"   # (Mix and match's picks, the same each time)
 
 
-def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None) -> None:
+LOCALES = {"en": "en-US", "ja": "ja-JP", "ko": "ko-KR"}   # --lang: Hoard's language, and the window's, for dates
+
+
+REGION_BOXES = """sels => {
+  const rect = e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };
+  const cut = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+  const clips = e => { const s = getComputedStyle(e); return s.overflowX !== "visible" || s.overflowY !== "visible"; };
+  const shows = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; };
+  // all it draws: its own box, and whatever inside it sticks out of it, but not what a scrolled or cut-off box hides
+  const box = el => {
+    let clip = [0, 0, innerWidth, innerHeight], u = null;
+    for (let a = el.parentElement; a; a = a.parentElement) if (clips(a)) clip = cut(clip, rect(a));
+    const walk = (n, c) => {
+      const s = getComputedStyle(n);
+      if (s.display === "none") return;
+      const v = cut(rect(n), c);
+      if (v[2] > v[0] && v[3] > v[1] && s.visibility !== "hidden")
+        u = u ? [Math.min(u[0], v[0]), Math.min(u[1], v[1]), Math.max(u[2], v[2]), Math.max(u[3], v[3])] : v;
+      for (const k of n.children) walk(k, clips(n) ? cut(c, rect(n)) : c);
+    };
+    walk(el, clip);
+    return u && [Math.floor(u[0]), Math.floor(u[1]), Math.ceil(u[2]) - Math.floor(u[0]), Math.ceil(u[3]) - Math.floor(u[1])];
+  };
+  return Object.fromEntries(Object.entries(sels).map(([k, sel]) => {
+    const el = [...document.querySelectorAll(sel)].find(shows);
+    return [k, el ? box(el) : null];
+  }));
+}"""   # --regions: where each named thing is on the page, the first one that shows
+
+
+BRING_INTO_VIEW = """sel => {
+  const e = document.querySelector(sel);
+  if (!e) return;
+  let box = e.parentElement;   // what scrolls it
+  while (box && !(box.scrollHeight > box.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  const bottom = box ? Math.min(innerHeight, box.getBoundingClientRect().bottom) : innerHeight;
+  const by = e.getBoundingClientRect().bottom - (bottom - 40);
+  if (by > 0) (box || document.scrollingElement).scrollBy({ top: by, behavior: "instant" });
+}"""   # --regions: some pictures for the videos, scrolled so the thing they look at closely isn't cut off
+
+
+def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None,
+          lang: str = "en", regions: dict | None = None) -> None:
     """Take every screenshot, in each theme, from a made-up library of the products."""
     from playwright.sync_api import sync_playwright
     root, made = build(items)
-    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style}
+    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style, "language": lang}
     # what a usual computer says (this one may have no keyring, and its folders are made up for the pictures)
     server.signin_protection = lambda cfg: "encrypted by your Windows account"
     from pathlib import PureWindowsPath
     server.signins_root = lambda cfg: PureWindowsPath(r"C:\Users\you\AppData\Local\Hoard\sign-ins")
+    signed = set()   # the stores signed in, in the pictures (none, but for the help videos' Booth)
+    server.signed_in = lambda cfg, store: store in signed
     srv = server.AppServer(("127.0.0.1", 0), made["cfg"], lan=False)
     now = made["now"]
     with srv.lib.lock:   # in memory only
@@ -339,7 +389,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for theme in themes:
-            page = browser.new_page(viewport=SIZE, color_scheme=theme)
+            page = browser.new_page(viewport=SIZE, color_scheme=theme, locale=LOCALES[lang])
             page.add_init_script(SEEDED)
             page.add_init_script(NO_VERSION)
 
@@ -350,9 +400,26 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
                 page.wait_for_timeout(settle)
                 page.evaluate(SHOW_PATHS, str(WORK))
-                path = out / (f"{name}-{theme}.png" if style == "standard" else f"{name}-{style}-{theme}.png")
+                path = out / ((f"{name}-{theme}" if style == "standard" else f"{name}-{style}-{theme}")
+                              + ("" if lang == "en" else f"-{lang}") + ".png")
                 page.screenshot(path=str(path))
                 shots.append(path)
+                if regions and name in regions:
+                    boxes = page.evaluate(REGION_BOXES, regions[name])
+                    missing = [k for k, v in boxes.items() if v is None]
+                    if missing:
+                        print(f"{path.name}: nothing shows for {', '.join(missing)}")
+                    path.with_suffix(".json").write_text(json.dumps(boxes, indent=1), "utf-8")
+
+            def video_snap(name, show, settle=900):
+                """A picture for the videos only (taken with --regions): scrolled so that show (a selector), and
+                what's round it, is whole on the page, for a video to look at closely."""
+                if not regions and not (only and name in only):
+                    return
+                if only and name not in only:
+                    return
+                page.evaluate(BRING_INTO_VIEW, show)
+                snap(name, settle)
 
             def click(selector, wait=None):
                 """Click something, and wait for what it opens (from the bar's Menu, when it's in there)."""
@@ -374,6 +441,32 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 click(button)
                 snap(name, 700)
                 page.keyboard.press("Escape")
+            # for the help videos (issue #274): Booth ended Hoard's sign-in, as Hoard shows it
+            if (regions and not only) or {"help-booth-library", "help-booth-stores", "help-booth-fixed"} & set(only or ()):
+                with srv.lib.lock:
+                    srv.lib.data["stores"]["booth"] = {**srv.lib.data["stores"]["booth"], "error": "Not signed in to Booth"}
+                page.goto(srv.entry_url())
+                page.reload()   # (the same address: a reload, so the page reads the library again)
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(1200)
+                snap("help-booth-library", 600)
+                click("#storesBtn")
+                snap("help-booth-stores", 700)
+                page.keyboard.press("Escape")
+                with srv.lib.lock:   # and signed in again: Booth's row as it is then
+                    srv.lib.data["stores"]["booth"]["error"] = None
+                signed.add("booth")
+                page.goto(srv.entry_url())
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(900)
+                click("#storesBtn")
+                snap("help-booth-fixed", 700)
+                page.keyboard.press("Escape")
+                signed.discard("booth")
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(600)
             # Projects: the list, a project's details, its packages and its source control, a new project, the backups
             click("#projectsTab", ".pj-row")
             page.locator("#pjSplash").wait_for(state="hidden")   # (its splash, the first time it's opened)
@@ -402,6 +495,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             page.locator("[data-setopen]", has_text="Booth").first.click()
             page.locator("[data-setx=back]").first.wait_for()
             snap("wishlist", 1200)
+            video_snap("wishlist-prices", ".slot:has(.price.down)")
             click("[data-setx=back]", "[data-setopen]")
             page.evaluate("MIX.fit = false")   # (the sample's clothes aren't tagged for its avatar)
             click("[data-setx=mix]", "dialog.mixdlg")
@@ -412,6 +506,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             snap("downloads", 1200)
             page.locator(".slot:not(:has-text('My Texture Set'))").first.click()   # a store's, not your own
             snap("downloads-details", 700)
+            video_snap("downloads-files", "#detail ul.files li:has([data-act=inside])")
             page.keyboard.press("Escape")
             click('#views [data-view="space"]')
             snap("space", 1500)
@@ -448,11 +543,12 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
 if __name__ == "__main__":
     given = [a for a in sys.argv[1:] if not a.startswith("--")]
     opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
-    if not given or opts.get("style", "standard") not in server.themes.STYLES:
+    if not given or opts.get("style", "standard") not in server.themes.STYLES or opts.get("lang", "en") not in LOCALES:
         sys.exit(__doc__)
     try:
         shoot(products(Path(given[0])), Path(given[1]) if len(given) > 1 else REPO / "build" / "screenshots",
               opts.get("style", "standard"), tuple(opts.get("themes", "dark,light").split(",")),
-              set(opts["only"].split(",")) if opts.get("only") else None)
+              set(opts["only"].split(",")) if opts.get("only") else None, opts.get("lang", "en"),
+              json.loads(Path(opts["regions"]).read_text("utf-8")) if opts.get("regions") else None)
     finally:
         shutil.rmtree(WORK, ignore_errors=True)

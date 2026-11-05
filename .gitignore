@@ -12,7 +12,6 @@ probe-output/
 __pycache__/
 *.pyc
 dist/
-promo/out/        # the videos, music and posters promo/ makes (they go on a release of their own)
 
 # The share server's working files (Wrangler's, and anything secret it's given)
 share/.wrangler/

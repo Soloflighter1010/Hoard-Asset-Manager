@@ -1,211 +1,176 @@
-"""Hoard's videos, posters and music (promo/): every scene has its words in English, Japanese and Korean, the
-screens and parts it names are ones promo/capture.py takes, a video builds into what the player draws, the player
-draws the same frame every time, the music loops, and each troubleshooting video has the wiki section that explains its
-problem, to be linked from."""
+"""Hoard's videos (promo/: issues #273, #274, #291): every scene is one promo/video/film.html draws, a whole or half
+number of bars long, so its cuts land on the beat; what a film points at is something promo/regions.json finds on a
+screen scripts/screenshots.py takes; a film has every word in each language it has; the videos' Heap is the one
+hoard/heap.py draws everywhere; the music's loop wraps round with no seam; and a thing's box on a screen holds all it
+draws, so a close-up of it never cuts it off."""
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import re
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "promo"))
-import scenes  # noqa: E402
+PROMO = REPO / "promo"
+FILMS = {p.stem: json.loads(p.read_text("utf-8")) for p in sorted((PROMO / "films").glob("*.json"))}
+REGIONS = json.loads((PROMO / "regions.json").read_text("utf-8"))
+BAR = 4 * 60 / 100   # the music is 100 beats a minute, four to a bar
+SHOTS_PY = (REPO / "scripts" / "screenshots.py").read_text("utf-8")
+
+try:
+    import numpy  # noqa: F401
+    import scipy  # noqa: F401
+    MUSIC = True
+except ImportError:   # (promo/requirements.txt: not in the app's own requirements)
+    MUSIC = False
+try:
+    from tests.test_packages import BROWSER
+except ImportError:
+    BROWSER = False
 
 
-def _capture_tables() -> tuple[dict, dict]:
-    """capture.py's SHOTS and FOCUS, read without importing it (importing it makes a made-up data folder)."""
-    tree = ast.parse((REPO / "promo" / "capture.py").read_text("utf-8"))
-    found = {}
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name) and node.targets[0].id in ("SHOTS", "FOCUS"):
-            found[node.targets[0].id] = ast.literal_eval(node.value)
-    return found["SHOTS"], found["FOCUS"]
+def load(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-SHOTS, FOCUS = _capture_tables()
-
-
-def _words(v):
-    """Every set of words (a dict with en, ja and ko) in a scene."""
+def words(v, where=""):
+    """Every set of words in a film (a dict with "en"), and where it is."""
     if isinstance(v, dict):
-        if set(v) == set(scenes.LANGS):
-            yield v
+        if "en" in v:
+            yield where, v
         else:
-            for x in v.values():
-                yield from _words(x)
-    elif isinstance(v, (list, tuple)):
-        for x in v:
-            yield from _words(x)
+            for k, x in v.items():
+                yield from words(x, f"{where}.{k}")
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            yield from words(x, f"{where}[{i}]")
 
 
-class Scenes(unittest.TestCase):
-    def test_every_word_in_every_language(self):
-        for name, make, _, _ in scenes.videos():
-            for w in _words(make()):
-                for lang in scenes.LANGS:
-                    self.assertTrue(w[lang].strip(), f"{name}: no {lang} for {w['en']!r}")
-        for w in _words(scenes.POSTERS):
-            for lang in scenes.LANGS:
-                self.assertTrue(w[lang].strip())
+class Films(unittest.TestCase):
+    def test_every_scene_is_drawn(self):
+        page = (PROMO / "video" / "film.html").read_text("utf-8")
+        drawn = set(re.findall(r"^BUILD\.(\w+) =", page, re.M)) & set(re.findall(r"^DRAW\.(\w+) =", page, re.M))
+        self.assertTrue(FILMS)
+        for name, film in FILMS.items():
+            for s in film["scenes"]:
+                self.assertIn(s["type"], drawn, name)
 
-    def test_hoards_own_words_are_translated(self):
-        # a {Name} is one of Hoard's own words: the app has it in Japanese and Korean, so the video names it as Hoard does
-        for name, make, _, _ in scenes.videos():
-            for w in _words(make()):
-                for lang in ("ja", "ko"):
-                    for word in re.findall(r"\{([^{}]+)\}", w[lang]):
-                        self.assertNotEqual(scenes.ui(lang, word), word, f"{name}: Hoard has no {lang} for {word!r}")
-                    self.assertNotIn("{", scenes.say(w, lang))
-
-    def test_screens_and_parts_are_ones_capture_takes(self):
-        for name, make, _, _ in scenes.videos():
-            for s in make():
-                if s["kind"] != "screen":
-                    continue
-                self.assertIn(s["shot"], SHOTS, name)
-                parts = set(FOCUS.get(s["shot"], {})) | {"all", None}
-                for p in s["cam"]:
-                    self.assertIn(p, parts, f"{name}: {s['shot']} has no part {p!r}")
-                for p, _, _ in s["rings"]:
-                    self.assertIn(p, parts, f"{name}: {s['shot']} has no part {p!r}")
-                for _, p, _ in s["cursor"] or ():
-                    self.assertIn(p, parts, f"{name}: {s['shot']} has no part {p!r}")
-        for p in scenes.POSTERS:
-            self.assertIn(p["shot"], SHOTS)
-
-    def test_every_shot_has_a_theme(self):
-        from hoard import themes
-        for name, (theme, mode, style, _) in SHOTS.items():
-            self.assertIn(theme, themes.THEMES, name)
-            self.assertIn(mode, ("light", "dark"), name)
-            self.assertIn(style, themes.STYLES, name)
+    def test_cuts_on_the_beat(self):
+        for name, film in FILMS.items():
+            self.assertEqual(film.get("bpm", 100), 100, name)
+            for s in film["scenes"]:
+                self.assertEqual(s["bars"] * 2, int(s["bars"] * 2), f"{name}: {s['type']} is {s['bars']} bars")
+            self.assertEqual(sum(1 for s in film["scenes"] if s.get("ending")), 1, f"{name}: one scene has the ending chord")
+            self.assertTrue(film["scenes"][-1].get("ending"), f"{name}: the ending chord is on its last scene")
 
     def test_lengths(self):
-        lengths = {name: scenes.total(make()) for name, make, _, _ in scenes.videos()}
-        self.assertTrue(60 <= lengths["promo-long"] <= 180, lengths["promo-long"])   # (#273: 1 to 3 minutes)
-        self.assertTrue(25 <= lengths["promo-short"] <= 40, lengths["promo-short"])  # (about 30 seconds)
-        for name, n in lengths.items():
-            if name.startswith("troubleshooting-"):
-                self.assertLessEqual(n, 40, name)
+        for name, film in FILMS.items():
+            seconds = sum(s["bars"] for s in film["scenes"]) * BAR
+            if name == "promo-short":
+                self.assertTrue(25 <= seconds <= 40, seconds)   # (#273: about 30 seconds)
+            elif name == "promo-long":
+                self.assertTrue(60 <= seconds <= 180, seconds)  # (#273: 1 to 3 minutes)
+            else:
+                self.assertTrue(20 <= seconds <= 90, f"{name}: {seconds}")
 
-    def test_the_twelve_promos_and_the_troubleshooting_videos(self):
-        made = {(name, layout, lang) for name, _, layouts, langs in scenes.videos() for layout in layouts for lang in langs}
-        self.assertEqual(sum(1 for n, _, _ in made if n.startswith("promo-")), 12)
-        self.assertEqual(len(scenes.TROUBLESHOOTING), 9)
-        for key in scenes.TROUBLESHOOTING:
-            for lang in scenes.LANGS:
-                self.assertIn((f"troubleshooting-{key}", "landscape", lang), made)
+    def test_what_a_film_points_at_is_found(self):
+        for name, film in FILMS.items():
+            for s in film["scenes"]:
+                if "image" not in s:
+                    continue
+                self.assertIn(s["image"], REGIONS, f"{name}: regions.json has nothing on {s['image']}")
+                for f in s.get("focus", []):
+                    box, lens = (f[1], f[3] if len(f) > 3 else None) if isinstance(f, list) else (f["box"], f.get("lens"))
+                    self.assertIn(box, REGIONS[s["image"]], f"{name}: {s['image']} has no {box}")
+                    if isinstance(lens, str):
+                        self.assertIn(lens, REGIONS[s["image"]], f"{name}: {s['image']} has no {lens}")
 
+    def test_every_screen_is_taken(self):
+        # each screen regions.json names is one scripts/screenshots.py photographs
+        for image in REGIONS:
+            self.assertRegex(SHOTS_PY, rf'snap\(\s*"{re.escape(image)}"|"{re.escape(image)}"\)', image)
 
-class Build(unittest.TestCase):
-    def setUp(self):
-        self.dir = Path(tempfile.mkdtemp(prefix="hoard-promo-"))
-        self.screens, self.library = self.dir / "screens", self.dir / "library"
-        self.screens.mkdir()
-        self.library.mkdir()
-        boxes = {name: {lang: {part: [100 + 10 * k, 120, 400, 200] for k, part in enumerate(parts)} for lang in scenes.LANGS}
-                 for name, parts in FOCUS.items()}
-        (self.screens / "shots.json").write_text(json.dumps(
-            {name: {"theme": t, "mode": m, "style": st, "boxes": boxes.get(name, {})} for name, (t, m, st, _) in SHOTS.items()}), "utf-8")
-        items = [{"image": f"p{i}.jpg", "name": f"Product {i}", "creator": f"Maker {i}", "store": s, "tags": []}
-                 for i, s in enumerate(("booth", "gumroad", "jinxxy", "payhip", "itch"))]
-        (self.library / "products.json").write_text(json.dumps(items), "utf-8")
+    def test_every_word_in_each_language(self):
+        for name, film in FILMS.items():
+            for where, w in words(film):
+                en = w["en"]
+                for lang, said in w.items():
+                    self.assertIn(lang, ("en", "ja", "ko"), f"{name}{where}")
+                    if isinstance(en, dict):
+                        self.assertEqual(set(said), set(en), f"{name}{where}: {lang} hasn't the same words as en")
+                        for k, v in said.items():
+                            self.assertTrue(v if isinstance(v, list) else str(v).strip(), f"{name}{where}.{k}: no {lang}")
+                            if isinstance(v, list):
+                                self.assertEqual(len(v), len(en[k]), f"{name}{where}.{k}: {lang}")
+                    else:
+                        self.assertTrue(str(said).strip(), f"{name}{where}: no {lang}")
 
-    def tearDown(self):
-        import shutil
-        shutil.rmtree(self.dir, ignore_errors=True)
-
-    def test_build(self):
-        for name, make, layouts, langs in scenes.videos():
-            for layout in layouts:
-                for lang in langs:
-                    v = scenes.build(make(), lang, layout, self.screens, self.library)
-                    self.assertEqual((v["w"], v["h"]), (1920, 1080) if layout == "landscape" else (1080, 1920))
-                    self.assertAlmostEqual(sum(s["dur"] for s in v["shots"]), scenes.total(make()))
-                    aspect = 1180 / 664 if layout == "landscape" else 1.0
-                    for s in v["shots"]:
-                        if s["kind"] != "screen":
-                            continue
-                        self.assertTrue(s["src"].startswith("file://") and s["src"].endswith(f"-{lang}.png"))
-                        for r in (s["from"], s["to"]):   # (the camera: the window's shape, on the screen)
-                            x, y, w, h = r
-                            self.assertTrue(0 <= x and 0 <= y and x + w <= 1920 + 1 and y + h <= 1080 + 1, (name, r))
-                            self.assertAlmostEqual(w / h, aspect, delta=0.02)
-                        if s["shot"].startswith("t-"):
-                            self.assertIsNone(s["chip"])   # (troubleshooting: Hoard's own look, no theme to show)
-                        else:
-                            self.assertEqual(len(s["chip"]["swatches"]), 4)
-                    self.assertIn("<svg", v["logo"])
-
-    def test_credits_name_every_creator_shown(self):
-        names = scenes.credit_names(self.library)
-        self.assertEqual(names, [f"Maker {i}" for i in range(5)])
-
-    def test_posters(self):
-        for p in scenes.POSTERS:
-            for layout in ("portrait", "landscape"):
-                for lang in scenes.LANGS:
-                    v = scenes.build_poster(p, lang, layout, self.screens)
-                    self.assertEqual(v["shots"][0]["kind"], "poster")
+    def test_the_heap_is_hoards(self):
+        from hoard import heap
+        parts = load("promo_build", PROMO / "build.py").heap_parts()
+        self.assertEqual([b["box"] for b in parts["boxes"]], [p["box"] for p in heap.layout(heap.FULL)])
+        self.assertEqual(parts["boxes"][-1]["box"], "gold")   # your own files, on top
+        self.assertIn("projects", [b["box"] for b in parts["boxes"]])
+        self.assertEqual(parts["svg"], heap.boxes_svg(heap.FULL))
 
 
-class Player(unittest.TestCase):
-    page = (REPO / "promo" / "player.html").read_text("utf-8")
-
-    def test_the_same_frame_every_time(self):
-        # each frame is drawn from t alone: no randomness, no clock, no animations running on their own
-        for bad in ("Math.random", "Date.now", "new Date", "requestAnimationFrame", "@keyframes", "transition"):
-            self.assertFalse(bad in self.page, f"player.html has {bad}")
-
-    def test_nothing_from_elsewhere(self):
-        self.assertIsNone(re.search(r"(src|href)=\"https?://", self.page))
-        self.assertNotIn("@import", self.page)
-
-
+@unittest.skipUnless(MUSIC, "needs numpy and SciPy (pip install -r promo/requirements.txt)")
 class Music(unittest.TestCase):
-    def test_notes(self):
-        import music
-        self.assertAlmostEqual(music.hz("A4"), 440.0)
-        self.assertAlmostEqual(music.hz("A5"), 880.0)
-        self.assertAlmostEqual(music.hz("C4"), 261.63, places=1)
-        self.assertAlmostEqual(music.LOOP, 40.0)
+    def test_a_note_past_the_end_lands_on_the_start(self):
+        import numpy as np
+        loop = load("promo_loop", PROMO / "music" / "loop.py")
+        self.assertAlmostEqual(loop.L / loop.SR, 32 * BAR, places=3)   # 32 bars
+        bus = loop.Bus()
+        bus.add(np.ones(loop.SR), (loop.L - loop.SR // 2) / loop.SR)   # a second long, half a second from the end
+        self.assertGreater(abs(bus.L[: loop.SR // 4]).max(), 0.5)
+        self.assertGreater(abs(bus.L[-loop.SR // 4:]).max(), 0.5)
 
-    def test_a_bar_loops_without_a_click(self):
-        import music
-        left, right = music.master(music.render(bars=2))
-        self.assertEqual(len(left), round(2 * 4 * music.BEAT * music.RATE))
-        self.assertLessEqual(max(map(abs, left + right)), 1.0)
-        self.assertLess(music.seam(left), 1.0)
+    def test_filters_and_echoes_run_round(self):
+        import numpy as np
+        loop = load("promo_loop", PROMO / "music" / "loop.py")
+        x = np.sin(2 * np.pi * 3 * np.arange(loop.L) / loop.L) + np.random.default_rng(1).normal(0, .1, loop.L)
+        y = loop.circular(lambda v: loop.lp(v, 400), x)
+        jump = abs(y[0] - y[-1])   # across the seam, no bigger than from one sample to the next anywhere else
+        self.assertLessEqual(jump, abs(np.diff(y)).max() + 1e-9)
+        z = loop.wrap_convolve(np.r_[np.zeros(loop.L - 10), np.ones(10)], np.exp(-np.arange(loop.SR) / 2000.0))
+        self.assertGreater(z[:100].max(), .5)   # the echo of the last samples is heard at the start
 
 
-class Wiki(unittest.TestCase):
-    """promo/wiki_links.py links each troubleshooting video from the wiki once the media release has it: each video has
-    its section, in each language, to go under."""
+def _region_boxes() -> str:
+    """screenshots.py's REGION_BOXES (read without importing it: importing it makes a made-up data folder)."""
+    for node in ast.parse(SHOTS_PY).body:
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "REGION_BOXES":
+            return ast.literal_eval(node.value)
+    raise AssertionError("no REGION_BOXES in scripts/screenshots.py")
 
-    def test_each_troubleshooting_video_has_its_wiki_section(self):
-        import wiki_links
-        for lang in scenes.LANGS:
-            path, sections = wiki_links.SECTIONS[lang]
-            lines = {s.strip() for s in (REPO / path).read_text("utf-8").split("\n")}
-            for heading in sections:
-                self.assertIn(heading, lines, f"{path}: no {heading!r}")
-            self.assertEqual(set(sections.values()), set(scenes.TROUBLESHOOTING), path)
-            faq, heading = wiki_links.FAQ[lang]
-            self.assertIn(heading, {s.strip() for s in (REPO / faq).read_text("utf-8").split("\n")}, faq)
 
-    def test_a_link_goes_at_the_end_of_its_section_once(self):
-        import wiki_links
-        page = "# Page\n\n### One\n\nFirst.\n\nSecond.\n\n### Two\n\nThird.\n"
-        link = wiki_links.line("pin", "en")
-        self.assertIn(wiki_links.url("pin", "en"), link)
-        once = wiki_links.insert(page, "### One", link)
-        self.assertEqual(once, page.replace("Second.\n", f"Second.\n\n{link}\n"))
-        self.assertEqual(wiki_links.insert(once, "### One", link), once)
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class Boxes(unittest.TestCase):
+    def test_a_box_holds_all_it_draws(self):
+        from playwright.sync_api import sync_playwright
+        page_html = """<body style="margin:0">
+          <div id="row" style="position:absolute;left:100px;top:100px;width:300px;height:40px">
+            <button style="position:absolute;left:250px;top:0;width:90px;height:30px;border:2px solid">Show</button></div>
+          <div id="cut" style="position:absolute;left:100px;top:300px;width:200px;height:40px;overflow:hidden">
+            <span style="position:absolute;left:150px;width:200px;height:20px;display:block">hidden past the edge</span></div>
+          <div id="low" style="position:absolute;left:10px;top:580px;width:100px;height:100px"></div></body>"""
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 800, "height": 600})
+            page.set_content(page_html)
+            boxes = page.evaluate(_region_boxes(), {"row": "#row", "cut": "#cut", "low": "#low", "none": "#nothing"})
+            browser.close()
+        self.assertEqual(boxes["row"], [100, 100, 340, 40])   # the button that sticks out, with its border
+        self.assertEqual(boxes["cut"], [100, 300, 200, 40])   # not what its own edge hides
+        self.assertEqual(boxes["low"], [10, 580, 100, 20])    # only what's on the page
+        self.assertIsNone(boxes["none"])
+
 
 if __name__ == "__main__":
     unittest.main()

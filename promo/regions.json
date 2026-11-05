@@ -1,0 +1,118 @@
+{
+ "library": {
+  "search": "#q",
+  "sort": "#sort",
+  "filters": "#filters",
+  "storetabs": "#storeSeg",
+  "grid": "#grid",
+  "tile": ".slot",
+  "sync": "#syncBtn",
+  "tags": "[data-sec=your-tags]",
+  "show": "[data-sec=show]",
+  "type": "[data-sec=product-type]",
+  "heading": "#count"
+ },
+ "library-details": {
+  "detail": "#detail",
+  "tile": ".slot"
+ },
+ "downloads": {
+  "grid": "#grid",
+  "tile": ".slot",
+  "updates": "#filters [data-view=updates], #filters button:nth-of-type(2)",
+  "filters": "#filters"
+ },
+ "downloads-details": {
+  "detail": "#detail",
+  "inside": "#detail [data-act=inside]",
+  "projects": "#detail [data-act=projects]",
+  "editcopy": "#detail [data-act=edit-copy]",
+  "tile": ".slot",
+  "file": "#detail ul.files li:has([data-act=inside])"
+ },
+ "downloads-files": {
+  "detail": "#detail",
+  "inside": "#detail [data-act=inside]",
+  "projects": "#detail [data-act=projects]",
+  "editcopy": "#detail [data-act=edit-copy]",
+  "tile": ".slot",
+  "file": "#detail ul.files li:has([data-act=inside])"
+ },
+ "inside": {
+  "window": "#insideWin"
+ },
+ "local": {
+  "grid": "#grid",
+  "tile": ".slot"
+ },
+ "sets": {
+  "sets": "[data-setopen]",
+  "wishlists": "[data-wlopen], [data-setopen]:last-of-type"
+ },
+ "set": {
+  "products": "#setView"
+ },
+ "wishlist": {
+  "cheaper": ".price.down",
+  "products": "#setView",
+  "share": "#setView [data-setx=share]",
+  "card": ".slot:has(.price.down)",
+  "buttons": "#setView .sethead-text"
+ },
+ "wishlist-prices": {
+  "cheaper": ".price.down",
+  "products": "#setView",
+  "share": "#setView [data-setx=share]",
+  "card": ".slot:has(.price.down)",
+  "buttons": "#setView .sethead-text"
+ },
+ "mix": {
+  "window": "dialog[open]",
+  "picks": "dialog[open] .mixlist"
+ },
+ "projects": {
+  "rows": "#projectsBody .pj-items",
+  "new": "[data-pj=new]",
+  "tabs": ".pj-tabs"
+ },
+ "project-details": {
+  "detail": "aside.pj-detail",
+  "manage": "aside.pj-detail [data-pj=manage].ghost",
+  "unity": "[data-pj=unity]",
+  "updates": ".pj-up-go"
+ },
+ "project-manage": {
+  "body": "#projectsBody"
+ },
+ "stores": {
+  "panel": "#stores",
+  "booth": "#storeRows .store-row",
+  "boothmeta": "#storeRows .store-row .meta",
+  "refresh": "#storeRows [data-refresh=booth]"
+ },
+ "settings": {
+  "panel": "#settingsPanel"
+ },
+ "tasks": {
+  "window": "#tasksWin"
+ },
+ "help-booth-library": {
+  "menu": "#menuBtn",
+  "sync": "#syncBtn",
+  "barend": ".bar-side.bar-end"
+ },
+ "help-booth-stores": {
+  "panel": "#stores",
+  "booth": "#storeRows .store-row",
+  "error": "#storeRows .store-row .err",
+  "signin": "#storeRows [data-login=booth]",
+  "refresh": "#storeRows [data-refresh=booth]"
+ },
+ "help-booth-fixed": {
+  "panel": "#stores",
+  "booth": "#storeRows .store-row",
+  "boothmeta": "#storeRows .store-row .meta",
+  "refresh": "#storeRows [data-refresh=booth]",
+  "signout": "#storeRows [data-logout=booth]"
+ }
+}
