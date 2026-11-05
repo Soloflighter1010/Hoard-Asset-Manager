@@ -44,9 +44,15 @@ python promo/posters.py
 
 There's a help video for each problem in issue #274: `help-windows-warning`, `help-social-signin`,
 `help-booth-signed-out`, `help-payhip-check`, `help-itch-key`, `help-download-fails`, `help-notifications`,
-`help-unrecognised-page` and `help-hidden-pin`. Each is linked from the wiki section that explains its problem
-(Troubleshooting, and the FAQ), in each language, at its address on the `media` release:
-`https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-<film>-<lang>-<shape>.mp4`.
+`help-unrecognised-page` and `help-hidden-pin`. Each is in the wiki section that explains its problem
+(Troubleshooting, and the FAQ), in each language, as its thumbnail linking to it, both on the website:
+
+    [![Video: how to fix it (under a minute)](https://hoard.furryup.link/videos/hoard-help-<film>-<lang>-landscape.jpg)](https://hoard.furryup.link/videos/hoard-help-<film>-<lang>-landscape.mp4)
+
+The website's deploy (build-listing.yml) puts every landscape video and its thumbnail in its `videos/` from the
+`media` release, so they're never in the repository. On the website's docs that line is a player
+(`scripts/build_site_docs.py`); GitHub's wiki can't play a video from elsewhere, so it shows the thumbnail, and opens
+the video. The website's front page plays the promos, in each language.
 A help video says what its wiki section says: change both together.
 
 `PRODUCTS_FOLDER` is the products the website's screenshots show, the ones listed on its
