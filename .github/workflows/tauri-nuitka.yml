@@ -164,7 +164,8 @@ jobs:
 
       - name: Make the installer
         working-directory: shell
-        run: npx tauri bundle --bundles ${{ matrix.bundles }} --config "{\"version\": \"$NUMBERS\"}"
+        run: |
+          npx tauri bundle --bundles ${{ matrix.bundles }} --config "{\"version\": \"$NUMBERS\"}"
 
       - name: Name the files, and list their checksums
         run: |

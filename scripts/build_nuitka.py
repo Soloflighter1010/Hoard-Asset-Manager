@@ -57,7 +57,7 @@ def command() -> list[str]:
     cmd = [sys.executable, "-m", "nuitka", "--mode=standalone", f"--output-dir={OUT}", "--output-filename=hoard-server",
            "--assume-yes-for-downloads", "--remove-output", "--no-deployment-flag=self-execution",
            "--include-package=hoard", "--include-package=apprise", "--include-package-data=apprise",
-           "--include-package-data=playwright", "--include-package-data=tzdata",   # (its time zones: Apprise on Windows)
+           "--include-package-data=tzdata",   # (its time zones: Apprise on Windows; Playwright's driver comes with Nuitka's own rules)
            f"--include-data-dir={REPO / 'hoard' / 'web'}=hoard/web",
            f"--include-data-dir={REPO / 'hoard' / 'vpm' / 'templates'}=hoard/vpm/templates",
            *(f"--include-data-files={REPO / src}={dest}" for src, dest in data),
