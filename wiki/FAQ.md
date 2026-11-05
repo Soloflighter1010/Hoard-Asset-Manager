@@ -105,7 +105,7 @@ downloads files, which some security software watches closely. Hoard is code-sig
 release is scanned by VirusTotal before it's published. See
 [Troubleshooting](Troubleshooting#security-software-stops-hoard-or-its-browser).
 
-Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-windows-warning-en-landscape.mp4) (under a minute).
+[![Video: how to fix it (under a minute)](https://hoard.furryup.link/videos/hoard-help-windows-warning-en-landscape.jpg)](https://hoard.furryup.link/videos/hoard-help-windows-warning-en-landscape.mp4)
 
 ## Is the hidden library encrypted?
 
