@@ -1,0 +1,26 @@
+# Hoard's window, as a Tauri shell around Hoard's own server (hoard-server, compiled by Nuitka): the experimental
+# Tauri and Nuitka build (.github/workflows/tauri-nuitka.yml). Each crate is pinned to an exact version, and
+# Cargo.lock to the rest.
+[package]
+name = "hoard-shell"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Hoard's window: a Tauri shell around Hoard's own server"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.4", features = [] }
+tauri-plugin-dialog = "=2.8.3"
+tauri-plugin-opener = "=2.7.2"
+tauri-plugin-window-state = "=2.5.0"
+serde_json = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

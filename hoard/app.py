@@ -188,8 +188,9 @@ def window_available() -> bool:
         return False
 
 
-def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
-    """Start Hoard for the person at the computer: its window (or the browser), until it's closed or quit."""
+def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: bool = False) -> int:
+    """Start Hoard for the person at the computer: its window (or the browser), until it's closed or quit. With
+    shell, the window is the Tauri shell's that started this Hoard (hoard/shell.py)."""
     from .server import serve
     lock = InstanceLock(data_dir() / "running.lock")
     if not lock.acquire():   # (before the log: a second copy only brings the first to the front, and keeps no log)
@@ -231,7 +232,11 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
         if os.name == "posix":
             os.chmod(running_file(), 0o600)
         opened = False
-        if not browser and window_available():
+        if shell:
+            from . import shell as tauri
+            tauri.open_in_shell(srv, tauri.SHELL or tauri.claim_pipes())
+            opened = True
+        elif not browser and window_available():
             try:
                 open_window(srv)
                 opened = True
@@ -564,8 +569,9 @@ def self_test() -> int:
         check("Playwright's driver", Path(node).is_file() and Path(cli).is_file(), f"{node}, {cli}")
     except Exception as e:
         check("Playwright's driver", False, repr(e))
-    check("window support (pywebview)", window_available() or sys.platform not in ("win32", "darwin"))
-    if sys.platform == "darwin":   # pywebview's Mac window needs its Cocoa part and PyObjC's AppKit and WebKit (found
+    from . import shell
+    check("window support (pywebview)", shell.BUILD or window_available() or sys.platform not in ("win32", "darwin"))
+    if sys.platform == "darwin" and not shell.BUILD:   # (the shell build's window is its Tauri shell's)   # pywebview's Mac window needs its Cocoa part and PyObjC's AppKit and WebKit (found
         import importlib.util       # without importing them, which would start an app in the Dock)
         missing = [m for m in ("webview.platforms.cocoa", "AppKit", "WebKit", "Foundation")
                    if importlib.util.find_spec(m) is None]
