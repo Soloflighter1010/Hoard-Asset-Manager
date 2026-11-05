@@ -302,6 +302,23 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 @media (prefers-color-scheme: light) { .store, .store-notes strong.store { color: color-mix(in srgb, var(--c) 82%, #000); } }
 .window .shot { margin-top: 18px; }
 
+/* the videos: the front page's player, as wide as its screenshot, with which video and which language under it; and
+   a docs page's, a little narrower than the page */
+.player, .doc-video video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000;
+  border-radius: var(--radius); border: 1px solid var(--seam); box-shadow: 0 24px 60px rgb(0 0 0 / .35); }
+.player { max-width: 1112px; margin: 0 auto; }
+.watch { text-align: center; }
+.watch-picks { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 28px; margin-top: 18px; }
+.picks { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.picks a { padding: 7px 15px; border-radius: 999px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam);
+  color: var(--dust); font-weight: 700; text-decoration: none; }
+.picks a:hover { color: var(--bone); background: var(--stone); }
+.picks a[aria-current="true"] { color: var(--gold-ink); background: var(--gold); box-shadow: none; }
+.doc-video { margin: 1.2em 0 1.4em; max-width: 720px; }
+.doc-video video { box-shadow: 0 12px 30px rgb(0 0 0 / .3); }
+.doc-video figcaption { margin-top: 8px; color: var(--dust); font-size: .9rem; }
+@media (prefers-color-scheme: light) { .player, .doc-video video { box-shadow: 0 8px 20px rgb(60 40 20 / .1); } }
+
 /* tiles: a square picture with a store's spine along its foot, the name, and a line under it */
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 26px 16px; }
 .slot { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; }
