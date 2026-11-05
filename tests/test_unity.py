@@ -74,8 +74,10 @@ def build_material(d: Path) -> None:
     good = [asset("Rusk Avatar Base", "Booth/Kitsu Studio/Rusk Avatar Base", "https://booth.pm/ja/items/1", ["Rusk.unitypackage"],
                   page="https://booth.pm/ja/items/1"),
             asset("Odd Link", "Booth/Kitsu Studio/Odd Link", "https://booth.pm.evil.example/x", []),
-            asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"]),
+            asset("Linked Away", "Booth/Kitsu Studio/Linked Away", None, ["secret.txt"],
+                  code={"scripts": 1, "plugins": 0, "editor": 2, "tools": [], "folders": []}),   # (more in the editor than there are: left out)
             asset("Paw Suit", "Itch/Kitsu Studio/Paw Suit", "https://kitsu.itch.io/paw-suit", ["PawSuit.unitypackage"], store="Itch",
+                  code={"scripts": 3, "plugins": 1, "editor": 2, "tools": ["lilToon"], "folders": ["Assets/Kitsu/Scripts", "Assets/Kitsu/Editor"]},
                   page="https://kitsu.itch.io/paw-suit/download/SECRETKEY",   # a page of the buyer's own: never read as its page
                   needs=[   # what it needs (Hoard 4.0, hoard/needs.py): two kept, one link dropped, two broken ones left out
                       {"kind": "tool", "name": "Poiyomi Toon", "url": "https://www.poiyomi.com/", "versions": ["8.1"], "guids": ["a" * 32]},
@@ -86,7 +88,7 @@ def build_material(d: Path) -> None:
                       {"kind": "product", "name": "Escaping", "creator": "x", "store": "Booth", "folder": "../x", "guids": ["e" * 32]}]),
             # your own, listed where it is (issue #80): a folder outside the downloads, named by the sealed catalog
             asset("My Textures", "Local/_linked/local-1", None, ["Mine.unitypackage", "sub/skin.png"], store="Local",
-                  location=os.path.normpath(str(d / "mine")), note="A commission")]
+                  location=os.path.normpath(str(d / "mine")), note="A commission", your_note="For Rusk\n\nHue shifted to blue")]
     # a product in another library folder, on another drive (version 4)
     drive = d / "drive"
     (drive / "Booth" / "Kitsu Studio" / "Anko").mkdir(parents=True)

@@ -50,6 +50,13 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   **Import** asks first when something is missing, as without it parts of the product may be pink or missing. Hoard
   works out what each product needs (see [Downloads](Downloads#the-downloads-view)); the window checks whether this
   project has it.
+- **Code in a package** (0.11.0, with Hoard 5.2.0). Before importing a product whose packages hold scripts or DLLs,
+  which Unity runs once they're imported, **Import** says so in the same warning: how many, how many run in the
+  editor, which are from a tool Hoard knows, and where the rest goes; then **Import** or **Cancel**. **Import set**
+  names the products in it with code. A product with none, or one Hoard hasn't read yet, says nothing of it. Hoard
+  says what's there; it doesn't call it safe or unsafe. (Look inside, in Hoard's Downloads, lists each file.)
+- **Your note** (0.11.0, with Hoard 5.2.0). A note you wrote on a product in Hoard (its details) shows in its details
+  here.
 - **Find which product a file came from** (0.6.0). Select files or folders in the Project window, right-click and
   choose **Hoard › Which Product Is This From?** (also in the **Assets** menu). The window lists the products
   whose packages carry them, most files first, with **Show** to find each in the list. It looks at up to 20,000

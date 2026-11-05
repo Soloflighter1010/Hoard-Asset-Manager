@@ -1618,7 +1618,8 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=fro
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
-             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": "", "type": kind, "type_from": known}
+             "also_in": [], "copy_keys": [], "match_key": _norm(i["name"]), "stack_key": "", "type": kind, "type_from": known,
+             "your_note": tagdata.get("notes", {}).get(key, "")}   # (issue #304; "note" is a Local item's own)
         for k in ("creator_url", "url", "download_url", "page"):  # also covers lists saved by older versions
             e[k] = store_link(e["store"], e.get(k))
         e["thumbnail"] = safe_url(e.get("thumbnail"))

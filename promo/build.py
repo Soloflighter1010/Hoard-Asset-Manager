@@ -69,7 +69,7 @@ def grain() -> None:
     from PIL import Image
     BUILD.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(7)
-    Image.fromarray(rng.normal(128, 40, (256, 256)).clip(0, 255).astype("uint8"), "L").save(path)
+    Image.fromarray(rng.normal(128, 40, (256, 256)).clip(0, 255).astype("uint8")).save(path)   # (grey: "L")
 
 
 def setup_for(film: dict, lang: str, shape: str, shots: Path) -> dict:

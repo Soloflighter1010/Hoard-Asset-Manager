@@ -26,7 +26,7 @@ from . import packages
 from .paths import data_dir
 from .safety import DataFileError, check_seal, read_json_file, remember_sealed, seal, write_file_safely
 
-FORMAT = {"format": "hoard-package-needs", "version": 1}
+FORMAT = {"format": "hoard-package-needs", "version": 2}   # 2: what code each package holds (issue #303)
 KNOWN_FILE = Path(__file__).resolve().parent / "known_tools.json"
 MAX_FILES = 50_000
 MAX_LISTED = 5          # other products named as needed, the most needed first
@@ -68,42 +68,90 @@ def _clean(guids) -> list[str]:
     return sorted(g for g in guids if isinstance(g, str) and packages.GUID.fullmatch(g) and not g.startswith(BUILT_IN))
 
 
-def _one(stream) -> dict:
-    """What one .unitypackage has (its assets' GUIDs) and names that it doesn't have (what it needs from elsewhere)."""
+def _one(stream, tools: dict) -> dict:
+    """What one .unitypackage has (its assets' GUIDs), names that it doesn't have (what it needs from elsewhere), and
+    the code it holds (packages.code_in, without each file's marks: issue #303)."""
     refs: set = set()
-    assets = packages.read_unitypackage(stream, refs=refs)
+    seen: dict = {}
+    assets = packages.read_unitypackage(stream, refs=refs, code=seen)
     own = set(assets)
-    return {"own": _clean(own), "refs": _clean(refs - own)}
+    return {"own": _clean(own), "refs": _clean(refs - own), "code": packages._summary(packages.code_in(assets, seen, tools))}
 
 
 def read_file(path: Path) -> dict:
     """What one download holds and names: {"size", "mtime_ns", "packages": [{"member" (its path in a .zip, or None),
-    "own", "refs"}], "error"}."""
+    "own", "refs", "code"}], "loose" (in a .zip, the scripts and plugins loose in it), "error"}."""
     st = os.stat(path, follow_symlinks=False)
     entry = {"size": st.st_size, "mtime_ns": st.st_mtime_ns, "packages": [], "error": None}
+    tools = packages.known_code_tools()
     if not stat.S_ISREG(st.st_mode):
         entry["error"] = "not a plain file"
         return entry
     try:
         if path.name.lower().endswith(".zip"):
             with zipfile.ZipFile(path) as zf:
+                loose = {"scripts": 0, "plugins": 0, "editor": 0}
+                entry["loose"] = loose
                 for info in zf.infolist()[:packages.MAX_ZIP_MEMBERS]:
                     name = packages.zip_name(info)
+                    kind = None if info.is_dir() else packages.code_kind(name)
+                    if kind:
+                        loose[kind + "s"] += 1
+                        loose["editor"] += packages._in_editor_folder(name)
                     if info.is_dir() or not name.lower().endswith(".unitypackage") or info.flag_bits & 0x1:
                         continue
                     try:
                         with zf.open(info) as member:
-                            entry["packages"].append({"member": name, **_one(member)})
+                            entry["packages"].append({"member": name, **_one(member, tools)})
                     except (packages.NotAPackage, zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError, zlib.error):
                         continue
                     if len(entry["packages"]) >= packages.MAX_ZIP_PACKAGES:
                         break
         else:
             with open(path, "rb") as fh:
-                entry["packages"].append({"member": None, **_one(fh)})
+                entry["packages"].append({"member": None, **_one(fh, tools)})
     except (packages.NotAPackage, zipfile.BadZipFile, zipfile.LargeZipFile, OSError, NotImplementedError) as e:
         entry["error"] = str(e)[:200] or e.__class__.__name__
     return entry
+
+
+# ----------------------------------------------------------------------------- code in a download (issue #303)
+
+def _clean_code(value) -> dict:
+    """A package's code as kept (packages.code_in, without its items): counts, tools' names and folders, checked."""
+    from .safety import clean_text
+    v = value if isinstance(value, dict) else {}
+
+    def count(k):
+        """One of its counts, or 0."""
+        n = v.get(k)
+        return n if isinstance(n, int) and not isinstance(n, bool) and 0 <= n < 10 ** 7 else 0
+    tools = v.get("tools") if isinstance(v.get("tools"), dict) else {}
+    folders = v.get("folders") if isinstance(v.get("folders"), list) else []
+    return {"scripts": count("scripts"), "plugins": count("plugins"), "editor": count("editor"),
+            "tools": {clean_text(t, 100): n for t, n in list(tools.items())[:20]
+                      if isinstance(t, str) and clean_text(t, 100) and isinstance(n, int) and n > 0},
+            "folders": [f for f in (clean_text(x, 300) for x in folders[:8] if isinstance(x, str)) if f]}
+
+
+def file_code(entry: dict | None) -> dict | None:
+    """What code a download holds, all of its packages together (and in a .zip, what's loose in it): {"scripts",
+    "plugins", "editor", "tools": {a known tool's name: how many}, "folders" (where the rest goes), "loose": {"scripts",
+    "plugins", "editor"}}; None when it holds none, or hasn't been read yet."""
+    if not entry:
+        return None
+    out = {"scripts": 0, "plugins": 0, "editor": 0, "tools": {}, "folders": [], "loose": dict(entry.get("loose") or {})}
+    for p in entry.get("packages") or []:
+        c = _clean_code(p.get("code"))
+        for k in ("scripts", "plugins", "editor"):
+            out[k] += c[k]
+        for t, n in c["tools"].items():
+            out["tools"][t] = out["tools"].get(t, 0) + n
+        out["folders"] += [f for f in c["folders"] if f not in out["folders"]][:max(0, 8 - len(out["folders"]))]
+    loose = out["loose"]
+    if not (out["scripts"] or out["plugins"] or loose.get("scripts") or loose.get("plugins")):
+        return None
+    return out
 
 
 # ----------------------------------------------------------------------------- the index
@@ -119,7 +167,8 @@ class NeedsIndex:
         if self.path.is_file():
             try:
                 raw = read_json_file(self.path, 256 * 1024 * 1024)
-                if check_seal(raw, self.path) in ("sealed",) and isinstance(raw.get("files"), dict):
+                if (check_seal(raw, self.path) in ("sealed",) and raw.get("version") == FORMAT["version"]
+                        and isinstance(raw.get("files"), dict)):   # (an older version's: every file read again, once)
                     self.files = {k: v for k, v in list(raw["files"].items())[:MAX_FILES] if self._valid(k, v)}
             except (DataFileError, OSError, AttributeError):
                 pass   # read again from the files themselves
@@ -138,6 +187,9 @@ class NeedsIndex:
             if not isinstance(p, dict) or not isinstance(p.get("own"), list) or not isinstance(p.get("refs"), list):
                 return False
             p["own"], p["refs"] = _clean(p["own"]), _clean(p["refs"])
+            p["code"] = _clean_code(p.get("code"))
+        if "loose" in entry:
+            entry["loose"] = {k: v for k, v in _clean_code(entry["loose"]).items() if k in ("scripts", "plugins", "editor")}
         return True
 
     def fresh(self, path: str) -> bool:
@@ -278,6 +330,7 @@ def add_to_catalog(root: Path, catalog: list[dict], index: NeedsIndex | None = N
     """Give each catalog.json entry what it needs ("needs", docs/DATA-FORMATS.md), from what's been read so far:
     [{"kind": "tool", "name", "url", "versions", "guids"} or {"kind": "product", "name", "creator", "store", "folder",
     "guids"}]. Hoard for Unity says which of them aren't in the project before importing."""
+    from .safety import valid_rel
     from .tags import tag_key
     index = index or NeedsIndex()
     if not index.files:
@@ -288,6 +341,15 @@ def add_to_catalog(root: Path, catalog: list[dict], index: NeedsIndex | None = N
         assets.append({"id": i, "abs_folder": str(base), "files": [{"path": f} for f in e["files"]],
                        "tag_key": tag_key(e["store"], e["name"]), "name": e["name"], "creator": e["creator"],
                        "store": e["store"], "catalog_folder": e["folder"]})
+    for i, a in enumerate(assets):   # what code its packages hold, for Hoard for Unity's warning (issue #303)
+        found = [c for c in (file_code(index.get(p)) for p, _a in package_files([a])) if c]
+        if found:
+            catalog[i]["code"] = {"scripts": sum(c["scripts"] for c in found), "plugins": sum(c["plugins"] for c in found),
+                                  "editor": sum(c["editor"] for c in found),
+                                  "tools": sorted({t for c in found for t in c["tools"]})[:20],
+                                  "folders": list(dict.fromkeys(f for c in found for f in c["folders"] if valid_rel(f)))[:8]}
+            if not (catalog[i]["code"]["scripts"] or catalog[i]["code"]["plugins"]):
+                del catalog[i]["code"]   # (only loose in a .zip: not imported from it)
     for i, n in work_out(assets, index).items():
         listed = [{"kind": "tool", "name": t["name"], "url": t["url"], "versions": t["versions"],
                    "guids": t["guids"][:MAX_CATALOG_GUIDS]} for t in n["tools"]]
@@ -295,6 +357,22 @@ def add_to_catalog(root: Path, catalog: list[dict], index: NeedsIndex | None = N
                     "folder": o["folder"], "guids": o["guids"][:MAX_CATALOG_GUIDS]} for o in n["products"]]
         if listed:
             catalog[i]["needs"] = listed
+
+
+def valid_code(value) -> bool:
+    """A catalog entry's "code" as Hoard writes it (docs/DATA-FORMATS.md): counts, tools' names and folders."""
+    from .safety import clean_text, valid_rel
+    if not isinstance(value, dict) or set(value) != {"scripts", "plugins", "editor", "tools", "folders"}:
+        return False
+    counts = [value[k] for k in ("scripts", "plugins", "editor")]
+    if not all(isinstance(n, int) and not isinstance(n, bool) and 0 <= n < 10 ** 7 for n in counts) or not (counts[0] or counts[1]):
+        return False
+    if value["editor"] > value["scripts"] + value["plugins"]:
+        return False
+    if not isinstance(value["tools"], list) or len(value["tools"]) > 20 or not all(
+            isinstance(t, str) and t and t == clean_text(t, 100) for t in value["tools"]):
+        return False
+    return isinstance(value["folders"], list) and len(value["folders"]) <= 8 and all(valid_rel(f) for f in value["folders"])
 
 
 def valid_needs(value, stores) -> bool:

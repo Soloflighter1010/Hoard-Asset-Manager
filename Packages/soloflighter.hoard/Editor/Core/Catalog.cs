@@ -16,11 +16,13 @@ namespace SoloFlighter.Hoard
         public string Page;       // its public page (Hoard 4.3.3), for a credits list: Url is often the buyer's own
         public string Location;   // a Local item listed where it is (Hoard's issue #80): its own folder; else null
         public string Note;       // a Local item: who or what it's for
+        public string YourNote;   // your note on the product, from its details in Hoard (Hoard's issue #304); else null
         public string Library;    // a product in another of Hoard's library folders (on another drive): that folder; else null
         public List<string> Files = new List<string>();
         public List<string> Tags = new List<string>();
         public List<string> SuggestedTags = new List<string>();
         public List<HoardNeed> Needs = new List<HoardNeed>();   // what its packages use from elsewhere (Hoard 4.0)
+        public HoardCode Code;    // the code its packages hold, as far as Hoard has read them (Hoard's issue #303); else null
         public string Key { get { return Store + "/" + Folder; } }
 
         // Worked out once when the catalog is loaded (in the background), so the window never touches the disk
@@ -30,6 +32,32 @@ namespace SoloFlighter.Hoard
         public string ThumbPath;
         public string SearchText = "";
         public bool HasPackages;
+    }
+
+    /// <summary>The code a product's packages hold (Hoard 5.2.0, issue #303): scripts and plugins (DLLs and native ones),
+    /// how many of them run in the editor, the tools Hoard knows by GUID that some of them are from, and where the rest
+    /// goes. Unity compiles and loads them as soon as they're imported. It's information, not a verdict.</summary>
+    public sealed class HoardCode
+    {
+        public int Scripts, Plugins, Editor;
+        public List<string> Tools = new List<string>();
+        public List<string> Folders = new List<string>();
+
+        /// <summary>What it says before importing: what code, which runs in the editor, whose, and where it goes.</summary>
+        public string Words(string product)
+        {
+            var parts = new List<string>();
+            if (Scripts > 0) parts.Add(Scripts + (Scripts == 1 ? " script" : " scripts"));
+            if (Plugins > 0) parts.Add(Plugins + (Plugins == 1 ? " DLL or plugin" : " DLLs or plugins"));
+            var sb = new StringBuilder(product + "'s packages have code that Unity runs once it's imported: " + string.Join(" and ", parts.ToArray()));
+            if (Editor > 0) sb.Append(Editor == Scripts + Plugins ? (Editor == 1 ? ", which runs in the editor" : ", all of which run in the editor")
+                                                                  : " (" + Editor + " of them run in the editor)");
+            sb.Append(".");
+            if (Tools.Count > 0) sb.Append(" Some of it is " + string.Join(", ", Tools.ToArray()) + "'s.");
+            if (Folders.Count > 0) sb.Append(" " + (Tools.Count > 0 ? "The rest goes" : "It goes") + " in " + string.Join(", ", Folders.ToArray()) + ".");
+            sb.Append(" Hoard says what's there; it doesn't call it safe or unsafe.");
+            return sb.ToString();
+        }
     }
 
     /// <summary>Something a product's packages use that isn't in them (Hoard's What it needs): a tool, such as a
@@ -147,6 +175,8 @@ namespace SoloFlighter.Hoard
             }
             string note = e.Str("note");
             a.Note = a.Store == "Local" && note != null && CleanText(note, 300) ? note : null;
+            a.YourNote = CleanLines(e.Str("your_note"), 2000, 40);
+            a.Code = ReadCode(e.Get("code"));
             var needs = e.Get("needs");
             if (needs != null && needs.Kind == JsonKind.Array)
                 foreach (var n in needs.Items)
@@ -175,6 +205,20 @@ namespace SoloFlighter.Hoard
                     if (set.Folders.Count < 500 && PlainPath(f) && folders.Contains(f) && !set.Folders.Contains(f)) set.Folders.Add(f);
                 if (set.Folders.Count > 0) Sets.Add(set);
             }
+        }
+
+        /// <summary>The code a product's packages hold, or null when there's none or it breaks a promise.</summary>
+        static HoardCode ReadCode(JsonValue c)
+        {
+            if (c == null || c.Kind != JsonKind.Object) return null;
+            long? scripts = c.Long("scripts"), plugins = c.Long("plugins"), editor = c.Long("editor");
+            if (scripts == null || plugins == null || editor == null || scripts < 0 || plugins < 0 || editor < 0
+                || scripts + plugins == 0 || editor > scripts + plugins || scripts + plugins > 10000000) return null;
+            var code = new HoardCode { Scripts = (int)scripts, Plugins = (int)plugins, Editor = (int)editor,
+                                       Tools = c.Strings("tools"), Folders = c.Strings("folders") };
+            if (code.Tools.Count > 20 || !code.Tools.TrueForAll(t => CleanText(t, 100))) return null;
+            if (code.Folders.Count > 8 || !code.Folders.TrueForAll(PlainPath)) return null;
+            return code;
         }
 
         /// <summary>One of a product's needs, or null when it breaks a promise (left out, not the product).</summary>
@@ -218,6 +262,18 @@ namespace SoloFlighter.Hoard
                 if (char.IsControl(c) || cat == System.Globalization.UnicodeCategory.Format) return false;
             }
             return true;
+        }
+
+        /// <summary>Text of several lines (a note), when each line is clean text and there are at most maxLines of them,
+        /// maxLength characters in all; else null.</summary>
+        public static string CleanLines(string s, int maxLength, int maxLines)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length > maxLength) return null;
+            string[] lines = s.Split('\n');
+            if (lines.Length > maxLines) return null;
+            foreach (string line in lines)
+                if (line.Length > 0 && !CleanText(line, maxLength)) return null;
+            return s;
         }
 
         /// <summary>A plain relative path: "/" between parts, no "..", ".", empty parts, drive letters or odd characters.</summary>

@@ -235,6 +235,18 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   store page usually gives the password), and one that isn't what its name says, or is damaged, says that. Hoard
   keeps what it read (in its `cache` folder) for the 40 files you looked inside most recently, so a second look
   is instant: up to 64 MB of preview pictures for one file (past that, the rest show their kind), and 512 MB in all.
+- **Code in it** (5.2.0 beta 5, in **Look inside**). Unity compiles and loads a package's scripts (`.cs`, and old
+  `.js`) and its DLLs and other plugins (`.dll`, `.so`, `.dylib`, `.bundle`) as soon as they're imported, so Look
+  inside says what code a package holds, above its files: how many of each, how many run in the editor (in an
+  `Editor` folder, under an editor-only assembly definition, or a plugin whose import settings load it there), which
+  are from a tool Hoard knows by its GUIDs (lilToon, Poiyomi Toon, Modular Avatar, VRCFury, NDMF, Avatar Optimizer,
+  the VRChat SDK), so the rest stands out, and where the rest goes. Each is marked in the list (**Script** or
+  **DLL**, and **Editor**), and **Only code** lists just them. A package with none says "No scripts or DLLs". In a
+  `.zip`, the same for each package in it, and for scripts and DLLs loose in it. A file with code has a **Code** mark
+  in its product's details, saying what when you point at it, once Hoard has read it in the background (as it does
+  for what it needs). It's information, not a verdict: Hoard doesn't call a package safe or unsafe, and sends nothing
+  anywhere to be checked. Most code is what a product needs (lilToon's, Modular Avatar's); it's worth knowing what's
+  there before importing, from any creator.
 - **Extract** (from 5.1.1, in **Look inside**) takes files out. Tick the files and folders you want (a folder brings
   everything in it, and searching lets you tick what it finds), then **Extract the N chosen files**, or **Extract
   everything**. Hoard writes them into a new folder named after the package, in **Extracted** in your folder for

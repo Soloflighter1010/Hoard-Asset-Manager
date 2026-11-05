@@ -372,6 +372,12 @@ public static class CoreTests
         var good = cat.Assets.Find(a => a.Name == "Rusk Avatar Base");
         Check("store link kept", good != null && good.Url == "https://booth.pm/ja/items/1", good == null ? "missing" : good.Url ?? "null");
         var itch = cat.Assets.Find(a => a.Name == "Paw Suit");
+        Check("the code its packages hold (Hoard's issue #303)", itch != null && itch.Code != null && itch.Code.Scripts == 3
+              && itch.Code.Words("Paw Suit") == "Paw Suit's packages have code that Unity runs once it's imported: 3 scripts and 1 DLL or plugin " +
+                 "(2 of them run in the editor). Some of it is lilToon's. The rest goes in Assets/Kitsu/Scripts, Assets/Kitsu/Editor. " +
+                 "Hoard says what's there; it doesn't call it safe or unsafe.", itch == null || itch.Code == null ? "none" : itch.Code.Words("Paw Suit"));
+        Check("code that breaks a promise is left out, not the product", cat.Assets.Find(a => a.Name == "Linked Away") != null
+              && cat.Assets.Find(a => a.Name == "Linked Away").Code == null && cat.Assets.Find(a => a.Name == "Rusk Avatar Base").Code == null);
         Check("an itch.io asset, with its link", itch != null && itch.Store == "Itch" && itch.Url == "https://kitsu.itch.io/paw-suit"
               && cat.FilePath(itch, "PawSuit.unitypackage") != null, itch == null ? "missing" : itch.Url ?? "null");
         // what it needs (Hoard 4.0): checked like the rest, a broken need left out (not the product)
@@ -445,6 +451,8 @@ public static class CoreTests
         Check("never through a planted link", linked != null && cat.FilePath(linked, "secret.txt") == null && cat.FolderPath(linked) == null);
         Check("missing file is null", good != null && cat.FilePath(good, "nope.zip") == null);
         var mine = cat.Assets.Find(a => a.Name == "My Textures");
+        Check("your note on a product, its lines kept (Hoard's issue #304)", mine != null && mine.YourNote == "For Rusk\n\nHue shifted to blue"
+              && cat.Assets.Find(a => a.Name == "Odd Link").YourNote == null, mine == null ? "missing" : mine.YourNote ?? "no note");
         Check("a Local item listed where it is", mine != null && mine.Store == "Local" && mine.Note == "A commission"
               && cat.FilePath(mine, "Mine.unitypackage") != null && cat.FolderPath(mine) == Path.GetFullPath(Path.Combine(dir, "mine"))
               && mine.PackagePaths.Count == 1 && mine.ThumbPath != null, mine == null ? "missing" : mine.Location ?? "no place");
