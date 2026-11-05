@@ -366,7 +366,8 @@ PAYHIP_BLOCKED = ("Payhip blocked the automated browser (the check wasn't comple
 def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: dict) -> None:
     """The pictures only the videos use (issues #273, #274), taken after the website's, as they change what's in the
     made-up library: Hoard as it is in each help video's problem, and the parts the long promo shows (choosing
-    files, updates, the hidden library, notifications)."""
+    files, updates, the hidden library, notifications). Everything it changes is put back after, so the next
+    theme's pictures start from the same library."""
     from hoard import alerts, marks, net, vault
     from hoard.asset_updates import AssetUpdates
     now, catalog = made["now"], downloader.collect_catalog(made["cfg"], Path(made["cfg"]["root"]))[0]
@@ -417,6 +418,7 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     page.evaluate(BRING_INTO_VIEW, "#detail .update")
     snap("updates", 900)
     page.keyboard.press("Escape")
+    AssetUpdates().record_check(["booth"], None, [])   # (and none again)
     # Hoard's looks: its other layouts (Treasure, Workbench) and some of its colour themes, then Settings' Appearance
     shown = dict(srv.cfg.get("display") or {})
     for name, style, colours in LOOKS:
@@ -432,6 +434,8 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     page.keyboard.press("Escape")
     # Notifications through Apprise: two addresses kept (made up), and a test one of them didn't take
     fake = ["discord://000000000000000000/made-up-token", "ntfys://ntfy.sh/hoard-made-up"]
+    real = {k: getattr(alerts, k) for k in ("available", "urls", "described", "kept", "deliver")}
+    events = srv.cfg.get("apprise_events")
     alerts.available = lambda: True
     alerts.urls = lambda cfg: list(fake)
     alerts.described = lambda cfg: [alerts.describe(u) for u in fake]
@@ -448,6 +452,9 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     page.wait_for_timeout(900)
     snap("help-apprise-test", 200)
     page.keyboard.press("Escape")
+    for k, f in real.items():
+        setattr(alerts, k, f)
+    srv.cfg["apprise_events"] = events
     # Stores: security software stopped Hoard reaching Booth; Payhip's bot check; itch.io's API key
     was = {s: dict(srv.lib.data["stores"].get(s) or {}) for s in ("booth", "payhip", "itch")}
     store_row("booth", error=net.blocked_message("booth.pm"))
@@ -477,7 +484,9 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
             else:
                 srv.lib.data["stores"].pop(s, None)
     # A download that partly failed, in Tasks: what didn't come, and why
-    gum = [x for x in catalog if str(x["store"]).lower() == "gumroad"] or booth
+    hide = [tag_key(x["store"], x["name"]) for x in made["items"][4:7]]   # (hidden below: not named in the log)
+    booth = [x for x in booth if tag_key("booth", x["name"]) not in hide]
+    gum = [x for x in catalog if str(x["store"]).lower() == "gumroad" and tag_key("gumroad", x["name"]) not in hide] or booth
     stopped = f"Booth: {booth[3]['creator']} / {booth[3]['name']} / {safe_name(booth[3]['name'])}.zip - the download stopped at 31457280 of 52428800 bytes; the next sync resumes it"
     no_page = f"Gumroad: {gum[0]['name']} - no download page (refunded or membership inactive)"
     if not any(h["id"] == "j0" for h in srv.jobs.history):
@@ -495,6 +504,7 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     page.locator('#tasksBody details[data-id="j0"] summary').click()
     snap("help-download-tasks", 700)
     page.keyboard.press("Escape")
+    srv.jobs.history[:] = [h for h in srv.jobs.history if h["id"] != "j0"]
     # Hoard's page opened without this run's access key (an old bookmark): "Hoard didn't recognise this page"
     ctx = browser.new_context(viewport=SIZE, color_scheme=theme, locale=LOCALES[lang])
     other = ctx.new_page()
@@ -505,10 +515,9 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     ctx.close()
     # The hidden library: three products hidden behind a PIN; unlocked, its PIN forgotten and reset, and too many tries
     ms = marks.MarkStore()
-    if not ms.load().get("pin"):
-        HIDDEN["phrase"] = ms.set_pin(HIDDEN["pin"])
-        hide = [tag_key(x["store"], x["name"]) for x in made["items"][4:7]]
-        ms.change("hidden", set(hide), True, {i["key"]: k for i in made["items"] if (k := tag_key(i["store"], i["name"])) in hide})
+    before = ms.path.read_bytes() if ms.path.exists() else None
+    HIDDEN.update(pin="2468", phrase=ms.set_pin("2468"))
+    ms.change("hidden", set(hide), True, {i["key"]: k for i in made["items"] if (k := tag_key(i["store"], i["name"])) in hide})
     library()
     page.evaluate("pin => apiPost('/api/unlock', { pin })", HIDDEN["pin"])
     page.evaluate("load().then(() => showView('hidden'))")
@@ -529,7 +538,6 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
     HIDDEN["pin"] = new_pin
     snap("help-pin-fixed", 300)
     page.evaluate("apiPost('/api/lock')")
-    kept = ms.path.read_bytes()   # (the tries are undone after: the next theme's pictures start afresh)
     library()
     click('#views [data-view="hidden"]', "#pinDialog[open]")
     for _ in range(6):
@@ -538,7 +546,11 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
         page.wait_for_timeout(350)
     snap("help-pin-wait", 300)
     page.keyboard.press("Escape")
-    ms.path.write_bytes(kept)
+    if before is None:   # nothing hidden, and no PIN, again
+        ms.path.unlink()
+    else:
+        ms.path.write_bytes(before)
+    page.evaluate("apiPost('/api/lock')")
 
 
 def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None,
