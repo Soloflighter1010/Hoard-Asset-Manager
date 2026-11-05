@@ -569,6 +569,13 @@ def self_test() -> int:
         check("Playwright's driver", Path(node).is_file() and Path(cli).is_file(), f"{node}, {cli}")
     except Exception as e:
         check("Playwright's driver", False, repr(e))
+    try:   # (it finds its services by listing its folders: a build without them knows none, issue #237)
+        import apprise
+        services = len(apprise.Apprise().details()["schemas"])
+        check("notification services (Apprise)", services > 50 and apprise.Apprise().add("discord://1234/abcd"),
+              f"{services} services")
+    except Exception as e:
+        check("notification services (Apprise)", False, repr(e))
     from . import shell
     check("window support (pywebview)", shell.BUILD or window_available() or sys.platform not in ("win32", "darwin"))
     if sys.platform == "darwin" and not shell.BUILD:   # (the shell build's window is its Tauri shell's)   # pywebview's Mac window needs its Cocoa part and PyObjC's AppKit and WebKit (found
