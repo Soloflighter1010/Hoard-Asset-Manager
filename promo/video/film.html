@@ -662,7 +662,7 @@ BUILD.hcard = (s, root) => {
   s.wrap = el("div", "abs", "inset:0;background:var(--cave)");
   s.mk = el("div", "abs", `left:${(W - 140) / 2}px;top:${y0 - 200}px;width:140px`, heapSVG(false));
   s.k = el("div", "abs center", `top:${y0}px;font-size:${PORTRAIT ? 34 : 30}px;font-weight:700;color:var(--gold-text);letter-spacing:.02em`, esc(tx.kicker || ""));
-  s.t = el("div", "abs center display", `top:${y0 + 60}px;font-size:${PORTRAIT ? 80 : 84}px;padding:0 80px`, esc(tx.title));
+  s.t = el("div", "abs center display", `top:${y0 + 60}px;font-size:${PORTRAIT ? 80 : 84}px;padding:0 80px;text-wrap:balance`, esc(tx.title));
   s.b = el("div", "abs center", `top:${y0 + (PORTRAIT ? 290 : 190)}px;font-size:${PORTRAIT ? 38 : 36}px;color:var(--dust);line-height:1.45;padding:0 ${PORTRAIT ? 70 : 300}px`, esc(tx.body || ""));
   s.wrap.append(s.mk, s.k, s.t, s.b);
   if (tx.link) {
@@ -673,7 +673,23 @@ BUILD.hcard = (s, root) => {
   }
   root.append(s.wrap);
 };
+function hcardFit(s) {   // a title or words longer than their room push what's under them down, and all of it up by half
+  const top = n => parseFloat(n.style.top), gap = 26;
+  let push = 0;
+  const tEnd = top(s.t) + s.t.offsetHeight, bTop = top(s.b);
+  if (tEnd + gap > bTop) push = tEnd + gap - bTop;
+  s.b.style.top = (bTop + push) + "px";
+  if (s.l) {
+    const bEnd = top(s.b) + s.b.offsetHeight, lTop = top(s.l) + push;
+    const more = Math.max(0, bEnd + gap + 10 - lTop);
+    s.l.style.top = (lTop + more) + "px";
+    push += more;
+  }
+  s.push = push;
+  if (push) [s.mk, s.k, s.t, s.b, s.l].forEach(n => { if (n) n.style.top = (top(n) - push / 2) + "px"; });
+}
 DRAW.hcard = (s, t) => {
+  if (s.push == null) hcardFit(s);
   const last = s === SC[SC.length - 1], out = last ? null : s.dur - .5;
   s.wrap.style.opacity = ((s.i === 0 ? 1 : P(t, 0, .45)) * (out == null ? 1 : 1 - P(t, out, out + .5))).toFixed(3);
   [s.mk, s.k, s.t, s.b, s.l].forEach((n, i) => { if (n) rise(n, t, .15 + i * .18, null, { y: 14, di: .6 }); });
@@ -756,6 +772,11 @@ window.checkFrame = function () {
       if (off(c)) bad.push(`${s.image}: the words run off the frame (${fmt(c)})`);
       if (over(c, w)) bad.push(`${s.image}: the words run into the screen`);
     }
+  });
+  SC.forEach(s => {   // a help card's lines never run into one another, or off the frame
+    if (s.type !== "hcard" || s.root.style.display === "none") return;
+    const ns = [s.mk, s.k, s.t, s.b, s.l].filter(Boolean).map(n => n.getBoundingClientRect());
+    ns.forEach((r, i) => { if (r.top < 8 || r.bottom > H - 8) bad.push(`card: line ${i + 1} runs off the frame`); if (i && r.top < ns[i - 1].bottom - 2) bad.push(`card: line ${i + 1} runs into the one above it`); });
   });
   SC.forEach(s => {   // the end card's words stay on the frame, above its fine print
     if (s.type !== "end" || s.root.style.display === "none") return;
