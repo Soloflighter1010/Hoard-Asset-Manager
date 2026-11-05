@@ -798,20 +798,21 @@ class AccessKey(unittest.TestCase):
 
     def test_each_page_ends_its_header_with_its_one_thing_to_press(self):
         """The gold button is the last in the header, as the one thing to press: Sync in the Library, and Download new
-        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, and Settings are in the Menu (#219)."""
+        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, Settings and Bring in from KonoAsset...
+        (#305) are in the Menu (#219)."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Stores", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Stores", "Settings", "Bring in from KonoAsset..."])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
         self.assertEqual(page.locator("#syncBtn").count(), 0)
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Rescan", "Settings"])
+        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Rescan", "Settings", "Bring in from KonoAsset..."])
         page.close()
 
     def test_search_prefixes_in_downloads(self):

@@ -163,7 +163,7 @@ class BringingIn(unittest.TestCase):
         folder = make_folder(self.base)
         (folder / "metadata" / "otherAssets.json").write_text(json.dumps({"version": 3, "data": [
             {"id": "not-a-uuid", "description": description("Bad Id", "x")},
-            {"id": SKIN, "description": description("Name‮flipped", "x", boothItemId=-4, imageFilename="../../secret.png",
+            {"id": SKIN, "description": description("Name\u202eflipped", "x", boothItemId=-4, imageFilename="../../secret.png",
                                                     tags=["ok", 7, "<b>"], dependencies=["nope"]), "category": "Texture"},
             {"id": LOST.replace("4", "6"), "description": {"name": ""}}]}), "utf-8")
         found = {a["id"]: a for a in konoasset.read(folder)}

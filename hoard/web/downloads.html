@@ -2728,10 +2728,12 @@ function insideFound(q, onlyCode = false) {
 /* What code a package holds (issue #303): its scripts and plugins, which of them run in the editor, which are a tool's
    Hoard knows by their GUIDs (so the rest stands out), and where the rest goes. It's information, not a verdict. */
 const CODE_KINDS = { script: "Script", plugin: "DLL" };
+// What each kind is, said when you point at its mark.
+const CODE_SAYS = { script: "A script: Unity compiles it when it's imported.", plugin: "A DLL or plugin: Unity loads it when it's imported." };
 // A file's mark in Look inside, when it's a script or a plugin.
 function codeTag(it) {
   if (!it.code) return "";
-  const what = [tr(it.code === "script" ? "A script: Unity compiles it when it's imported." : "A DLL or plugin: Unity loads it when it's imported."),
+  const what = [tr(CODE_SAYS[it.code]),
                 it.editor && tr("It runs in the editor."), it.tool && tr("It's {0}'s.", it.tool)].filter(Boolean).join(" ");
   return ` <span class="codetag${it.editor ? " ed" : ""}${it.tool ? " known" : ""}" title="${esc(what)}">${esc(tr(CODE_KINDS[it.code]))}` +
     `${it.editor ? ` · ${esc(tr("Editor"))}` : ""}${it.tool ? ` · <span translate="no">${esc(it.tool)}</span>` : ""}</span>`;
@@ -2740,6 +2742,7 @@ function codeTag(it) {
 function codeWords(c, loose) {
   const n = c ? c.scripts + c.plugins : 0, l = loose ? (loose.scripts || 0) + (loose.plugins || 0) : 0;
   if (!n && !l) return [tr("No scripts or DLLs.")];
+  // How many scripts and plugins, in words.
   const count = x => [x.scripts && tr(x.scripts === 1 ? "1 script" : "{0} scripts", x.scripts),
                       x.plugins && tr(x.plugins === 1 ? "1 DLL or plugin" : "{0} DLLs or plugins", x.plugins)].filter(Boolean);
   const out = [];
