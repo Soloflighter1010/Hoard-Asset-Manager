@@ -95,7 +95,7 @@ def render_part(job) -> list[str]:
         page = browser.new_page(viewport={"width": w, "height": h}, device_scale_factor=1)
         page.on("pageerror", lambda e: problems.append(f"page error: {e}"))
         page.goto((PROMO / "video" / "film.html").as_uri())
-        page.evaluate("document.fonts.ready")
+        page.evaluate(FONTS)
         page.evaluate("cfg => window.setup(cfg)", cfg)
         page.evaluate("Promise.all([...document.images].map(i => i.decode().catch(() => null)))")
         page.wait_for_timeout(300)
@@ -108,6 +108,10 @@ def render_part(job) -> list[str]:
                 page.screenshot(path=str(out), type="jpeg", quality=94)
         browser.close()
     return problems
+
+
+FONTS = """Promise.all(['400 40px "Dela Gothic One"', '500 40px "Zen Maru Gothic"', '700 40px "Zen Maru Gothic"']
+  .map(f => document.fonts.load(f, "Aあ")))"""   # (loaded before anything's drawn or measured, not as it first shows)
 
 
 def preview(name: str, lang: str, shape: str, shots: Path, times: list[float]) -> None:
@@ -123,7 +127,7 @@ def preview(name: str, lang: str, shape: str, shots: Path, times: list[float]) -
         page = browser.new_page(viewport={"width": w, "height": h})
         page.on("pageerror", lambda e: print("page error:", e))
         page.goto((PROMO / "video" / "film.html").as_uri())
-        page.evaluate("document.fonts.ready")
+        page.evaluate(FONTS)
         info = page.evaluate("cfg => window.setup(cfg)", cfg)
         page.evaluate("Promise.all([...document.images].map(i => i.decode().catch(() => null)))")
         for t in times:

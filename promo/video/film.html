@@ -292,9 +292,9 @@ const HEAP_AT = { landscape: [960, 400, 9.5], portrait: [540, 760, 14] };   // t
 BUILD.intro = (s, root) => {
   const tx = T(s.text), fs = PORTRAIT ? 96 : 100;
   s.lines = el("div", "abs center display", `top:${PORTRAIT ? 300 : 110}px;font-size:${fs}px;padding:0 50px`);
-  s.l1 = words(el("div", "", "", esc(tx.stores)));
-  s.l2 = words(el("div", "", "", esc(tx.projects)));
-  s.l3 = words(el("div", "", "color:var(--gold)", esc(tx.local)));
+  s.l1 = words(el("div", "", "white-space:nowrap", esc(tx.stores)));   // a line each, never broken mid-word: see fitLines
+  s.l2 = words(el("div", "", "white-space:nowrap", esc(tx.projects)));
+  s.l3 = words(el("div", "", "white-space:nowrap;color:var(--gold)", esc(tx.local)));
   s.lines.append(s.l1, s.l2, s.l3);
   s.tag = words(el("div", "abs center display", `top:${PORTRAIT ? 1150 : 700}px;font-size:${PORTRAIT ? 70 : 60}px;padding:0 70px`, esc(tx.tagline)));
   root.append(s.lines, s.tag);
@@ -321,6 +321,12 @@ BUILD.intro = (s, root) => {
   });
 };
 DRAW.intro = (s, t) => {
+  if (!s.fit) {   // once it's laid out: the opening's lines a size that fits the frame's width (narrower in portrait)
+    s.fit = true;
+    const width = n => { n.style.display = "inline-block"; const w = n.offsetWidth; n.style.display = ""; return w; };   // (its words', not the frame's)
+    const widest = Math.max(...[s.l1, s.l2, s.l3].map(width)), room = W - 100;
+    if (widest > room) s.lines.style.fontSize = (parseFloat(s.lines.style.fontSize) * room / widest) + "px";
+  }
   const d = s.dur, B = BEAT;
   const tTurn = 8 * B;                                  // bar 2: the words go and the chips turn into boxes
   reveal(s.l1, t, .1, tTurn - .6);
