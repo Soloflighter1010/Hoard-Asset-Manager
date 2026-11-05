@@ -63,8 +63,9 @@
   diffusion: promos, a short and a long one, landscape and portrait, in English, Japanese and Korean, opening on the
   stores, your projects and your own files turning into the Heap's boxes; help videos, one for each problem the
   wiki's Troubleshooting page explains most, in Hoard's light theme, with each step clicked through, and linked from
-  that page and the FAQ in each language; a thumbnail for each, for YouTube, drawn the same way; and a looping music
-  track, written out note by note. Only the products given are shown, with their own pictures, and the credits name
+  that page and the FAQ in each language; a thumbnail for each, for YouTube, drawn the same way; square posters, for
+  VRChat's poster frames and social sites ([#292](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/292)), one for Hoard and one for each of six of its parts; and a looping
+  music track, written out note by note. Only the products given are shown, with their own pictures, and the credits name
   their creators. They go on a release of their own, `media`; `promo/` in the repository makes them all.
 - **The website, the README and the press kit** say what Hoard is now: your VRChat assets, and the Unity projects you
   make with them. Every screenshot is new, of every part of Hoard (Projects, a project's details, its packages and its

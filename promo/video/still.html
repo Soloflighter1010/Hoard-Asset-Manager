@@ -2,12 +2,15 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Hoard thumbnail</title>
-<!-- A video's thumbnail (for YouTube), drawn here: promo/thumbs.py opens this page, calls setup() with a film's
-     "thumb" from promo/films/, a language and a shape, checks it with check() and takes its picture. Like the videos,
-     it's Hoard's own screenshots, the Heap and words, drawn in HTML and SVG: nothing generated.
-     Three looks: "short" (the Heap over Hoard's library), "tour" (a fan of Hoard's screens) and "help" (light, like
-     the help videos: the problem, and a close look at where it shows in Hoard). -->
+<title>Hoard still</title>
+<!-- A still picture: a video's thumbnail (for YouTube) or a poster, drawn here. promo/thumbs.py opens this page and
+     calls setup() with a film's "thumb" from promo/films/, a language and a shape; promo/posters.py, with a poster
+     from promo/posters.json and its words (the films' own). Each is checked with check() and its picture taken. Like
+     the videos, it's Hoard's own screenshots, the Heap and words, drawn in HTML and SVG: nothing generated.
+     The thumbnails' looks: "short" (the Heap over Hoard's library), "tour" (a fan of Hoard's screens) and "help"
+     (light, like the help videos: the problem, and a close look at where it shows in Hoard). The posters' (square):
+     "hero" (the Heap, what Hoard is, the stores, where to get it) and "feature" (one part of Hoard, its screen and a
+     lens on it). -->
 <style>
 @font-face { font-family: "Dela Gothic One"; src: url(../../hoard/web/fonts/DelaGothicOne-Regular.woff2) format("woff2"); }
 @font-face { font-family: "Zen Maru Gothic"; font-weight: 500; src: url(../../hoard/web/fonts/ZenMaruGothic-Medium.woff2) format("woff2"); }
@@ -44,6 +47,9 @@ html, body { background: #000; overflow: hidden; }
 .pill { display: inline-flex; align-items: center; gap: .45em; border-radius: 999px; background: var(--gold); color: var(--gold-ink);
   font-family: var(--display); font-weight: var(--display-weight, 400); white-space: nowrap; padding: .34em .9em .42em .7em; }
 .pill svg { width: .78em; height: .78em; flex: none; }
+.kicker { display: flex; align-items: center; gap: .5em; font-weight: 700; color: var(--gold); letter-spacing: .02em; }
+.kicker b { display: inline-block; width: .7em; height: .7em; border-radius: .2em; background: var(--gold); }
+.fine { color: rgba(179,166,149,.7); line-height: 1.45; }
 /* the help look's close-up: a lens, like the videos', on what the help is about */
 .lens { position: absolute; overflow: hidden; border-radius: 26px; background: var(--ledge);
   box-shadow: 0 0 0 5px var(--gold), 0 30px 70px rgba(60,40,20,.22), 0 6px 18px rgba(60,40,20,.12); }
@@ -210,6 +216,93 @@ function words(stage, tx, chips, lockup) {
   stage.appendChild(N.chips);
   N.chips.style.top = (bottom(N.title) + (PORTRAIT ? 50 : 36)) + "px";
 }
+// ---------------- the posters (square, 1080 px here; posters.py makes them 2048 px, as VRChat's poster frames take)
+// The main one: the Heap and Hoard's name, what it is, the stores (and Projects, and your own files), and where to
+// get it, down the middle.
+LOOK.hero = (stage, p, tx) => {
+  backdrop(stage);
+  const col = el("div", "abs", "left:0;right:0;top:0;display:flex;flex-direction:column;align-items:center");
+  stage.appendChild(el("div", "glow", `left:${W / 2 - 420}px;top:-200px;width:840px;height:840px;` +
+    "background:radial-gradient(circle,rgba(240,180,41,.3) 0%,rgba(240,180,41,0) 60%)"));
+  N.heap = el("div", "", "width:340px;filter:drop-shadow(0 26px 40px rgba(0,0,0,.55))", heapSVG(false));
+  N.mark = el("div", "", "width:300px;margin-top:28px", wordSVG());
+  N.title = title(tx.tagline, "position:relative;width:900px;text-align:center;margin-top:46px");
+  N.chips = el("div", "chips", "justify-content:center;gap:12px;font-size:26px;width:920px;margin-top:40px", chipsFor(tx));
+  N.foot = el("div", "", "display:flex;align-items:center;gap:28px;margin-top:56px",
+    `<div style="text-align:right"><div class="display" style="font-size:34px">${esc(tx.line)}</div>` +
+    `<div style="font-size:24px;color:var(--dust);margin-top:8px">${esc(tx.platforms)}</div></div>` +
+    `<span class="pill" style="font-size:36px;padding:.36em .9em .44em">${esc(p.site)}</span>`);
+  col.append(N.heap, N.mark, N.title, N.chips, N.foot);
+  stage.appendChild(col);
+  N.titleBox = { w: 900, h: 220 };
+  fitTitle(N.title, N.titleBox, 74, 44);
+  N.fine = el("div", "abs fine", "left:60px;right:60px;bottom:30px;text-align:center;font-size:16px", esc(tx.fine));
+  stage.appendChild(N.fine);
+  col.style.top = Math.max(40, (H - 70 - col.offsetHeight) / 2) + "px";   // (the whole of it in the middle, over the fine print)
+  N.keep = [["Heap", N.heap], ["name", N.mark], ["chips", N.chips], ["footer", N.foot], ["fine print", N.fine]];
+  N.apart = [["footer", N.foot, "fine print", N.fine]];
+};
+// One part of Hoard: its name, what it does (the long promo's own words), its screen, and a lens on the thing on it
+// that shows it best, ringed on the screen too.
+LOOK.feature = (stage, p, tx) => {
+  backdrop(stage);
+  const mx = 64;
+  N.mark = el("div", "abs", `left:${mx}px;top:56px;width:200px`, heapSVG(true));
+  N.site = el("div", "abs", `right:${mx}px;top:66px;font-size:24px;font-weight:700;color:var(--dust)`, esc(p.site));
+  N.kick = el("div", "abs kicker", `left:${mx}px;top:168px;font-size:28px`, `<b></b>${esc(tx.kicker)}`);
+  N.title = title(tx.title, `left:${mx}px;top:218px;width:${W - 2 * mx}px`);
+  stage.append(N.mark, N.site, N.kick, N.title);
+  N.titleBox = { w: W - 2 * mx, h: 210 };
+  fitTitle(N.title, N.titleBox, 100, 56);
+  N.body = el("div", "abs", `left:${mx}px;width:820px;font-size:30px;line-height:1.42;color:var(--dust);top:${bottom(N.title) + 22}px`, esc(tx.body));
+  stage.appendChild(N.body);
+  // the screen: under the words, running off the right and the bottom, the thing it's about ringed
+  const reg = F.regions[p.image] || {}, box = reg[p.box], pad = 8;
+  const names = p.lens == null ? [] : [].concat(p.lens), parts = names.map(k => reg[k]).filter(Boolean);
+  const look = parts.length ? [Math.min(...parts.map(r => r[0])), Math.min(...parts.map(r => r[1]))] : null;   // (several things: all of them)
+  if (look) look.push(Math.max(...parts.map(r => r[0] + r[2])) - look[0], Math.max(...parts.map(r => r[1] + r[3])) - look[1]);
+  [p.box, ...names].forEach(k => { if (!reg[k]) window.warnings.push(`${p.image}: no box for "${k}"`); });
+  const ww = 1180, z = ww / 1600, wx = 150, wy = bottom(N.body) + 64;
+  N.win = el("div", "window", `left:${wx}px;top:${wy}px;width:${ww}px;height:${950 * z}px;transform-origin:0 0;` +
+    "transform:perspective(2400px) rotateY(-10deg) rotateZ(-2deg);box-shadow:0 50px 120px rgba(0,0,0,.6)", `<img src="${shot(p.image, "dark")}">`);
+  if (box) N.win.appendChild(N.ring = el("div", "ring", `left:${(box[0] - pad) * z}px;top:${(box[1] - pad) * z}px;width:${(box[2] + 2 * pad) * z}px;height:${(box[3] + 2 * pad) * z}px;border-radius:8px`));
+  stage.appendChild(N.win);
+  stage.appendChild(el("div", "abs", `left:0;right:0;bottom:0;height:220px;background:linear-gradient(180deg,rgba(33,28,24,0),rgba(33,28,24,.92) 70%)`));
+  N.fine = el("div", "abs fine", `left:${mx}px;right:${mx}px;bottom:26px;font-size:15px`, esc(tx.fine).replace(/\n/g, "<br>"));
+  stage.appendChild(N.fine);
+  N.keep = [["name", N.mark], ["address", N.site], ["kicker", N.kick], ["words", N.body], ["fine print", N.fine]];
+  N.apart = [["screen", N.win, "words", N.body]];
+  if (!look) return;
+  // the lens: that thing close up (its top left, if it's large: a row reads from its start), as large as it fits
+  // (never past 2.2 times its size), at the foot of the screen, left or right, or else at its head, under the words:
+  // the first place clear of the ring and the words, smaller if it must be (or the place least in their way)
+  const lp = 18, cw = Math.min(look[2], 480), ch = Math.min(look[3], 300), rw = cw + 2 * lp, rh = ch + 2 * lp;
+  const L0 = Math.min(620 / rw, 430 / rh, 2.2);
+  const r = N.ring.getBoundingClientRect(), b = N.body.getBoundingClientRect();
+  const cut = (a, q) => Math.max(0, Math.min(a.right, q.right) - Math.max(a.left, q.left)) * Math.max(0, Math.min(a.bottom, q.bottom) - Math.max(a.top, q.top));
+  const spots = [1, .85, .72].flatMap(k => { const lw = rw * L0 * k, lh = rh * L0 * k;
+    return [[mx, H - 92 - lh], [W - mx - lw, H - 92 - lh], [mx, b.bottom + 40], [W - mx - lw, b.bottom + 40]].map(([x, y]) => {
+      const q = { left: x, right: x + lw, top: y, bottom: y + lh }; return { x, y, L: L0 * k, cost: cut(q, r) + cut(q, b) }; }); });
+  const at = spots.find(q => !q.cost) || spots.reduce((a, q) => (q.cost < a.cost ? q : a)), L = at.L;
+  N.lens = el("div", "lens", `left:${at.x}px;top:${at.y}px;width:${rw * L}px;height:${rh * L}px;box-shadow:0 0 0 5px var(--gold),0 30px 70px rgba(0,0,0,.6)`,
+    `<img src="${shot(p.image, "dark")}" style="position:absolute;left:0;top:0;width:1600px;height:950px;transform-origin:0 0;` +
+    `transform:translate(${-(look[0] - lp) * L}px,${-(look[1] - lp) * L}px) scale(${L})">`);
+  if (names.join() !== p.box) N.lens.appendChild(el("div", "ring", `left:${(box[0] - look[0] + lp - pad) * L}px;top:${(box[1] - look[1] + lp - pad) * L}px;` +
+    `width:${(box[2] + 2 * pad) * L}px;height:${(box[3] + 2 * pad) * L}px`));
+  stage.appendChild(N.lens);
+  N.keep.push(["lens", N.lens]);
+  N.apart.push(["lens", N.lens, "ring", N.ring], ["lens", N.lens, "fine print", N.fine], ["lens", N.lens, "words", N.body]);
+};
+function wordSVG() {   // Hoard's name alone, cut to its letters
+  const d = el("div", "", "", heapSVG(true)), svg = d.firstChild;
+  svg.querySelector("g").remove();
+  document.body.appendChild(d);
+  const b = svg.querySelector("g").getBBox();
+  d.remove();
+  svg.setAttribute("viewBox", `${b.x} ${b.y} ${b.width} ${b.height}`);
+  return d.innerHTML;
+}
+
 // A help video's: Hoard, "Help", the problem, how to fix it, and a lens on where it shows (as the video's first step
 // shows it, or the window it draws).
 LOOK.help = (stage, th, tx) => {
@@ -284,13 +377,14 @@ function drawn(st, kind) {   // one state of a drawn window, as the help videos 
   return h;
 }
 
-// ---------------- the thumbnail
+// ---------------- the picture
+const SIZES = { landscape: [1280, 720], portrait: [1080, 1920], square: [1080, 1080] };
 window.warnings = [];
 window.setup = function (cfg) {
   F = cfg; LANG = cfg.lang; PORTRAIT = cfg.shape === "portrait";
   document.documentElement.lang = LANG;
-  W = PORTRAIT ? 1080 : 1280; H = PORTRAIT ? 1920 : 720;
-  const stage = $("stage"), th = cfg.film.thumb;
+  [W, H] = SIZES[cfg.shape];
+  const stage = $("stage"), th = cfg.poster || cfg.film.thumb;
   stage.style.width = W + "px"; stage.style.height = H + "px";
   stage.classList.toggle("help", th.look === "help");
   document.body.style.width = W + "px"; document.body.style.height = H + "px";
@@ -311,10 +405,11 @@ window.check = function () {
   if (!N.title.querySelector(".line") && N.title.scrollWidth > N.title.clientWidth + 1) bad.push("a word in the title is too long for its room");
   if (N.title.offsetHeight > N.titleBox.h) bad.push(`the title is too tall for its room (${N.title.offsetHeight} px)`);
   if (off(tb)) bad.push("the title runs off the picture");
-  [["mark", N.mark], ["chips", N.chips], ["pill", N.pill]].forEach(([k, n]) => { if (n && off(R(n))) bad.push(`the ${k} runs off the picture`); });
+  [["mark", N.mark], ["chips", N.chips], ["pill", N.pill], ...(N.keep || [])].forEach(([k, n]) => { if (n && off(R(n))) bad.push(`the ${k} runs off the picture`); });
+  (N.apart || []).forEach(([a, x, b, y]) => { if (x && y && over(R(x), R(y))) bad.push(`the ${a} runs into the ${b}`); });
   if (N.chips && over(R(N.chips), tb)) bad.push("the chips run into the title");
   if (N.chips && N.heap && over(R(N.chips), R(N.heap))) bad.push("the chips run into the Heap");
-  if (N.lens) {
+  if (N.lens && N.pill) {   // (a help thumbnail's)
     const l = R(N.lens);
     [["title", tb], ["pill", R(N.pill)], ["header", R(N.mark)]].forEach(([k, r]) => { if (over(l, r)) bad.push(`the lens covers the ${k}`); });
     if (!N.lens.querySelector(".surface")) bad.push("the lens is empty");

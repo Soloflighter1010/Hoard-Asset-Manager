@@ -4,7 +4,7 @@
                            [--out=build/promo/thumbs] [--draft]
 
 With no FILM, every film in promo/films/. Make the screenshots first, as for the videos (promo/build.py says how).
-Each is drawn by promo/video/thumb.html in Chromium, twice as large and then made smaller, so its edges are smooth:
+Each is drawn by promo/video/still.html in Chromium, twice as large and then made smaller, so its edges are smooth:
 build/promo/thumbs/hoard-<film>-<lang>-<shape>.jpg, named like its video. A landscape one is 1280 x 720 (YouTube's
 size for a video's thumbnail); a portrait one, for a Short, 1080 x 1920. Each is under 2 MB, YouTube's limit.
 
@@ -29,32 +29,35 @@ SIZES = {"landscape": (1280, 720), "portrait": (1080, 1920)}
 LIMIT = 2 * 1024 * 1024   # YouTube's most for a thumbnail
 
 
+def regions(image: str, theme: str, lang: str, shots: Path) -> dict:
+    """Where things are on one of the screenshots (scripts/screenshots.py --regions saved them beside it)."""
+    box = shots / f"{image}-{theme}{'' if lang == 'en' else '-' + lang}.json"
+    if not box.is_file():
+        sys.exit(f"{box} isn't there: make the screenshots with --regions=promo/regions.json first")
+    return json.loads(box.read_text("utf-8"))
+
+
 def config(film: dict, lang: str, shape: str, shots: Path) -> dict:
-    """What thumb.html needs: the film, the Heap, where the screenshots are, the boxes on the help look's screen, and
+    """What still.html needs: the film, the Heap, where the screenshots are, the boxes on the help look's screen, and
     the opening's words for the chips."""
-    th, regions = film["thumb"], {}
-    if th["look"] == "help":
-        s = film["scenes"][th["scene"]]
-        if s.get("image"):
-            box = shots / f"{s['image']}-light{'' if lang == 'en' else '-' + lang}.json"
-            if not box.is_file():
-                sys.exit(f"{box} isn't there: make the screenshots with --regions=promo/regions.json first")
-            regions[s["image"]] = json.loads(box.read_text("utf-8"))
+    th, boxes = film["thumb"], {}
+    if th["look"] == "help" and film["scenes"][th["scene"]].get("image"):
+        image = film["scenes"][th["scene"]]["image"]
+        boxes[image] = regions(image, "light", lang, shots)
     intro = next((s["text"] for s in film["scenes"] if s["type"] == "intro"), None)
-    return {"film": film, "lang": lang, "shape": shape, "heap": heap_parts(), "regions": regions, "intro": intro,
+    return {"film": film, "lang": lang, "shape": shape, "heap": heap_parts(), "regions": boxes, "intro": intro,
             "shots": shots.resolve().as_uri()}
 
 
-def make(page, name: str, lang: str, shape: str, shots: Path, out: Path, draft: bool = False) -> list[str]:
-    """One thumbnail: what was wrong with it, if anything (then it isn't made)."""
+def draw(page, cfg: dict, tag: str, view: tuple[int, int], size: tuple[int, int], path: Path, draft: bool = False,
+         limit: int = LIMIT) -> list[str]:
+    """Draw one still with still.html (twice as large, then made the size asked for), check it and save it as a JPEG
+    under the limit: what was wrong with it, if anything (then it isn't saved, unless it's a draft)."""
     from PIL import Image
-    film = json.loads((PROMO / "films" / f"{name}.json").read_text("utf-8"))
-    tag = f"{name}-{lang}-{shape}"
-    w, h = SIZES[shape]
-    page.set_viewport_size({"width": w, "height": h})
-    page.goto((PROMO / "video" / "thumb.html").as_uri())
+    page.set_viewport_size({"width": view[0], "height": view[1]})
+    page.goto((PROMO / "video" / "still.html").as_uri())
     page.evaluate(FONTS)
-    page.evaluate("cfg => window.setup(cfg)", config(film, lang, shape, shots))
+    page.evaluate("cfg => window.setup(cfg)", cfg)
     page.evaluate("Promise.all([...document.images].map(i => i.decode().catch(() => null)))")
     problems = page.evaluate("window.check()")
     if problems:
@@ -62,18 +65,24 @@ def make(page, name: str, lang: str, shape: str, shots: Path, out: Path, draft: 
         if not draft:
             return [tag]
     big = Image.open(io.BytesIO(page.screenshot(type="png"))).convert("RGB")
-    img = big.resize((w, h), Image.LANCZOS)
-    path = out / f"hoard-{tag}.jpg"
+    img = big.resize(size, Image.LANCZOS)
     for q in (92, 88, 84, 80):
         img.save(path, "JPEG", quality=q, optimize=True, progressive=True)
-        if path.stat().st_size < LIMIT:
+        if path.stat().st_size < limit:
             break
     else:
-        print(f"{tag}: not made: over 2 MB")
+        print(f"{tag}: not made: over {limit // 1024 // 1024} MB")
         path.unlink()
         return [tag]
     print(f"{tag}: {path} ({path.stat().st_size // 1024} KB)")
     return []
+
+
+def make(page, name: str, lang: str, shape: str, shots: Path, out: Path, draft: bool = False) -> list[str]:
+    """One thumbnail: what was wrong with it, if anything (then it isn't made)."""
+    film = json.loads((PROMO / "films" / f"{name}.json").read_text("utf-8"))
+    tag = f"{name}-{lang}-{shape}"
+    return draw(page, config(film, lang, shape, shots), tag, SIZES[shape], SIZES[shape], out / f"hoard-{tag}.jpg", draft)
 
 
 def main(argv: list[str]) -> None:

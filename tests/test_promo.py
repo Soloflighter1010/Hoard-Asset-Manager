@@ -2,8 +2,8 @@
 number of bars long, so its cuts land on the beat; what a film points at is something promo/regions.json finds on a
 screen scripts/screenshots.py takes; a film has every word in each language it has; the videos' Heap is the one
 hoard/heap.py draws everywhere; the music's loop wraps round with no seam; a thing's box on a screen holds all it
-draws, so a close-up of it never cuts it off; and every video has a thumbnail, its title (in Japanese) broken only
-between phrases."""
+draws, so a close-up of it never cuts it off; every video has a thumbnail, its title (in Japanese) broken only
+between phrases; and every poster's screen, words and close-up are there, in each language."""
 from __future__ import annotations
 
 import ast
@@ -20,6 +20,8 @@ FILMS = {p.stem: json.loads(p.read_text("utf-8")) for p in sorted((PROMO / "film
 REGIONS = json.loads((PROMO / "regions.json").read_text("utf-8"))
 BAR = 4 * 60 / 100   # the music is 100 beats a minute, four to a bar
 SHOTS_PY = (REPO / "scripts" / "screenshots.py").read_text("utf-8")
+STILL = (PROMO / "video" / "still.html").read_text("utf-8")
+POSTERS = json.loads((PROMO / "posters.json").read_text("utf-8"))
 
 try:
     import numpy  # noqa: F401
@@ -128,8 +130,7 @@ class Films(unittest.TestCase):
 
 class Thumbnails(unittest.TestCase):
     def test_every_video_has_one(self):
-        page = (PROMO / "video" / "thumb.html").read_text("utf-8")
-        looks = set(re.findall(r"^LOOK\.(\w+) =", page, re.M))
+        looks = set(re.findall(r"^LOOK\.(\w+) =", STILL, re.M))
         for name, film in FILMS.items():
             self.assertIn("thumb", film, f"{name}: no thumbnail")
             self.assertIn(film["thumb"]["look"], looks, name)
@@ -161,13 +162,38 @@ class Thumbnails(unittest.TestCase):
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = browser.new_page()
-            page.goto((PROMO / "video" / "thumb.html").as_uri())
+            page.goto((PROMO / "video" / "still.html").as_uri())
             got = {t: page.evaluate("t => jaPhrases(t)", t) for t in
                    ("「Boothにサインインしていません」", "itch.ioがAPIキーを受け付けない", "ダウンロードが何度も失敗する")}
             browser.close()
         self.assertEqual(got["「Boothにサインインしていません」"], ["「", "Boothに", "サインインして", "いません」"])
         self.assertEqual(got["itch.ioがAPIキーを受け付けない"], ["itch.ioが", "APIキーを", "受け付けない"])
         self.assertEqual(got["ダウンロードが何度も失敗する"], ["ダウンロードが", "何度も", "失敗する"])
+
+
+class Posters(unittest.TestCase):
+    def test_each_is_drawn_from_a_screen_the_long_promo_shows(self):
+        looks = set(re.findall(r"^LOOK\.(\w+) =", STILL, re.M))
+        self.assertEqual(POSTERS["size"], 2048)   # (the most VRChat's poster frames load)
+        self.assertEqual(len({p["name"] for p in POSTERS["posters"]}), len(POSTERS["posters"]))
+        for p in POSTERS["posters"]:
+            self.assertIn(p["look"], looks, p["name"])
+            if p["look"] != "feature":
+                continue
+            s = FILMS["promo-long"]["scenes"][p["scene"]]
+            self.assertEqual(s["type"], "shot", p["name"])
+            for box in [p["box"], *([] if p["lens"] is None else [p["lens"]] if isinstance(p["lens"], str) else p["lens"])]:
+                self.assertIn(box, REGIONS[s["image"]], f"{p['name']}: {s['image']} has no {box}")
+
+    def test_every_word_in_each_language(self):
+        posters = load("promo_posters", PROMO / "posters.py")
+        for p in POSTERS["posters"]:
+            said = posters.words(p)
+            self.assertEqual(set(said), {"en", "ja", "ko"}, p["name"])
+            for lang, w in said.items():
+                self.assertEqual(set(w), set(said["en"]), f"{p['name']} ({lang})")
+                for k, v in w.items():
+                    self.assertTrue(str(v).strip(), f"{p['name']}: no {k} in {lang}")
 
 
 @unittest.skipUnless(MUSIC, "needs numpy and SciPy (pip install -r promo/requirements.txt)")

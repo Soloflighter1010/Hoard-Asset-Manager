@@ -11,7 +11,9 @@ as `hoard/heap.py` draws it everywhere); the music is notes written out in `musi
 | `films/` | One file a video: its scenes, each a number of bars long, with its words in English, Japanese and Korean |
 | `video/film.html` | Draws a film, one frame at a time |
 | `build.py` | Takes a picture of every frame, checks it, and puts the video together with the music |
-| `video/thumb.html`, `thumbs.py` | Each video's thumbnail, for YouTube: drawn, checked and saved |
+| `video/still.html` | Draws a still: a video's thumbnail, or a poster |
+| `thumbs.py` | Each video's thumbnail, for YouTube: drawn, checked and saved |
+| `posters.json`, `posters.py` | The posters (square, for VRChat's poster frames and social sites): drawn, checked and saved |
 | `music/loop.py` | The music: a loop of 32 bars with no seam, and the chord a video ends on |
 | `regions.json` | Things on Hoard's pages a film can point at, by name, found again in every language |
 | `requirements.txt` | What these need beyond Hoard's own requirements: numpy, SciPy and Pillow, hash-checked |
@@ -28,6 +30,7 @@ python scripts/screenshots.py PRODUCTS_FOLDER build/shots --themes=dark,light --
 python promo/music/loop.py
 python promo/build.py promo-short promo-long help-booth-signed-out ... --lang=en,ja,ko --shape=landscape,portrait
 python promo/thumbs.py
+python promo/posters.py
 ```
 
 ## The videos
@@ -60,7 +63,7 @@ stops the build and says where.
 `promo/thumbs.py` makes a thumbnail for each video, named like it: `build/promo/thumbs/hoard-<film>-<lang>-<shape>.jpg`.
 A landscape one is 1280 × 720, YouTube's size for a video's thumbnail; a portrait one is 1080 × 1920, for a Short.
 Each is under 2 MB, YouTube's limit. They're drawn as the videos are, from the same screens, the Heap and words, by
-`video/thumb.html`, from each film's `"thumb"`:
+`video/still.html`, from each film's `"thumb"`:
 
 - `"look": "short"`: the title, the stores, Projects and your own files, and the Heap over Hoard's library (`"image"`).
 - `"look": "tour"`: the title, what Hoard does (`"features"`, the long promo's own words) and a fan of Hoard's
@@ -72,6 +75,21 @@ Each is under 2 MB, YouTube's limit. They're drawn as the videos are, from the s
 Each is checked as it's drawn: a title too long for its room, anything off the picture or under the lens, or a lens
 that cuts off what it's about, and it isn't made (`--draft` makes it anyway, to look at). A title is as large as it
 fits, in at most three lines; a Japanese one breaks only between its phrases.
+
+## The posters
+
+`promo/posters.py` makes the posters in `posters.json`, in each language: `build/promo/posters/hoard-poster-<name>-<lang>.jpg`,
+2048 × 2048 (the most VRChat's poster frames load, and fine for social sites). Their words are the films' own, so
+they say things the way the videos do, in every language:
+
+- `"look": "hero"`: the Heap and Hoard's name, what it is, the stores (and Projects, and your own files), and where to
+  get it: the short promo's opening and end card.
+- `"look": "feature"`: one of the long promo's screens (`"scene"`), with its name, title and words, the screen with
+  `"box"` ringed, and a lens on `"lens"` (a thing on the screen, or several together; `null`: none), placed where it
+  covers neither the ring nor the words.
+
+The fine print says whose the products shown are, and that Hoard isn't VRChat's or the stores'. Each is checked as
+the thumbnails are (`--draft` makes one anyway).
 
 ## Writing a film
 
