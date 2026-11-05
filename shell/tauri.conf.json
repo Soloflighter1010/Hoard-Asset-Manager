@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "identifier": "io.github.soloflighter1010.Hoard.tauri",
   "build": {
-    "frontendDist": "dist"
+    "frontendDist": "page"
   },
   "app": {
     "windows": [],
