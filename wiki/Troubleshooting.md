@@ -9,6 +9,8 @@ Hoard restarted, or a one-time link opened twice. Open Hoard again from the Star
 the front), or, if you started it as a server, open the address it printed. See
 [Using Hoard on other devices](Using-Hoard-on-Other-Devices#the-access-key).
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-unrecognised-page-en-landscape.mp4) (under a minute).
+
 ### "Hoard is already running, but isn't answering"
 
 Another copy of Hoard is open but not responding. Close it (in Task Manager, end **Hoard**), or restart your
@@ -31,6 +33,8 @@ info** and the publisher shows as Hoard's maintainer. A new publisher earns Micr
 people install its releases, so the warning fades with time. Choose **Run anyway**. To check the
 file first, see [Installing Hoard](Installing-Hoard#checking-a-download).
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-windows-warning-en-landscape.mp4) (under a minute).
+
 ### Smart App Control, Memory integrity and TPM (Windows 11)
 
 - **Memory integrity** (Core isolation, in Windows Security) can stay on. It stops drivers that aren't safe, and
@@ -52,6 +56,8 @@ stopped Hoard connecting to ...". Allow Hoard, and the browser it installs, in t
 software's maker as a false positive. Hoard is code-signed and open source, and every release is scanned by
 VirusTotal before it's published.
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-windows-warning-en-landscape.mp4) (under a minute).
+
 ## Signing in
 
 ### Signing in with Google, Discord or X doesn't work
@@ -61,10 +67,14 @@ refuses (or you set `"automated_sign_in": true` in `config.json`), set a passwor
 usual browser, then sign in with that in Hoard's window. See
 [Getting started](Getting-Started#signing-in-without-your-saved-passwords) for finding saved passwords.
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-social-signin-en-landscape.mp4) (under a minute).
+
 ### "Not signed in to Booth", or "session expired"
 
 The store ended Hoard's sign-in, as stores do from time to time. In **Stores**, choose **Sign in** on that store
 again.
+
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-booth-signed-out-en-landscape.mp4) (under a minute).
 
 ### "The other Hoard tool is using your ... sign-in right now"
 
@@ -103,6 +113,8 @@ Complete it in the window Payhip opens in, and Hoard carries on (it waits up to 
 let Hoard in, save each shop's library page from your usual browser and import them all instead. See
 [Stores](Stores#payhip).
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-payhip-check-en-landscape.mp4) (under a minute).
+
 ### Payhip shows nothing, or only some of what I bought
 
 Payhip keeps purchases in each shop, each on pages of 15, so Hoard only sees the shops you've added, or the
@@ -131,6 +143,8 @@ When importing ends, Hoard lists each page it couldn't use, and why:
 The key was mistyped or cut short when it was copied, or it was deleted on itch.io. Make a new one on itch.io
 (Settings, API keys), then choose **Change API key** on itch.io's row in **Stores**. See [Stores](Stores#itchio).
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-itch-key-en-landscape.mp4) (under a minute).
+
 ### itch.io: "Something on this computer stopped Hoard connecting to itch.io"
 
 itch.io didn't refuse it: security software, a firewall rule or a VPN on this computer did. Allow Hoard in it (see
@@ -157,11 +171,15 @@ You're offline, or the store is down. Your saved library and downloads are uncha
 
 The connection ended before the file was complete. Nothing is lost: the next sync picks up where it stopped.
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-download-fails-en-landscape.mp4) (under a minute).
+
 ### A download keeps failing, or is skipped
 
 The summary at the end of each download gives the reason for everything that failed or was skipped. On Gumroad,
 "no download page" means a refund or a membership that ended, and files Gumroad only streams can't be downloaded.
 Products you removed from your library are skipped on purpose.
+
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-download-fails-en-landscape.mp4) (under a minute).
 
 ### A record "was changed by something other than Hoard"
 
@@ -207,6 +225,8 @@ If Settings says Apprise isn't installed (running Hoard from its source), run Se
 sent nothing at all, as Apprise couldn't find its services in them; 5.2.0 beta 2 fixes that. Hoard's log notes each
 notification: what it was for, which services took it, and why one didn't, without its address (from 5.2.0 beta 2).
 
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-notifications-en-landscape.mp4) (under a minute).
+
 ## The hidden library
 
 - **Forgot your PIN?** Choose **Forgot your PIN?** and enter your 6 recovery words to set a new one. Nothing is
@@ -216,6 +236,8 @@ notification: what it was for, which services took it, and why one didn't, witho
   (30 seconds, doubling, up to an hour), even if Hoard restarts.
 
 See [Your library](Library#the-hidden-library).
+
+Video: [how to fix it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/media/hoard-help-hidden-pin-en-landscape.mp4) (under a minute).
 
 ## Reporting a problem
 

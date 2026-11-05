@@ -62,7 +62,8 @@
 - **Videos and music** ([#273](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/273), [#274](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/274), [#291](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/291)), made in code from Hoard's own screens, with no
   diffusion: promos, a short and a long one, landscape and portrait, in English, Japanese and Korean, opening on the
   stores, your projects and your own files turning into the Heap's boxes; help videos, one for each problem the
-  wiki's Troubleshooting page explains most, in Hoard's light theme, with each step clicked through; and a looping
+  wiki's Troubleshooting page explains most, in Hoard's light theme, with each step clicked through, and linked from
+  that page and the FAQ in each language; and a looping
   music track, written out note by note. Only the products given are shown, with their own pictures, and the credits
   name their creators. They go on a release of their own, `media`; `promo/` in the repository makes them all.
 - **The website, the README and the press kit** say what Hoard is now: your VRChat assets, and the Unity projects you
