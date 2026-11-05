@@ -74,6 +74,11 @@ def installed_copy() -> bool:
 def how_to_update(version: str) -> str:
     """What to download to update a copy of Hoard that can't update itself, for this kind of copy."""
     from .paths import in_flatpak
+    from . import shell
+    if shell.BUILD:   # (the Tauri and Nuitka build: an experiment, with releases of its own)
+        return (f"This is the Tauri and Nuitka build. Install the usual Hoard {version} from the releases page (its "
+                "installer, or the package for your system), or the next Tauri and Nuitka build when there is one. "
+                "Your settings, library and downloads carry over.")
     if in_flatpak():
         return (f"Download Hoard-{version}-linux-x86_64.flatpak from the releases page and open it, or run "
                 f"flatpak install Hoard-{version}-linux-x86_64.flatpak. It replaces this one.")

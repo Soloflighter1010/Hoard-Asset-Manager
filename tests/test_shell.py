@@ -131,5 +131,16 @@ class Protocol(unittest.TestCase):
         self.assertFalse(t.is_alive())
 
 
+class Updates(unittest.TestCase):
+    def test_the_shell_build_says_where_its_updates_are(self):
+        """It isn't the app Hoard-Setup installed, nor the portable zip: it says what to get instead."""
+        from hoard import updater
+        self.addCleanup(setattr, shell, "BUILD", shell.BUILD)
+        shell.BUILD = True
+        said = updater.how_to_update("5.2.0")
+        self.assertIn("Tauri and Nuitka build", said)
+        self.assertNotIn("portable zip", said)
+
+
 if __name__ == "__main__":
     unittest.main()
