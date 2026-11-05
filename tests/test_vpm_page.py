@@ -323,6 +323,19 @@ class ProjectsPanel(unittest.TestCase):
         pj_details(page, "Rusk Avatar").locator(".pj-up-go", has_text="newer version").click()
         page.wait_for_function("() => PJ.view === 'project'")
 
+    def test_a_tag_being_typed_stays_when_the_list_is_drawn_again(self):
+        """The list is drawn again as its updates and a project's details come in, which emptied a tag being typed in
+        the details (and, on a slow computer, the next one typed just after adding one)."""
+        page = self.page
+        pj_details(page, "Rusk Avatar")
+        page.fill("#pjTagInput", "half-typed")
+        page.evaluate("drawProjects()")
+        self.assertEqual(page.input_value("#pjTagInput"), "half-typed")
+        self.assertTrue(page.evaluate("document.activeElement.id === 'pjTagInput'"), "where you were typing")
+        page.press("#pjTagInput", "Enter")
+        page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.includes('half-typed') && !PJ.busy")
+        self.assertEqual(page.input_value("#pjTagInput"), "", "added, so not kept as typed")
+
     def test_folders_and_tags(self):
         """Issue #190: Hoard's own folders and tags for the projects on the list (the Creator Companion and ALCOM have
         only a favourite): one folder shown at a time, a project's folder and tags changed in its details, and each tag
@@ -333,7 +346,8 @@ class ProjectsPanel(unittest.TestCase):
         for typed in ("Quest", "poiyomi", "quest"):   # (Enter adds one; a tag it has already isn't added twice)
             page.fill("#pjTagInput", typed)
             page.press("#pjTagInput", "Enter")
-            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", arg=1 if typed == "Quest" else 2)
+            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n && !PJ.busy",
+                                   arg=1 if typed == "Quest" else 2)   # (saved: one action at a time, as you'd see it)
         bar = page.locator("#projectsBody .pj-folders")
         bar.wait_for()
         self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])

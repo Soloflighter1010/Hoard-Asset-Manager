@@ -3039,12 +3039,16 @@ function drawProjects() {
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
     ? [...body.querySelectorAll("input[id], textarea[id]")].filter(el => pjTicks(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue)
       .map(el => [el.id, pjTicks(el) ? el.checked : el.value]) : [];
+  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in
+  const tagBox = $("#pjTagInput"), tagTyped = tagBox && tagBox.value ? [tagBox.value, document.activeElement === tagBox] : null;
   body.innerHTML = (views[PJ.view] || pjList)();
   pjDrawn = PJ.view;
   for (const [id, v] of typed) {
     const el = document.getElementById(id);
     if (el) pjTicks(el) ? (el.checked = v) : (el.value = v);
   }
+  const tagAgain = tagTyped && $("#pjTagInput");
+  if (tagAgain) { tagAgain.value = tagTyped[0]; if (tagTyped[1]) tagAgain.focus(); }
   if (PJ.view === "new") pjFillNew();
   if (PJ.view === "logs") pjLogWire();
   const find = $("#pjFind");
@@ -3235,11 +3239,12 @@ async function pjLoadAbout(path) {
   panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
 }
 // A project's folder or tags, changed in its details: saved, and the list drawn again.
-async function pjOrganizeSome(path, change) {
+async function pjOrganizeSome(path, change) {   // (true once it's saved and the list read again)
   const r = await apiPost("/api/vpm/organize", { path, ...change });
-  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
   if (r.data.folder && PJ.folder != null && PJ.folder !== r.data.folder) PJ.folder = r.data.folder;   // (shown where it went)
-  return loadProjects();
+  await loadProjects();
+  return true;
 }
 // Read each project's packages with newer versions, once the list is shown (then draw it again with them).
 async function pjLoadUpdates() {
@@ -4448,9 +4453,13 @@ async function pjAct(b) {
     const typed = act === "tagadd" ? (input ? input.value.trim() : "") : "";
     if (act === "tagadd" && !typed) { if (input) input.focus(); return; }
     const tags = act === "untag" ? (p.tags || []).filter(t => t !== b.dataset.tag) : [...(p.tags || []), typed];
-    await pjOrganizeSome(path, { tags });
+    if (act === "tagadd") input.value = "";   // (added: not kept as typed when the list is drawn again)
+    const saved = await pjOrganizeSome(path, { tags });
     const again = $("#pjTagInput");
-    if (act === "tagadd" && again) again.focus();   // (another one can be typed straight away)
+    if (act === "tagadd" && again) {   // (another one can be typed straight away; one that wasn't saved is still there)
+      if (!saved && !again.value) again.value = typed;
+      again.focus();
+    }
     return;
   }
   if (act === "undetail") {

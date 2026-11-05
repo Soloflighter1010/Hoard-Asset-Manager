@@ -71,7 +71,8 @@
   going through them. How Hoard works has a step for projects, and the Flatpak's summary and the privacy policy say
   what Projects and Git talk to.
 - **Fixes.** Add to Local's **Folder...** and **File...** show in Hoard's window however soon it's opened as the
-  window loads (they could stay hidden); on Windows, the repository a project is inside of is named with its own
+  window loads (they could stay hidden); a tag being typed in a project's details stays as Projects is drawn again
+  (its updates coming in emptied it); on Windows, the repository a project is inside of is named with its own
   backslashes; and the patterns reading a remote's address, a notification server's name and a store page's data each
   take no longer than the text is long.
 
