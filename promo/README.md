@@ -20,7 +20,8 @@ as `hoard/heap.py` draws it everywhere); the music is notes written out in `musi
 
 ## Making them
 
-You need Hoard's requirements and these (`pip install --require-hashes -r requirements.txt -r promo/requirements.txt`),
+You need Python 3.11 or later (Pillow 13 does), Hoard's requirements and these
+(`pip install --require-hashes -r requirements.txt -r promo/requirements.txt`),
 Playwright's Chromium (`python -m playwright install chromium`), and ffmpeg.
 
 ```
