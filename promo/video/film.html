@@ -18,6 +18,7 @@
   --body: "Zen Maru Gothic", "Noto Sans CJK JP", sans-serif;
 }
 :root[lang=ja] #stage { word-break: auto-phrase; }   /* Japanese lines break between phrases, not inside a word */
+:root[lang=ko] #stage { word-break: keep-all; }      /* Korean, between words (at the spaces), not inside one */
 :root[lang=ko] { --display: "Noto Sans CJK KR", sans-serif; --display-weight: 900; --body: "Noto Sans CJK KR", sans-serif; }
 /* the help look: Hoard's light theme */
 .help { --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3; --bone: #211C18; --dust: #6B6157; --gold-text: #8A5F00; }
