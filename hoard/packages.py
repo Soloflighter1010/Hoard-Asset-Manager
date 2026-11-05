@@ -48,7 +48,7 @@ GUID = re.compile(r"[0-9a-f]{32}")
 CACHE_ID = re.compile(r"[0-9a-f]{32}")
 PREVIEW_NAME = re.compile(r"(\d{1,2})-([0-9a-f]{32})\.png")
 PNG = b"\x89PNG\r\n\x1a\n"
-FORMAT = 1
+FORMAT = 2   # (2: what code each package holds, issue #303)
 KINDS = (".unitypackage", ".zip")
 
 
@@ -128,13 +128,132 @@ def _scan(gz, size: int, refs: set) -> None:
         left -= len(chunk)
 
 
-def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset=None) -> dict:
+# ----------------------------------------------------------------------------- code that runs in Unity (issue #303)
+#
+# A package's scripts and plugins are compiled and loaded by Unity as soon as they're imported: an editor script can
+# run before anything is opened. What's here says what code a package holds, and which of it runs in the editor; it's
+# information, never a verdict, and nothing is sent anywhere to be checked.
+
+CODE_KINDS = {".cs": "script", ".js": "script", ".dll": "plugin", ".so": "plugin", ".dylib": "plugin", ".bundle": "plugin"}
+MAX_CODE_META = 64 * 1024        # a plugin's .meta (its import settings) larger than this isn't read
+MAX_ASMDEF = 64 * 1024           # nor an assembly definition
+
+
+def code_kind(path: str) -> str | None:
+    """"script" (C#, or old UnityScript), "plugin" (a DLL or a native plugin) or None, by a path's ending. A file
+    inside a macOS .bundle is the bundle's: only the bundle counts."""
+    parts = path.replace("\\", "/").rstrip("/").split("/")
+    if any(p.lower().endswith(".bundle") for p in parts[:-1]):
+        return None
+    return CODE_KINDS.get(os.path.splitext(parts[-1])[1].lower())
+
+
+def _in_editor_folder(path: str) -> bool:
+    """Is it in a folder named Editor (Unity's: what's in one is for the editor alone)?"""
+    return any(p.lower() == "editor" for p in path.replace("\\", "/").split("/")[:-1])
+
+
+_PLATFORM = re.compile(r"^\s*(?:-\s*)?first:\s*$")
+_OLD_PLATFORM = re.compile(r"^ {4}([A-Za-z0-9]+):\s*$")
+
+
+def plugin_in_editor(meta: bytes) -> bool:
+    """Do a plugin's import settings (its .meta: Unity's PluginImporter) load it in the editor? Its Editor platform
+    on, or Any platform on without Editor left out. Older .meta files list the platforms without "first:"."""
+    lines = meta.decode("utf-8", "replace").splitlines()
+    enabled, current, exclude_editor, in_data, listed = {}, None, False, False, False
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s.startswith("platformData:"):
+            in_data = True
+            continue
+        if not in_data:
+            continue
+        if _PLATFORM.match(line) and i + 1 < len(lines):
+            key, _, value = lines[i + 1].strip().partition(":")
+            current, listed = key.strip() or ("exclusions" if value.strip() == "Any" else ""), True
+            continue
+        m = None if listed else _OLD_PLATFORM.match(line)   # (the older shape: no "first:", each platform by name)
+        if m:
+            current = m.group(1)
+            continue
+        if s.startswith("enabled:") and current:
+            enabled[current] = s.partition(":")[2].strip() == "1"
+        elif s.startswith("Exclude Editor:"):
+            exclude_editor = s.partition(":")[2].strip() == "1"
+    return bool(enabled.get("Editor") or (enabled.get("Any") and not exclude_editor))
+
+
+def _asmdef_editor_only(data: bytes) -> bool | None:
+    """An assembly definition's (.asmdef) "includePlatforms" is just the Editor: True; another one: False; not one: None."""
+    try:
+        doc = json.loads(data.decode("utf-8-sig"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(doc, dict) or not isinstance(doc.get("name"), str):
+        return None
+    platforms = doc.get("includePlatforms") if isinstance(doc.get("includePlatforms"), list) else []
+    return platforms == ["Editor"]
+
+
+def code_in(assets: dict, seen: dict, tools: dict | None = None) -> dict:
+    """What code a package holds (read_unitypackage's assets, and what its code= gathered): {"scripts", "plugins",
+    "editor" (how many of them run in the editor), "tools" ({a known tool's name: how many of its files}), "folders"
+    (where the rest goes, at most 8), "items" ({GUID: {"code", "editor", "tool"}})}. tools: {GUID: a tool's name}."""
+    tools = tools or {}
+    editor_dirs, other_dirs = [], []   # folders an assembly definition makes editor-only, or not
+    for guid, a in assets.items():
+        if a.get("path", "").lower().endswith(".asmdef") and (seen.get(guid) or {}).get("asmdef") is not None:
+            folder = a["path"].rsplit("/", 1)[0] + "/" if "/" in a["path"] else ""
+            (editor_dirs if seen[guid]["asmdef"] else other_dirs).append(folder)
+
+    def by_asmdef(path: str) -> bool:
+        """Is the nearest assembly definition above it editor-only?"""
+        best, editor = -1, False
+        for folder, is_editor in [(f, True) for f in editor_dirs] + [(f, False) for f in other_dirs]:
+            if path.startswith(folder) and len(folder) > best:
+                best, editor = len(folder), is_editor
+        return editor
+
+    out = {"scripts": 0, "plugins": 0, "editor": 0, "tools": {}, "folders": [], "items": {}}
+    for guid, a in sorted(assets.items(), key=lambda kv: kv[1].get("path", "")):
+        path = a.get("path", "")
+        kind = code_kind(path)
+        if not kind or (kind == "script" and a.get("size") is None):
+            continue
+        if kind == "script":
+            editor = _in_editor_folder(path) or by_asmdef(path)
+        else:   # (a plugin without import settings loads everywhere, the editor too: Unity's default)
+            editor = _in_editor_folder(path) or (seen.get(guid) or {}).get("plugin_editor", True)
+        tool = tools.get(guid)
+        out[kind + "s"] += 1
+        out["editor"] += bool(editor)
+        out["items"][guid] = {"code": kind, "editor": bool(editor), "tool": tool}
+        if tool:
+            out["tools"][tool] = out["tools"].get(tool, 0) + 1
+        else:
+            folder = path.rsplit("/", 1)[0] if "/" in path else path
+            if folder not in out["folders"] and len(out["folders"]) < 8:
+                out["folders"].append(folder)
+    return out
+
+
+def known_code_tools() -> dict:
+    """{GUID: tool name} for the tools Hoard knows by their GUIDs (hoard/needs.py's known_tools.json)."""
+    from .needs import known
+    k = known()
+    return {g: k["tools"][v[0]]["name"] for g, v in k["guids"].items() if v and v[0] in k["tools"]}
+
+
+def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset=None, code: dict | None = None) -> dict:
     """What a .unitypackage holds, from a stream of its (gzipped) bytes: {GUID: {"path", "size" (None for a folder),
     "preview" (has one)}}. on_preview(guid, png bytes) gets each preview that's a real PNG of a sensible size, and
     returns False for one it doesn't keep (that asset then has no preview). refs,
     when given, gets every GUID the package's text assets name (its own among them). on_asset(guid, "asset" or
     "asset.meta", size, stream), when given, is offered each asset's bytes (Extract): it reads exactly size of them
-    and returns True, or returns False to pass them by. Raises NotAPackage for anything that isn't one."""
+    and returns True, or returns False to pass them by. code, when given, gets what code_in() needs to say which code
+    runs in the editor: {GUID: {"plugin_editor": a plugin's import settings load it there, "asmdef": an assembly
+    definition is editor-only}}. Raises NotAPackage for anything that isn't one."""
     assets: dict[str, dict] = {}
     try:
         gz = gzip.GzipFile(fileobj=stream, mode="rb")
@@ -179,6 +298,20 @@ def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset
                     assets.setdefault(guid, {"size": None, "preview": False})["size"] = size
                 if on_asset is not None and on_asset(guid, part, size, gz):
                     _skip(gz, pad)
+                elif code is not None and part == "asset.meta" and size <= MAX_CODE_META:
+                    meta = _read_exactly(gz, size)
+                    _skip(gz, pad)
+                    if b"PluginImporter:" in meta:
+                        code.setdefault(guid, {})["plugin_editor"] = plugin_in_editor(meta)
+                elif code is not None and part == "asset" and size <= MAX_ASMDEF:
+                    data = _read_exactly(gz, size)
+                    _skip(gz, pad)
+                    if refs is not None and data.startswith(b"%YAML"):
+                        refs.update(m.group(1).decode() for m in REF.finditer(data) if len(refs) < MAX_REFS)
+                    elif b'"name"' in data[:4096] and data.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"{"):
+                        editor_only = _asmdef_editor_only(data)
+                        if editor_only is not None:
+                            code.setdefault(guid, {})["asmdef"] = editor_only
                 elif part == "asset" and refs is not None:
                     _scan(gz, size, refs)
                     _skip(gz, pad)
@@ -200,9 +333,11 @@ def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset
     return {g: a for g, a in assets.items() if a.get("path")}
 
 
-def _items(assets: dict) -> list[dict]:
-    """A package's assets for the page, by their path: [{"path", "size" (None: a folder), "guid", "preview"}]."""
-    out = [{"path": clean_text(a["path"], 1000), "size": a["size"], "guid": g, "preview": a["preview"]}
+def _items(assets: dict, code: dict | None = None) -> list[dict]:
+    """A package's assets for the page, by their path: [{"path", "size" (None: a folder), "guid", "preview"}], and for
+    code (code_in's items), "code" ("script" or "plugin"), "editor" and "tool"."""
+    marks = (code or {}).get("items", {})
+    out = [{"path": clean_text(a["path"], 1000), "size": a["size"], "guid": g, "preview": a["preview"], **marks.get(g, {})}
            for g, a in assets.items()]
     out = [i for i in out if i["path"]]
     out.sort(key=lambda i: i["path"].casefold())
@@ -228,10 +363,19 @@ def zip_name(info: zipfile.ZipInfo) -> str:
     return info.filename
 
 
+def _summary(code: dict) -> dict:
+    """What code a package holds, without each item's marks (code_in's, for the page and package-needs.json)."""
+    return {k: v for k, v in code.items() if k != "items"}
+
+
 def read_zip(path: Path, on_preview=None) -> dict:
     """A .zip's files, and what each .unitypackage in it holds: {"files": [{"name", "size", "package" (its number in
-    "packages", or None), "locked"}], "packages": [{"name", "items", "error"}], "more": files left out}."""
+    "packages", or None), "locked", and "code" and "editor" for a script or plugin loose in it}], "packages":
+    [{"name", "items", "error", "code"}], "loose" (the scripts and plugins loose in it: {"scripts", "plugins",
+    "editor"}), "more": files left out}."""
     files, packages = [], []
+    loose = {"scripts": 0, "plugins": 0, "editor": 0}
+    tools = known_code_tools()
     try:
         with zipfile.ZipFile(path) as zf:
             infos = zf.infolist()
@@ -241,17 +385,25 @@ def read_zip(path: Path, on_preview=None) -> dict:
                 name = member_name(info)
                 locked = bool(info.flag_bits & 0x1)
                 entry = {"name": name, "size": info.file_size, "package": None, "locked": locked}
+                kind = code_kind(name)
+                if kind:   # (not imported as it is; copied into a project, it would be)
+                    entry.update(code=kind, editor=_in_editor_folder(name))
+                    loose[kind + "s"] += 1
+                    loose["editor"] += entry["editor"]
                 if name.lower().endswith(".unitypackage") and len(packages) < MAX_ZIP_PACKAGES:
                     n = len(packages)
                     entry["package"] = n
-                    pkg = {"name": name, "items": [], "error": None}
+                    pkg = {"name": name, "items": [], "error": None, "code": None}
                     if locked:
                         pkg["error"] = "This zip is locked with a password, so what's in this package can't be read."
                     else:
                         try:
                             with zf.open(info) as member:
-                                pkg["items"] = _items(read_unitypackage(
-                                    member, None if on_preview is None else lambda g, d, n=n: on_preview(n, g, d)))
+                                seen: dict = {}
+                                assets = read_unitypackage(
+                                    member, None if on_preview is None else lambda g, d, n=n: on_preview(n, g, d), code=seen)
+                                code = code_in(assets, seen, tools)
+                                pkg["items"], pkg["code"] = _items(assets, code), _summary(code)
                         except (NotAPackage, zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError, zlib.error) as e:
                             pkg["error"] = _why(e)
                     packages.append(pkg)
@@ -260,7 +412,7 @@ def read_zip(path: Path, on_preview=None) -> dict:
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError, NotImplementedError) as e:
         raise NotAPackage("not a zip, or a damaged one") from e
     files.sort(key=lambda f: f["name"].casefold())
-    return {"files": files, "packages": packages, "more": more}
+    return {"files": files, "packages": packages, "loose": loose, "more": more}
 
 
 def _why(e: BaseException) -> str:
@@ -363,7 +515,10 @@ def look_inside(path: Path) -> dict:
                 if kind == "zip":
                     result.update(read_zip(path, keep))
                 else:
-                    result["items"] = _items(read_unitypackage(fh, lambda g, d: keep(0, g, d)))
+                    seen: dict = {}
+                    assets = read_unitypackage(fh, lambda g, d: keep(0, g, d), code=seen)
+                    code = code_in(assets, seen, known_code_tools())
+                    result["items"], result["code"] = _items(assets, code), _summary(code)
         except NotAPackage as e:
             result["error"] = _why(e)
         (work / "inside.json").write_text(json.dumps(result, ensure_ascii=False), "utf-8")

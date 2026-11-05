@@ -23,7 +23,7 @@ from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, pace, vault
 from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, open_under, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
-from .tags import TagMatcher, TagStore, clean_tag, tag_key
+from .tags import TagMatcher, TagStore, clean_note, clean_tag, tag_key
 
 try:
     from tqdm import tqdm
@@ -2022,7 +2022,8 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     matcher = TagMatcher(tagdata["tags"])
     for a, ts in zip(assets, toks):
         folder = f"{a['store']}/{a['folder']}"
-        mine = TagStore.tags_for(tagdata, tag_key(a["store"], a["name"]), a["name"], matcher)
+        key = tag_key(a["store"], a["name"])
+        mine = TagStore.tags_for(tagdata, key, a["name"], matcher)
         a_tags = sorted((ts & tags) - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
         url = store_link(a["store"], a.get("url"))
@@ -2036,7 +2037,8 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
                         "tags": mine, "suggested_tags": a_tags,
                         **({"location": a["location"]} if a.get("location") else {}),
                         **({"library": a["library"]} if a.get("library") else {}),
-                        **({"note": a["note"]} if a.get("note") else {})})
+                        **({"note": a["note"]} if a.get("note") else {}),
+                        **({"your_note": tagdata["notes"][key]} if tagdata.get("notes", {}).get(key) else {})})
         for t in a_tags:
             index.setdefault(t, []).append(folder)
     catalog.sort(key=lambda e: (e["store"], e["creator"].lower(), e["name"].lower()))
@@ -2632,6 +2634,8 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: library is another library folder, as a plain absolute path")
     if entry.get("note") is not None and entry["note"] != clean_text(entry["note"], 300):
         problems.append(f"{label}: note isn't clean text")
+    if "your_note" in entry and (not entry["your_note"] or entry["your_note"] != clean_note(entry["your_note"])):
+        problems.append(f"{label}: your_note isn't clean text")
     if entry.get("url") is not None and store_link(str(entry.get("store")), entry["url"]) != entry["url"]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
     if "page" in entry:
@@ -2642,6 +2646,10 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         from .needs import valid_needs
         if not valid_needs(entry["needs"], set(STORE_DIRS.values())):
             problems.append(f"{label}: needs isn't as Hoard writes it")
+    if "code" in entry:
+        from .needs import valid_code
+        if not valid_code(entry["code"]):
+            problems.append(f"{label}: code isn't as Hoard writes it")
     for key in ("tags", "suggested_tags"):
         if not isinstance(entry.get(key), list) or any(not isinstance(t, str) or clean_tag(t) != t or not t for t in entry[key]):
             problems.append(f"{label}: {key} has a tag that isn't clean")

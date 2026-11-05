@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parent.parent
 os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
-from hoard import config, downloader, library, server, themes  # noqa: E402
+from hoard import config, downloader, library, server, tags, themes  # noqa: E402
 from tests.browsing import menu  # noqa: E402
 
 try:
@@ -927,6 +927,25 @@ class DiskSpace(unittest.TestCase):
         self.assertIn("hasn't found any Unity projects", page.locator("#viewBar").inner_text())
         page.click('#views [data-view="downloads"]')
         self.assertEqual(page.evaluate("state.sort"), "name", "biggest first only while looking at disk space")
+        page.close()
+
+    def test_a_note_in_downloads(self):
+        """Issue #304: a download's details have the same note as its product's in the Library, and its tile the mark."""
+        page = self.open()
+        page.click('#views [data-view="downloads"]')
+        page.locator(".slot", has_text="Tiny Hat").click()
+        page.click("#detail [data-act=noteedit]")
+        page.locator("#detail textarea[data-pnote]").fill("Goes with the winter set")
+        try:
+            with page.expect_response(lambda r: r.url.endswith("/api/tags") and r.request.method == "POST"):
+                page.click("#detail [data-act=notesave]")
+            page.wait_for_selector("#detail .pnote")
+            self.assertEqual(page.locator("#detail .pnote").inner_text(), "Goes with the winter set")
+            self.assertEqual(page.locator(".slot", has_text="Tiny Hat").locator(".note-mark").count(), 1)
+            entry = next(e for e in downloader.collect_catalog(self.srv.cfg, self.root)[0] if e["name"] == "Tiny Hat")
+            self.assertEqual(entry.get("your_note"), "Goes with the winter set", "in the catalog, for Hoard for Unity")
+        finally:
+            tags.TagStore().change({"action": "note", "keys": [tags.tag_key("booth", "Tiny Hat")], "note": ""})
         page.close()
 
     def test_select_and_delete_frees_the_space(self):
@@ -2579,12 +2598,12 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page = self.open()
         self.assertEqual(page.evaluate("parseSearch('by:\"Kitsu Studio\" #Hoodie https://booth.pm/x set: hello')"),
                          {"words": ["https://booth.pm/x", "hello"], "creator": ["kitsu studio"], "tag": ["hoodie"], "store": [],
-                          "type": [], "set": [], "project": [], "settings": []}, "an address's https: isn't a prefix")
+                          "type": [], "note": [], "set": [], "project": [], "settings": []}, "an address's https: isn't a prefix")
         q, guide = page.locator("#q"), page.locator("#qMenu")
         q.focus()
         guide.wait_for()
         self.assertEqual(guide.locator(".qopt code").first.inner_text(), "creator:")
-        self.assertEqual(guide.locator(".qopt").count(), 12, "every prefix, and each other site's")
+        self.assertEqual(guide.locator(".qopt").count(), 13, "every prefix (note: too, issue #304), and each other site's")
         self.assertEqual(guide.locator(".qmenu-h").all_inner_texts(), ["Search for one kind of thing", "Search another site, in your browser"])
         self.assertEqual(q.get_attribute("aria-expanded"), "true")
         page.keyboard.press("ArrowDown")
@@ -2926,6 +2945,72 @@ class WindowsTabsAndTasks(unittest.TestCase):
         finally:   # (Hoard's guess again, for the other tests)
             page.evaluate("api('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
                           "body: JSON.stringify({ action: 'set-type', keys: [DATA.items.find(a => a.name === 'Rusk').tag_key], type: '' }) })")
+        page.close()
+
+    def test_a_note_on_a_product(self):
+        """Issue #304: a note in a product's details, folded away while there's none and kept only on Save; a mark on
+        its tile; the search finds its words, and note: searches notes alone."""
+        page = self.open()
+        page.locator(".slot", has_text="Rusk").click()
+        self.assertEqual(page.locator("#detail textarea[data-pnote]").count(), 0, "folded away while there's none")
+        page.click("#detail [data-act=noteedit]")
+        box = page.locator("#detail textarea[data-pnote]")
+        self.assertTrue(box.evaluate("el => el === document.activeElement"), "the box takes the focus")
+        box.fill("For my avatar\nHue shifted to teal")
+        page.click("#detail [data-act=notecancel]")
+        self.assertEqual(page.evaluate("DATA.items.find(a => a.name === 'Rusk').your_note"), "", "nothing kept until Save")
+        page.click("#detail [data-act=noteedit]")
+        page.locator("#detail textarea[data-pnote]").fill("For my avatar\nHue shifted to teal")
+        try:
+            with page.expect_response(lambda r: r.url.endswith("/api/tags") and r.request.method == "POST"):
+                page.click("#detail [data-act=notesave]")
+            page.wait_for_function("() => (DATA.items.find(a => a.name === 'Rusk') || {}).your_note === 'For my avatar\\nHue shifted to teal'")
+            page.wait_for_selector("#detail .pnote")
+            self.assertEqual(page.locator("#detail .pnote").inner_text(), "For my avatar\nHue shifted to teal")
+            self.assertEqual(page.locator(".slot", has_text="Rusk").locator(".note-mark").count(), 1, "a mark on its tile")
+            self.assertIn("has a note", page.locator(".slot", has_text="Rusk").get_attribute("aria-label"))
+            self.assertEqual(page.locator(".slot .note-mark").count(), 1, "only on the product with a note")
+            for q in ("teal", "note:teal", 'note:"hue shifted"'):
+                page.fill("#q", q)
+                page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
+            page.fill("#q", "note:rusk")   # (its name isn't in its note)
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 0")
+            page.fill("#q", "")
+            self.assertEqual(self.errors, [])
+        finally:   # (taken off again, for the other tests)
+            page.evaluate("api('/api/tags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
+                          "body: JSON.stringify({ action: 'note', keys: [DATA.items.find(a => a.name === 'Rusk').tag_key], note: '' }) })")
+        page.close()
+
+    def test_bring_in_from_konoasset(self):
+        """Issue #305: Bring in from KonoAsset... in the Menu asks for its data folder, says what bringing it in would do
+        (changing nothing), and brings it in only after Bring in."""
+        sys.path.insert(0, str(Path(__file__).parent))
+        from test_konoasset import make_folder
+        folder = make_folder(Path(tempfile.mkdtemp()))
+        page = self.open()
+        sent = []
+        page.route("**/api/konoasset/bring-in", lambda route: (sent.append(json.loads(route.request.post_data)),
+                                                               route.fulfill(status=200, json={"ok": True, "queued": False})))
+        page.click("#menuBtn")
+        page.click("#barMenu [data-konoasset]")
+        box = page.locator("dialog.ask-folder input")
+        box.fill(str(folder.parent / "nowhere"))
+        page.click("dialog.ask-folder button[value=yes]")
+        page.locator("#toast", has_text="no folder there").wait_for()
+        page.locator("dialog.ask-folder input").fill(str(folder))   # (asked again, with what was typed)
+        page.click("dialog.ask-folder button[value=yes]")
+        page.wait_for_function("() => document.querySelector('#askDialog') && document.querySelector('#askDialog').open")
+        said = page.locator("#askText").inner_text()
+        for words in ("In KonoAsset: 5 products.", "New Local products: 3.",   # (its Rusk isn't this library's: BOOTH item 1)
+                      "Left out, with no files and not in your library: 2 (Rusk, Lost Thing).",
+                      "Nothing in KonoAsset's folder is changed."):
+            self.assertIn(words, said)
+        self.assertEqual(sent, [], "nothing until Bring in")
+        page.click("#askDialog button[value=yes]")
+        page.locator("#toast", has_text="Bringing in from KonoAsset").wait_for()
+        self.assertEqual(sent, [{"path": str(folder), "confirm": True}])
+        self.assertEqual(self.errors, [])
         page.close()
 
     def test_sync_asks_first(self):

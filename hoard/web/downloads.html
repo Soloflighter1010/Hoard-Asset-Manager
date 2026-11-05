@@ -1369,6 +1369,7 @@ body.less-motion .tour-try::before { animation: none; }
         <button id="tagsBtn" aria-expanded="false" aria-controls="tagPanel">Tags</button>
         <button id="rescan" title="Re-read what's on disk">Rescan</button>
         <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+        <button data-konoasset>Bring in from KonoAsset...</button>
         <div class="barmenu-links" role="group" aria-label="About Hoard"><span class="barmenu-ver" translate="no" data-version></span><button class="barmenu-upd" data-update-note hidden></button><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><button data-report-problem>Report a problem</button></div>
       </div>
     </div>
@@ -1912,7 +1913,7 @@ async function load(rescan = false) {
   for (const el of document.querySelectorAll("[data-version]")) el.textContent = `Hoard ${DATA.version || ""}`;
   drawHeap();   // the logo with the stores you use (issue #278)
   for (const a of DATA.assets) {
-    withStoreTags(a).hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path)].join(" "));
+    withStoreTags(a).hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path), a.your_note].join(" "));
   }
   byId = new Map(DATA.assets.map(a => [a.id, a]));
   stackMembers = new Map();
@@ -2358,10 +2359,10 @@ const slotHTML = a => {
     const n = stackSize.get(a.id) || 0, others = otherCopies(a);
     const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, storeName(a.store)), n > 1 && tr("{0} copies", n),
-                  also.length && tr("also from {0}", listed(also))];
+                  also.length && tr("also from {0}", listed(also)), a.your_note && tr("has a note")];
     return `<button draggable="true" class="slot ${a.store.toLowerCase()}${n > 1 ? " stacked" : ""}" data-id="${a.id}" aria-label="${esc(said.filter(Boolean).join(", "))}"` +
       `${a.id === openId ? ' aria-current="true"' : ""}>` +
-      `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>` +
+      `<span class="art">${art(a)}${notch(a.store.toLowerCase(), others.map(o => o.store.toLowerCase()))}<i class="tick" aria-hidden="true"></i>${noteMark(a)}` +
         `${n > 1 ? `<span class="flag count" aria-hidden="true">×${n}</span>` : ""}` +
         `${hasUpdate(a) ? '<span class="flag upd">Update</span>' : ""}${a.missing ? '<span class="flag">Missing files</span>' : ""}` +
         `${state.view === "space" && copiesOf(a) ? '<span class="flag upd">Copies</span>' : ""}</span>` +
@@ -2590,7 +2591,8 @@ function showDetail(a, focus = true) {
         : `<p class="sub">Want to change a texture or a file? Make an editable copy and change that: Hoard checks the files
         here, and replaces one that was changed.</p>`) +
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
-    `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}</span>` +
+    `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}${f.code ? ` <span class="codemark" ` +
+      `title="${esc(codeWords(f.code, f.code.loose).join(" "))}">${esc(tr("Code"))}</span>` : ""}</span>` +
       `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
       (f.missing ? "<span></span>" : `<span class="fb">` + (canLookInside(f.path)
         ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
@@ -2600,6 +2602,7 @@ function showDetail(a, focus = true) {
     updateSection(a) +
     needsSection(a) +
     librarySection(a) +
+    noteSection(a) +
     tagSection(a) +
     setsSection(a) +
     previousSection(a) +
@@ -2695,7 +2698,7 @@ function insideFolder(node, n) {   // one folder's contents: its folders (closed
     return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary>${pickBox(`d:${n}:${d.path}`, d.count, name)}<span translate="no">${esc(name)}</span>` +
       `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
-    `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
+    `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
 }
 // What's in a package, as a tree of folders, with how many files and their size.
 function insidePackage(items, n, open) {
@@ -2704,31 +2707,75 @@ function insidePackage(items, n, open) {
   const sum = `<p class="sum">${esc(tr(tree.count === 1 ? "{0} file, {1}" : "{0} files, {1}", tree.count.toLocaleString(), sizeText(tree.size)))}</p>`;
   return sum + (open ? insideFolder(tree, n) : (INSIDE.nodes.push({ node: tree, n }), `<div data-pkg-node="${INSIDE.nodes.length - 1}"></div>`));
 }
-function insideFound(q) {   // searching: every file whose path has these words, wherever it is
+// searching: every file whose path has these words, wherever it is (with Only code, only scripts and plugins)
+function insideFound(q, onlyCode = false) {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean), found = [];
   // Note the files in a package that have every word searched for.
   const look = (items, n, where) => {
-    for (const it of items) if (it.size != null && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
+    for (const it of items) if ((it.size != null || it.code) && (!onlyCode || it.code) && words.every(w => it.path.toLowerCase().includes(w))) found.push({ ...it, n, where });
   };
   if (INSIDE.kind === "zip") INSIDE.packages.forEach((p, n) => look(p.items, n, p.name));
   else look(INSIDE.items, 0, "");
   if (INSIDE.kind === "zip")
-    for (const f of INSIDE.files) if (words.every(w => f.name.toLowerCase().includes(w))) found.push({ path: f.name, size: f.size, zip: true });
-  if (!found.length) return `<p class="sum">${esc(tr("Nothing in it matches."))}</p>`;
+    for (const f of INSIDE.files) if ((!onlyCode || f.code) && words.every(w => f.name.toLowerCase().includes(w))) found.push({ path: f.name, size: f.size, zip: true, code: f.code, editor: f.editor });
+  if (!found.length) return `<p class="sum">${esc(tr(onlyCode && !words.length ? "No scripts or DLLs." : "Nothing in it matches."))}</p>`;
   return `<p class="sum">${esc(tr(found.length === 1 ? "{0} file matches." : "{0} files match.", found.length.toLocaleString()))}</p>` +
-    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${pickBox(f.zip ? `z:${f.path}` : `p:${f.n}:${f.path}`, 1, f.path)}` +
+    `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${pickBox(f.zip ? `z:${f.path}` : `${f.size == null ? "d" : "p"}:${f.n}:${f.path}`, 1, f.path)}` +
       `${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
-      `<span class="nm" translate="no">${esc(f.path)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+      `<span class="nm" translate="no">${esc(f.path)}${codeTag(f)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${f.size == null ? "" : sizeText(f.size)}</span></li>`).join("")}</ul>` +
     (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
+}
+/* What code a package holds (issue #303): its scripts and plugins, which of them run in the editor, which are a tool's
+   Hoard knows by their GUIDs (so the rest stands out), and where the rest goes. It's information, not a verdict. */
+const CODE_KINDS = { script: "Script", plugin: "DLL" };
+// A file's mark in Look inside, when it's a script or a plugin.
+function codeTag(it) {
+  if (!it.code) return "";
+  const what = [tr(it.code === "script" ? "A script: Unity compiles it when it's imported." : "A DLL or plugin: Unity loads it when it's imported."),
+                it.editor && tr("It runs in the editor."), it.tool && tr("It's {0}'s.", it.tool)].filter(Boolean).join(" ");
+  return ` <span class="codetag${it.editor ? " ed" : ""}${it.tool ? " known" : ""}" title="${esc(what)}">${esc(tr(CODE_KINDS[it.code]))}` +
+    `${it.editor ? ` · ${esc(tr("Editor"))}` : ""}${it.tool ? ` · <span translate="no">${esc(it.tool)}</span>` : ""}</span>`;
+}
+// The code in a package (or all of a .zip's), in words: one sentence each.
+function codeWords(c, loose) {
+  const n = c ? c.scripts + c.plugins : 0, l = loose ? (loose.scripts || 0) + (loose.plugins || 0) : 0;
+  if (!n && !l) return [tr("No scripts or DLLs.")];
+  const count = x => [x.scripts && tr(x.scripts === 1 ? "1 script" : "{0} scripts", x.scripts),
+                      x.plugins && tr(x.plugins === 1 ? "1 DLL or plugin" : "{0} DLLs or plugins", x.plugins)].filter(Boolean);
+  const out = [];
+  if (n) {
+    out.push(tr("Code that Unity runs once it's imported: {0}.", listed(count(c))));
+    if (c.editor) out.push(tr(c.editor === 1 ? "1 of them runs in the editor." : "{0} of them run in the editor.", c.editor));
+    const tools = Object.entries(c.tools || {}), theirs = tools.reduce((t, [, k]) => t + k, 0);
+    if (tools.length) out.push(tr("{0} from tools Hoard knows: {1}.", theirs, listed(tools.map(([t]) => t))));
+    if (n > theirs && (c.folders || []).length) out.push(tr("The rest goes in {0}.", listed(c.folders)));
+  }
+  if (l) out.push(tr("Loose in the zip, outside its packages: {0}.", listed(count(loose))));
+  return out;
+}
+// Look inside's code: what a package holds, with Only code to list just that.
+function insideCode(I) {
+  const all = I.kind === "zip" ? I.packages.reduce((t, p) => {
+    const c = p.code || {};
+    for (const k of ["scripts", "plugins", "editor"]) t[k] += c[k] || 0;
+    for (const [tool, k] of Object.entries(c.tools || {})) t.tools[tool] = (t.tools[tool] || 0) + k;
+    for (const f of c.folders || []) if (!t.folders.includes(f) && t.folders.length < 8) t.folders.push(f);
+    return t;
+  }, { scripts: 0, plugins: 0, editor: 0, tools: {}, folders: [] }) : I.code;
+  if (!all) return "";   // (read before 5.2.0 beta 5: read again next time)
+  const any = all.scripts + all.plugins + ((I.loose || {}).scripts || 0) + ((I.loose || {}).plugins || 0);
+  return `<div class="code-sum${any ? " has" : ""}"><p>${codeWords(all, I.loose).map(esc).join(" ")}</p>` +
+    (any ? `<p class="hint">${esc(tr("Hoard says what's here; it doesn't call a package safe or unsafe, and sends nothing anywhere to be checked."))}</p>` +
+      `<button class="ghost sm" data-only-code aria-pressed="${!!I.onlyCode}">${esc(tr("Only code"))}</button>` : "") + `</div>`;
 }
 // Draw Look inside: the package (or each in the .zip), or the files matching what's searched for.
 function drawInside(q = "") {
   const I = INSIDE, body = $("#insideBody");
   I.nodes = [];
-  const head = `<p class="file-name" translate="no">${esc(I.name)}</p>`;
+  const head = `<p class="file-name" translate="no">${esc(I.name)}</p>` + insideCode(I);
   const search = `<input type="search" id="insideQ" placeholder="${esc(tr("Search in it"))}" aria-label="${esc(tr("Search in it"))}" value="${esc(q)}">`;
   let html;
-  if (q.trim()) html = insideFound(q);
+  if (q.trim() || I.onlyCode) html = insideFound(q, !!I.onlyCode);
   else if (I.kind === "zip") {
     const total = I.files.reduce((t, f) => t + f.size, 0);
     html = `<p class="sum">${esc(tr(I.files.length === 1 ? "This zip holds {0} file, {1}." : "This zip holds {0} files, {1}.", I.files.length.toLocaleString(), sizeText(total)))} ` +
@@ -2737,7 +2784,7 @@ function drawInside(q = "") {
       I.packages.map((p, n) => `<details class="pkg"${I.packages.length === 1 ? " open" : ""} data-pkg="${n}"><summary translate="no">${esc(p.name)}</summary>` +
         (p.error ? `<p class="note">${esc(tr(p.error))}</p>` : insidePackage(p.items, n, false)) + `</details>`).join("") +
       `<details><summary>${esc(tr("Every file in the zip"))}</summary><ul class="zipfiles">${I.files.map(f =>
-        `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+        `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
       (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
   } else html = insidePackage(I.items, 0, true);
   body.innerHTML = head + (I.kind === "zip" && !I.files.length ? html : search + insideBar() + html);
@@ -2826,6 +2873,12 @@ function wireInside() {
   w.addEventListener("click", e => {
     const x = e.target.closest("[data-x=extract]");
     if (x && INSIDE && !x.disabled) extractInside(x.dataset.what);
+    if (e.target.closest("[data-only-code]") && INSIDE) {   // just the scripts and plugins, or everything again
+      INSIDE.onlyCode = !INSIDE.onlyCode;
+      drawInside(($("#insideQ") || {}).value || "");
+      const b = $("#insideBody [data-only-code]");
+      if (b) b.focus();
+    }
     if (e.target.matches("summary input.pick")) e.stopPropagation();   // (choosing a folder doesn't open or close it)
   });
   let t;

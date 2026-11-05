@@ -12,7 +12,7 @@ import unicodedata
 from pathlib import Path
 
 from .paths import data_dir
-from .safety import DataFileError, read_json_file, set_aside, write_file_safely
+from .safety import DataFileError, clean_text, read_json_file, set_aside, write_file_safely
 
 
 # ----------------------------------------------------------------------------- tags
@@ -56,6 +56,20 @@ TYPE_WORDS = (
 
 
 TAG_LIMITS = {"tags": 1000, "matching": 200, "per_item": 100, "tagged_items": 50000, "keys_per_change": 5000}
+
+# Your note on a product (issue #304): what it's for, which avatar it's set up for, what you changed. Plain text, kept
+# with your tags, so a refresh never clears it; never in a shared set.
+NOTE_LENGTH, NOTE_LINES = 2000, 40
+
+
+def clean_note(value) -> str:
+    """A product's note as it's kept: its lines, each made safe as a name is (no control or invisible characters,
+    single spaces), at most NOTE_LINES of them and NOTE_LENGTH characters in all."""
+    if not isinstance(value, str):
+        return ""
+    lines = [clean_text(line, NOTE_LENGTH) for line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines).strip())   # (a blank line between paragraphs, no more)
+    return "\n".join(text.split("\n")[:NOTE_LINES])[:NOTE_LENGTH].strip()
 
 
 # Characters a tag may contain besides letters, marks and digits (in any script, so Japanese works).
@@ -208,6 +222,8 @@ class TagStore:
       items     {tag_key: [tag, ...]}              tags you put on items
       excluded  {tag_key: [tag, ...]}              matched tags you took off an item
       hidden    [word, ...]                        suggestions you hid
+      types     {tag_key: product type}            what a product is, as you set it (issue #223)
+      notes     {tag_key: text}                    your note on a product (issue #304)
     """
 
     def __init__(self, path: Path | None = None):
@@ -217,7 +233,7 @@ class TagStore:
     @staticmethod
     def empty() -> dict:
         """A tag file with nothing in it."""
-        return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": [], "types": {}}
+        return {"version": 1, "tags": {}, "items": {}, "excluded": {}, "hidden": [], "types": {}, "notes": {}}
 
     @staticmethod
     def sanitize(raw) -> dict:
@@ -256,6 +272,11 @@ class TagStore:
         types = raw.get("types") if isinstance(raw.get("types"), dict) else {}   # a product's type, as you set it (#223)
         data["types"] = {k: v for k, v in list(types.items())[:TAG_LIMITS["tagged_items"]]
                          if isinstance(k, str) and TAG_KEY_RX.match(k) and v in PRODUCT_TYPES}
+        notes = raw.get("notes") if isinstance(raw.get("notes"), dict) else {}   # your notes (issue #304)
+        for k, v in list(notes.items())[:TAG_LIMITS["tagged_items"]]:
+            note = clean_note(v) if isinstance(k, str) and TAG_KEY_RX.match(k) else ""
+            if note:
+                data["notes"][k] = note
         return data
 
     def load(self) -> dict:
@@ -294,6 +315,28 @@ class TagStore:
                     set_aside(self.path)  # keep the damaged file rather than overwrite it
             self._apply(data, action, body)
             self._save(data)
+
+    def change_all(self, bodies: list[dict]) -> list[str]:
+        """Several changes, read and saved once (bringing in another tool's library: hoard/konoasset.py). One that
+        doesn't make sense is left out, not the rest: returns why each left out wasn't made."""
+        problems = []
+        with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
+            data = self.empty()
+            if self.path.exists():
+                try:
+                    data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+                except DataFileError:
+                    set_aside(self.path)
+            for body in bodies:
+                trial = json.loads(json.dumps(data))   # (a change that fails partway leaves nothing behind)
+                try:
+                    self._apply(trial, body.get("action") if isinstance(body, dict) else None, body if isinstance(body, dict) else {})
+                except ValueError as e:
+                    problems.append(str(e))
+                    continue
+                data = trial
+            self._save(data)
+        return problems
 
     @staticmethod
     def _apply(data: dict, action, body: dict) -> None:
@@ -376,6 +419,21 @@ class TagStore:
                     data["types"].pop(key, None)
             if len(data["types"]) > TAG_LIMITS["tagged_items"]:
                 raise ValueError("That's more products with a type than Hoard can keep.")
+        elif action == "note":   # your note on these products (a product and its copies: issue #304), or "" for none
+            given = body.get("keys") if isinstance(body.get("keys"), list) else []
+            keys = [k for k in given[:TAG_LIMITS["keys_per_change"]] if isinstance(k, str) and TAG_KEY_RX.match(k)]
+            if not keys or not isinstance(body.get("note"), str):
+                raise ValueError("Choose a product, and write its note.")
+            if len(body["note"]) > NOTE_LENGTH * 2:
+                raise ValueError(f"A note can be at most {NOTE_LENGTH} characters.")
+            note = clean_note(body["note"])
+            for key in keys:
+                if note:
+                    data["notes"][key] = note
+                else:
+                    data["notes"].pop(key, None)
+            if len(data["notes"]) > TAG_LIMITS["tagged_items"]:
+                raise ValueError("That's more products with a note than Hoard can keep.")
         elif action == "rename":
             new = need(clean_tag(body.get("to")), "a new name")
             if need(name) not in tags:

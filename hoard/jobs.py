@@ -214,7 +214,7 @@ TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "S
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists", "list-files": "See what's in it"}
+              "wishlists": "Read wishlists", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -473,6 +473,8 @@ class Jobs:
             target = self._routine
         elif task == "add-local":
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
+        elif task == "konoasset":
+            target = lambda s: self._konoasset(spec.get("local") or {})  # noqa: E731
         elif task == "move":
             target = lambda s: self._move(spec.get("move") or {})  # noqa: E731
         elif task == "project":
@@ -775,6 +777,29 @@ class Jobs:
         self._set(message=f"Added {rec['name']} to Local: {plural(len(rec['files']), 'file')}"
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
+
+    def _konoasset(self, what: dict) -> None:
+        """Bring in a KonoAsset library (issue #305): matched to your library, or as Local products listed where they
+        are, with their tags and notes. Stop stops it between products; what's done is kept, and remembered."""
+        from .config import root_dir
+        from . import konoasset
+        self._set(task="konoasset", message="Bringing in from KonoAsset")
+        try:
+            folder = konoasset.check_folder(what.get("path", ""))
+            done = konoasset.bring_in(self.cfg, root_dir(self.cfg), folder, self.lib.snapshot()[0], say=self._quietly,
+                                      stop=self.stop)
+        except (ValueError, OSError) as e:
+            self._set(message=str(e), error=str(e))
+            return
+        finally:
+            self.on_download_done()
+        words = [f"{plural(done['matched'], 'product')} in your library", f"{plural(done['local'], 'Local product')}"]
+        message = "Brought in from KonoAsset: " + " and ".join(words) + (
+            f", with {plural(done['notes'], 'note')}." if done["notes"] else ".")
+        if done["left_out"]:
+            message += f" Left out, with no files and not in your library: {', '.join(done['left_out'][:10])}" + (
+                f" and {len(done['left_out']) - 10} more." if len(done["left_out"]) > 10 else ".")
+        self._set(message=message)
 
     def _add_local_folders(self, what: dict) -> None:
         """Issue #109: each folder some levels down in a folder of folders, added to Local as a package of its own."""

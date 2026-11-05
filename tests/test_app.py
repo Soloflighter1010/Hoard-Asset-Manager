@@ -3279,6 +3279,61 @@ class ProductTypes(unittest.TestCase):
         self.assertEqual((items[0]["type"], items[0]["type_from"]), ("clothing", "guess"))
 
 
+class ProductNotes(unittest.TestCase):
+    """Issue #304: your note on a product, kept with your tags (so a refresh never clears it), on the product and its
+    copies; plain text, made safe as names are; never in a shared set."""
+
+    def test_saved_cleaned_and_taken_off(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = tags.TagStore(Path(tmp) / "tags.json")
+            rusk, copy = tags.tag_key("booth", "Rusk"), tags.tag_key("gumroad", "Rusk")
+            store.change({"action": "note", "keys": [rusk, copy], "note": "  For my Rusk\r\n\n\n\nHue\u200b shifted\x07 to blue  "})
+            self.assertEqual(store.load()["notes"], {rusk: "For my Rusk\n\nHue shifted to blue", copy: "For my Rusk\n\nHue shifted to blue"},
+                             "the product and its copy; no invisible or control characters, one blank line at most")
+            self.assertEqual(store.load()["tags"], {}, "no tag made")
+            store.change({"action": "note", "keys": [copy], "note": "   "})
+            self.assertEqual(store.load()["notes"], {rusk: "For my Rusk\n\nHue shifted to blue"}, "an empty note takes it off")
+            store.change({"action": "note", "keys": [rusk], "note": "\n".join(["x" * 10] * 60)})
+            self.assertEqual(len(store.load()["notes"][rusk].split("\n")), tags.NOTE_LINES)
+            for bad in ({"keys": [], "note": "x"}, {"keys": ["not a key"], "note": "x"}, {"keys": [rusk]},
+                        {"keys": [rusk], "note": ["x"]}, {"keys": [rusk], "note": "x" * (tags.NOTE_LENGTH * 2 + 1)}):
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    store.change({"action": "note", **bad})
+            self.assertEqual(tags.TagStore.sanitize({"notes": {rusk: "ok", "bad key": "x", copy: "", tags.tag_key("booth", "Mochi"): 7}})["notes"],
+                             {rusk: "ok"})
+
+    def test_a_refresh_keeps_it(self):
+        data = tags.TagStore.empty()
+        tags.TagStore._apply(data, "note", {"keys": [tags.tag_key("booth", "Winter Coat")], "note": "For Rusk"})
+        before = library.enrich([library.item("booth", "1", name="Winter Coat", creator="Kitsu")], {}, data)
+        self.assertEqual(before[0]["your_note"], "For Rusk")
+        after = library.enrich([library.item("booth", "1", name="Winter Coat", creator="Kitsu", url="https://booth.pm/ja/items/1"),
+                                library.item("booth", "2", name="Mochi", creator="Kitsu")], {}, data)
+        self.assertEqual([(a["name"], a["your_note"]) for a in after], [("Winter Coat", "For Rusk"), ("Mochi", "")])
+
+    def test_never_in_a_shared_set(self):
+        from hoard import sets
+        with tempfile.TemporaryDirectory() as tmp:
+            store = sets.SetStore(Path(tmp) / "sets.json")
+            key = tags.tag_key("booth", "Winter Coat")
+            store.change({"action": "create", "name": "Winter", "items": [key], "note": "The set's own note"})
+            details = {key: {"store": "booth", "id": "1", "name": "Winter Coat", "creator": "Kitsu",
+                             "url": "https://booth.pm/ja/items/1", "your_note": "MY PRIVATE NOTE"}}
+            code = sets.share_code(store.load()["sets"][0], details.get)[0]
+            shared = json.dumps(sets.from_code(code), ensure_ascii=False)
+            self.assertIn("The set's own note", shared)
+            self.assertIn("Winter Coat", shared, "the product is in it")
+            self.assertNotIn("PRIVATE", shared)
+
+    def test_in_the_catalog_for_hoard_for_unity(self):
+        entry = {"store": "Booth", "name": "Rusk", "creator": "Kitsu", "folder": "Booth/Kitsu/Rusk", "url": None,
+                 "variants": None, "added": None, "files": [], "tags": [], "suggested_tags": []}
+        self.assertEqual(downloader.validate_catalog_entry({**entry, "your_note": "For Rusk\n\nHue shifted"}), [])
+        for bad in ("", "a\u202eb", "x\n\n\n\ny", "x" * (tags.NOTE_LENGTH + 1)):
+            with self.subTest(bad=bad):
+                self.assertTrue(downloader.validate_catalog_entry({**entry, "your_note": bad}))
+
+
 class TagMatching(unittest.TestCase):
     """Matching tags go through a word index (review finding P-04), with exactly name_has_word's answers."""
 

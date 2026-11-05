@@ -36,9 +36,11 @@ def _png_1x1() -> bytes:
 PNG_1x1 = _png_1x1()
 
 
-def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = False, asset_first: bool = False) -> bytes:
+def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = False, asset_first: bool = False,
+                 metas: dict | None = None) -> bytes:
     """A .unitypackage as Unity makes one: {guid: (project path, file bytes or None for a folder)}; each asset's
-    entries as Unity writes them (asset, asset.meta, pathname) with asset_first, else its .meta first."""
+    entries as Unity writes them (asset, asset.meta, pathname) with asset_first, else its .meta first. metas: what
+    goes after an asset's .meta's GUID line (a plugin's import settings), by GUID."""
     raw = io.BytesIO()
     fmt = tarfile.GNU_FORMAT if long_names else tarfile.USTAR_FORMAT
     with tarfile.open(fileobj=raw, mode="w", format=fmt) as tar:
@@ -47,7 +49,7 @@ def unitypackage(assets: dict, previews: dict | None = None, long_names: bool = 
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
         for guid, (path, data) in assets.items():
-            meta = b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n"
+            meta = b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n" + (metas or {}).get(guid, b"")
             if asset_first:
                 if data is not None:
                     add(f"{guid}/asset", data)
@@ -433,6 +435,126 @@ class Extract(unittest.TestCase):
         self.assertLess(sum(read), path.stat().st_size // 4)
 
 
+# Issue #303: code in a package
+EDITOR_ONLY = b"""PluginImporter:
+  serializedVersion: 2
+  platformData:
+  - first:
+      Any:
+    second:
+      enabled: 0
+      settings: {}
+  - first:
+      Editor: Editor
+    second:
+      enabled: 1
+      settings:
+        DefaultValueInitialized: true
+"""
+NOT_IN_EDITOR = EDITOR_ONLY.replace(b"enabled: 1", b"enabled: 0").replace(b"Any:\n    second:\n      enabled: 0", b"Any:\n    second:\n      enabled: 1") + (
+    b"  - first:\n      : Any\n    second:\n      enabled: 0\n      settings:\n        Exclude Editor: 1\n")
+MA_SCRIPT = "01ff1e86623a409ba5248c5fb6a0b53e"   # one of Modular Avatar's (hoard/known_tools.json)
+S1, S2, S3, S4, S5, S6, S7 = ("1" * 32, "2" * 32, "3" * 32, "4" * 32, "5" * 32, "6" * 32, "7" * 32)
+WITH_CODE = {S1: ("Assets/Kitsu/Editor/Setup.cs", b"class Setup {}"),
+             S2: ("Assets/Kitsu/Tools/Kitsu.Tools.asmdef", b'{"name": "Kitsu.Tools", "includePlatforms": ["Editor"]}'),
+             S3: ("Assets/Kitsu/Tools/Bake.cs", b"class Bake {}"),
+             S4: ("Assets/Kitsu/Runtime/Blink.cs", b"class Blink {}"),
+             S5: ("Assets/Kitsu/Plugins/Native.dll", b"MZ" + b"\0" * 64),
+             S6: ("Assets/Kitsu/Plugins/EditorHelper.dll", b"MZ" + b"\0" * 64),
+             S7: ("Assets/Kitsu/Plugins/Bare.dll", b"MZ" + b"\0" * 64),
+             MA_SCRIPT: ("Packages/nadena.dev.modular-avatar/Runtime/ModularAvatarMergeArmature.cs", b"class M {}"),
+             **SAMPLE}
+CODE_METAS = {S5: NOT_IN_EDITOR, S6: EDITOR_ONLY}
+
+
+class CodeInPackages(unittest.TestCase):
+    """Issue #303: which scripts and plugins a package holds, which of them run in the editor (an Editor folder, an
+    editor-only assembly definition, a plugin's import settings), and which are a tool's Hoard knows by GUID."""
+
+    def read(self, data: bytes) -> dict:
+        seen: dict = {}
+        assets = packages.read_unitypackage(io.BytesIO(data), code=seen)
+        return packages.code_in(assets, seen, packages.known_code_tools())
+
+    def test_scripts_plugins_and_the_editor(self):
+        for asset_first in (False, True):   # (whichever comes first in the package, its path or its bytes)
+            with self.subTest(asset_first=asset_first):
+                code = self.read(unitypackage(WITH_CODE, asset_first=asset_first, metas=CODE_METAS))
+                self.assertEqual((code["scripts"], code["plugins"]), (4, 3))
+                marks = {g: (m["code"], m["editor"], m["tool"]) for g, m in code["items"].items()}
+                self.assertEqual(marks, {S1: ("script", True, None),        # in an Editor folder
+                                         S3: ("script", True, None),        # under an editor-only assembly definition
+                                         S4: ("script", False, None),
+                                         S5: ("plugin", False, None),       # its settings leave the editor out
+                                         S6: ("plugin", True, None),        # its settings load it in the editor
+                                         S7: ("plugin", True, None),        # no settings: everywhere, the editor too
+                                         MA_SCRIPT: ("script", False, "Modular Avatar")})
+                self.assertEqual(code["editor"], 4)
+                self.assertEqual(code["tools"], {"Modular Avatar": 1})
+                self.assertEqual(code["folders"], ["Assets/Kitsu/Editor", "Assets/Kitsu/Plugins", "Assets/Kitsu/Runtime", "Assets/Kitsu/Tools"],
+                                 "where the rest goes (not the known tool's)")
+
+    def test_only_textures_and_materials(self):
+        code = self.read(unitypackage(SAMPLE))
+        self.assertEqual((code["scripts"], code["plugins"], code["editor"], code["items"]), (0, 0, 0, {}))
+
+    def test_look_inside_marks_each_and_a_zip_its_loose_ones(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"HOARD_DATA_DIR": tmp}):
+            pkg = Path(tmp) / "Kitsu.unitypackage"
+            pkg.write_bytes(unitypackage(WITH_CODE, metas=CODE_METAS))
+            seen = packages.look_inside(pkg)
+            self.assertEqual((seen["code"]["scripts"], seen["code"]["plugins"]), (4, 3))
+            setup = next(i for i in seen["items"] if i["path"].endswith("Setup.cs"))
+            self.assertEqual((setup["code"], setup["editor"], setup["tool"]), ("script", True, None))
+            self.assertNotIn("code", next(i for i in seen["items"] if i["path"].endswith(".png")))
+            z = Path(tmp) / "Kitsu.zip"
+            with zipfile.ZipFile(z, "w") as zf:
+                zf.writestr("Kitsu/Kitsu.unitypackage", unitypackage({S1: WITH_CODE[S1]}))
+                zf.writestr("Kitsu/Textures.unitypackage", unitypackage(SAMPLE))
+                zf.writestr("Kitsu/Extras/Editor/Loose.cs", "class Loose {}")
+                zf.writestr("Kitsu/Extras/Loose.dll", b"MZ")
+            seen = packages.look_inside(z)
+            self.assertEqual([(p["code"]["scripts"], p["code"]["editor"]) for p in seen["packages"]], [(1, 1), (0, 0)])
+            self.assertEqual(seen["loose"], {"scripts": 1, "plugins": 1, "editor": 1})
+            loose = {f["name"]: (f.get("code"), f.get("editor")) for f in seen["files"]}
+            self.assertEqual(loose["Kitsu/Extras/Editor/Loose.cs"], ("script", True))
+            self.assertEqual(loose["Kitsu/Extras/Loose.dll"], ("plugin", False))
+
+    def test_for_downloads_and_hoard_for_unity(self):
+        from hoard import downloader, needs
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / "Booth" / "Kitsu" / "Rusk"
+            folder.mkdir(parents=True)
+            (folder / "Rusk.unitypackage").write_bytes(unitypackage(WITH_CODE, metas=CODE_METAS))
+            (folder / "Textures.unitypackage").write_bytes(unitypackage(SAMPLE))
+            index = needs.NeedsIndex(root / "package-needs.json")
+            for f in ("Rusk.unitypackage", "Textures.unitypackage"):
+                index.put(str(folder / f), needs.read_file(folder / f))
+            code = needs.file_code(index.get(str(folder / "Rusk.unitypackage")))
+            self.assertEqual((code["scripts"], code["plugins"], code["editor"], code["tools"]), (4, 3, 4, {"Modular Avatar": 1}))
+            self.assertIsNone(needs.file_code(index.get(str(folder / "Textures.unitypackage"))), "no mark without code")
+            index.save()
+            self.assertEqual(needs.file_code(needs.NeedsIndex(root / "package-needs.json").get(str(folder / "Rusk.unitypackage"))), code,
+                             "kept as it was read")
+            entry = {"store": "Booth", "name": "Rusk", "creator": "Kitsu", "folder": "Booth/Kitsu/Rusk", "url": None,
+                     "variants": None, "added": None, "files": ["Rusk.unitypackage", "Textures.unitypackage"], "tags": [],
+                     "suggested_tags": []}
+            catalog = [dict(entry), {**entry, "name": "Plain", "files": ["Textures.unitypackage"]}]
+            needs.add_to_catalog(root, catalog, index)
+            self.assertEqual(catalog[0]["code"], {"scripts": 4, "plugins": 3, "editor": 4, "tools": ["Modular Avatar"],
+                                                  "folders": ["Assets/Kitsu/Editor", "Assets/Kitsu/Plugins", "Assets/Kitsu/Runtime", "Assets/Kitsu/Tools"]})
+            self.assertNotIn("code", catalog[1])
+            self.assertEqual(downloader.validate_catalog_entry(catalog[0]), [])
+            for bad in ({**catalog[0]["code"], "editor": 99}, {**catalog[0]["code"], "folders": ["../x"]}, {"scripts": 1}):
+                self.assertTrue(downloader.validate_catalog_entry({**catalog[0], "code": bad}))
+
+    def test_the_older_shape_of_a_plugins_settings(self):
+        old = b"PluginImporter:\n  serializedVersion: 1\n  platformData:\n    Any:\n      enabled: 0\n      settings: {}\n    Editor:\n      enabled: 1\n"
+        self.assertTrue(packages.plugin_in_editor(old))
+        self.assertFalse(packages.plugin_in_editor(old.replace(b"enabled: 1", b"enabled: 0")))
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class LookInsidePage(unittest.TestCase):
     """Downloads: Look inside on a product's .unitypackage, and on a .zip with one in it."""
@@ -452,10 +574,11 @@ class LookInsidePage(unittest.TestCase):
             zf.writestr("Hoodie/Hoodie_v2.unitypackage", unitypackage({G1: ("Assets/Kitsu/Hoodie v2.prefab", b"p" * 50)}))
             zf.writestr("Hoodie/利用規約.txt", "terms")
         (folder / "readme.txt").write_text("hi")
+        (folder / "Tools.unitypackage").write_bytes(unitypackage(WITH_CODE, metas=CODE_METAS))   # (issue #303)
         man = downloader.Manifest(root / "Booth")
         rec = man.record("111", "Kitsu Studio", "Hoodie")
         rec.update(name="Hoodie", creator="Kitsu Studio")
-        for n, f in enumerate(("Hoodie.unitypackage", "Hoodie_zip.zip", "readme.txt")):
+        for n, f in enumerate(("Hoodie.unitypackage", "Hoodie_zip.zip", "readme.txt", "Tools.unitypackage")):
             rec["files"][f"f{n}"] = {"path": f, "size": (folder / f).stat().st_size}
         man.save()
         cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True}, lan=False)
@@ -496,6 +619,38 @@ class LookInsidePage(unittest.TestCase):
         self.assertIn("Assets/Creator/Textures/hoodie.png", win.locator(".found").inner_text())
         page.keyboard.press("Escape")
         self.assertTrue(win.is_hidden())
+
+    def test_code_in_a_package(self):
+        """Issue #303: Look inside says what code a package holds, marks each, and Only code lists just them; a
+        download's file with code has a Code mark, once the background reader has read it."""
+        from hoard import needs
+        tools = Path(self.srv.cfg["root"]) / "Booth" / "Kitsu Studio" / "Hoodie" / "Tools.unitypackage"
+        self.srv.needs_index.put(str(tools), needs.read_file(tools))
+        self.srv.forget_index()
+        page = self.open_hoodie()
+        rows = page.locator("#detail .files li")
+        mark = rows.filter(has_text="Tools.unitypackage").locator(".codemark")
+        self.assertIn("4 scripts and 3 DLLs or plugins", mark.get_attribute("title"))
+        self.assertEqual(rows.filter(has_text="Hoodie.unitypackage").locator(".codemark").count(), 0)
+        rows.filter(has_text="Tools.unitypackage").locator("[data-act='inside']").click()
+        win = page.locator("#insideWin")
+        said = win.locator(".code-sum")
+        said.wait_for()
+        for words in ("Code that Unity runs once it's imported: 4 scripts and 3 DLLs or plugins.", "4 of them run in the editor.",
+                      "1 from tools Hoard knows: Modular Avatar.", "doesn't call a package safe or unsafe"):
+            self.assertIn(words, said.inner_text())
+        win.locator("[data-only-code]").click()
+        found = win.locator(".found li")
+        self.assertEqual(found.count(), 7, "just the scripts and plugins")
+        self.assertIn("Editor", found.filter(has_text="Setup.cs").locator(".codetag").inner_text())
+        self.assertIn("Modular Avatar", found.filter(has_text="ModularAvatarMergeArmature.cs").inner_text())
+        win.locator("[data-only-code]").click()
+        win.locator("summary", has_text="Assets").wait_for()
+        page.keyboard.press("Escape")
+        rows.filter(has_text="Hoodie.unitypackage").locator("[data-act='inside']").click()
+        win.locator(".code-sum", has_text="No scripts or DLLs.").wait_for()
+        self.assertEqual(win.locator("[data-only-code]").count(), 0)
+        page.close()
 
     def test_a_zip_with_a_package_in_it(self):
         page = self.open_hoodie()

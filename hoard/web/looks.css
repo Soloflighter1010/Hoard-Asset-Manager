@@ -139,6 +139,28 @@ body.less-motion .pj-tile-art { transition: none; }
 @media (max-width: 560px) { .apprise-fields .field-row { grid-template-columns: minmax(0, 1fr); } }
 /* a set's note, as it's shared (issue #256: changed after Edit) */
 .setnote-full { margin: 10px 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+/* your note on a product (issue #304, shared.js): in its details, and a mark on its tile */
+.pnote { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: 14px; }
+textarea.pnote-box { display: block; width: 100%; box-sizing: border-box; min-height: 88px; margin: 6px 0 8px; padding: 8px 10px; border: 0;
+  border-radius: 8px; resize: vertical; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam);
+  font: 500 14px/1.45 var(--body); }
+textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
+/* code in a package (issue #303, downloads.html): what Look inside says of it, each file's mark, and a download's */
+.code-sum { margin: 6px 0 10px; padding: 10px 12px; border-radius: 10px; background: var(--ledge); font-size: 13px; line-height: 1.45; }
+.code-sum.has { box-shadow: inset 3px 0 0 var(--gold); }
+.code-sum p { margin: 0 0 6px; }
+.code-sum .hint { color: var(--dust); font-size: 12px; }
+.codetag, .codemark { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; font-weight: 700;
+  line-height: 18px; vertical-align: 1px; background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); white-space: nowrap; }
+.codetag.ed, .codemark { box-shadow: inset 0 0 0 1.5px var(--gold); }
+.codetag.known { opacity: .7; }
+/* a folder to choose (shared.js askFolder: KonoAsset's, issue #305): its path, and Browse in Hoard's window */
+.ask-folder .ask-field { display: flex; gap: 8px; }
+.ask-folder .ask-field input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; }
+.pnote-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.note-mark { position: absolute; right: 7px; bottom: 7px; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 7px; background: rgb(20 16 12 / .78); color: #F4EDE3; pointer-events: none; }
+.note-mark svg { width: 14px; height: 14px; }
 /* a note on what's new (issue #244, shared.js): beside what it's about, once */
 .new-spot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0 12px; padding: 10px 12px;
   border-radius: 10px; background: var(--ledge); box-shadow: inset 0 0 0 1.5px var(--gold); font-size: 13px; line-height: 1.45; }
@@ -347,7 +369,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .grid .slot.stacked .art > img, [data-style="workbench"] .grid .slot.stacked .art > .ph { border-radius: 6px; }
 [data-style="workbench"] .grid .ph b { font-size: 14px; }
 [data-style="workbench"] .grid .ph small { display: none; }
-[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .flag) { display: none; }
+[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .note-mark, .flag) { display: none; }
 [data-style="workbench"] .grid :is(.nm-t, .slot .nm) { grid-area: nm; align-self: end; font-size: 14px; -webkit-line-clamp: 1; }
 [data-style="workbench"] .grid .cr { grid-area: cr; align-self: start; margin-top: 0; font-size: 12.5px; }
 /* the columns fit their longest words: "Not downloaded yet", and a date in Korean ("2026년 9월 28일"), whole; wider

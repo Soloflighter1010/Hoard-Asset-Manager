@@ -14,10 +14,10 @@ stays still.
 
 ## Finding things
 
-- **Search** (at the top: after the logo and the pages, or in the middle of a wide window) matches names, creators, stores, variants and tags. A prefix
+- **Search** (at the top: after the logo and the pages, or in the middle of a wide window) matches names, creators, stores, variants, tags and your notes. A prefix
   searches one kind of thing (5.2.0): `creator:` (or `by:`), `tag:` (or `#`), `store:` (or `on:`) and `type:` (or
   `kind:`: a tag's kind, such as avatar, or in Downloads a kind of file) narrow the products; `set:` (or `in:`)
-  narrows them to a set's and offers to go to it; `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
+  narrows them to a set's and offers to go to it; `note:` finds words in your notes alone (5.2.0 beta 5); `project:` (or `pj:`) opens a project, and `settings:` (or `s:`)
   a setting: `settings:language` opens Settings at Language. Put a name with spaces in quotes, as in
   `creator:"Kitsu Studio"`. Click in the empty box, or press **/**, to see them all with an example: choose one and
   it goes in the box, then what it could be is offered under it (the arrow keys and Enter work there too).
@@ -89,6 +89,12 @@ In the details:
 - **Organise:** **Archive**, **Hide**, **Remove** and **Delete downloaded files**. See below.
 - **You also own this on ...**: Hoard spots the same product bought on more than one store. **Show all copies**
   lists them together.
+- **Note** (5.2.0 beta 5): your own note on the product: what it's for, which avatar it's set up for, what you
+  changed. **Add a note...** opens a box for it, and nothing is kept until **Save**; **Edit** changes it later, and
+  saving it empty takes it off. It's plain text, kept with your tags in Hoard's app-data folder (`tags.json`), on the
+  product and its copies, so a refresh never clears it. A product with a note has a small note mark on its tile (in
+  Downloads too), and Hoard for Unity shows it in the product's details. It's yours alone: a set you share doesn't
+  include its products' notes.
 - **Tags:** add your own tags, or click a suggestion. See [Tags](Tags).
 - **Files** lists what the store offers, each with its own download link.
 - **Archive**, **Remove** and **Hide**: see below.

@@ -40,6 +40,26 @@ them, and up to 500 can be added at once. They're copied or listed together, as 
 to them all. Adding the same folder again later only adds the folders that are new: those already in Local are
 marked in the list and left as they are. (Packages added with a beta of 3.0, before beta 6, aren't recognised this way.)
 
+### From KonoAsset
+
+Switching from [KonoAsset](https://github.com/siloneco/KonoAsset)? Choose **Bring in from KonoAsset...** in the
+Menu (or, the first time, in the setup assistant's last step), and choose KonoAsset's data folder: the one with
+`metadata`, `data` and `images` in it (KonoAsset's Settings say where it is). KonoAsset needn't be running, or
+installed. Before anything changes, Hoard says what bringing it in will do; then **Bring in** or **Cancel**.
+
+- An asset whose BOOTH item is in your Hoard library is matched to that product. The rest become Local products,
+  listed where they are: their files stay in KonoAsset's `data` folder, and KonoAsset's picture is the one chosen
+  for each.
+- Its tags become your tags, and so do its category and the avatars a wearable fits. An avatar is marked as an
+  avatar and a world object as a world, unless you've said what it is.
+- Its memo becomes the product's note (see [Library](Library#an-items-details)), with what it needs listed after
+  it ("Needs: ..."), and a Local product's BOOTH page. A note you've written already stays.
+- An asset with no files that isn't in your library is left out, and named.
+
+Hoard only reads KonoAsset's folder: nothing in it is written, moved or deleted. It remembers what it brought in
+(`konoasset.json` in its app-data folder), so bringing in again later adds only what's new. It reads KonoAsset's
+lists as KonoAsset 1.0 and later write them.
+
 ## Its picture
 
 An item's tile shows one of its own images to begin with. To show another, open it and choose **Choose a
