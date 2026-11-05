@@ -1,0 +1,237 @@
+{
+ "title": "Hoard in 40 seconds",
+ "bpm": 100,
+ "music": {
+  "start_bar": 14
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "thumb": {
+  "look": "short",
+  "image": "library",
+  "text": {
+   "en": {
+    "title": [
+     "5 stores.",
+     "1 library."
+    ]
+   },
+   "ja": {
+    "title": [
+     "5つのストアが、",
+     "ひとつに。"
+    ]
+   },
+   "ko": {
+    "title": [
+     "스토어 5곳이",
+     "하나로."
+    ]
+   }
+  }
+ },
+ "scenes": [
+  {
+   "type": "intro",
+   "bars": 5,
+   "text": {
+    "en": {
+     "stores": "Five stores,",
+     "projects": "your Unity projects,",
+     "local": "and your own files.",
+     "chip": "Your own files",
+     "projectsChip": "Projects",
+     "tag": "Local",
+     "tagline": "One library for everything you own."
+    },
+    "ja": {
+     "stores": "5つのストア、",
+     "projects": "Unityのプロジェクト、",
+     "local": "そして自分のファイル。",
+     "chip": "自分のファイル",
+     "projectsChip": "プロジェクト",
+     "tag": "ローカル",
+     "tagline": "持っているものすべてを、ひとつのライブラリに。"
+    },
+    "ko": {
+     "stores": "다섯 개의 스토어,",
+     "projects": "Unity 프로젝트,",
+     "local": "그리고 내 파일까지.",
+     "chip": "내 파일",
+     "projectsChip": "프로젝트",
+     "tag": "로컬",
+     "tagline": "가진 모든 것을 하나의 라이브러리에."
+    }
+   }
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "library",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Library",
+     "title": "Find anything",
+     "body": "Everything you own from every store, together.",
+     "points": [
+      "Search it all at once",
+      "Filter by store, tag or type"
+     ]
+    },
+    "ja": {
+     "kicker": "ライブラリ",
+     "title": "何でも見つかる",
+     "body": "どのストアで買ったものも、ひとつにまとめて。",
+     "points": [
+      "すべてを一度に検索",
+      "ストア、タグ、種類で絞り込み"
+     ]
+    },
+    "ko": {
+     "kicker": "라이브러리",
+     "title": "뭐든 찾아요",
+     "body": "어느 스토어에서 산 것이든 한곳에 모아요.",
+     "points": [
+      "한 번에 모두 검색",
+      "스토어, 태그, 종류로 거르기"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "search",
+     8
+    ],
+    [
+     6.5,
+     "storetabs",
+     4
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "downloads-files",
+   "side": "right",
+   "text": {
+    "en": {
+     "kicker": "Downloads",
+     "title": "Always up to date",
+     "body": "Hoard downloads what's new, and notices when a creator updates something.",
+     "points": [
+      "Only the new files",
+      "Look inside before you import"
+     ]
+    },
+    "ja": {
+     "kicker": "ダウンロード",
+     "title": "いつも最新",
+     "body": "Hoardは新しいものをダウンロードし、作者のアップデートにも気づきます。",
+     "points": [
+      "新しいファイルだけ",
+      "取り込む前に中身を見る"
+     ]
+    },
+    "ko": {
+     "kicker": "다운로드",
+     "title": "늘 최신으로",
+     "body": "Hoard가 새것을 다운로드하고, 제작자가 업데이트하면 알아채요.",
+     "points": [
+      "새 파일만",
+      "가져오기 전에 내용 보기"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "tile",
+     6
+    ],
+    [
+     6.5,
+     "inside",
+     6,
+     "file"
+    ]
+   ]
+  },
+  {
+   "type": "shot",
+   "bars": 3,
+   "image": "wishlist-prices",
+   "side": "left",
+   "text": {
+    "en": {
+     "kicker": "Sets and wishlists",
+     "title": "What goes together",
+     "body": "Sets of what you use together, and wishlists from each store.",
+     "points": [
+      "See what got cheaper",
+      "Share a set as a link"
+     ]
+    },
+    "ja": {
+     "kicker": "セットとほしい物リスト",
+     "title": "いっしょに使うもの",
+     "body": "いっしょに使うもののセットと、各ストアのほしい物リスト。",
+     "points": [
+      "安くなったものがわかる",
+      "セットをリンクで共有"
+     ]
+    },
+    "ko": {
+     "kicker": "세트와 위시리스트",
+     "title": "함께 쓰는 것",
+     "body": "함께 쓰는 것끼리 세트로, 스토어마다 위시리스트도.",
+     "points": [
+      "싸진 것을 알려 줘요",
+      "세트를 링크로 공유"
+     ]
+    }
+   },
+   "focus": [
+    [
+     1.5,
+     "cheaper",
+     8,
+     "card"
+    ],
+    [
+     6.5,
+     "share",
+     6,
+     "buttons"
+    ]
+   ]
+  },
+  {
+   "type": "end",
+   "bars": 2.5,
+   "ending": true,
+   "text": {
+    "en": {
+     "line": "Free and open source.",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "Products shown are from the maintainer's own library, pictured by their creators: hoard.furryup.link/credits.html\nNot affiliated with VRChat, Booth, Gumroad, Jinxxy, Payhip or itch.io."
+    },
+    "ja": {
+     "line": "無料でオープンソース。",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "紹介している商品はメンテナー自身のライブラリのもので、画像は各作者のものです: hoard.furryup.link/credits.html\nVRChat、Booth、Gumroad、Jinxxy、Payhip、itch.ioとは関係ありません。"
+    },
+    "ko": {
+     "line": "무료이고 오픈 소스예요.",
+     "platforms": "Windows · macOS · Linux",
+     "fine": "보여 드린 상품은 관리자 본인의 라이브러리에 있는 것이고, 이미지는 각 제작자의 것이에요: hoard.furryup.link/credits.html\nVRChat, Booth, Gumroad, Jinxxy, Payhip, itch.io와는 관계가 없어요."
+    }
+   }
+  }
+ ]
+}

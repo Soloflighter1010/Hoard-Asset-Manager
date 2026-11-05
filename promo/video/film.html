@@ -1,0 +1,819 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hoard film</title>
+<!-- Hoard's videos, drawn here frame by frame: promo/build.py opens this page, calls setup() with a film from
+     promo/films/, a language and a shape, then seek(t) for every frame and takes a picture of it. Everything on screen
+     is Hoard's own screenshots (scripts/screenshots.py) and shapes drawn in HTML and SVG: nothing generated.
+     Two looks: "promo" (dark, moving with the music) and "help" (light and calm: a screen, a pointer, the steps). -->
+<style>
+@font-face { font-family: "Dela Gothic One"; src: url(../../hoard/web/fonts/DelaGothicOne-Regular.woff2) format("woff2"); }
+@font-face { font-family: "Zen Maru Gothic"; font-weight: 500; src: url(../../hoard/web/fonts/ZenMaruGothic-Medium.woff2) format("woff2"); }
+@font-face { font-family: "Zen Maru Gothic"; font-weight: 700; src: url(../../hoard/web/fonts/ZenMaruGothic-Bold.woff2) format("woff2"); }
+:root {
+  --cave: #211C18; --ledge: #2B2520; --stone: #372F28; --seam: #4A4037;
+  --bone: #F4EDE3; --dust: #B3A695; --gold: #F0B429; --gold-ink: #2A1D00; --gold-text: #F0B429;
+  --display: "Dela Gothic One", "Noto Sans CJK JP", sans-serif;
+  --body: "Zen Maru Gothic", "Noto Sans CJK JP", sans-serif;
+}
+:root[lang=ja] #stage { word-break: auto-phrase; }   /* Japanese lines break between phrases, not inside a word */
+:root[lang=ko] #stage { word-break: keep-all; }      /* Korean, between words (at the spaces), not inside one */
+:root[lang=ko] { --display: "Noto Sans CJK KR", sans-serif; --display-weight: 900; --body: "Noto Sans CJK KR", sans-serif; }
+/* the help look: Hoard's light theme */
+.help { --cave: #EEECE8; --ledge: #FFFFFF; --stone: #E3DFD8; --seam: #D2CCC3; --bone: #211C18; --dust: #6B6157; --gold-text: #8A5F00; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #000; overflow: hidden; }
+#stage { position: relative; overflow: hidden; background: var(--cave); color: var(--bone); font-family: var(--body); font-weight: 500; }
+.abs { position: absolute; }
+.scene { position: absolute; inset: 0; display: none; }
+.glow { position: absolute; width: 1300px; height: 1300px; border-radius: 50%; margin: -650px 0 0 -650px; }
+#grain { position: absolute; inset: -64px; background: url(../../build/promo/grain.png); opacity: .07; mix-blend-mode: overlay; }
+#vig { position: absolute; inset: 0; background: radial-gradient(ellipse 75% 70% at 50% 50%, rgba(0,0,0,0) 55%, rgba(8,6,5,.55) 100%); }
+.help #grain, .help #vig, .help #bg { display: none; }
+#fade { position: absolute; inset: 0; background: #000; opacity: 0; }
+.help #fade { background: #EEECE8; }
+.display { font-family: var(--display); font-weight: var(--display-weight, 400); line-height: 1.1; letter-spacing: -.005em; }
+.wm { display: inline-block; overflow: hidden; vertical-align: top; padding: .14em .05em .2em; margin: -.14em -.05em -.2em; }
+.wi { display: inline-block; }
+.center { left: 0; right: 0; text-align: center; }
+.chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: .4em; padding: 0 .85em 0 .66em; height: 1.95em;
+  border-radius: 999px; background: var(--ledge); border: 2px solid var(--seam); font-weight: 700; white-space: nowrap;
+  box-shadow: 0 24px 50px rgba(0,0,0,.45); transform-origin: 50% 50%; }
+.chip i { width: .44em; height: .44em; border-radius: 50%; display: block; flex: none; }
+.chip .tag { font-size: .6em; padding: .18em .6em .22em; border-radius: .5em; background: var(--gold); color: var(--gold-ink); letter-spacing: .02em; }
+.chip .face { display: flex; align-items: center; gap: .4em; }
+.cap .kicker { display: flex; align-items: center; gap: .5em; font-weight: 700; color: var(--gold-text); letter-spacing: .02em; }
+.cap .kicker b { display: inline-block; width: .7em; height: .7em; border-radius: .2em; background: var(--gold); }
+.cap .title { font-family: var(--display); font-weight: var(--display-weight, 400); line-height: 1.06; }
+.cap .body { color: var(--dust); line-height: 1.45; }
+.cap .points { display: flex; flex-direction: column; }
+.cap .point { display: flex; align-items: flex-start; gap: .55em; font-weight: 700; line-height: 1.3; color: var(--dust); }
+.cap .point.on { color: var(--bone); }
+.cap .point svg { flex: none; width: 1.2em; height: 1.2em; margin-top: .02em; }
+.window { position: absolute; overflow: hidden; border-radius: 22px; border: 2px solid var(--seam); background: var(--ledge);
+  box-shadow: 0 40px 100px rgba(0,0,0,.55), 0 10px 30px rgba(0,0,0,.35); }
+.help .window { box-shadow: 0 24px 60px rgba(60,40,20,.16), 0 4px 14px rgba(60,40,20,.08); }
+.shotimg { position: absolute; left: 0; top: 0; width: 1600px; height: 950px; transform-origin: 0 0; }
+.ring { position: absolute; border-radius: 12px; pointer-events: none; }
+.lens { position: absolute; overflow: hidden; border-radius: 20px; background: var(--ledge);
+  box-shadow: 0 0 0 4px var(--gold), 0 28px 70px rgba(0,0,0,.55); }
+.help .lens { box-shadow: 0 0 0 4px var(--gold), 0 20px 50px rgba(60,40,20,.25); }
+.lens img { position: absolute; left: 0; top: 0; width: 1600px; height: 950px; transform-origin: 0 0; }
+.cursor { position: absolute; left: 0; top: 0; width: 44px; height: 44px; pointer-events: none; }
+.ripple { position: absolute; border-radius: 50%; border: 4px solid var(--gold); pointer-events: none; }
+.pill { display: inline-block; border-radius: 999px; background: var(--gold); color: var(--gold-ink); font-family: var(--display); font-weight: var(--display-weight, 400); }
+.credit { position: absolute; color: rgba(179,166,149,.62); white-space: nowrap; }
+.help .credit { color: rgba(107,97,87,.75); }
+.panel { position: absolute; background: var(--ledge); border: 2px solid var(--seam); border-radius: 22px; box-shadow: 0 24px 60px rgba(60,40,20,.12); }
+.steps { display: flex; flex-direction: column; }
+.step { display: flex; align-items: flex-start; gap: .6em; color: var(--dust); font-weight: 700; line-height: 1.3; }
+.step .n { flex: none; width: 1.7em; height: 1.7em; border-radius: 50%; border: 2px solid var(--seam); display: flex; align-items: center; justify-content: center;
+  font-size: .9em; color: var(--dust); background: var(--ledge); }
+.step.now { color: var(--bone); }
+.step.now .n { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
+.step.done .n { background: var(--stone); border-color: var(--stone); color: var(--bone); }
+/* a drawing of a window outside Hoard (a store's page, a system dialog, a terminal): plain shapes and words, never
+   anyone's own design */
+.dw { position: absolute; display: flex; flex-direction: column; gap: 20px; color: #211C18; }
+.dw .wt { font-family: var(--display); font-weight: var(--display-weight, 400); font-size: 40px; line-height: 1.12; }
+.dw .wl { font-size: 25px; line-height: 1.45; color: #6B6157; }
+.dw .wfl { font-size: 21px; font-weight: 700; color: #6B6157; margin-bottom: 8px; }
+.dw .wbox { height: 58px; border-radius: 12px; background: #FFFFFF; border: 2px solid #D2CCC3; display: flex; align-items: center;
+  padding: 0 18px; font-size: 24px; letter-spacing: .02em; white-space: nowrap; overflow: hidden; }
+.dw .wbtns { display: flex; gap: 14px; flex-wrap: wrap; }
+.dw .wb { height: 58px; padding: 0 28px; border-radius: 12px; border: 2px solid #D2CCC3; background: #FFFFFF; font-weight: 700;
+  font-size: 24px; display: flex; align-items: center; white-space: nowrap; }
+.dw .wb.primary { background: #E3DFD8; border-color: #E3DFD8; }
+.dw .wlk { color: #8A5F00; text-decoration: underline; text-underline-offset: .18em; font-weight: 700; font-size: 25px; align-self: flex-start; }
+.dw .wrow { display: flex; align-items: center; gap: 20px; padding: 16px 20px; border-radius: 16px; background: #FFFFFF; border: 2px solid #E3DFD8; }
+.dw .wrow .ic { width: 64px; height: 64px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #211C18; }
+.dw .wrow b { display: block; font-size: 28px; } .dw .wrow span { font-size: 21px; color: #6B6157; }
+.dw .wsr { height: 64px; border-radius: 32px; background: #FFFFFF; border: 2px solid #D2CCC3; display: flex; align-items: center; gap: 14px;
+  padding: 0 24px; font-size: 27px; }
+.dw .wkv { display: grid; grid-template-columns: auto 1fr; gap: 10px 22px; font-size: 24px; } .dw .wkv dt { color: #6B6157; } .dw .wkv dd { font-weight: 700; }
+.dw .wterm { font-family: "DejaVu Sans Mono", "Noto Sans Mono CJK JP", monospace; font-size: 23px; line-height: 1.6; color: #E3DACB; white-space: pre-wrap; word-break: break-all; }
+.dw .wterm .m { color: #F0B429; border-radius: 6px; }
+.dw .on { box-shadow: 0 0 0 4px #F0B429; }
+.dw .wb.on { background: #F0B429; border-color: #F0B429; color: #2A1D00; }
+.lookchip { position: absolute; padding: .3em .8em .36em; border-radius: 999px; background: var(--ledge); border: 2px solid var(--seam);
+  font-weight: 700; white-space: nowrap; box-shadow: 0 10px 26px rgba(0,0,0,.4); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="frame"></div>
+  <div id="scenes"></div>
+  <div id="chrome"></div>
+  <div id="grain"></div>
+  <div id="vig"></div>
+  <div id="fade"></div>
+</div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const P = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const eOut3 = p => 1 - Math.pow(1 - p, 3);
+const eIn3 = p => p * p * p;
+const eIn2 = p => p * p;
+const eIO3 = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eBack = (p, s = 1.7) => p <= 0 ? 0 : 1 + (s + 1) * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2);
+const spring = (p, k = 3.2, z = 5.5) => p <= 0 ? 0 : p >= 1 ? 1 : 1 - Math.exp(-z * p) * Math.cos(k * Math.PI * p);
+const el = (tag, cls, css, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (css) e.style.cssText = css; if (html != null) e.innerHTML = html; return e; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, p) => { const A = hex(a), B = hex(b); return `rgb(${A.map((v, i) => Math.round(lerp(v, B[i], p))).join(",")})`; };
+const C = { booth: "#FF6259", gumroad: "#FF8AD8", jinxxy: "#56D1DC", payhip: "#95A0FF", itch: "#7ED67A", gold: "#F0B429", local: "#E8C26A" };
+const CAVE = "#211C18", SPARK = "#FFF8E6";
+const STORE_NAMES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io" };
+const CHECK = '<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="19" fill="#F0B429"/><path d="M11.5 20.5l6 6 11-12" fill="none" stroke="#2A1D00" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CURSOR = '<svg viewBox="0 0 24 24" width="44" height="44"><path d="M4 2.5l15.5 11.2-6.6 1.1 3.9 6.7-3 1.7-3.9-6.8-5 4.4z" fill="#FFFFFF" stroke="#211C18" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
+let F, LANG, W, H, PORTRAIT, HELP, BEAT, BAR, SC = [], T_END = 0, VT = 0, HF = null;
+const XF = .5;   // a help video's crossfade from one step's screen to the next
+window.warnings = [];
+// a film's words, in this language (falling back to English)
+const T = s => (s && typeof s === "object" && !Array.isArray(s) && "en" in s) ? (s[LANG] ?? s.en) : s;
+
+// ---------------- the Heap: Hoard's logo (issues #277, #280), as hoard/heap.py draws it everywhere (build.py passes
+// it in): a box for each store, the Projects box with its cube, and on top the gold box, for your own files
+function heapSVG(withWord, ink = "#F4EDE3") {
+  const boxes = `<g class="boxes">${F.heap.svg}</g>`;
+  if (!withWord) return `<svg viewBox="0 8 64 48" style="overflow:visible;width:100%;height:auto;display:block">${boxes}</svg>`;
+  return `<svg viewBox="0 0 226 64" style="overflow:visible;width:100%;height:auto;display:block">${boxes}<g class="wmk" fill="${ink}">${F.heap.word}</g></svg>`;
+}
+
+// ---------------- text
+function jaPhrases(text) {   // Japanese in phrases: each word with the particles and marks after it (サインインを / 選ぶ)
+  const out = [];
+  for (const { segment: t, isWordLike } of new Intl.Segmenter("ja", { granularity: "word" }).segment(text)) {
+    if (/^\s+$/.test(t)) { out.push(t); continue; }
+    const last = out[out.length - 1];
+    if (last && !/^\s+$/.test(last) && (!isWordLike || /^[ぁ-ゖー]+$/.test(t))) out[out.length - 1] = last + t;
+    else out.push(t);
+  }
+  return out;
+}
+function words(node) {   // each word (in Japanese, each phrase) in a mask of its own, for a reveal: lines break between them
+  const walk = n => [...n.childNodes].forEach(c => {
+    if (c.nodeType === 3) {
+      const parts = LANG === "ja" ? jaPhrases(c.textContent) : c.textContent.split(/(\s+)/);
+      const f = document.createDocumentFragment();
+      parts.forEach(p => { if (!p) return; if (/^\s+$/.test(p)) { f.appendChild(document.createTextNode(p)); return; }
+        const m = el("span", "wm"), i = el("span", "wi"); i.textContent = p; m.appendChild(i); f.appendChild(m); });
+      c.replaceWith(f);
+    } else if (c.nodeType === 1) walk(c);
+  });
+  walk(node); node._w = [...node.querySelectorAll(".wi")]; return node;
+}
+function reveal(node, t, t0, t1 = null, st = .08, d = .7) {
+  node._w.forEach((w, i) => {
+    const pi = eOut3(P(t, t0 + i * st, t0 + i * st + d));
+    const po = t1 == null ? 0 : eIn3(P(t, t1 + i * st * .4, t1 + i * st * .4 + .35));
+    w.style.transform = `translateY(${(1 - pi) * 190 - po * 190}%)`;
+    w.style.opacity = pi > 0 && po < 1 ? 1 : 0;
+  });
+}
+function rise(node, t, tin, tout, o = {}) {
+  const di = o.di ?? .6, y = o.y ?? 26, x = o.x ?? 0;
+  const pi = eOut3(P(t, tin, tin + di)), po = tout == null ? 0 : eIn3(P(t, tout, tout + .35));
+  node.style.opacity = (pi * (1 - po)).toFixed(4);
+  node.style.transform = `translate(${x * (1 - pi)}px,${y * (1 - pi) - (o.oy ?? 18) * po}px)`;
+  return pi * (1 - po);
+}
+const fadeIO = (t, tin, tout, d = .45) => P(t, tin, tin + d) * (tout == null ? 1 : 1 - P(t, tout, tout + d));
+
+// ---------------- screens: a whole screenshot in a window, a ring round what's meant, a lens on it
+function focusList(s) {
+  const reg = F.regions[s.image] || {};
+  return (s.focus || []).map(f => {
+    const o = Array.isArray(f) ? { at: f[0], box: f[1], pad: f[2], lens: f[3] } : f;
+    const r = reg[o.box], lname = typeof o.lens === "string" ? o.lens : o.box, lr = reg[lname];
+    if (!r) window.warnings.push(`${s.image}: no box for "${o.box}" (${LANG})`);
+    if (o.lens !== false && !lr) window.warnings.push(`${s.image}: no box for "${lname}" (${LANG})`);
+    // the lens always shows a whole thing on the page (a row, a card, a bar), never a cut through the middle of one
+    return { t: o.at * BEAT, r: r || [0, 0, 1600, 950], pad: o.pad ?? 8, click: !!o.click, lens: o.lens !== false,
+             lr: lr || r || [0, 0, 1600, 950], lpad: o.lensPad ?? LENS_BLEED };
+  });
+}
+function screenBuild(s, root, box) {   // box: the window's [left, top, width] on the frame; its height follows the screen's
+  const z = box[2] / 1600;
+  s.box = [box[0], box[1], box[2], 950 * z]; s.z = z;
+  s.focusR = focusList(s);
+  const src = `${F.shots}/${s.image}-${F.film.theme || "dark"}${LANG === "en" ? "" : "-" + LANG}.png`;
+  s.win = el("div", "window", `left:${s.box[0]}px;top:${s.box[1]}px;width:${s.box[2]}px;height:${s.box[3]}px`,
+    `<img class="shotimg" src="${src}" style="transform:scale(${z})"><div class="abs dim" style="inset:0"></div>`);
+  s.dim = s.win.querySelector(".dim");
+  s.ring = el("div", "ring");
+  // the lens: just the element it shows (cut to its edges), on the lens's own plain ground
+  s.lens = el("div", "lens", "", `<div class="abs lclip"><img src="${src}"><div class="ring lring"></div></div>`);
+  s.lensClip = s.lens.firstChild; s.lensImg = s.lensClip.firstChild; s.lensRing = s.lens.querySelector(".lring");
+  root.append(s.win, s.ring, s.lens);
+  if (HELP) { s.cursor = el("div", "cursor", "", CURSOR); s.ripple = el("div", "ripple"); root.append(s.ripple, s.cursor); }
+}
+function focusAt(s, t, moveFor) {   // what's pointed at now, gliding from one to the next
+  if (!s.focusR.length) return null;
+  let r = s.focusR[0].r.slice(), pad = s.focusR[0].pad, lr = s.focusR[0].lr.slice(), lpad = s.focusR[0].lpad, idx = 0;
+  for (let i = 1; i < s.focusR.length; i++) {
+    const p = eIO3(P(t, s.focusR[i].t - moveFor, s.focusR[i].t));
+    if (p > 0) {
+      r = r.map((v, k) => lerp(v, s.focusR[i].r[k], p)); pad = lerp(pad, s.focusR[i].pad, p);
+      lr = lr.map((v, k) => lerp(v, s.focusR[i].lr[k], p)); lpad = lerp(lpad, s.focusR[i].lpad, p);
+    }
+    if (t >= s.focusR[i].t - moveFor / 2) idx = i;
+  }
+  return { r, pad, lr, lpad, idx };
+}
+const LENS_BLEED = 10, LENS_EDGE = 16;   // the screen round what a lens shows (faded out), and its plain margin
+function lensPlace(s, r, pad) {   // the lens: its size, its place on the frame, and how much bigger than the screen it shows
+  const [wx, wy, ww, wh] = s.box, z = s.z;
+  const rw = r[2] + 2 * pad, rh = r[3] + 2 * pad;
+  let L = clamp(Math.min((PORTRAIT ? 640 : 560) / rw, (PORTRAIT ? 260 : 230) / rh), z * 1.6, 1.9);
+  L = Math.min(L, (ww * .92 - 2 * LENS_EDGE) / rw);
+  const lw = rw * L + 2 * LENS_EDGE, lh = rh * L + 2 * LENS_EDGE;
+  const sx = wx + (r[0] + r[2] / 2) * z, sy = wy + (r[1] - pad) * z, sb = wy + (r[1] + r[3] + pad) * z;
+  const x = HELP ? clamp(sx - lw / 2, wx + 14, wx + ww - 14 - lw) : clamp(sx - lw / 2, Math.max(24, wx - 30), Math.min(W - 24, wx + ww + 30) - lw);
+  const bottom = Math.min(H - (HELP ? 50 : 70), wy + wh + 50);
+  const top = HELP ? wy + 8 : 24;   // (in a help video, never over its header)
+  let y = sb + 24;
+  if (y + lh > bottom) y = sy - 24 - lh;
+  if (y < top) y = clamp(sb + 24, top, bottom - lh);
+  return { x, y, lw, lh, L, cx: sx, cy: (sy + sb) / 2 };
+}
+function screenDraw(s, t, o) {   // o: { tout, move }
+  const f = focusAt(s, t, o.move);
+  const z = s.z, [wx, wy] = s.box;
+  if (!f) { s.ring.style.opacity = s.lens.style.opacity = 0; s.dim.style.background = "none"; return; }
+  const f0 = s.focusR[0].t;
+  const on = P(t, f0, f0 + .35) * (1 - P(t, o.tout - .3, o.tout));
+  const [x, y, w, h] = [wx + (f.r[0] - f.pad) * z, wy + (f.r[1] - f.pad) * z, (f.r[2] + 2 * f.pad) * z, (f.r[3] + 2 * f.pad) * z];
+  s.ring.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px;opacity:${on.toFixed(3)};box-shadow:0 0 0 4px var(--gold),0 0 34px 6px rgba(240,180,41,${HELP ? .25 : .45})`;
+  s.dim.style.background = `rgba(${HELP ? "40,30,20" : "12,9,7"},${(on * (HELP ? .1 : .3)).toFixed(3)})`;
+  // the lens opens after the ring lands, and closes while the ring moves on
+  const lp = lensPlace(s, f.lr, f.lpad);
+  let lensOn = 0;
+  s.focusR.forEach((q, i) => {
+    if (!q.lens) return;
+    const next = s.focusR[i + 1], a = q.t + .4, b = next ? next.t - o.move : o.tout - .35;
+    lensOn = Math.max(lensOn, eBack(P(t, a, a + .5), 1.4) * (1 - eIn3(P(t, b, b + .3))));
+  });
+  const ls = .6 + .4 * clamp(lensOn, 0, 1.2);
+  s.lens.style.cssText = `left:${lp.x}px;top:${lp.y}px;width:${lp.lw}px;height:${lp.lh}px;opacity:${clamp(lensOn * 1.5).toFixed(3)};` +
+    `transform-origin:${lp.cx - lp.x}px ${lp.cy - lp.y}px;transform:scale(${ls.toFixed(4)})`;
+  const fe = Math.max(1, f.lpad * lp.L).toFixed(1);   // the bleed fades out, so nothing ends in a hard cut
+  s.lensClip.style.cssText = `overflow:hidden;left:${LENS_EDGE}px;top:${LENS_EDGE}px;width:${lp.lw - 2 * LENS_EDGE}px;height:${lp.lh - 2 * LENS_EDGE}px;` +
+    `-webkit-mask-image:linear-gradient(90deg,transparent,#000 ${fe}px,#000 calc(100% - ${fe}px),transparent),linear-gradient(180deg,transparent,#000 ${fe}px,#000 calc(100% - ${fe}px),transparent);` +
+    `-webkit-mask-composite:source-in;mask-composite:intersect`;
+  const ox = -(f.lr[0] - f.lpad) * lp.L, oy = -(f.lr[1] - f.lpad) * lp.L;
+  s.lensImg.style.transform = `translate(${ox}px,${oy}px) scale(${lp.L})`;
+  const sameBox = f.r.every((v, k) => Math.abs(v - f.lr[k]) < 1);   // a ring inside the lens, when it shows more than what's meant
+  s.lensRing.style.cssText = `left:${ox + (f.r[0] - f.pad) * lp.L}px;top:${oy + (f.r[1] - f.pad) * lp.L}px;width:${(f.r[2] + 2 * f.pad) * lp.L}px;` +
+    `height:${(f.r[3] + 2 * f.pad) * lp.L}px;opacity:${sameBox ? 0 : 1};box-shadow:0 0 0 3px var(--gold)`;
+  if (HELP) {   // the pointer glides to what's clicked, and clicks it
+    const clicks = s.focusR.filter(q => q.click);
+    let px = wx + s.box[2] * .62, py = wy + s.box[3] * .82, show = 0, click = 0, cx = 0, cy = 0, press = 0;
+    clicks.forEach(q => {
+      const tx = wx + (q.r[0] + q.r[2] / 2) * z, ty = wy + (q.r[1] + q.r[3] * .6) * z;
+      const m = eIO3(P(t, q.t - 1.3, q.t - .15));
+      px = lerp(px, tx, m); py = lerp(py, ty, m);
+      show = Math.max(show, P(t, q.t - 1.6, q.t - 1.3));
+      press = Math.max(press, Math.sin(Math.PI * P(t, q.t - .1, q.t + .15)));
+      const c = P(t, q.t - .1, q.t + .6); if (c > 0 && c < 1) { click = c; cx = tx; cy = ty; }
+    });
+    show *= 1 - P(t, o.tout - .4, o.tout);
+    s.cursor.style.opacity = show.toFixed(3);
+    s.cursor.style.transform = `translate(${px - 6}px,${py - 4}px) scale(${1 - .12 * press})`;
+    const rr = 16 + 46 * eOut3(click);
+    s.ripple.style.cssText = `left:${cx - rr}px;top:${cy - rr}px;width:${rr * 2}px;height:${rr * 2}px;opacity:${click > 0 ? (1 - click).toFixed(3) : 0}`;
+  }
+}
+
+// ---------------- the promo's scenes
+const BUILD = {}, DRAW = {};
+const CHIP_ORDER = ["booth", "gumroad", "jinxxy", "payhip", "itch", "projects", "gold"];   // the order they pop up in
+const CHIP_AT = {   // where each chip pops up: under the Heap, so a box waiting its turn is never where one lands
+  landscape: { booth: [400, 700], gumroad: [930, 760], jinxxy: [1480, 700], payhip: [560, 880], itch: [1180, 890], projects: [1620, 850], gold: [880, 975] },
+  portrait: { booth: [290, 1180], gumroad: [790, 1260], jinxxy: [280, 1380], payhip: [800, 1460], itch: [300, 1580], projects: [790, 1660], gold: [540, 1775] } };
+const HEAP_AT = { landscape: [960, 400, 9.5], portrait: [540, 760, 14] };   // the Heap's middle, and its size
+
+// The opening: the stores one by one, your projects, then your own files; each turns into its box and drops into
+// the Heap, the bottom row first and your files last, on top.
+BUILD.intro = (s, root) => {
+  const tx = T(s.text), fs = PORTRAIT ? 96 : 100;
+  s.lines = el("div", "abs center display", `top:${PORTRAIT ? 300 : 110}px;font-size:${fs}px;padding:0 50px`);
+  s.l1 = words(el("div", "", "white-space:nowrap", esc(tx.stores)));   // a line each, never broken mid-word: see fitLines
+  s.l2 = words(el("div", "", "white-space:nowrap", esc(tx.projects)));
+  s.l3 = words(el("div", "", "white-space:nowrap;color:var(--gold)", esc(tx.local)));
+  s.lines.append(s.l1, s.l2, s.l3);
+  s.tag = words(el("div", "abs center display", `top:${PORTRAIT ? 1150 : 700}px;font-size:${PORTRAIT ? 70 : 60}px;padding:0 70px`, esc(tx.tagline)));
+  root.append(s.lines, s.tag);
+  const [hx, hy, k] = HEAP_AT[PORTRAIT ? "portrait" : "landscape"], x0 = hx - 32 * k, y0 = hy - 32 * k;   // its 64 x 64 square
+  s.k = k;
+  s.items = F.heap.boxes.map((b, drop) => {
+    const c = b.box, i = CHIP_ORDER.indexOf(c), inner = b.size * k;
+    const name = c === "gold" ? tx.chip : c === "projects" ? tx.projectsChip : STORE_NAMES[c];
+    const dot = c === "projects"   // the Projects chip has the box's cube, in the box's colour
+      ? `<svg viewBox="${-b.size * .32} ${-b.size * .32} ${b.size * .64} ${b.size * .64}" style="width:.62em;height:.62em;flex:none;overflow:visible">${b.extra.replace(/stroke="[^"]+"/, `stroke="${b.fill}"`).replace(/stroke-width="[^"]+"/, `stroke-width="${b.size * .09}"`)}</svg>`
+      : `<i style="background:${b.fill};box-shadow:0 0 0 .15em ${b.fill}33"></i>`;
+    const chip = el("div", "chip", `font-size:${PORTRAIT ? 50 : 46}px`,
+      `<span class="face">${dot}${esc(name)}` + (c === "gold" ? `<span class="tag">${esc(tx.tag)}</span>` : "") + `</span>`);
+    root.appendChild(chip);
+    const it = { c, i, drop, chip, face: chip.firstChild, fill: b.fill, at: CHIP_AT[PORTRAIT ? "portrait" : "landscape"][c],
+      r0: [-6, 4, -5, 5, -3, 4, 3][i], rot: b.tilt, slot: [x0 + b.x * k, y0 + b.y * k],
+      size: (b.size + b.line) * k, radius: (b.round + b.line / 2) * k, line: b.line * k };
+    if (b.extra) {   // the gold box's sparkle, the Projects box's cube
+      it.extra = el("div", "abs", `left:50%;top:50%;width:${inner}px;height:${inner}px;margin:${-inner / 2}px 0 0 ${-inner / 2}px;opacity:0`,
+        `<svg viewBox="${-b.size / 2} ${-b.size / 2} ${b.size} ${b.size}" style="width:100%;height:100%;overflow:visible;display:block">${b.extra}</svg>`);
+      chip.appendChild(it.extra);
+    }
+    return it;
+  });
+};
+DRAW.intro = (s, t) => {
+  if (!s.fit) {   // once it's laid out: the opening's lines a size that fits the frame's width (narrower in portrait)
+    s.fit = true;
+    const width = n => { n.style.display = "inline-block"; const w = n.offsetWidth; n.style.display = ""; return w; };   // (its words', not the frame's)
+    const widest = Math.max(...[s.l1, s.l2, s.l3].map(width)), room = W - 100;
+    if (widest > room) s.lines.style.fontSize = (parseFloat(s.lines.style.fontSize) * room / widest) + "px";
+  }
+  const d = s.dur, B = BEAT;
+  const tTurn = 8 * B;                                  // bar 2: the words go and the chips turn into boxes
+  reveal(s.l1, t, .1, tTurn - .6);
+  reveal(s.l2, t, 4.3 * B, tTurn - .6);
+  reveal(s.l3, t, 4.9 * B, tTurn - .6);
+  const out = eIn3(P(t, d - .45, d)), last = s.items.length - 1;
+  s.items.forEach(it => {
+    const tPop = it.c === "gold" ? 5.5 * B : it.c === "projects" ? 4.5 * B : (.8 + it.i * .7) * B;
+    const pin = eBack(P(t, tPop, tPop + .5), 2.2);
+    const tMorph = tTurn + it.i * .09, morph = eIO3(P(t, tMorph, tMorph + .65));
+    const tDrop = tTurn + 1.2 + it.drop * .4 + (it.drop === last ? .3 : 0), fall = P(t, tDrop, tDrop + .7);
+    const cw = it.chip.offsetWidth || 1, ch = it.chip.offsetHeight || 1;
+    if (!it.cw) { it.cw = cw; it.ch = ch; }             // the chip's own size, before it starts to turn
+    const w = lerp(it.cw, it.size, morph), h = lerp(it.ch, it.size, morph);
+    const st = it.chip.style;
+    st.width = w + "px"; st.height = h + "px"; st.marginLeft = (-w / 2) + "px"; st.marginTop = (-h / 2) + "px";
+    st.padding = morph > 0 ? "0" : ""; st.justifyContent = "center";
+    st.borderRadius = lerp(it.ch / 2, it.radius, morph) + "px";
+    st.background = morph > 0 ? mix("#2B2520", it.fill, morph) : "";
+    st.borderColor = morph > 0 ? mix("#4A4037", CAVE, morph) : "";
+    st.borderWidth = lerp(2, it.line, morph) + "px";
+    st.boxShadow = `0 ${24 - 14 * morph}px ${50 - 20 * morph}px rgba(0,0,0,${.45 - .15 * morph})`;
+    it.face.style.opacity = (1 - P(t, tMorph, tMorph + .3)).toFixed(3);
+    it.face.style.display = morph >= .5 ? "none" : "flex";
+    // where it is: where it popped up, bobbing; then up and over, and down into its place in the Heap
+    const bob = Math.sin(VT * 2.2 + it.i * 1.7) * 7 * (1 - P(t, tDrop - .2, tDrop));
+    let x = it.at[0], y = it.at[1] + bob;
+    if (fall > 0) {
+      const apex = Math.max(Math.min(it.at[1], it.slot[1]) - (PORTRAIT ? 360 : 280), it.size / 2 + 40);   // (never off the top)
+      const q = eIO3(Math.min(1, fall * 1.05)), mx = lerp(it.at[0], it.slot[0], .5);
+      x = (1 - q) * (1 - q) * it.at[0] + 2 * (1 - q) * q * mx + q * q * it.slot[0];
+      y = fall < .42 ? lerp(it.at[1], apex, eOut3(fall / .42)) : lerp(apex, it.slot[1], eIn2((fall - .42) / .58));
+    }
+    it.now = fall >= 1 ? "landed" : fall > 0 ? "falling" : "waiting";
+    const land = P(t, tDrop + .7, tDrop + 1.05);
+    const squash = land > 0 && land < 1 ? Math.sin(Math.PI * land) * .13 : 0;
+    const rot = lerp(it.r0, it.rot, Math.max(morph, eOut3(fall)));
+    const scl = .3 + .7 * pin;
+    st.opacity = (P(t, tPop, tPop + .12) * (1 - out)).toFixed(3);
+    st.transform = `translate(${x}px,${y}px) rotate(${rot}deg) scale(${scl * (1 + squash * .6)},${scl * (1 - squash)})`;
+    if (it.extra && it.c === "gold") {   // the sparkle, once it has landed on top
+      const sp = P(t, tDrop + 1.0, tDrop + 1.5);
+      it.extra.style.opacity = sp; it.extra.style.transform = `rotate(${(1 - eOut3(sp)) * 120}deg) scale(${eBack(sp, 3)})`;
+    } else if (it.extra) it.extra.style.opacity = P(t, tMorph + .35, tMorph + .65).toFixed(3);   // the cube, as it turns into its box
+  });
+  const tTag = tTurn + 1.2 + last * .4 + .3 + 1.0;   // once your files have landed on top
+  reveal(s.tag, t, tTag, d - .6, .07);
+};
+
+// A screen of Hoard's beside its words (under them, in portrait), whole: a lens shows what's meant up close.
+BUILD.shot = (s, root) => {
+  const tx = T(s.text), right = s.side !== "right";
+  screenBuild(s, root, PORTRAIT ? [40, 240, W - 80] : [right ? 690 : 90, 0, 1140]);
+  if (!PORTRAIT) { s.box[1] = (H - s.box[3]) / 2 + 10; s.win.style.top = s.box[1] + "px"; }
+  const capW = PORTRAIT ? W - 120 : 500;
+  const fsT = PORTRAIT ? 88 : 72, fsB = PORTRAIT ? 38 : 32, fsK = PORTRAIT ? 32 : 27, fsP = PORTRAIT ? 36 : 30;
+  s.cap = el("div", "abs cap", `width:${capW}px`);
+  s.k = el("div", "kicker", `font-size:${fsK}px`, `<b></b>${esc(tx.kicker || "")}`);
+  s.t = words(el("div", "title", `font-size:${fsT}px;margin-top:${fsK * .7}px`, esc(tx.title)));
+  s.b = el("div", "body", `font-size:${fsB}px;margin-top:${fsB * .7}px`, esc(tx.body || ""));
+  s.ps = el("div", "points", `gap:${fsP * .5}px;margin-top:${fsP}px`);
+  s.pts = (tx.points || []).map(p => { const n = el("div", "point", `font-size:${fsP}px`, CHECK + `<span>${esc(p)}</span>`); s.ps.appendChild(n); return n; });
+  s.cap.append(s.k, s.t, s.b, s.ps);
+  root.appendChild(s.cap);
+  if (PORTRAIT) { s.cap.style.left = "60px"; s.cap.style.top = (s.box[1] + s.box[3] + 330) + "px"; }
+  else s.cap.style.left = (right ? 120 : W - 120 - capW) + "px";
+};
+DRAW.shot = (s, t) => {
+  const d = s.dur, pin = eOut3(P(t, .02, .9)), out = eIn3(P(t, d - .5, d - .05)), right = s.side !== "right";
+  s.win.style.opacity = (P(t, 0, .4) * (1 - out)).toFixed(3);
+  s.win.style.transform = PORTRAIT ? `translateY(${60 * (1 - pin) - 30 * out}px)` : `translateX(${(right ? 1 : -1) * (120 * (1 - pin) - 60 * out)}px)`;
+  screenDraw(s, t, { tout: d - .5, move: .9 });
+  if (!PORTRAIT) s.cap.style.top = Math.max(150, (H - s.cap.offsetHeight) / 2 + 10) + "px";
+  const tout = d - .55;
+  rise(s.k, t, .25, tout, { y: 22 });
+  reveal(s.t, t, .35, tout);
+  rise(s.b, t, .75, tout);
+  const pts = s.pts.map((_, i) => s.focusR[i] ? s.focusR[i].t : (2 + i) * BEAT);
+  s.pts.forEach((p, i) => { rise(p, t, pts[i], tout, { x: right ? -26 : 26, y: 0, di: .5 }); p.classList.toggle("on", t >= pts[i] && (i === s.pts.length - 1 || t < pts[i + 1])); });
+};
+
+// Hoard's looks: a screen in each of several layouts and colour themes, one after another, each named.
+BUILD.looks = (s, root) => {
+  const tx = T(s.text), right = s.side !== "right";
+  const tw = PORTRAIT ? 480 : 540, th = tw * 950 / 1600, gap = PORTRAIT ? 40 : 36;
+  const gx = PORTRAIT ? (W - 2 * tw - gap) / 2 : (right ? 1830 - 2 * tw - gap : 90), gy = PORTRAIT ? 250 : (H - 2 * th - gap) / 2 + 10;
+  s.tiles = s.images.map((img, i) => {
+    const x = gx + (i % 2) * (tw + gap), y = gy + Math.floor(i / 2) * (th + gap);
+    const w = el("div", "window", `left:${x}px;top:${y}px;width:${tw}px;height:${th}px;opacity:0`,
+      `<img class="shotimg" src="${F.shots}/${img}-${F.film.theme || "dark"}${LANG === "en" ? "" : "-" + LANG}.png" style="transform:scale(${tw / 1600})">`);
+    const c = el("div", "lookchip", `left:${x + 18}px;top:${y + th - 30}px;font-size:${PORTRAIT ? 26 : 24}px;opacity:0`, esc((tx.labels || [])[i] || ""));
+    root.append(w, c);
+    return { w, c };
+  });
+  s.gridBox = [gx, gy, 2 * tw + gap, 2 * th + gap];
+  const capW = PORTRAIT ? W - 120 : 500;
+  const fsT = PORTRAIT ? 88 : 72, fsB = PORTRAIT ? 38 : 32, fsK = PORTRAIT ? 32 : 27;
+  s.cap = el("div", "abs cap", `width:${capW}px`);
+  s.k = el("div", "kicker", `font-size:${fsK}px`, `<b></b>${esc(tx.kicker || "")}`);
+  s.t = words(el("div", "title", `font-size:${fsT}px;margin-top:${fsK * .7}px`, esc(tx.title)));
+  s.b = el("div", "body", `font-size:${fsB}px;margin-top:${fsB * .7}px`, esc(tx.body || ""));
+  s.cap.append(s.k, s.t, s.b);
+  root.appendChild(s.cap);
+  if (PORTRAIT) { s.cap.style.left = "60px"; s.cap.style.top = (gy + 2 * th + gap + 120) + "px"; }
+  else s.cap.style.left = (right ? 120 : W - 120 - capW) + "px";
+};
+DRAW.looks = (s, t) => {
+  const d = s.dur, out = eIn3(P(t, d - .5, d - .05)), tout = d - .55;
+  s.tiles.forEach(({ w, c }, i) => {
+    const t0 = .3 + i * BEAT * 1.25, p = eBack(P(t, t0, t0 + .6), 1.6);
+    w.style.opacity = (P(t, t0, t0 + .2) * (1 - out)).toFixed(3);
+    w.style.transform = `translateY(${30 * (1 - p)}px) scale(${.9 + .1 * p})`;
+    c.style.opacity = (P(t, t0 + .35, t0 + .55) * (1 - out)).toFixed(3);
+    c.style.transform = `translateY(${12 * (1 - eOut3(P(t, t0 + .35, t0 + .8)))}px)`;
+  });
+  if (!PORTRAIT) s.cap.style.top = Math.max(150, (H - s.cap.offsetHeight) / 2 + 10) + "px";
+  rise(s.k, t, .25, tout, { y: 22 });
+  reveal(s.t, t, .35, tout);
+  rise(s.b, t, .75, tout);
+};
+
+BUILD.end = (s, root) => {
+  const tx = T(s.text), lw = PORTRAIT ? 900 : 860;
+  s.logo = el("div", "abs", `left:${(W - lw) / 2}px;top:${PORTRAIT ? 560 : 170}px;width:${lw}px`, heapSVG(true));
+  s.boxes = [...s.logo.querySelectorAll(".hb")];
+  // the words under the logo, one under another, however many lines each takes
+  const col = el("div", "abs", `left:0;right:0;top:${PORTRAIT ? 960 : 500}px;display:flex;flex-direction:column;align-items:center;padding:0 60px`);
+  s.l1 = words(el("div", "center display", `font-size:${PORTRAIT ? 76 : 70}px`, esc(tx.line)));
+  s.l2 = el("div", "center", `margin-top:${PORTRAIT ? 34 : 26}px;font-size:${PORTRAIT ? 40 : 36}px;font-weight:700;color:var(--dust)`, esc(tx.platforms));
+  s.l3 = el("div", "", `margin-top:${PORTRAIT ? 44 : 36}px;display:flex;justify-content:center`, `<span class="pill" style="padding:.38em .95em .45em;font-size:${PORTRAIT ? 60 : 56}px">hoard.furryup.link</span>`);
+  s.l4 = el("div", "center", `margin-top:${PORTRAIT ? 56 : 44}px;font-size:${PORTRAIT ? 34 : 30}px;color:var(--dust)`, "English · 日本語 · 한국어");
+  col.append(s.l1, s.l2, s.l3, s.l4);
+  s.l5 = el("div", "abs center", `top:${H - (PORTRAIT ? 190 : 110)}px;font-size:${PORTRAIT ? 22 : 20}px;line-height:1.6;color:rgba(179,166,149,.6);padding:0 60px`, esc(tx.fine).replace(/\n/g, "<br>"));
+  s.col = col;
+  root.append(s.logo, col, s.l5);
+};
+DRAW.end = (s, t) => {
+  s.boxes.forEach((b, i) => { const t0 = .02 + i * .07, p = spring(P(t, t0, t0 + .8)); b.style.opacity = P(t, t0, t0 + .05); b.style.transform = `translate(0,${-18 * (1 - p)}px)`; });
+  const wm = s.logo.querySelector(".wmk"); wm.style.opacity = P(t, .4, .8); wm.style.transform = `translateY(${8 * (1 - eOut3(P(t, .4, .9)))}px)`;
+  reveal(s.l1, t, .6);
+  rise(s.l2, t, 1.1, null, { y: 18 });
+  const up = eBack(P(t, 1.5, 2.0), 2); s.l3.style.transform = `scale(${.6 + .4 * up})`; s.l3.style.opacity = P(t, 1.5, 1.65);
+  rise(s.l4, t, 2.0, null, { y: 14 });
+  rise(s.l5, t, 2.3, null, { y: 8 });
+};
+
+// ---------------- the help videos: Hoard's light theme, a header, the screen, and the steps beside it
+function helpFrame() {   // what stays on screen the whole video: the logo, the problem, and the steps
+  const tx = T(F.film.text);
+  const head = el("div", "abs", `left:${PORTRAIT ? 50 : 80}px;right:${PORTRAIT ? 50 : 80}px;top:${PORTRAIT ? 70 : 42}px;height:64px;display:flex;align-items:center;gap:26px`);
+  head.append(el("div", "", `width:${PORTRAIT ? 190 : 176}px;flex:none`, heapSVG(true, "#211C18")),
+              el("div", "", "width:2px;height:40px;background:var(--seam);flex:none"),
+              el("div", "", `font-size:${PORTRAIT ? 30 : 28}px;font-weight:700;color:var(--dust);white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+                 `${esc(tx.label)} <span style="color:var(--bone)">${esc(tx.problem)}</span>`));
+  const pw = PORTRAIT ? W - 80 : 500, pl = PORTRAIT ? 40 : W - 80 - pw, pt = PORTRAIT ? 1100 : 150;
+  const ph = PORTRAIT ? 720 : 1240 / 1600 * 950;
+  const pad = PORTRAIT ? 44 : 36, fs = PORTRAIT ? 36 : 29;
+  const panel = el("div", "panel", `left:${pl}px;top:${pt}px;width:${pw}px;height:${ph}px`);
+  const about = el("div", "abs", `left:${pad}px;right:${pad}px;top:${pad}px`);
+  const list = el("div", "abs steps", `left:${pad}px;right:${pad}px;bottom:${pad}px;gap:${fs * .6}px`);
+  list.append(el("div", "", `font-size:${fs * .8}px;font-weight:700;color:var(--dust)`, esc(tx.stepsLabel || "")));
+  const rows = (tx.steps || []).map((st, i) => { const r = el("div", "step", `font-size:${fs}px`, `<span class="n">${i + 1}</span><span>${esc(st)}</span>`); list.appendChild(r); return r; });
+  panel.append(about, list);
+  $("frame").append(head, panel);
+  return { head, panel, about, rows, list };
+}
+function helpAbout(s, tx) {   // one scene's words, at the top of the panel
+  const fsK = PORTRAIT ? 30 : 24, fsT = PORTRAIT ? 62 : 46, fsB = PORTRAIT ? 34 : 27;
+  s.cap = el("div", "abs cap", "left:0;right:0;top:0;opacity:0;display:none");
+  s.cap.append(el("div", "kicker", `font-size:${fsK}px`, `<b></b>${esc(tx.kicker || "")}`),
+               el("div", "title", `font-size:${fsT}px;margin-top:${fsK * .6}px`, esc(tx.title)),
+               el("div", "body", `font-size:${fsB}px;margin-top:${fsB * .6}px`, esc(tx.body || "")));
+  HF.about.appendChild(s.cap);
+}
+function helpPanelDraw(s, t) {
+  s.cap.style.opacity = (t < 0 ? 0 : fadeIO(t, .05, s.dur - .4, .35)).toFixed(3);
+  s.cap.style.transform = `translateY(${10 * (1 - eOut3(P(t, .2, .7)))}px)`;
+  HF.rows.forEach((r, i) => { r.classList.toggle("now", s.step === i + 1); r.classList.toggle("done", typeof s.step === "number" && i + 1 < s.step); });
+}
+const HELP_BOX = () => PORTRAIT ? [40, 190, W - 80] : [80, 150, 1240];
+BUILD.hshot = (s, root) => { screenBuild(s, root, HELP_BOX()); helpAbout(s, T(s.text)); };
+const helpIn = s => s.i > 0 && ["hshot", "hwindow"].includes(SC[s.i - 1].type) ? -XF : 0;
+const helpOut = s => SC[s.i + 1] && ["hshot", "hwindow"].includes(SC[s.i + 1].type) ? s.dur : s.dur - .45;
+DRAW.hshot = (s, t) => {
+  s.win.style.opacity = fadeIO(t, helpIn(s), helpOut(s) - (helpOut(s) === s.dur ? XF : 0), helpIn(s) ? XF : .45).toFixed(3);
+  screenDraw(s, t, { tout: s.dur - .45, move: 1.1 });
+  helpPanelDraw(s, t);
+};
+// A step outside Hoard's pages (a store's sign-in window): a plain drawing of a window, never the store's own page.
+// With "win" in its words, it's drawn from them: a browser's page, a system's dialog, a search for an app or a
+// terminal, in one or more states, each with what's clicked in it ("clicks": b0 its first button, l0 its first link,
+// f0 its first field, r0 its first result, m0 its marked line); "done" ends it with a tick and its note.
+const MAG = `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#6B6157" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>`;
+function drawnState(st, kind) {   // one state's words, as plain shapes
+  const k = (pre, i) => `data-k="${pre}${i}"`;
+  let h = "";
+  if (kind === "terminal")
+    return `<div class="wterm">${(st.lines || []).map((l, i) => i === st.mark ? `<span class="m" ${k("m", 0)}>${esc(l)}</span>` : esc(l)).join("\n")}</div>`;
+  if (st.search != null) h += `<div class="wsr">${MAG}<span>${esc(st.search)}</span></div>`;
+  if (st.title) h += `<div class="wt">${esc(st.title)}</div>`;
+  (st.lines || []).forEach(l => { h += `<div class="wl">${esc(l)}</div>`; });
+  if (st.facts) h += `<dl class="wkv">${st.facts.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>`;
+  (st.fields || []).forEach((f, i) => { h += `<div>${f.label ? `<div class="wfl">${esc(f.label)}</div>` : ""}<div class="wbox" ${k("f", i)}>${f.dots ? "&#9679;".repeat(f.dots) : esc(f.value || "")}</div></div>`; });
+  (st.results || []).forEach((r, i) => { h += `<div class="wrow" ${k("r", i)}><div class="ic">${r.heap ? `<div style="width:48px">${heapSVG(false)}</div>` : ""}</div><div><b>${esc(r.name)}</b><span>${esc(r.sub || "")}</span></div></div>`; });
+  (st.links || []).forEach((l, i) => { h += `<div class="wlk" ${k("l", i)}>${esc(l)}</div>`; });
+  if (st.buttons) h += `<div class="wbtns" style="justify-content:${kind === "dialog" ? "flex-end" : "flex-start"}">${st.buttons.map((b, i) => `<div class="wb${b.primary ? " primary" : ""}" ${k("b", i)}>${esc(b.t)}</div>`).join("")}</div>`;
+  return h;
+}
+function drawnWindow(s, root, tx) {
+  const box = HELP_BOX(), ww = box[2], wh = ww * 950 / 1600, kind = s.kind || "browser", dark = kind === "terminal";
+  s.box = [box[0], box[1], ww, wh];
+  s.win = el("div", "window", `left:${box[0]}px;top:${box[1]}px;width:${ww}px;height:${wh}px;background:${dark ? "#1B1714" : "#F7F5F1"}`);
+  const barH = kind === "launcher" ? 0 : 66;
+  if (kind === "browser") s.win.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:#FFFFFF;border-bottom:2px solid #E3DFD8"></div>` +
+    `<div class="abs" style="left:26px;right:26px;top:13px;height:40px;border-radius:20px;background:#EEECE8;display:flex;align-items:center;gap:10px;padding:0 18px;font-size:22px;color:#6B6157">` +
+    `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6B6157" stroke-width="2.2"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>${esc(s.address || "")}</div>`;
+  else if (barH) s.win.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:${dark ? "#2B2520" : "#FFFFFF"};border-bottom:2px solid ${dark ? "#372F28" : "#E3DFD8"};display:flex;align-items:center;padding:0 26px;font-size:22px;font-weight:700;color:${dark ? "#B3A695" : "#6B6157"}">${esc(tx.bar || "")}</div>`;
+  const fw = kind === "terminal" ? ww - 100 : kind === "dialog" ? Math.min(800, ww - 160) : Math.min(700, ww - 160);
+  s.states = (tx.win || []).map(st => {
+    const c = el("div", "dw", `left:${(ww - fw) / 2}px;width:${fw}px;opacity:0`, drawnState(st, kind));
+    s.win.appendChild(c);
+    return { el: c };
+  });
+  s.area = [barH, wh];
+  s.clicks = s.clicks || [];
+  s.wok = el("div", "abs", `left:50%;top:${wh / 2 - 110}px;width:140px;height:140px;margin-left:-70px;opacity:0`, CHECK);
+  s.wok.firstChild.style.cssText = "width:100%;height:100%";
+  s.wnote = el("div", "abs center", `top:${wh / 2 + 60}px;font-size:${PORTRAIT ? 30 : 27}px;color:#6B6157;opacity:0;padding:0 40px`, esc(tx.note || ""));
+  s.win.append(s.wok, s.wnote);
+  s.cursor = el("div", "cursor", "", CURSOR); s.ripple = el("div", "ripple");
+  root.append(s.win, s.ripple, s.cursor);
+  helpAbout(s, tx);
+  // when each state shows, and when its click is
+  const n = s.states.length, seg = (s.dur - 1.0) / (n + (s.done ? .7 : 0));
+  s.times = []; let t0 = 0;
+  for (let i = 0; i < n; i++) {
+    const c = s.clicks[i] ? .5 + seg * (i + .7) : null;
+    s.times.push({ show: t0, click: c });
+    t0 = c != null ? c + .45 : .5 + seg * (i + 1);
+  }
+  s.doneAt = s.done && s.times.length && s.times[n - 1].click != null ? s.times[n - 1].click + .45 : null;
+}
+function drawnDraw(s, t) {
+  const d = s.dur, n = s.states.length;
+  s.win.style.opacity = fadeIO(t, helpIn(s), helpOut(s) - (helpOut(s) === s.dur ? XF : 0), helpIn(s) ? XF : .45).toFixed(3);
+  if (!s.laid) {   // each state's place (in the middle of the window), and where its click lands, once it's laid out
+    s.laid = true;
+    s.states.forEach((st, i) => {
+      const h = st.el.offsetHeight, [top, bottom] = s.area;
+      st.el.style.top = (s.kind === "launcher" ? top + 60 : s.kind === "terminal" ? top + 40 : top + Math.max(40, (bottom - top - h) / 2)) + "px";
+      const k = s.clicks[i] && st.el.querySelector(`[data-k="${s.clicks[i]}"]`);
+      if (k) { const r = k.getBoundingClientRect(), f = $("stage").getBoundingClientRect(); st.at = [r.left - f.left + r.width / 2, r.top - f.top + r.height / 2]; st.target = k; }
+    });
+  }
+  s.states.forEach((st, i) => {
+    const show = s.times[i].show, next = i + 1 < n ? s.times[i + 1].show : s.doneAt;
+    st.el.style.opacity = (P(t, show, show + .35) * (next != null ? 1 - P(t, next - .05, next + .3) : 1)).toFixed(3);
+    if (st.target) st.target.classList.toggle("on", t > s.times[i].click - .05 && (next == null || t < next + .3));
+  });
+  if (s.doneAt != null) {
+    const ok = eBack(P(t, s.doneAt + .1, s.doneAt + .65), 2.2);
+    s.wok.style.opacity = P(t, s.doneAt + .1, s.doneAt + .22); s.wok.style.transform = `scale(${.4 + .6 * ok})`;
+    s.wnote.style.opacity = fadeIO(t, s.doneAt + .5, d - .45).toFixed(3);
+  }
+  // the pointer: from the window's corner to each click in turn
+  const clicks = s.states.map((st, i) => st.at && s.times[i].click != null ? { at: st.at, t: s.times[i].click } : null).filter(Boolean);
+  if (!clicks.length) { s.cursor.style.opacity = 0; s.ripple.style.opacity = 0; }
+  else {
+    let px = s.box[0] + s.box[2] * .78, py = s.box[1] + s.box[3] * .86;
+    clicks.forEach(c => { const m = eIO3(P(t, c.t - 1.3, c.t - .15)); px = lerp(px, c.at[0] + 34, m); py = lerp(py, c.at[1] + 6, m); });
+    const end = s.doneAt != null ? s.doneAt + .3 : d - .5;
+    s.cursor.style.opacity = (P(t, clicks[0].t - 1.7, clicks[0].t - 1.4) * (1 - P(t, end, end + .3))).toFixed(3);
+    const press = clicks.reduce((a, c) => Math.max(a, Math.sin(Math.PI * P(t, c.t - .1, c.t + .15))), 0);
+    s.cursor.style.transform = `translate(${px - 6}px,${py - 4}px) scale(${1 - .12 * press})`;
+    const last = clicks.filter(c => t >= c.t - .1).pop();
+    const c = last ? P(t, last.t - .1, last.t + .6) : 0, rr = 16 + 46 * eOut3(c);
+    s.ripple.style.cssText = `left:${px - rr}px;top:${py - rr}px;width:${rr * 2}px;height:${rr * 2}px;opacity:${c > 0 && c < 1 ? (1 - c).toFixed(3) : 0}`;
+  }
+  helpPanelDraw(s, t);
+}
+BUILD.hwindow = (s, root) => {
+  const tx = T(s.text);
+  if (tx.win) return drawnWindow(s, root, tx);
+  const box = HELP_BOX(), ww = box[2], wh = ww * 950 / 1600;
+  s.box = [box[0], box[1], ww, wh];
+  s.win = el("div", "window", `left:${box[0]}px;top:${box[1]}px;width:${ww}px;height:${wh}px;background:#F7F5F1`);
+  const fw = Math.min(520, ww - 200), mid = wh / 2 - 30;
+  const bar = top => `<div class="abs" style="left:50%;top:${top}px;width:${fw}px;height:54px;margin-left:${-fw / 2}px;border-radius:12px;background:#FFFFFF;border:2px solid #D2CCC3"></div>`;
+  s.win.innerHTML = `<div class="abs" style="left:0;right:0;top:0;height:66px;background:#FFFFFF;border-bottom:2px solid #E3DFD8"></div>` +
+    `<div class="abs" style="left:26px;right:26px;top:13px;height:40px;border-radius:20px;background:#EEECE8;display:flex;align-items:center;gap:10px;padding:0 18px;font-size:22px;color:#6B6157">` +
+    `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#6B6157" stroke-width="2.2"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>${esc(s.address || "")}</div>` +
+    `<div class="abs wf" style="inset:0">${bar(mid - 100)}${bar(mid - 26)}<div class="abs wbtn" style="left:50%;top:${mid + 56}px;width:${fw}px;height:56px;margin-left:${-fw / 2}px;border-radius:12px;background:#D2CCC3"></div></div>` +
+    `<div class="abs wok" style="left:50%;top:${mid - 70}px;width:140px;height:140px;margin-left:-70px;opacity:0">${CHECK}</div>` +
+    `<div class="abs wnote center" style="top:${mid + 100}px;font-size:${PORTRAIT ? 30 : 27}px;color:#6B6157;opacity:0;padding:0 40px">${esc(tx.note || "")}</div>`;
+  s.wf = s.win.querySelector(".wf"); s.wok = s.win.querySelector(".wok"); s.wbtn = s.win.querySelector(".wbtn"); s.wnote = s.win.querySelector(".wnote");
+  s.wok.firstChild.style.cssText = "width:100%;height:100%";
+  s.btn = [box[0] + ww / 2, box[1] + mid + 84];
+  s.cursor = el("div", "cursor", "", CURSOR); s.ripple = el("div", "ripple");
+  root.append(s.win, s.ripple, s.cursor);
+  helpAbout(s, tx);
+};
+DRAW.hwindow = (s, t) => {
+  if (s.states) return drawnDraw(s, t);
+  const d = s.dur, press = .5 * d, done = press + 1.0;
+  s.win.style.opacity = fadeIO(t, helpIn(s), helpOut(s) - (helpOut(s) === s.dur ? XF : 0), helpIn(s) ? XF : .45).toFixed(3);
+  s.wf.style.opacity = (1 - P(t, done - .1, done + .3)).toFixed(3);
+  s.wbtn.style.background = t > press - .05 && t < done ? "#F0B429" : "#D2CCC3";
+  const ok = eBack(P(t, done, done + .55), 2.2);
+  s.wok.style.opacity = P(t, done, done + .12); s.wok.style.transform = `scale(${.4 + .6 * ok})`;
+  s.wnote.style.opacity = fadeIO(t, done + .4, d - .45).toFixed(3);
+  const [bx, by] = s.btn, m = eIO3(P(t, press - 1.4, press - .15));
+  const px = lerp(s.box[0] + s.box[2] * .7, bx + 60, m), py = lerp(s.box[1] + s.box[3] * .84, by, m);
+  s.cursor.style.opacity = (P(t, press - 1.7, press - 1.4) * (1 - P(t, done + .2, done + .5))).toFixed(3);
+  s.cursor.style.transform = `translate(${px - 6}px,${py - 4}px) scale(${1 - .12 * Math.sin(Math.PI * P(t, press - .1, press + .15))})`;
+  const c = P(t, press - .1, press + .6), rr = 16 + 46 * eOut3(c);
+  s.ripple.style.cssText = `left:${px - rr}px;top:${py - rr}px;width:${rr * 2}px;height:${rr * 2}px;opacity:${c > 0 && c < 1 ? (1 - c).toFixed(3) : 0}`;
+  helpPanelDraw(s, t);
+};
+// The help video's first and last cards, over the whole frame.
+BUILD.hcard = (s, root) => {
+  const tx = T(s.text), y0 = PORTRAIT ? 760 : (tx.link ? 330 : 390);
+  s.wrap = el("div", "abs", "inset:0;background:var(--cave)");
+  s.mk = el("div", "abs", `left:${(W - 140) / 2}px;top:${y0 - 200}px;width:140px`, heapSVG(false));
+  s.k = el("div", "abs center", `top:${y0}px;font-size:${PORTRAIT ? 34 : 30}px;font-weight:700;color:var(--gold-text);letter-spacing:.02em`, esc(tx.kicker || ""));
+  s.t = el("div", "abs center display", `top:${y0 + 60}px;font-size:${PORTRAIT ? 80 : 84}px;padding:0 80px;text-wrap:balance`, esc(tx.title));
+  s.b = el("div", "abs center", `top:${y0 + (PORTRAIT ? 290 : 190)}px;font-size:${PORTRAIT ? 38 : 36}px;color:var(--dust);line-height:1.45;padding:0 ${PORTRAIT ? 70 : 300}px`, esc(tx.body || ""));
+  s.wrap.append(s.mk, s.k, s.t, s.b);
+  if (tx.link) {
+    s.l = el("div", "abs", `left:0;right:0;top:${y0 + (PORTRAIT ? 520 : 340)}px;display:flex;flex-direction:column;align-items:center;gap:18px`,
+      `<span class="pill" style="padding:.38em .95em .45em;font-size:${PORTRAIT ? 50 : 46}px">${esc(tx.link)}</span>` +
+      (tx.linkNote ? `<span style="font-size:${PORTRAIT ? 30 : 28}px;color:var(--dust)">${esc(tx.linkNote)}</span>` : ""));
+    s.wrap.append(s.l);
+  }
+  root.append(s.wrap);
+};
+function hcardFit(s) {   // a title or words longer than their room push what's under them down, and all of it up by half
+  const top = n => parseFloat(n.style.top), gap = 26;
+  let push = 0;
+  const tEnd = top(s.t) + s.t.offsetHeight, bTop = top(s.b);
+  if (tEnd + gap > bTop) push = tEnd + gap - bTop;
+  s.b.style.top = (bTop + push) + "px";
+  if (s.l) {
+    const bEnd = top(s.b) + s.b.offsetHeight, lTop = top(s.l) + push;
+    const more = Math.max(0, bEnd + gap + 10 - lTop);
+    s.l.style.top = (lTop + more) + "px";
+    push += more;
+  }
+  s.push = push;
+  if (push) [s.mk, s.k, s.t, s.b, s.l].forEach(n => { if (n) n.style.top = (top(n) - push / 2) + "px"; });
+}
+DRAW.hcard = (s, t) => {
+  if (s.push == null) hcardFit(s);
+  const last = s === SC[SC.length - 1], out = last ? null : s.dur - .5;
+  s.wrap.style.opacity = ((s.i === 0 ? 1 : P(t, 0, .45)) * (out == null ? 1 : 1 - P(t, out, out + .5))).toFixed(3);
+  [s.mk, s.k, s.t, s.b, s.l].forEach((n, i) => { if (n) rise(n, t, .15 + i * .18, null, { y: 14, di: .6 }); });
+};
+
+// ---------------- the whole film
+window.setup = function (cfg) {
+  F = cfg; LANG = cfg.lang; PORTRAIT = cfg.shape === "portrait"; HELP = cfg.film.style === "help";
+  document.documentElement.lang = LANG;
+  W = PORTRAIT ? 1080 : 1920; H = PORTRAIT ? 1920 : 1080;
+  BEAT = 60 / cfg.film.bpm; BAR = 4 * BEAT;
+  const stage = $("stage"); stage.style.width = W + "px"; stage.style.height = H + "px";
+  stage.classList.toggle("help", HELP);
+  document.body.style.width = W + "px"; document.body.style.height = H + "px";
+  [["gold", .2, .16, .83], ["gumroad", .16, .86, .91], ["jinxxy", .14, .78, .11], ["booth", .15, .1, .19], ["payhip", .16, .5, 1.02]].forEach(([c, a, x, y], i) => {
+    const g = el("div", "glow", `background:radial-gradient(circle,${C[c]} 0%,rgba(0,0,0,0) 62%)`); g._a = a; g._x = x * W; g._y = y * H; g._f = [.31, .23, .19, .27, .21][i]; g._ph = [.9, 2.1, 3.7, 5.2, 1.3][i];
+    $("bg").appendChild(g);
+  });
+  if (HELP) HF = helpFrame();
+  else $("chrome").append(Object.assign(el("div", "abs", `left:${PORTRAIT ? 60 : 120}px;top:${PORTRAIT ? 100 : 50}px;width:${PORTRAIT ? 230 : 200}px`, heapSVG(true)), { id: "bug" }));
+  $("chrome").append(Object.assign(el("div", "credit", PORTRAIT ? "left:60px;right:60px;top:1846px;font-size:19px;white-space:normal;line-height:1.4;text-align:center"
+    : `left:${HELP ? 80 : 120}px;top:${HELP ? 1036 : 1030}px;font-size:19px`, esc(T(cfg.film.credit))), { id: "credit" }));
+  let t0 = 0;
+  SC = cfg.film.scenes.map((s0, i) => {
+    const s = { ...s0, i, start: t0, dur: s0.bars * BAR };
+    t0 += s.dur;
+    s.root = el("div", "scene");
+    $("scenes").appendChild(s.root);
+    return s;
+  });
+  SC.forEach(s => BUILD[s.type](s, s.root));
+  T_END = t0 + (cfg.film.tail || 0);
+  return { duration: T_END, warnings: window.warnings };
+};
+
+window.seek = function (t) {
+  VT = t;
+  if (!HELP) {
+    $("bg").childNodes.forEach(g => { g.style.opacity = g._a * (.85 + .15 * Math.sin(t * g._f * 2 + g._ph)); g.style.left = (g._x + Math.sin(t * g._f + g._ph) * 140) + "px"; g.style.top = (g._y + Math.cos(t * g._f * .8 + g._ph) * 110) + "px"; });
+    const fr = Math.floor(t * 60); $("grain").style.transform = `translate(${((fr * 37) % 64) - 32}px,${((fr * 53) % 64) - 32}px)`;
+  }
+  let onShot = 0;
+  SC.forEach(s => {
+    const local = t - s.start, last = s === SC[SC.length - 1];
+    const early = HELP && s.i > 0 && ["hshot", "hwindow"].includes(s.type) && ["hshot", "hwindow"].includes(SC[s.i - 1].type) ? XF : 0;
+    const on = local >= -early && (local < s.dur || last);
+    s.root.style.display = on ? "block" : "none";
+    if (s.cap && HELP) s.cap.style.display = on ? "block" : "none";
+    if (on) { DRAW[s.type](s, local); if (s.image) onShot = Math.max(onShot, P(local, .2, .6) * (last ? 1 : 1 - P(local, s.dur - .5, s.dur - .1))); }
+  });
+  const firstShot = SC.find(s => s.type === "shot"), endS = SC.find(s => s.type === "end");
+  if ($("bug")) $("bug").style.opacity = (firstShot ? P(t, firstShot.start + .2, firstShot.start + .6) * (endS ? 1 - P(t, endS.start - .4, endS.start) : 1) : 0).toFixed(3);
+  $("credit").style.opacity = onShot.toFixed(3);
+  $("fade").style.opacity = eIO3(P(t, T_END - .9, T_END)).toFixed(3);
+};
+
+// what's wrong with this frame, if anything: something off the edge, a lens over what it shows, words over the screen
+window.checkFrame = function () {
+  const bad = [], fmt = r => `${Math.round(r.left)},${Math.round(r.top)} to ${Math.round(r.right)},${Math.round(r.bottom)}`;
+  const off = (r, m = 8) => r.left < m || r.top < m || r.right > W - m || r.bottom > H - m;
+  const over = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  SC.forEach(s => {
+    if (s.root.style.display === "none" || !s.win) return;
+    const w = s.win.getBoundingClientRect();
+    if (+s.win.style.opacity > .9 && off(w)) bad.push(`${s.image || s.type}: the screen runs off the frame (${fmt(w)})`);
+    if (s.lens && +s.lens.style.opacity > .9) {
+      const l = s.lens.getBoundingClientRect(), r = s.ring.getBoundingClientRect();
+      if (off(l)) bad.push(`${s.image}: the lens runs off the frame (${fmt(l)})`);
+      if (over(l, r)) bad.push(`${s.image}: the lens covers what it shows (${fmt(l)} over ${fmt(r)})`);
+      if (!HELP && s.cap && over(l, s.cap.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the words`);
+      if (HELP && over(l, HF.panel.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the steps`);
+      if (HELP && over(l, HF.head.getBoundingClientRect())) bad.push(`${s.image}: the lens covers the header`);
+    }
+    if (s.ring && +s.ring.style.opacity > .5) {
+      const r = s.ring.getBoundingClientRect();
+      if (r.left < w.left - 6 || r.top < w.top - 6 || r.right > w.right + 6 || r.bottom > w.bottom + 6) bad.push(`${s.image}: the ring runs out of the screen (${fmt(r)})`);
+    }
+    if (!HELP && s.cap && +s.win.style.opacity > .9) {
+      const c = s.cap.getBoundingClientRect();
+      if (off(c)) bad.push(`${s.image}: the words run off the frame (${fmt(c)})`);
+      if (over(c, w)) bad.push(`${s.image}: the words run into the screen`);
+    }
+  });
+  SC.forEach(s => {   // a help card's lines never run into one another, or off the frame
+    if (s.type !== "hcard" || s.root.style.display === "none") return;
+    const ns = [s.mk, s.k, s.t, s.b, s.l].filter(Boolean).map(n => n.getBoundingClientRect());
+    ns.forEach((r, i) => { if (r.top < 8 || r.bottom > H - 8) bad.push(`card: line ${i + 1} runs off the frame`); if (i && r.top < ns[i - 1].bottom - 2) bad.push(`card: line ${i + 1} runs into the one above it`); });
+  });
+  SC.forEach(s => {   // the end card's words stay on the frame, above its fine print
+    if (s.type !== "end" || s.root.style.display === "none") return;
+    const f = s.l5.getBoundingClientRect();
+    [s.l1, s.l2, s.l3.firstChild, s.l4].forEach(n => { const c = n.getBoundingClientRect();
+      if (off(c) || c.bottom > f.top - 10) bad.push(`end: "${n.textContent.slice(0, 30)}" runs off or into the fine print (${fmt(c)})`); });
+  });
+  SC.forEach(s => {   // Hoard's looks stay on the frame, clear of the words
+    if (s.type !== "looks" || s.root.style.display === "none") return;
+    const c = s.cap.getBoundingClientRect();
+    if (off(c)) bad.push(`looks: the words run off the frame (${fmt(c)})`);
+    s.tiles.forEach(({ w }, i) => { const r = w.getBoundingClientRect(); if (+w.style.opacity > .9 && off(r)) bad.push(`looks: ${s.images[i]} runs off the frame`);
+      if (+w.style.opacity > .9 && over(r, c)) bad.push(`looks: ${s.images[i]} runs into the words`); });
+  });
+  SC.forEach(s => {   // a drawn window's words fit in it
+    if (!s.states || s.root.style.display === "none") return;
+    const w = s.win.getBoundingClientRect();
+    s.states.forEach((st, i) => { if (+st.el.style.opacity > .5) { const r = st.el.getBoundingClientRect();
+      if (r.left < w.left || r.right > w.right || r.top < w.top || r.bottom > w.bottom - 10) bad.push(`window ${s.i}: state ${i + 1} runs out of the window (${fmt(r)})`); } });
+  });
+  if (HELP) {
+    const p = HF.panel.getBoundingClientRect(), l = HF.list.getBoundingClientRect();
+    if (off(p)) bad.push(`the steps panel runs off the frame (${fmt(p)})`);
+    SC.forEach(s => { if (s.cap && s.cap.style.display !== "none" && +s.cap.style.opacity > .5 && s.cap.getBoundingClientRect().bottom > l.top - 10)
+      bad.push(`${s.image || s.type}: the words in the panel run into the steps`); });
+  }
+  if (!HELP) SC.forEach(s => {   // the opening's chips and boxes stay on the frame
+    if (s.type !== "intro" || s.root.style.display === "none") return;
+    s.items.forEach(it => { if (+it.chip.style.opacity > .9) { const r = it.chip.getBoundingClientRect(); if (off(r, 4)) bad.push(`intro: ${it.c} runs off the frame (${fmt(r)})`); } });
+    // a box waiting for its turn is never in the way of one that has landed
+    const near = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    s.items.filter(a => a.now === "landed").forEach(a => s.items.filter(b => b.now === "waiting").forEach(b => {
+      if (near(a.chip.getBoundingClientRect(), b.chip.getBoundingClientRect())) bad.push(`intro: ${b.c}, waiting, is over ${a.c}, landed`); }));
+  });
+  return bad;
+};
+</script>
+</body>
+</html>

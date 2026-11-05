@@ -59,12 +59,14 @@
 - **Tiles' names over the glow** ([#284](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/284)) keep a drop shadow instead of a box.
 - **Hoard and other tools** ([#293](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/293)): a page comparing Hoard with the Creator Companion, ALCOM and KonoAsset, on the
   website and in the wiki, in English, Japanese and Korean, with a **Compare** tab on the website.
-- **Videos, posters and music** ([#273](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/273), [#274](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/274), [#289](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/289), [#291](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/291), [#292](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/292)), made in code from Hoard's own screens, with no
-  diffusion: a long and a short promo, landscape and portrait, in English, Japanese and Korean; a short video for each
-  problem the wiki's Troubleshooting page explains most; a mockup of a sketch to record in VRChat; posters for VRChat
-  worlds; and a looping music track. Only the products given are shown, with their own pictures, and the credits name
-  their creators. They go on a release of their own, `media`, and `promo/wiki_links.py` then links each troubleshooting
-  video from the wiki; `promo/` in the repository makes them all.
+- **Videos and music** ([#273](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/273), [#274](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/274), [#291](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/291)), made in code from Hoard's own screens, with no
+  diffusion: promos, a short and a long one, landscape and portrait, in English, Japanese and Korean, opening on the
+  stores, your projects and your own files turning into the Heap's boxes; help videos, one for each problem the
+  wiki's Troubleshooting page explains most, in Hoard's light theme, with each step clicked through, and linked from
+  that page and the FAQ in each language; a thumbnail for each, for YouTube, drawn the same way; square posters, for
+  VRChat's poster frames and social sites ([#292](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/292)), one for Hoard and one for each of six of its parts; and a looping
+  music track, written out note by note. Only the products given are shown, with their own pictures, and the credits name
+  their creators. They go on a release of their own, `media`; `promo/` in the repository makes them all.
 - **The website, the README and the press kit** say what Hoard is now: your VRChat assets, and the Unity projects you
   make with them. Every screenshot is new, of every part of Hoard (Projects, a project's details, its packages and its
   Git too), showing real products whose creators are credited, and each opens bigger when clicked, with the arrow keys

@@ -1,0 +1,298 @@
+{
+ "title": "Help: \"Hoard didn't recognise this page\"",
+ "wiki": "Troubleshooting#hoard-didnt-recognise-this-page",
+ "style": "help",
+ "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "“Hoard didn't recognise this page”",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Open Hoard again",
+    "Or open the address it printed",
+    "Your hoard opens as it was"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "「Hoardがこのページを認識できませんでした」",
+   "steps": [
+    "Hoardをもう一度開く",
+    "または表示されたアドレスを開く",
+    "コレクションがそのまま開く"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "“Hoard가 이 페이지를 알아보지 못했어요”",
+   "steps": [
+    "Hoard를 다시 열기",
+    "또는 표시된 주소 열기",
+    "컬렉션이 그대로 열려요"
+   ]
+  }
+ },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "“Hoard didn't recognise this page”"
+   },
+   "ja": {
+    "title": "「Hoardがこのページを認識できませんでした」"
+   },
+   "ko": {
+    "title": "“Hoard가 이 페이지를 알아보지 못했어요”"
+   }
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "“Hoard didn't recognise this page”",
+     "body": "An old bookmark, an address from before Hoard restarted, or a one-time link opened twice."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "「Hoardがこのページを認識できませんでした」",
+     "body": "古いブックマーク、再起動前にコピーしたアドレス、1回だけのリンクを2回開いたとき。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "“Hoard가 이 페이지를 알아보지 못했어요”",
+     "body": "오래된 북마크, 다시 시작하기 전에 복사한 주소, 한 번만 쓰는 링크를 두 번 열었을 때예요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "help-nokey",
+   "text": {
+    "en": {
+     "kicker": "What you'll see",
+     "title": "Can't reach your hoard",
+     "body": "The page doesn't have this run's access key, so Hoard won't show it anything."
+    },
+    "ja": {
+     "kicker": "表示されるもの",
+     "title": "コレクションにアクセスできません",
+     "body": "そのページには今回の起動のアクセスキーがないので、Hoardは何も見せません。"
+    },
+    "ko": {
+     "kicker": "보이는 것",
+     "title": "컬렉션에 접근할 수 없어요",
+     "body": "그 페이지에 이번 실행의 접근 키가 없어서, Hoard가 아무것도 보여 주지 않아요."
+    }
+   },
+   "focus": [
+    {
+     "at": 2,
+     "box": "message",
+     "pad": 8
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 3.5,
+   "kind": "launcher",
+   "step": 1,
+   "clicks": [
+    "r0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Open Hoard again",
+     "body": "From the Start menu, or however you usually open it. It brings its window to the front.",
+     "win": [
+      {
+       "search": "Hoard",
+       "results": [
+        {
+         "name": "Hoard",
+         "sub": "App",
+         "heap": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard's window comes to the front."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "Hoardをもう一度開く",
+     "body": "スタートメニューから、またはいつもの開き方で。ウィンドウが前面に出ます。",
+     "win": [
+      {
+       "search": "Hoard",
+       "results": [
+        {
+         "name": "Hoard",
+         "sub": "アプリ",
+         "heap": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoardのウィンドウが前面に出ます。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "Hoard 다시 열기",
+     "body": "시작 메뉴에서, 또는 평소 여는 방법으로요. 창이 앞으로 나와요.",
+     "win": [
+      {
+       "search": "Hoard",
+       "results": [
+        {
+         "name": "Hoard",
+         "sub": "앱",
+         "heap": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard 창이 앞으로 나와요."
+    }
+   }
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "terminal",
+   "step": 2,
+   "clicks": [
+    "m0"
+   ],
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "Or the address it printed",
+     "body": "Started Hoard as a server? Open the address it printed: it has the key in it.",
+     "win": [
+      {
+       "lines": [
+        "> hoard-cli --host 0.0.0.0 --plain-http",
+        "",
+        "Other devices on your network: http://192.168.1.20:8765/#key=…",
+        "Open Hoard at http://127.0.0.1:8765/#key=…"
+       ],
+       "mark": 3
+      }
+     ],
+     "bar": "Terminal"
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "または表示されたアドレス",
+     "body": "サーバーとして起動した? 表示されたアドレスを開きます。キーが入っています。",
+     "win": [
+      {
+       "lines": [
+        "> hoard-cli --host 0.0.0.0 --plain-http",
+        "",
+        "Other devices on your network: http://192.168.1.20:8765/#key=…",
+        "Open Hoard at http://127.0.0.1:8765/#key=…"
+       ],
+       "mark": 3
+      }
+     ],
+     "bar": "ターミナル"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "또는 표시된 주소",
+     "body": "서버로 시작했나요? 표시된 주소를 여세요. 키가 들어 있어요.",
+     "win": [
+      {
+       "lines": [
+        "> hoard-cli --host 0.0.0.0 --plain-http",
+        "",
+        "Other devices on your network: http://192.168.1.20:8765/#key=…",
+        "Open Hoard at http://127.0.0.1:8765/#key=…"
+       ],
+       "mark": 3
+      }
+     ],
+     "bar": "터미널"
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3,
+   "image": "library",
+   "step": 3,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Your hoard again",
+     "body": "Everything is as it was."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "コレクションが戻る",
+     "body": "すべて元のままです。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "컬렉션이 돌아와요",
+     "body": "모든 게 그대로예요."
+    }
+   },
+   "focus": []
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Still stuck?",
+     "title": "Create a support report",
+     "body": "In Settings, choose Create support report, then open an issue on GitHub and attach it.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "それでも解決しない?",
+     "title": "サポートレポートを作成",
+     "body": "設定でサポートレポートを作成を選び、GitHubでissueを開いて添付してください。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "그래도 안 되나요?",
+     "title": "지원 보고서 만들기",
+     "body": "설정에서 지원 보고서 만들기를 고르고, GitHub에서 이슈를 열어 첨부하세요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}

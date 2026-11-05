@@ -1,0 +1,346 @@
+{
+ "title": "Help: signing in with Google, Discord or X",
+ "wiki": "Troubleshooting#signing-in-with-google-discord-or-x-doesnt-work",
+ "style": "help",
+ "theme": "light",
+ "shapes": [
+  "landscape"
+ ],
+ "bpm": 100,
+ "music": {
+  "start_bar": 0,
+  "lufs": -20
+ },
+ "credit": {
+  "en": "Real products from the maintainer's own library, shown with their creators' pictures · credits at hoard.furryup.link/credits.html",
+  "ja": "メンテナー自身のライブラリにある実際の商品を、作者の画像で表示しています · クレジット: hoard.furryup.link/credits.html",
+  "ko": "관리자 본인의 라이브러리에 있는 실제 상품을 제작자의 이미지로 보여 줘요 · 크레디트: hoard.furryup.link/credits.html"
+ },
+ "text": {
+  "en": {
+   "label": "Help:",
+   "problem": "Signing in with Google, Discord or X",
+   "stepsLabel": "How to fix it",
+   "steps": [
+    "Choose Sign in on the store's row",
+    "If it's refused, set a password for your store account",
+    "Sign in with your email and that password"
+   ]
+  },
+  "ja": {
+   "label": "ヘルプ:",
+   "stepsLabel": "直し方",
+   "problem": "Google、Discord、Xでサインインできない",
+   "steps": [
+    "ストアの行でサインインを選ぶ",
+    "拒否されたら、ストアのアカウントにパスワードを設定",
+    "メールアドレスとそのパスワードでサインイン"
+   ]
+  },
+  "ko": {
+   "label": "도움말:",
+   "stepsLabel": "해결 방법",
+   "problem": "Google, Discord, X로 로그인이 안 돼요",
+   "steps": [
+    "스토어 줄에서 로그인 고르기",
+    "거부되면 스토어 계정에 비밀번호 설정",
+    "이메일과 그 비밀번호로 로그인"
+   ]
+  }
+ },
+ "thumb": {
+  "look": "help",
+  "scene": 1,
+  "text": {
+   "en": {
+    "title": "Sign in with Google, Discord or X"
+   },
+   "ja": {
+    "title": "Google、Discord、Xでサインイン"
+   },
+   "ko": {
+    "title": "Google, Discord, X로 로그인"
+   }
+  }
+ },
+ "scenes": [
+  {
+   "type": "hcard",
+   "bars": 2.5,
+   "text": {
+    "en": {
+     "kicker": "Hoard help",
+     "title": "Signing in with Google, Discord or X",
+     "body": "From Hoard 2.11 they work. If one still refuses, here's the way round it."
+    },
+    "ja": {
+     "kicker": "Hoardのヘルプ",
+     "title": "Google、Discord、Xでサインイン",
+     "body": "Hoard 2.11から使えます。それでも拒否されるときの回り道です。"
+    },
+    "ko": {
+     "kicker": "Hoard 도움말",
+     "title": "Google, Discord, X로 로그인",
+     "body": "Hoard 2.11부터 돼요. 그래도 거부될 때 돌아가는 방법이에요."
+    }
+   }
+  },
+  {
+   "type": "hshot",
+   "bars": 3.5,
+   "image": "stores",
+   "step": 1,
+   "text": {
+    "en": {
+     "kicker": "Step 1",
+     "title": "Choose Sign in",
+     "body": "Hoard's sign-in window is the browser's own, which Google, Discord and X accept."
+    },
+    "ja": {
+     "kicker": "ステップ1",
+     "title": "サインインを選ぶ",
+     "body": "Hoardのサインインのウィンドウはブラウザー自体のもので、Google、Discord、Xも受け付けます。"
+    },
+    "ko": {
+     "kicker": "1단계",
+     "title": "로그인 고르기",
+     "body": "Hoard의 로그인 창은 브라우저 자체의 창이라 Google, Discord, X도 받아들여요."
+    }
+   },
+   "focus": [
+    {
+     "at": 3,
+     "box": "signin",
+     "pad": 6,
+     "click": true,
+     "lens": "booth"
+    }
+   ]
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "browser",
+   "address": "your-store.example/settings/password",
+   "step": 2,
+   "clicks": [
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 2",
+     "title": "If it's refused, set a password",
+     "body": "In your usual browser, give your store account a password, in the store's account settings.",
+     "win": [
+      {
+       "title": "Set a password",
+       "lines": [
+        "To sign in with your email too."
+       ],
+       "fields": [
+        {
+         "label": "New password",
+         "dots": 12
+        },
+        {
+         "label": "Again",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Save",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Your account has a password now."
+    },
+    "ja": {
+     "kicker": "ステップ2",
+     "title": "拒否されたら、パスワードを設定",
+     "body": "ふだんのブラウザーで、ストアのアカウント設定からアカウントにパスワードを設定します。",
+     "win": [
+      {
+       "title": "パスワードを設定",
+       "lines": [
+        "メールアドレスでもサインインできるように。"
+       ],
+       "fields": [
+        {
+         "label": "新しいパスワード",
+         "dots": 12
+        },
+        {
+         "label": "もう一度",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "保存",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "アカウントにパスワードができました。"
+    },
+    "ko": {
+     "kicker": "2단계",
+     "title": "거부되면 비밀번호 설정",
+     "body": "평소 쓰는 브라우저에서, 스토어의 계정 설정에서 계정에 비밀번호를 정하세요.",
+     "win": [
+      {
+       "title": "비밀번호 설정",
+       "lines": [
+        "이메일로도 로그인할 수 있게요."
+       ],
+       "fields": [
+        {
+         "label": "새 비밀번호",
+         "dots": 12
+        },
+        {
+         "label": "한 번 더",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "저장",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "이제 계정에 비밀번호가 있어요."
+    }
+   }
+  },
+  {
+   "type": "hwindow",
+   "bars": 4,
+   "kind": "browser",
+   "address": "your-store.example/login",
+   "step": 3,
+   "clicks": [
+    "b0"
+   ],
+   "done": true,
+   "text": {
+    "en": {
+     "kicker": "Step 3",
+     "title": "Sign in with it",
+     "body": "In Hoard's sign-in window, use your email and that password.",
+     "win": [
+      {
+       "title": "Sign in",
+       "fields": [
+        {
+         "label": "Email",
+         "value": "you@example.com"
+        },
+        {
+         "label": "Password",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "Sign in",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard keeps the sign-in on this computer."
+    },
+    "ja": {
+     "kicker": "ステップ3",
+     "title": "それでサインイン",
+     "body": "Hoardのサインインのウィンドウで、メールアドレスとそのパスワードを使います。",
+     "win": [
+      {
+       "title": "サインイン",
+       "fields": [
+        {
+         "label": "メールアドレス",
+         "value": "you@example.com"
+        },
+        {
+         "label": "パスワード",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "サインイン",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoardはサインインをこのコンピューターに保存します。"
+    },
+    "ko": {
+     "kicker": "3단계",
+     "title": "그걸로 로그인",
+     "body": "Hoard의 로그인 창에서 이메일과 그 비밀번호를 쓰세요.",
+     "win": [
+      {
+       "title": "로그인",
+       "fields": [
+        {
+         "label": "이메일",
+         "value": "you@example.com"
+        },
+        {
+         "label": "비밀번호",
+         "dots": 12
+        }
+       ],
+       "buttons": [
+        {
+         "t": "로그인",
+         "primary": true
+        }
+       ]
+      }
+     ],
+     "note": "Hoard는 로그인을 이 컴퓨터에 보관해요."
+    }
+   }
+  },
+  {
+   "type": "hcard",
+   "bars": 3,
+   "ending": true,
+   "text": {
+    "en": {
+     "kicker": "Can't remember a password?",
+     "title": "Find your saved passwords",
+     "body": "The wiki's Getting started page shows where your browser keeps them.",
+     "link": "hoard.furryup.link",
+     "linkNote": "More help: the wiki's Troubleshooting page"
+    },
+    "ja": {
+     "kicker": "パスワードを覚えていない?",
+     "title": "保存したパスワードを探す",
+     "body": "ブラウザーがどこにパスワードを保存しているかは、wikiの「はじめに」にあります。",
+     "link": "hoard.furryup.link",
+     "linkNote": "ほかのヘルプ: wikiのトラブルシューティング"
+    },
+    "ko": {
+     "kicker": "비밀번호가 기억나지 않나요?",
+     "title": "저장한 비밀번호 찾기",
+     "body": "브라우저가 비밀번호를 어디에 보관하는지는 위키의 시작하기에 있어요.",
+     "link": "hoard.furryup.link",
+     "linkNote": "더 많은 도움말: 위키의 문제 해결"
+    }
+   }
+  }
+ ]
+}
