@@ -383,10 +383,12 @@ def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: di
         page.wait_for_timeout(900)
 
     def store_row(store, **info):
+        """Change what Hoard knows of a store (its error, its count), in memory only."""
         with srv.lib.lock:
             srv.lib.data["stores"][store] = {**srv.lib.data["stores"].get(store, {"count": 0, "source": "refresh"}), **info}
 
     def stores(name, settle=700):
+        """A picture of the Stores panel, as it is now."""
         library()
         click("#storesBtn")
         snap(name, settle)
