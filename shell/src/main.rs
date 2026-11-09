@@ -200,6 +200,10 @@ fn main() {
                     false
                 })
                 .on_download(|_, _| false) // (Hoard saves what it makes itself, as in its own window)
+                // Hoard's page does its own drag and drop: a product onto another, a project into a folder,
+                // saved pages dropped in from outside. Tauri's handler would take every drag for itself, and on
+                // Windows the page then saw none of them (issue #313).
+                .disable_drag_drop_handler()
                 .build()?;
             if let Err(why) = start_server(&handle, &server) {
                 handle
