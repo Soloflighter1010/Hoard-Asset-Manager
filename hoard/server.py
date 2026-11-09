@@ -60,7 +60,7 @@ ACTIONS = ("/api/refresh", "/api/login", "/api/logout", "/api/import", "/api/tag
            "/api/local/add", "/api/local/rescan", "/api/local/remove", "/api/projects/forget",
            "/api/pick", "/api/move", "/api/libraries/add", "/api/libraries/remove", "/api/download-skip", "/api/product-files",
            "/api/integrity/resolve", "/api/apprise", "/api/apprise/test",
-           "/api/routine/seen", "/api/local/preview", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
+           "/api/routine/seen", "/api/local/preview", "/api/konoasset/preview", "/api/konoasset/bring-in", "/api/picture-looks", "/api/look-inside", "/api/look-inside/extract",
            "/api/previous/restore", "/api/sets", "/api/backup/make", "/api/backup/check", "/api/backup/restore",
            "/api/backup/show", "/api/local/picture", "/api/wishlists/read", "/api/wishlists/import",
            # Projects (hoard/vpm): the Creator Companion's and ALCOM's projects, their packages, and your library in them
@@ -584,6 +584,17 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             self._wanted += 1
         self.needs_reader.poke()   # (it waits for the job to finish before reading anything new)
 
+    def files_with_code(self, a: dict) -> list[dict]:
+        """A download's files, each package (.unitypackage or .zip) that holds scripts or plugins with what they are
+        ("code": needs.file_code), as far as the background reader has got."""
+        out = []
+        for f in a.get("files") or []:
+            code = None
+            if not f.get("missing") and packages.can_look_inside(f.get("path") or ""):
+                code = needs.file_code(self.needs_index.get(os.path.join(a["abs_folder"], *f["path"].split("/"))))
+            out.append({**f, "code": code} if code else f)
+        return out
+
     def needs_view(self, index: dict) -> dict:
         """What each product in the downloads index needs (hoard/needs.py), worked out again only when the index or
         what's been read changes."""
@@ -1034,7 +1045,9 @@ class Handler(BaseHTTPRequestHandler):
                 if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
                     kind, known = product_type(tagdata, key, a["name"], a.get("tags") or [], store_tags.get(key, []))
                     assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                                   "files": srv.files_with_code(a),   # (what code each holds: issue #303)
                                    "store_tags": store_tags.get(key, []), "type": kind, "type_from": known,
+                                   "your_note": tagdata["notes"].get(key, ""),   # (issue #304; "note" is a Local item's own)
                                    "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
                                    "needs": needed.get(a["id"]),
                                    "own_picture": a.get("catalog_folder") in chosen,
@@ -1507,6 +1520,23 @@ class Handler(BaseHTTPRequestHandler):
         if not hidden:
             return found
         return [{**p, "assets": [a for a in p["assets"] if tag_key(a["store"], a["name"]) not in hidden]} for p in found]
+
+    def _konoasset(self, path: str, body: dict):
+        """A KonoAsset library: what bringing it in would do (changing nothing), then bringing it in, as a task."""
+        from . import konoasset
+        srv = self.server
+        try:
+            folder = konoasset.check_folder(str(body.get("path") or "")[:1000])
+            if path == "/api/konoasset/preview":
+                return self._json(konoasset.summary(konoasset.plan(folder, srv.lib.snapshot()[0])))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        if path != "/api/konoasset/bring-in" or body.get("confirm") is not True:
+            return self._json({"error": "Unknown request."}, 404)
+        started = srv.jobs.start("konoasset", [], local={"path": str(folder)})
+        if not started:
+            return self._json({"error": "That's already waiting its turn."}, 409)
+        return self._json({"ok": True, "queued": started == "queued"})
 
     def _local(self, path: str, body: dict):
         """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
@@ -2341,6 +2371,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": projects.forget(str(body.get("id") or "")[:40])})
         if path.startswith("/api/local/"):   # your own packages (issue #80)
             return self._local(path, body)
+        if path.startswith("/api/konoasset/"):   # a KonoAsset library, brought in (issue #305)
+            return self._konoasset(path, body)
         if path == "/api/verify":   # check the downloads now (issue #83), after anything already running
             started = srv.jobs.start("verify", [])
             if not started:

@@ -4,6 +4,7 @@
 //   deployed; else it opens the releases page),
 // - Copy copies the VCC listing's address,
 // - the store tabs on the front page tint the glow and say what Hoard does on each store, as the app's tabs do,
+// - the front page's videos play in its player (which one, and in which language), instead of opening on their own,
 // - the docs' search box finds any section of the docs (docs/search.json, or docs/ja/search.json in Japanese),
 // - a screenshot, clicked (or chosen with the keyboard), opens bigger, with the others a key away,
 // - and there are a few things to find, as in the app.
@@ -111,6 +112,38 @@
         next.focus(); showStore(next.dataset.store);
       });
     }
+  }
+
+  // The front page's videos: choosing one, or a language, plays it in the page's player instead of opening it (each
+  // pick is a link to its video, so without this it opens on its own). A site deployed without the videos (the media
+  // release couldn't be read) leaves the player out.
+  const player = document.getElementById("player");
+  if (player) {
+    const watch = player.closest("section"), picks = watch.querySelectorAll("[data-video], [data-lang]");
+    const titles = { "promo-short": "Hoard in 40 seconds", "promo-long": "The whole tour" };
+    let video = "promo-short", lang = "en";
+    const file = (v, l) => `videos/hoard-${v}-${l}-landscape`;   // a video's file, without its extension
+    // Put the chosen video in the player, mark the picks, and point each pick at the video it would show.
+    const show = () => {
+      const playing = !player.paused;
+      player.poster = `${file(video, lang)}.jpg`;
+      player.src = `${file(video, lang)}.mp4`;
+      player.setAttribute("aria-label", titles[video]);
+      for (const a of picks) {
+        const on = a.dataset.video ? a.dataset.video === video : a.dataset.lang === lang;
+        if (on) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
+        a.href = `${file(a.dataset.video || video, a.dataset.lang || lang)}.mp4`;
+      }
+      if (playing) player.play().catch(() => {});
+    };
+    for (const a of picks) a.addEventListener("click", e => {
+      e.preventDefault();
+      if (a.dataset.video) video = a.dataset.video; else lang = a.dataset.lang;
+      show();
+    });
+    const probe = new Image();   // (its thumbnail is there when the videos are)
+    probe.onerror = () => { watch.hidden = true; };
+    probe.src = player.poster;
   }
 
   // The docs' search: every section of every page (search.json, built with the docs), by its heading and words.

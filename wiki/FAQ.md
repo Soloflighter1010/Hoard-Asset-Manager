@@ -105,6 +105,8 @@ downloads files, which some security software watches closely. Hoard is code-sig
 release is scanned by VirusTotal before it's published. See
 [Troubleshooting](Troubleshooting#security-software-stops-hoard-or-its-browser).
 
+[![Video: how to fix it (under a minute)](https://hoard.furryup.link/videos/hoard-help-windows-warning-en-landscape.jpg)](https://hoard.furryup.link/videos/hoard-help-windows-warning-en-landscape.mp4)
+
 ## Is the hidden library encrypted?
 
 No. It's a privacy screen for Hoard: hidden items stay out of view everywhere in Hoard until you unlock them, but

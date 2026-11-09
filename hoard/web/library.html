@@ -370,7 +370,7 @@ a.ghost { height: 42px; }
 .files li > a { margin-left: auto; }
 
 .toast {
-  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 30;
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 8px); z-index: 70;   /* over an open panel (60): Settings' Send a test answers here */
   background: var(--bone); color: var(--cave); padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 700;
   opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
 }
@@ -1378,6 +1378,7 @@ body.less-motion .tour-try::before { animation: none; }
         <button id="tagsBtn" aria-expanded="false" aria-controls="tagPanel">Tags</button>
         <button id="storesBtn" class="stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
         <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+        <button data-konoasset>Bring in from KonoAsset...</button>
         <div class="barmenu-links" role="group" aria-label="About Hoard"><span class="barmenu-ver" translate="no" data-version></span><button class="barmenu-upd" data-update-note hidden></button><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><button data-report-problem>Report a problem</button></div>
       </div>
     </div>
@@ -1954,7 +1955,7 @@ async function load() {
   $("#version").textContent = DATA.version || "";
   for (const el of document.querySelectorAll("[data-version]")) el.textContent = `Hoard ${DATA.version || ""}`;
   drawHeap();   // the logo with the stores you use (issue #278)
-  for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested].join(" "));
+  for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested, a.your_note].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   renderStores(); render(); showJob(DATA.job);
   if (DATA.job && DATA.job.running) startPolling();
@@ -2108,10 +2109,10 @@ const slotHTML = a => {
     const n = stackSize.get(a.key) || 0, wrapped = isWrapped(a);
     const said = [tr("{0}, by {1}, from {2}", a.name, a.creator, label(a.store)), n > 1 && tr("{0} copies: choose to see them all", n),
                   a.also_in.length && tr("also on {0}", listed(a.also_in.map(label))), onDisk(a) && tr("downloaded"), a.new && tr("new"),
-                  wrapped && tr("a gift, not opened yet")];
+                  wrapped && tr("a gift, not opened yet"), a.your_note && tr("has a note")];
     return `<button draggable="true" class="slot ${a.store}${n > 1 ? " stacked" : ""}${wrapped ? " wrapped" : ""}" data-key="${esc(a.key)}" aria-label="${esc(said.filter(Boolean).join(", "))}"${a.key === openKey ? ' aria-current="true"' : ""}>` +
       `<span class="art">${thumb(a)}${notch(a.store, n > 1 ? [...a.also_in, ...(stackStores.get(a.key) || [])] : a.also_in)}<i class="tick" aria-hidden="true"></i>` +
-        (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
+        noteMark(a) + (onDisk(a) ? `<span class="ondisk-mark" title="Downloaded" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11"/></svg></span>` : "") +
         `<span class="badges">${n > 1 ? `<span class="badge count" aria-hidden="true">×${n}</span>` : ""}${a.new ? '<span class="badge new">New</span>' : ""}` +
         `${a.gift ? '<span class="badge">Gift</span>' : a.archived ? '<span class="badge">Archived</span>' : ""}</span></span>` +
       `<span class="nm-t" translate="no">${esc(a.name)}</span><span class="cr" translate="no">${esc(a.creator)}</span>${rowMeta(a)}</button>`;
@@ -2313,7 +2314,7 @@ function showDetail(a, focus = true) {
     shopNote(a) +
     (links ? `<div class="actions links">${links}</div>` : "") +
     `<h3>Organise</h3><div class="marks">${markButtons(a)}</div>` +
-    tagSection(a) + setsSection(a) +
+    noteSection(a) + tagSection(a) + setsSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   $("#detail").classList.add("open"); document.body.classList.add("panel-open");
@@ -2661,11 +2662,13 @@ async function filesIn(entries, most = 5000) {
   return out;
 }
 let dragDepth = 0;
-document.addEventListener("dragenter", e => { if (e.dataTransfer.types.includes("Files")) { dragDepth++; $("#drop").hidden = false; } });
+// Files brought in from outside the window (never a product or project dragged in Hoard: issue #313, shared.js's DRAG)
+const fromOutside = e => !DRAG.what && e.dataTransfer.types.includes("Files");
+document.addEventListener("dragenter", e => { if (fromOutside(e)) { dragDepth++; $("#drop").hidden = false; } });
 document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("#drop").hidden = true; } });
-document.addEventListener("dragover", e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); });
+document.addEventListener("dragover", e => { if (fromOutside(e)) e.preventDefault(); });
 document.addEventListener("drop", e => {
-  if (!e.dataTransfer.files.length) return;
+  if (DRAG.what || !e.dataTransfer.files.length) return;
   e.preventDefault(); dragDepth = 0; $("#drop").hidden = true;
   // What was dropped can only be read while the drop is happening, so take it now; folders are read after
   const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
@@ -3044,7 +3047,8 @@ async function watchJobs() {
 }
 /* ---------- closing Hoard while it's working: stop it first, carry on in the background, or close at once */
 /* ---------- the setup assistant: on first start, and from Settings (Set up Hoard) */
-const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false, firstRun: false, picked: false };
+const SETUP = { step: 0, st: null, timer: null, busy: false, watching: false, firstRun: false, picked: false,
+  kono: "" };   // kono: a KonoAsset data folder to bring in once the stores are read (issue #305)
 // Which stores the stores step ticks. The first time, only the ones you already have items from (all of them used to
 // be ticked, so someone who'd never used Payhip was asked for Payhip shops); after that, the ones you chose.
 function setupPicked(st, s) {
@@ -3214,6 +3218,12 @@ const SETUP_VIEWS = {
   done: () => `<h2 id="setupTitle">Hoard's ready</h2>
     <p>When you choose Finish, Hoard reads what you own from your stores. After that, choose <strong>Download everything new</strong> in Stores, or <strong>Download new</strong> in Downloads, whenever you want local copies.</p>
     <p>Once Hoard has read your library, a short tour can show you what else it does.</p>
+    <details class="setup-kono"${SETUP.kono ? " open" : ""}><summary>Coming from KonoAsset?</summary>
+      <p>Hoard can bring in your KonoAsset library once it's read your stores: what's in your library is matched by its BOOTH item, and the rest come in as Local products, left where they are. Its tags and memos come too. Nothing in KonoAsset's folder is changed.</p>
+      <div class="field"><input id="setupKono" spellcheck="false" aria-label="KonoAsset's data folder" placeholder="KonoAsset's data folder (its Settings say where)">
+        <button class="ghost sm" id="setupKonoBrowse" data-browse ${canPick() ? "" : "hidden"}>Browse…</button><button class="ghost sm" id="setupKonoCheck">Check</button></div>
+      <p class="progress" id="setupKonoResult" aria-live="polite"></p>
+    </details>
     <p class="muted">Run this again any time from Settings.</p>`,
 };
 
@@ -3319,6 +3329,19 @@ const SETUP_WIRES = {
     $("#setupRootDefault").addEventListener("click", () => { $("#setupRoot").value = st.default_root; });
     $("#setupRootBrowse").addEventListener("click", () => browseInto($("#setupRoot")));
   },
+  done: () => {   // issue #305: a KonoAsset library, brought in after the stores are read (a task after theirs)
+    syncBrowse();
+    if (SETUP.kono) { $("#setupKono").value = SETUP.kono; $("#setupKonoResult").textContent = tr("It's brought in after Hoard reads your stores."); }
+    $("#setupKonoBrowse").addEventListener("click", async () => { if (await browseInto($("#setupKono"))) $("#setupKonoCheck").click(); });
+    $("#setupKono").addEventListener("input", () => { SETUP.kono = ""; $("#setupKonoResult").textContent = ""; });
+    $("#setupKonoCheck").addEventListener("click", async () => {
+      const path = $("#setupKono").value.trim(), r = await apiPost("/api/konoasset/preview", { path });
+      SETUP.kono = r.ok ? path : "";
+      $("#setupKonoResult").textContent = r.ok
+        ? tr("{0} in KonoAsset. They're brought in after Hoard reads your stores.", tr(r.data.total === 1 ? "1 product" : "{0} products", r.data.total))
+        : (r.data.error || tr("That folder couldn't be read."));
+    });
+  },
   older: () => {
     $("#bringOver").addEventListener("click", async () => {
       const r = await apiPost("/api/setup/migrate", { folder: $("#oldFolder").value.trim() });
@@ -3405,7 +3428,12 @@ function wireSetup() {
         closeSetup();
         await load();
         const on = STORE_ORDER.filter(s => SETUP.st.stores[s].enabled);
-        if (on.length) runJob("/api/refresh", on, true);
+        if (on.length) await runJob("/api/refresh", on, true);
+        if (SETUP.kono) {   // (queued after reading the stores, so what's in your library is matched)
+          const r = await apiPost("/api/konoasset/bring-in", { path: SETUP.kono, confirm: true });
+          if (!r.ok) toast(r.data.error || "Bringing in from KonoAsset didn't start.");
+          SETUP.kono = "";
+        }
         return;
       }
       SETUP.step += 1;

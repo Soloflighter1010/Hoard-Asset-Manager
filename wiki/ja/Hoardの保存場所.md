@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 261396ef58be). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English c2d268d4010b). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <b>日本語</b> · <a href="Hoard가-저장하는-곳">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 Hoardが保管するものは2つに分かれます。あなたが選んだフォルダーにあるダウンロードと、それ以外のすべてを入れた、あなたのユーザーアカウント専用の非公開のアプリデータフォルダーです。
@@ -17,7 +17,8 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 | `config.json` | 設定。[設定](設定)をご覧ください |
 | `library.json` | ライブラリの一覧。持っているものの名前、クリエイター、リンク、画像のアドレス |
 | `keys/` | Windowsでは、Windowsのアカウントで暗号化したitch.ioのAPIキー。(Macではキーチェーン、Linuxではキーリングにあります。)[ストア](ストア#itchio)をご覧ください |
-| `tags.json` | あなたのタグ |
+| `tags.json` | あなたのタグと、商品の詳細で決めたこと(商品の種類と、商品のメモ。5.2.0) |
+| `konoasset.json` | KonoAssetのどのアセットを取り込み、どの商品になったか。もう一度取り込むときに新しいものだけを追加するためです(5.2.0)。[自分のパッケージ](自分のパッケージ#konoassetから)をご覧ください |
 | `picture-looks.json` | 商品の画像の見た目(画像のSHA-256ごとに、64ビットのハッシュ)。2つのストアが別々に保存した1つの商品のコピーをまとめるためです。[ライブラリ](ライブラリ#探す)をご覧ください |
 | `asset-updates.json` | 前回の **アップデートを確認** で見つかったもの。ダウンロードしたものごとに、ストアにあって手元にまだないファイル。[ダウンロード](ダウンロード#ダウンロードせずにアップデートを確認する)をご覧ください |
 | `marks.json` | アーカイブ、非表示、削除したもの、それに非表示のライブラリのPINと復元ワード(どちらもソルトつきの時間のかかるハッシュとしてだけ) |

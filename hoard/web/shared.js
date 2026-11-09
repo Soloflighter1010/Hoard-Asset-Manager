@@ -801,13 +801,66 @@ function addTyped(a) {
   if (!t) { if (input) input.focus(); return; }
   changeTags({ action: "assign", keys: keysOf([a]), add: [t] });
 }
-function tagDetailAction(act, b, a) {  // true when the click was a tag action
+function tagDetailAction(act, b, a) {  // true when the click was a tag action (or a note's: issue #304)
   if (act === "untag") changeTags({ action: "assign", keys: keysOf([a]), remove: [b.dataset.tag] });
   else if (act === "addtag") changeTags({ action: "assign", keys: keysOf([a]), add: [b.dataset.tag] });
   else if (act === "addtyped") addTyped(a);
+  else if (act.startsWith("note")) noteAction(act, a);
   else return false;
   return true;
 }
+
+/* Your note on a product (issue #304): what it's for, which avatar it's set up for, what you changed. Plain text in
+   its details, folded away while there's none, and changed only after Edit; nothing's kept until Save. It's kept with
+   your tags (on the product and its copies), so a refresh never clears it, and it's never in a shared set. The
+   search finds its words, and note: searches notes alone. */
+let NOTEEDIT = null;   // {key, text}: the product whose note is being written, as it's being written
+const NOTE_MAX = 2000;
+// A product's details: its note, or the box to write it in.
+function noteSection(a) {
+  const note = a.your_note || "", editing = NOTEEDIT && NOTEEDIT.key === a.tag_key;
+  if (!editing) {
+    return `<h3>${esc(tr("Note"))}</h3>` + (note
+      ? `<p class="pnote" translate="no">${esc(note)}</p><div class="pnote-row"><button class="ghost sm" data-act="noteedit">${esc(tr("Edit"))}</button></div>`
+      : `<div class="pnote-row"><button class="ghost sm" data-act="noteedit">${esc(tr("Add a note..."))}</button></div>`);
+  }
+  return `<h3>${esc(tr("Note"))}</h3><textarea class="pnote-box" data-pnote maxlength="${NOTE_MAX}" rows="4" ` +
+      `placeholder="${esc(tr("What it's for, which avatar it's set up for, what you changed. Only you see it."))}" ` +
+      `aria-label="${esc(tr("Your note on {0}", a.name))}">${esc(NOTEEDIT.text)}</textarea>` +
+    `<div class="pnote-row"><button class="primary sm" data-act="notesave">${esc(tr("Save"))}</button>` +
+    `<button class="ghost sm" data-act="notecancel">${esc(tr("Cancel"))}</button></div>`;
+}
+document.addEventListener("input", e => { if (e.target.matches("textarea[data-pnote]") && NOTEEDIT) NOTEEDIT.text = e.target.value; });
+// Edit, Save or Cancel a product's note, from its details.
+async function noteAction(act, a) {
+  if (!a) return;
+  // Draw its details again, and put the focus where it was (the box, or Edit).
+  const redraw = focus => {
+    showDetail(a, false);
+    const el = document.querySelector(focus);
+    if (el) el.focus();
+  };
+  if (act === "noteedit") {
+    NOTEEDIT = { key: a.tag_key, text: a.your_note || "" };
+    redraw("textarea[data-pnote]");
+  } else if (act === "notecancel") {
+    NOTEEDIT = null;
+    redraw("[data-act=noteedit]");
+  } else if (act === "notesave") {
+    const text = (document.querySelector("textarea[data-pnote]") || {}).value ?? NOTEEDIT.text;
+    const was = NOTEEDIT;
+    NOTEEDIT = null;
+    if (text.trim() === (a.your_note || "").trim()) { redraw("[data-act=noteedit]"); return; }
+    if (!await changeTags({ action: "note", keys: keysOf([a]), note: text }, text.trim() ? tr("Saved the note.") : tr("Took the note off."))) {
+      NOTEEDIT = { ...was, text }; redraw("textarea[data-pnote]");
+    }
+  }
+}
+// A tile's mark for a product with a note (issue #304).
+const NOTE_MARK = `<span class="note-mark" title="Has a note" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 2.5h6.2l2.8 2.8v8.2h-9zM6 7.5h4M6 10h4"/></svg></span>`;
+// The mark, on a product's tile when it has a note.
+const noteMark = a => a.your_note ? NOTE_MARK : "";
 
 // Show which tiles are selected, and the selection bar.
 function markSelected() {
@@ -1176,13 +1229,14 @@ const TAG_ACTIONS = { name: "Tags", items: [{ label: "Add a tag...", run: () => 
                                             { label: "Remove a tag...", run: () => bulkTag("remove") }] };
 
 /* ---------- the search's prefixes (issue #220): one kind of thing, as creator:mochi, tag:hoodie or settings:language.
-   Products are filtered by creator, tag, store, type and set; a set, a project or a setting is a place to go, offered
+   Products are filtered by creator, tag, store, type, your note (issue #304) and set; a set, a project or a setting is a place to go, offered
    under the box as you type it (with the prefixes' guide while the box is empty: issue #221). */
 const SEARCH_KINDS = [   // [kind, its prefixes (the first is the one shown), what it finds, an example]
   ["creator", ["creator", "by"], "Products by a creator", "creator:mochi"],
   ["tag", ["tag", "#"], "Products with a tag", "tag:hoodie"],
   ["store", ["store", "on"], "Products from a store", "store:booth"],
   ["type", ["type", "kind"], "Products of a kind: avatars, clothing, or a kind of file", "type:avatar"],
+  ["note", ["note"], "Products with these words in your note on them", "note:quest"],
   ["set", ["set", "in"], "A set or wishlist: go to it, or see what's in it", "set:winter"],
   ["project", ["project", "pj"], "A project, to open", "project:my avatar"],
   ["settings", ["settings", "s"], "A setting, to change", "settings:language"],
@@ -1255,6 +1309,7 @@ function searchMatches(a, q) {
   for (const v of s.tag) if (![...(a.tags || []), ...(a.suggested || [])].some(t => norm(t).includes(v))) return false;
   for (const v of s.store) if (!storeWords(a).some(w => w.includes(v))) return false;
   for (const v of s.type) if (!itemKinds(a).some(k => k.includes(v))) return false;
+  for (const v of s.note) if (!norm(a.your_note || "").includes(v)) return false;
   for (const keys of s.sets) if (!keys.has(a.tag_key)) return false;
   return true;   // (project: and settings: are places to go, under the box: they don't filter products)
 }
@@ -2953,6 +3008,58 @@ function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's 
     input.select();
   });
 }
+/* ---------- Bring in a KonoAsset library (issue #305): its data folder, what bringing it in would do, then Bring in
+   or Cancel. Hoard only reads KonoAsset's folder; what it brings in is a task (Tasks), and bringing in again adds only
+   what's new. */
+// Ask for a folder: a box for its path, and Browse in Hoard's window. Its path, or "" when cancelled.
+function askFolder(title, hint, value = "") {
+  return new Promise(resolve => {
+    const d = document.createElement("dialog");
+    d.className = "ask ask-folder";
+    d.innerHTML = `<form method="dialog"><p><label for="askFolder">${esc(tr(title))}</label></p>` +
+      (hint ? `<p class="muted">${esc(tr(hint))}</p>` : "") +
+      `<p class="ask-field"><input id="askFolder" maxlength="1000" spellcheck="false">` +
+      `<button class="ghost" type="button" data-browse${canPick() ? "" : " hidden"}>${esc(tr("Browse…"))}</button></p>` +
+      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Next"))}</button></div></form>`;
+    document.body.appendChild(d);
+    const input = d.querySelector("input");
+    input.value = value;
+    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
+    d.querySelector("[data-browse]").addEventListener("click", () => browseInto(input));
+    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
+    d.showModal();
+    input.focus();
+  });
+}
+// What bringing in a KonoAsset library would do (/api/konoasset/preview), in words.
+function konoSummary(s) {
+  const lines = [tr("In KonoAsset: {0}.", tr(s.total === 1 ? "1 product" : "{0} products", s.total))];
+  if (s.matched) lines.push(tr("Already in your library, by their BOOTH item: {0}. Their tags and notes go on those products.", s.matched));
+  if (s.local) lines.push(tr("New Local products: {0}. Their files stay where they are, in KonoAsset's folder.", s.local));
+  if (s.tags) lines.push(tr("Tags: {0}, of which {1} are new to you (its tags, categories and the avatars a wearable fits).", s.tags, s.new_tags));
+  if (s.notes) lines.push(tr("Notes, from its memos and what each needs: {0}. A note you've written already stays.", s.notes));
+  if (s.before) lines.push(tr("Brought in before, and left as they are: {0}.", s.before));
+  if (s.left_out) lines.push(tr("Left out, with no files and not in your library: {0} ({1}).", s.left_out, s.left_out_names.join(", ")));
+  return lines.join("\n\n");
+}
+// The Menu's Bring in from KonoAsset...: choose its data folder, see what it would do, then bring it in.
+async function konoBringIn(path = "") {
+  path = await askFolder("KonoAsset's data folder", "The folder with metadata, data and images in it. KonoAsset's Settings say where it is. Hoard only reads it.", path);
+  if (!path) return;
+  const r = await apiPost("/api/konoasset/preview", { path });
+  if (!r.ok) { toast(r.data.error || "That folder couldn't be read."); return konoBringIn(path); }
+  const s = r.data;
+  if (!s.matched && !s.local) {
+    await ask(tr("Nothing new to bring in from KonoAsset.") + "\n\n" + konoSummary(s), "OK", false, "");
+    return;
+  }
+  if (!await ask(konoSummary(s) + "\n\n" + tr("Nothing in KonoAsset's folder is changed."), "Bring in")) return;
+  const go = await apiPost("/api/konoasset/bring-in", { path, confirm: true });
+  if (!go.ok) { toast(go.data.error || "It didn't start."); return; }
+  toast(go.data.queued ? "Bringing in from KonoAsset once what's running has finished. Follow it in Tasks." : "Bringing in from KonoAsset. Follow it in Tasks.");
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-konoasset]")) konoBringIn(); });
+
 /* ---------- Projects (hoard/vpm): your Unity projects, shared with ALCOM and the VRChat Creator Companion (one list in
    all three), with their VPM packages, and your library in them: a new project made from a template with the packages
    and the products you choose (or a preset of them), and products put into a project later. What Hoard for Unity

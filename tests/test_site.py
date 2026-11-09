@@ -3,6 +3,7 @@ complete, loading nothing from elsewhere, pointing at the real listing and downl
 that VCC's addresses keep working."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -24,14 +25,32 @@ sys.path.insert(0, str(REPO / "scripts"))
 import build_site_changelog as changelog  # noqa: E402
 import build_site_docs as docs  # noqa: E402
 import build_press_kit as press  # noqa: E402
+import version_assets  # noqa: E402
 import site_chrome  # noqa: E402
 
 
+# a picture in place of each video's thumbnail (a 1 x 1 GIF: a browser shows it, whatever its name says)
+PIXEL = bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b")
+
+
+def deployed_videos(out: Path) -> None:
+    """The videos the deploy puts in videos/ from the media release (each film's landscape ones and their
+    thumbnails, in each language): empty stand-ins, named as the release names them."""
+    folder = out / "videos"
+    folder.mkdir(exist_ok=True)
+    for film in (REPO / "promo" / "films").glob("*.json"):
+        for lang in ("en", "ja", "ko"):
+            (folder / f"hoard-{film.stem}-{lang}-landscape.mp4").write_bytes(b"")
+            (folder / f"hoard-{film.stem}-{lang}-landscape.jpg").write_bytes(PIXEL)
+
+
 def built_site() -> Path:
-    """The site as deployed: site/ with its What's new page built from CHANGELOG.md, and the docs from wiki/."""
+    """The site as deployed: site/ with its What's new page built from CHANGELOG.md, the videos from the media
+    release, and the docs from wiki/."""
     out = Path(tempfile.mkdtemp()) / "site"
     shutil.copytree(SITE, out)
     changelog.main([str(out / "changelog.html")])
+    deployed_videos(out)
     docs.build(out / "docs")
     press.build(out)
     return out
@@ -123,6 +142,81 @@ class TheSite(unittest.TestCase):
         self.assertIn("releases/latest", deploy)
         self.assertIn("/latest.json", deploy)
         self.assertNotIn("innerHTML", js, "nothing from GitHub's answer becomes page markup")
+
+    def test_each_page_links_its_stylesheet_by_version(self):
+        """Issue #312: a page never shows with the stylesheet a browser kept from the deploy before. The deploy's last
+        step gives each link to the site's own .css and .js the file's version; another site's, a missing file's and
+        one already versioned are left alone, and running it again changes nothing."""
+        site = Path(tempfile.mkdtemp())
+        (site / "docs" / "ja").mkdir(parents=True)
+        (site / "styles.css").write_text("body{}", "utf-8")
+        (site / "site.js").write_text("1", "utf-8")
+        (site / "index.html").write_text('<link rel="stylesheet" href="styles.css"><script src="site.js" defer></script>'
+                                         '<script src="https://cdn.example/x.js"></script><link href="gone.css">'
+                                         '<a href="docs/index.html">docs</a>', "utf-8")
+        (site / "docs" / "ja" / "page.html").write_text('<link href="../../styles.css"><script src="../../site.js?v=1">'
+                                                        '</script>', "utf-8")
+        self.assertEqual(version_assets.stamp(site), 3)
+        css, js = (hashlib.sha256(b).hexdigest()[:10] for b in (b"body{}", b"1"))
+        self.assertEqual((site / "index.html").read_text("utf-8"),
+                         f'<link rel="stylesheet" href="styles.css?v={css}"><script src="site.js?v={js}" defer></script>'
+                         '<script src="https://cdn.example/x.js"></script><link href="gone.css"><a href="docs/index.html">docs</a>')
+        self.assertEqual((site / "docs" / "ja" / "page.html").read_text("utf-8"),
+                         f'<link href="../../styles.css?v={css}"><script src="../../site.js?v=1"></script>')
+        self.assertEqual(version_assets.stamp(site), 0, "once is enough")
+        deploy = WORKFLOW.read_text("utf-8")
+        step = deploy.index("python3 scripts/version_assets.py")
+        for before in ("python3 scripts/build_site_docs.py", "build_site_changelog.py", "build_press_kit.py",
+                       'cp -r "$GITHUB_WORKSPACE/site/." .'):
+            self.assertLess(deploy.index(before), step, f"after {before}: every page is there")
+        self.assertLess(step, deploy.index("actions/upload-pages-artifact"))
+
+    def test_the_videos_are_put_on_the_site_when_it_deploys(self):
+        """The videos come from the media release on each deploy, before the docs are built (which play them), so
+        they're never in the repository."""
+        deploy = WORKFLOW.read_text("utf-8")
+        step = deploy.index("gh release download media")
+        self.assertLess(step, deploy.index("python3 scripts/build_site_docs.py"))
+        self.assertIn("--pattern 'hoard-*-landscape.mp4' --pattern 'hoard-*-landscape.jpg'", deploy)
+        self.assertIn('"${{ env.listPublishDirectory }}/videos"', deploy[step - 300:step + 200])
+        self.assertEqual([p for p in REPO.glob("site/**/*") if p.suffix in (".mp4", ".webm", ".mov")], [])
+        for value in re.findall(r'(?:src|poster|href)="(videos/[^"]+)"', self.html):   # the front page's, on the release
+            self.assertRegex(value, r"^videos/hoard-promo-(short|long)-(en|ja|ko)-landscape\.(mp4|jpg)$")
+
+    def test_a_wiki_video_plays_on_the_site(self):
+        """A video's line in the wiki (its thumbnail, linking to it) is a player on the site, its thumbnail shown
+        until it plays; when the video isn't on the site, a link to it on the media release."""
+        line = ("[![Video: how to fix it](https://hoard.furryup.link/videos/hoard-help-x-en-landscape.jpg)]"
+                "(https://hoard.furryup.link/videos/hoard-help-x-en-landscape.mp4)")
+        videos = Path(tempfile.mkdtemp())
+        r = docs.Renderer(lambda t: t, up="../", videos=videos)
+        self.assertEqual(r.blocks([line]), '<p><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/'
+                                           'download/media/hoard-help-x-en-landscape.mp4">Video: how to fix it</a></p>')
+        (videos / "hoard-help-x-en-landscape.mp4").write_bytes(b"")
+        (videos / "hoard-help-x-en-landscape.jpg").write_bytes(PIXEL)
+        out = r.blocks(["Before.", "", line, "", "After."])
+        self.assertIn('<video controls preload="none" playsinline width="1920" height="1080" '
+                      'poster="../videos/hoard-help-x-en-landscape.jpg" src="../videos/hoard-help-x-en-landscape.mp4"', out)
+        self.assertIn("<figcaption>Video: how to fix it</figcaption>", out)
+        self.assertTrue(out.startswith("<p>Before.</p>") and out.endswith("<p>After.</p>"))
+
+    def test_every_wiki_video_is_one_the_release_has(self):
+        """Each video the wiki shows is a help video's, in its page's language: one promo/ makes and the media release
+        has."""
+        films = {p.stem for p in (REPO / "promo" / "films").glob("help-*.json")}
+        found = 0
+        for page in (REPO / "wiki").rglob("*.md"):
+            lang = page.parent.name if page.parent.name in ("ja", "ko") else "en"
+            for line in page.read_text("utf-8").splitlines():
+                if "hoard.furryup.link/videos/" not in line:
+                    continue
+                m = docs.VIDEO.match(line.strip())
+                self.assertTrue(m, f"{page.name}: a video's line as the docs read it: {line}")
+                film, said = re.match(r"hoard-(help-[\w-]+)-(en|ja|ko)-landscape$", m.group(2)).groups()
+                self.assertIn(film, films, page.name)
+                self.assertEqual(said, lang, f"{page.name}: {m.group(2)}")
+                found += 1
+        self.assertGreaterEqual(found, 27)
 
     def test_the_glow_is_the_apps(self):
         """The app's glow behind the page: every store's colour, as the app has them, decorative, and still for
@@ -625,6 +719,31 @@ class InABrowser(unittest.TestCase):
             for _ in range(5):
                 page.click(".brand")
             page.get_by_text("somebody's treasure").wait_for()
+            browser.close()
+
+    def test_the_front_pages_videos(self):
+        """Which video, and in which language, plays in the front page's player (each pick a link to its video, so it
+        works without the script); and a site deployed without the videos leaves the player out."""
+        from playwright.sync_api import sync_playwright
+        site = built_site()
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.route("https://**", lambda route: route.abort())
+            page.goto((site / "index.html").as_uri())
+            page.wait_for_function("() => document.documentElement.classList.contains('js')")
+            player = lambda: page.eval_on_selector("#player", "v => [v.getAttribute('src'), v.getAttribute('poster')]")  # noqa: E731
+            self.assertEqual(player(), ["videos/hoard-promo-short-en-landscape.mp4", "videos/hoard-promo-short-en-landscape.jpg"])
+            page.click('#watch [data-lang="ja"]')
+            page.click('#watch [data-video="promo-long"]')
+            self.assertEqual(player(), ["videos/hoard-promo-long-ja-landscape.mp4", "videos/hoard-promo-long-ja-landscape.jpg"])
+            self.assertEqual(page.get_attribute('#watch [data-lang="ja"]', "aria-current"), "true")
+            self.assertIsNone(page.get_attribute('#watch [data-lang="en"]', "aria-current"))
+            self.assertEqual(page.get_attribute('#watch [data-lang="ko"]', "href"), "videos/hoard-promo-long-ko-landscape.mp4")
+            self.assertEqual(page.get_attribute('#watch [data-video="promo-short"]', "href"), "videos/hoard-promo-short-ja-landscape.mp4")
+            self.assertFalse(page.eval_on_selector("#watch", "s => s.hidden"))
+            page.goto((SITE / "index.html").as_uri())   # (site/ as it is in the repository: no videos)
+            page.wait_for_function("() => document.getElementById('watch').hidden")
             browser.close()
 
     def test_a_screenshot_opens_bigger(self):

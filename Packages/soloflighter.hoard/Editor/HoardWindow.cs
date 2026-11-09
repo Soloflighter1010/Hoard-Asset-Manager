@@ -835,6 +835,7 @@ namespace SoloFlighter.Hoard.Editor
             var items = new List<ImportQueue.Item>();
             var faceTracking = new List<ImportQueue.Item>();
             var names = new List<string>();
+            var withCode = new List<string>();   // (products whose packages hold scripts or DLLs: Hoard's issue #303)
             var tools = new List<string>();
             int older = 0;
             foreach (var a in SetOrder.Order(members))
@@ -850,6 +851,7 @@ namespace SoloFlighter.Hoard.Editor
                     any = true;
                 }
                 if (any) names.Add(a.Name);
+                if (any && a.Code != null) withCode.Add(a.Name);
                 foreach (var n in Missing(a))
                     if (n.Kind == "tool" && !tools.Contains(n.Label)) tools.Add(n.Label);
             }
@@ -867,7 +869,9 @@ namespace SoloFlighter.Hoard.Editor
                              (faceTracking.Count > 0 ? "\n\nFace tracking add-ons (" + string.Join(", ", faceTracking.ConvertAll(i => PackageFile.Name(i.Path)).ToArray()) +
                                                        ") are left out: their animations are named like the avatar's own. Choose Import with face tracking to bring them in too." : "") +
                              (tools.Count > 0 ? "\n\nNot in this project yet, and not in the set: " + string.Join(", ", tools.ToArray()) +
-                                                ". Import " + (tools.Count == 1 ? "it" : "them") + " first, or parts may be pink or missing." : "");
+                                                ". Import " + (tools.Count == 1 ? "it" : "them") + " first, or parts may be pink or missing." : "") +
+                             (withCode.Count > 0 ? "\n\nWith code that Unity runs once it's imported (scripts or DLLs): " + string.Join(", ", withCode.ToArray()) +
+                                                   ". Their details say what, and where it goes." : "");
             if (faceTracking.Count == 0)
             {
                 if (EditorUtility.DisplayDialog("Hoard", message, "Import", "Cancel")) ImportQueue.Start(items);
@@ -1081,6 +1085,14 @@ namespace SoloFlighter.Hoard.Editor
             {
                 GUILayout.Space(4);
                 GUILayout.Label("#" + string.Join("   #", a.Tags.ToArray()), Look.Style("tags", Look.Styles.Name), GUILayout.Width(width));
+            }
+            if (a.YourNote != null)   // your note on it, from its details in Hoard (written there, not here)
+            {
+                GUILayout.Space(6);
+                GUILayout.BeginVertical(Look.Box("yournote", Look.Cave, Look.Seam), GUILayout.Width(width));
+                GUILayout.Label("Your note", Look.Style("yournote-h", Look.Styles.Dust));
+                GUILayout.Label(a.YourNote, Look.Style(Look.Styles.Wrapped));
+                GUILayout.EndVertical();
             }
             GUILayout.Space(10);
 
@@ -1304,9 +1316,14 @@ namespace SoloFlighter.Hoard.Editor
         void Import(HoardAsset a, string path)
         {
             var missing = Missing(a);
-            if (missing.Count > 0 && !EditorUtility.DisplayDialog("Hoard", a.Name + " needs " + Listed(missing) +
+            // before importing: what it needs that isn't here, and what code it holds (Hoard's issue #303), in one warning
+            string needs = missing.Count == 0 ? null : a.Name + " needs " + Listed(missing) +
                     (missing.Count == 1 ? ", which isn't" : ", which aren't") + " in this project yet. Without " +
-                    (missing.Count == 1 ? "it" : "them") + ", some of it may be pink or missing. Import it anyway?", "Import anyway", "Cancel"))
+                    (missing.Count == 1 ? "it" : "them") + ", some of it may be pink or missing.";
+            string code = a.Code == null ? null : a.Code.Words(a.Name);
+            if ((needs != null || code != null) && !EditorUtility.DisplayDialog("Hoard",
+                    (needs != null && code != null ? needs + "\n\n" + code : needs ?? code) + "\n\n" + (needs != null ? "Import it anyway?" : "Import it?"),
+                    needs != null ? "Import anyway" : "Import", "Cancel"))
                 return;
             string file;
             try

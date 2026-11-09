@@ -75,9 +75,11 @@ An `<asset>`:
 | `suggested_tags` | list of strings | Words shared by several asset names |
 | `location` | string, only on some `Local` entries | A Local item listed where it is: its own folder, as a full path written as the system writes it. `files` are relative to it, and `folder` (`Local/_linked/<id>`) is only a name. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
 | `note` | string, only on `Local` entries | Who or what it's for, as you wrote it |
+| `your_note` | string, only on some entries (5.2.0) | Your note on the product, from its details in Hoard: lines of clean text (`\n` between them, at most 40 lines and 2,000 characters). Yours alone: never share it. A reader that doesn't know it ignores it |
 | `library` | string, only on some entries (version 4) | A product in another of your library folders (another drive, say): that folder, as a full path written as the system writes it. `folder` and `files` are relative to it instead of the download folder. Never on an entry with `location`. Believe it only when the catalog's seal is this computer's; otherwise skip the entry |
 
 | `needs` | list, only on some entries (4.0) | What the product's packages use that isn't in them (What it needs): see below |
+| `code` | object, only on some entries (5.2.0) | The code its packages hold, as far as Hoard has read them: `{"scripts", "plugins", "editor"}` (whole numbers: scripts, DLLs and other plugins, and how many of them run in the editor, never more than the two together; at least one of the first two), `"tools"` (at most 20 names of tools Hoard knows by GUID that some of it is from) and `"folders"` (at most 8 plain relative paths, where the rest goes). Information, not a verdict. A reader that doesn't know it ignores it |
 
 A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 added the rest):
 `{"version": 1, "sets": [{"id", "name", "items": [<product key>, ...], "note"?, "photos"?: [<https link>, ...],
@@ -175,7 +177,8 @@ records but stops using their store links, keeps a copy of the changed file as
 
 ## Your tags (`tags.json` in Hoard's app-data folder)
 
-This one belongs to Hoard. Don't write to it; use the Tags panel. It's private to your user
+This one belongs to Hoard. Don't write to it; use the Tags panel. It also keeps what you set in a product's details:
+its type (5.0) and your note on it (5.2.0). It's private to your user
 account, Hoard check every entry when they read it, and a damaged copy is kept as
 `tags.damaged-<date>.json` rather than overwritten.
 
@@ -199,6 +202,7 @@ says so). `style` is `List`, `Markdown` or `ByCreator`. `folder` matches the pro
 
 ## Version history
 
+- **4** or **3**, still, in 5.2.0: `your_note` and `code`, which readers that don't know them ignore.
 - **2**, still, in 5.0: a tag's `type` in `tags.json`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.3.3: `page`, which readers that don't know it ignore.
 - **4** or **3**, still, in 4.0: `needs`, which readers that don't know it ignore.

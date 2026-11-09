@@ -13,6 +13,15 @@ The wiki uses a small part of Markdown, and this reads just that: "## " and "###
 "1. " lists (nested by indenting, with continuation lines indented), tables, ``` code blocks, **bold**, `code`,
 [links](Page#heading) and [links](https://...). Everything is escaped first, so nothing in a page becomes markup of
 its own; raw HTML (the logo at the top of Home) is left out. Standard library only.
+
+A video is a line of its own: its thumbnail, linking to it, both at the site's videos/ (put there on deploy, from the
+`media` release: build-listing.yml), so the GitHub wiki, which can't play a video from elsewhere, shows the thumbnail
+and opens the video:
+
+    [![Video: how to fix it (under a minute)](https://hoard.furryup.link/videos/NAME.jpg)](https://hoard.furryup.link/videos/NAME.mp4)
+
+On the site it's a player, its thumbnail before it starts. When the video isn't there (the release couldn't be read
+on deploy), it's a link to it on the release instead.
 """
 from __future__ import annotations
 
@@ -57,6 +66,8 @@ LIST = re.compile(r"^( *)([-*]|\d+\.) +(.*)$")
 FENCE = re.compile(r"^ *```")
 HEADING = re.compile(r"^(#{1,6}) +(.+?) *#* *$")
 SEPARATOR = re.compile(r"^ *\|? *:?-{3,}:? *(\| *:?-{3,}:? *)*\|? *$")
+VIDEO = re.compile(r"^\[!\[([^\]]+)\]\(https://hoard\.furryup\.link/videos/([\w-]+)\.jpg\)\]"
+                   r"\(https://hoard\.furryup\.link/videos/\2\.mp4\)$")
 
 
 class BrokenLink(ValueError):
@@ -152,11 +163,25 @@ def starts_block(line: str) -> bool:
 
 
 class Renderer:
-    """Turns a wiki page's Markdown into the website's HTML, collecting its headings for its contents."""
-    def __init__(self, link, anchor_label: str = UI["en"]["anchor"]):
+    """Turns a wiki page's Markdown into the website's HTML, collecting its headings for its contents. up: the way
+    from the page to the site's root ("../"); videos: the site's videos/ folder, to see which videos are there."""
+    def __init__(self, link, anchor_label: str = UI["en"]["anchor"], up: str = "", videos: Path | None = None):
         self.link = link
         self.anchor_label = anchor_label
+        self.up, self.videos = up, videos
         self.headings: list[tuple[int, str, str]] = []   # (level, id, text), for the page's own contents
+
+    def video(self, alt: str, name: str) -> str:
+        """A video's player, its thumbnail shown until it plays; or, when it isn't on the site, a link to it on the
+        media release."""
+        label = html.escape(alt, quote=True)
+        if not (self.videos and (self.videos / f"{name}.mp4").is_file()):
+            return f'<p><a href="{GITHUB}/releases/download/media/{name}.mp4">{label}</a></p>'
+        src = f"{self.up}videos/{name}"
+        poster = f' poster="{src}.jpg"' if (self.videos / f"{name}.jpg").is_file() else ""
+        return (f'<figure class="doc-video"><video controls preload="none" playsinline width="1920" height="1080"{poster} '
+                f'src="{src}.mp4" aria-label="{label}"><a href="{src}.mp4">{label}</a></video>'
+                f"<figcaption>{label}</figcaption></figure>")
 
     def inline(self, text: str) -> str:
         """A line's inline Markdown (links, code, emphasis) as HTML."""
@@ -177,6 +202,11 @@ class Renderer:
                     i += 1
                 i += 1
                 out.append(f"<pre><code>{html.escape(chr(10).join(code))}</code></pre>")
+                continue
+            m = VIDEO.match(line.strip())
+            if m:   # a video: its player (see the top of this file)
+                out.append(self.video(m.group(1), m.group(2)))
+                i += 1
                 continue
             if line.lstrip().startswith("<"):   # raw HTML (Home's logo): not on the site
                 while i < n and lines[i].strip():
@@ -385,12 +415,12 @@ def build(out: Path, folder: Path = WIKI) -> list[str]:
     written = []
     for lang, pages in every.items():
         where = "" if lang == "en" else f"{lang}/"
-        written += [where + f for f in _build(lang, pages, out / where, have)]
+        written += [where + f for f in _build(lang, pages, out / where, have, out.parent / "videos")]
     return written
 
 
-def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]]) -> list[str]:
-    """Write one language's pages, returning the files written."""
+def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]], videos: Path | None = None) -> list[str]:
+    """Write one language's pages, returning the files written. videos: the site's videos/ folder."""
     ui, up = UI[lang], "../" if lang == "en" else "../../"
     out.mkdir(parents=True, exist_ok=True)
     index, written = [], []
@@ -398,7 +428,7 @@ def _build(lang: str, pages: Pages, out: Path, have: dict[str, set[str]]) -> lis
         if name.startswith("_"):
             continue
         page = pages.source[name]
-        r = Renderer(lambda target, here=name: pages.href(target, here), ui["anchor"])
+        r = Renderer(lambda target, here=name: pages.href(target, here), ui["anchor"], up, videos)
         body = r.blocks(text.splitlines())
         side, titles = sidebar(pages, page, lang)
         title = ui["docs"] if page == "Home" else titles.get(page, name.replace("-", " "))

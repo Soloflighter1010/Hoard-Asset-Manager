@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+- **Code in a package.** Before importing a product whose packages hold scripts or DLLs (which Unity runs as soon as
+  they're imported), the warning says so: how many, how many run in the editor, which are from a tool Hoard knows,
+  and where the rest goes; then Import or Cancel. Import set names the products in it with code. Hoard 5.2.0 reads
+  this; it's information, not a verdict.
+- **Your note on a product.** A note you write in a product's details in Hoard (Hoard 5.2.0: what it's for, which
+  avatar it's set up for) shows in its details here.
+
 ## 0.10.1
 
 - **The Heap, Hoard's new logo.** The window's bar shows the Heap: a box in each store's colour and one with a cube for

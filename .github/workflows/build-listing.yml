@@ -30,6 +30,7 @@ on:
             "hoard/changelog.py", "hoard/versions.py",   # (the changelog page's renderer and its beta rule)
             "wiki/**", "scripts/build_site_docs.py", "scripts/site_chrome.py",   # (the docs, and every page's bar)
             "scripts/build_press_kit.py",   # (the press kit's download)
+            "scripts/version_assets.py",    # (each page's links to the stylesheets and scripts, with their version)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
@@ -151,6 +152,19 @@ jobs:
           python3 scripts/build_site_changelog.py "${{ env.listPublishDirectory }}/changelog.html" --dates "$RUNNER_TEMP/dates.json"
           test -s "${{ env.listPublishDirectory }}/changelog.html"
 
+      # The videos (the media release's: promo/), for the front page and the docs: each landscape video and its
+      # thumbnail, put on the site here so they're never in the repository. Served from the site itself, so they play
+      # in any browser and a visit asks no one else. Without the release, the docs link to the videos instead.
+      - name: The videos, from the media release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "${{ env.listPublishDirectory }}/videos"
+          gh release download media --repo "$GITHUB_REPOSITORY" --dir "${{ env.listPublishDirectory }}/videos" \
+            --pattern 'hoard-*-landscape.mp4' --pattern 'hoard-*-landscape.jpg' \
+            || echo "::warning::The media release's videos couldn't be read: the docs link to them on the release instead"
+          ls "${{ env.listPublishDirectory }}/videos"
+
       # The docs, from the wiki's pages (wiki/): a link to a page or heading that isn't there stops the deploy.
       - name: Build the docs from the wiki
         run: |
@@ -162,6 +176,12 @@ jobs:
         run: |
           python3 scripts/build_press_kit.py "${{ env.listPublishDirectory }}"
           test -s "${{ env.listPublishDirectory }}/press/hoard-press-kit.zip"
+
+      # Last, once every page is there: each page's links to the site's stylesheets and scripts carry their version
+      # (styles.css?v=...), so a browser never shows a new page with the stylesheet it kept from the last deploy
+      # (issue #312: the front page's new video came out at its full size, without its styles).
+      - name: Version the stylesheets and scripts in every page's links
+        run: python3 scripts/version_assets.py "${{ env.listPublishDirectory }}"
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3

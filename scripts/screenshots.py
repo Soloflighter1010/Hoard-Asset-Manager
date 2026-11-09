@@ -1,6 +1,7 @@
 """Screenshots of every part of Hoard, for the website and the README, made from real products you choose.
 
     python scripts/screenshots.py PRODUCTS_FOLDER [OUT_FOLDER] [--style=treasure] [--themes=dark] [--only=library,set]
+                                  [--lang=ja] [--regions=promo/regions.json]
 
 PRODUCTS_FOLDER holds each product's picture (PNG, JPEG, WebP or GIF) and products.json, listing them:
 
@@ -19,9 +20,14 @@ downloaded, with a Local item, sets and wishlists of them, two Unity projects (w
 what Hoard put in them), a finished check and a few tasks. Then each part is photographed, in the dark and light
 themes, at 1600x950: OUT_FOLDER/<part>-<theme>.png (and .webp, at 1600, 1200 and 800 wide, for the website).
 --style takes them in the Treasure or Workbench style (Settings, Appearance), named
-<part>-<style>-<theme>; --themes and --only take fewer of them. Nothing is fetched from the internet: the pictures
-come from the folder. Paths on the pages are shown as
-C:\\Users\\you\\..., as a usual computer's would be.
+<part>-<style>-<theme>; --themes and --only take fewer of them. --lang takes them in Japanese (ja) or Korean (ko),
+named <part>-<theme>-<lang> (the promo and help videos use them: promo/README.md). --regions names, for some
+parts, things on the page ({"library": {"search": "#q"}}): each one's box (all it draws) is saved beside the
+picture, in <picture>.json ({"search": [x, y, width, height]}), so the videos can point at it in every language; it
+also takes a few pictures for the videos alone: help-booth-library, -stores and -fixed (Booth's sign-in ended, as
+Hoard shows it, and then signed in again), and wishlist-prices and downloads-files, scrolled so what they look at
+closely is whole. Nothing is fetched from the internet: the pictures come from the folder. Paths on the pages are
+shown as C:\\Users\\you\\..., as a usual computer's would be.
 """
 from __future__ import annotations
 
@@ -304,15 +310,263 @@ NO_VERSION = ("document.addEventListener('DOMContentLoaded', () => { const s = d
 SEEDED = "(() => { let s = 20261021; Math.random = () => (s = (s * 16807) % 2147483647) / 2147483647; })()"   # (Mix and match's picks, the same each time)
 
 
-def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None) -> None:
+LOCALES = {"en": "en-US", "ja": "ja-JP", "ko": "ko-KR"}   # --lang: Hoard's language, and the window's, for dates
+
+
+REGION_BOXES = """sels => {
+  const rect = e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };
+  const cut = (a, b) => [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.min(a[2], b[2]), Math.min(a[3], b[3])];
+  const clips = e => { const s = getComputedStyle(e); return s.overflowX !== "visible" || s.overflowY !== "visible"; };
+  const shows = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; };
+  // all it draws: its own box, and whatever inside it sticks out of it, but not what a scrolled or cut-off box hides
+  const box = el => {
+    let clip = [0, 0, innerWidth, innerHeight], u = null;
+    for (let a = el.parentElement; a; a = a.parentElement) if (clips(a)) clip = cut(clip, rect(a));
+    const walk = (n, c) => {
+      const s = getComputedStyle(n);
+      if (s.display === "none") return;
+      const v = cut(rect(n), c);
+      if (v[2] > v[0] && v[3] > v[1] && s.visibility !== "hidden")
+        u = u ? [Math.min(u[0], v[0]), Math.min(u[1], v[1]), Math.max(u[2], v[2]), Math.max(u[3], v[3])] : v;
+      for (const k of n.children) walk(k, clips(n) ? cut(c, rect(n)) : c);
+    };
+    walk(el, clip);
+    return u && [Math.floor(u[0]), Math.floor(u[1]), Math.ceil(u[2]) - Math.floor(u[0]), Math.ceil(u[3]) - Math.floor(u[1])];
+  };
+  return Object.fromEntries(Object.entries(sels).map(([k, sel]) => {
+    const el = [...document.querySelectorAll(sel)].find(shows);
+    return [k, el ? box(el) : null];
+  }));
+}"""   # --regions: where each named thing is on the page, the first one that shows
+
+
+BRING_INTO_VIEW = """sel => {
+  const e = document.querySelector(sel);
+  if (!e) return;
+  let box = e.parentElement;   // what scrolls it
+  while (box && !(box.scrollHeight > box.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  const bottom = box ? Math.min(innerHeight, box.getBoundingClientRect().bottom) : innerHeight;
+  const by = e.getBoundingClientRect().bottom - (bottom - 40);
+  if (by > 0) (box || document.scrollingElement).scrollBy({ top: by, behavior: "instant" });
+}"""   # --regions: some pictures for the videos, scrolled so the thing they look at closely isn't cut off
+
+
+VIDEO_SHOTS = {"files", "updates", "hidden", "settings-apprise", "help-apprise-test", "help-payhip-stores",
+               "help-itch-stores", "help-itch-key", "help-itch-fixed", "help-blocked-stores", "help-download-tasks",
+               "help-nokey", "help-pin-unlock", "help-pin-recover", "help-pin-fixed", "help-pin-wait", "settings-look",
+               "look-treasure", "look-workbench", "look-synthwave", "look-moss"}
+LOOKS = (("look-treasure", "treasure", "dragonfire"), ("look-workbench", "workbench", "frost"),   # (picture, style, theme)
+         ("look-synthwave", "standard", "synthwave"), ("look-moss", "standard", "moss"))
+HIDDEN = {"pin": "2468", "phrase": None}   # the hidden library's PIN in the pictures, and its recovery words
+PAYHIP_BLOCKED = ("Payhip blocked the automated browser (the check wasn't completed in time). Import your library "
+                  "instead: open it in your usual browser, scroll to the bottom, press Ctrl+S and save it as "
+                  "\"Webpage, Single File\" (each page of it, and for Payhip each shop's), then choose Import pages here.")
+
+
+def video_shots(page, browser, srv, snap, click, theme: str, lang: str, made: dict) -> None:
+    """The pictures only the videos use (issues #273, #274), taken after the website's, as they change what's in the
+    made-up library: Hoard as it is in each help video's problem, and the parts the long promo shows (choosing
+    files, updates, the hidden library, notifications). Everything it changes is put back after, so the next
+    theme's pictures start from the same library."""
+    from hoard import alerts, marks, net, vault
+    from hoard.asset_updates import AssetUpdates
+    now, catalog = made["now"], downloader.collect_catalog(made["cfg"], Path(made["cfg"]["root"]))[0]
+    booth = [e for e in catalog if str(e["store"]).lower() == "booth"]
+
+    def library(url=None):
+        """The Library (or another page), read again."""
+        page.goto(srv.entry_url())
+        page.reload()
+        if url:
+            page.goto(srv.url + url)
+        page.locator(".slot").first.wait_for()
+        page.wait_for_timeout(900)
+
+    def store_row(store, **info):
+        """Change what Hoard knows of a store (its error, its count), in memory only."""
+        with srv.lib.lock:
+            srv.lib.data["stores"][store] = {**srv.lib.data["stores"].get(store, {"count": 0, "source": "refresh"}), **info}
+
+    def stores(name, settle=700):
+        """A picture of the Stores panel, as it is now."""
+        library()
+        click("#storesBtn")
+        snap(name, settle)
+        page.keyboard.press("Escape")
+
+    # What files do you want to save? (issue #225), with two of them left out
+    e = booth[0]
+    stem = safe_name(e["name"])
+    names = [f"{stem}.unitypackage", f"{stem} (Quest).unitypackage", "Textures.zip", f"{stem}.psd", "Read me.pdf"]
+    library()
+    page.evaluate("p => askFiles(p, () => {})", {"key": tag_key("booth", e["name"]), "store": "booth", "name": e["name"],
+                                                 "creator": e["creator"], "names": names})
+    page.wait_for_timeout(700)
+    page.locator("#filesPick").click()
+    for n in (names[1], names[3]):   # the Quest version and the PSD, left out
+        page.locator(f'#filesList input[data-file="{n}"]').uncheck()
+    snap("files", 600)
+    page.keyboard.press("Escape")
+    # Asset updates: two downloads with newer files on Booth
+    AssetUpdates().record_check(["booth"], None, [
+        {"key": tag_key("booth", x["name"]), "store": "booth", "name": x["name"], "creator": x["creator"], "file": f, "kind": k}
+        for x, f, k in ((booth[1], "Textures.zip", "changed"), (booth[1], "Extra colours.zip", "new"),
+                        (booth[2], f"{safe_name(booth[2]['name'])}.unitypackage", "changed"))])
+    library("downloads")
+    click('#views [data-view="updates"]')
+    page.wait_for_timeout(600)
+    page.locator(".slot").first.click()
+    page.wait_for_timeout(600)
+    page.evaluate(BRING_INTO_VIEW, "#detail .update")
+    snap("updates", 900)
+    page.keyboard.press("Escape")
+    AssetUpdates().record_check(["booth"], None, [])   # (and none again)
+    # Hoard's looks: its other layouts (Treasure, Workbench) and some of its colour themes, then Settings' Appearance
+    shown = dict(srv.cfg.get("display") or {})
+    for name, style, colours in LOOKS:
+        srv.cfg["display"] = {**shown, "style": style, "theme": colours}
+        library()
+        snap(name, 900)
+    srv.cfg["display"] = shown
+    library()
+    click("#settingsBtn")
+    page.wait_for_timeout(500)
+    page.evaluate("document.getElementById('part-look').scrollIntoView({block: 'start'})")
+    snap("settings-look", 700)
+    page.keyboard.press("Escape")
+    # Notifications through Apprise: two addresses kept (made up), and a test one of them didn't take
+    fake = ["discord://000000000000000000/made-up-token", "ntfys://ntfy.sh/hoard-made-up"]
+    real = {k: getattr(alerts, k) for k in ("available", "urls", "described", "kept", "deliver")}
+    events = srv.cfg.get("apprise_events")
+    alerts.available = lambda: True
+    alerts.urls = lambda cfg: list(fake)
+    alerts.described = lambda cfg: [alerts.describe(u) for u in fake]
+    alerts.kept = lambda cfg: len(fake)
+    alerts.deliver = lambda *a, **k: ("Discord didn't take it: Failed to send Discord notification: Unauthorized - 401. "
+                                      "Check its address, and that it can be reached from this computer.")
+    srv.cfg["apprise_events"] = ["new", "updates", "prices", "tasks"]
+    library()
+    click("#settingsBtn")
+    page.wait_for_timeout(500)
+    page.evaluate("document.getElementById('part-apprise').scrollIntoView({block: 'start'})")
+    snap("settings-apprise", 700)
+    page.locator("#appriseTest").click()
+    page.wait_for_timeout(900)
+    snap("help-apprise-test", 200)
+    page.keyboard.press("Escape")
+    for k, f in real.items():
+        setattr(alerts, k, f)
+    srv.cfg["apprise_events"] = events
+    # Stores: security software stopped Hoard reaching Booth; Payhip's bot check; itch.io's API key
+    was = {s: dict(srv.lib.data["stores"].get(s) or {}) for s in ("booth", "payhip", "itch")}
+    store_row("booth", error=net.blocked_message("booth.pm"))
+    stores("help-blocked-stores")
+    store_row("booth", error=None)
+    store_row("payhip", error=PAYHIP_BLOCKED)
+    stores("help-payhip-stores")
+    store_row("payhip", error=None)
+    has_key = vault.has_key
+    vault.has_key = lambda cfg, name: name == "itch" or has_key(cfg, name)
+    store_row("itch", error="itch.io didn't accept the API key")
+    stores("help-itch-stores")
+    library()
+    click("#storesBtn")
+    click("#storeRows [data-login=itch]", "#itchDialog[open]")
+    page.locator("#itchKey").fill("made-up-key-for-the-pictures-0000000000")
+    snap("help-itch-key", 500)
+    page.keyboard.press("Escape")
+    page.keyboard.press("Escape")
+    store_row("itch", error=None, count=4, updated=now.isoformat())
+    stores("help-itch-fixed")
+    vault.has_key = has_key
+    with srv.lib.lock:
+        for s, info in was.items():
+            if info:
+                srv.lib.data["stores"][s] = info
+            else:
+                srv.lib.data["stores"].pop(s, None)
+    # A download that partly failed, in Tasks: what didn't come, and why
+    hide = [tag_key(x["store"], x["name"]) for x in made["items"][4:7]]   # (hidden below: not named in the log)
+    booth = [x for x in booth if tag_key("booth", x["name"]) not in hide]
+    gum = [x for x in catalog if str(x["store"]).lower() == "gumroad" and tag_key("gumroad", x["name"]) not in hide] or booth
+    stopped = f"Booth: {booth[3]['creator']} / {booth[3]['name']} / {safe_name(booth[3]['name'])}.zip - the download stopped at 31457280 of 52428800 bytes; the next sync resumes it"
+    no_page = f"Gumroad: {gum[0]['name']} - no download page (refunded or membership inactive)"
+    if not any(h["id"] == "j0" for h in srv.jobs.history):
+        srv.jobs.history.insert(0, {
+            "id": "j0", "task": "download", "label": "Download: Booth, Gumroad", "stores": ["booth", "gumroad"],
+            "started": (now - timedelta(minutes=12)).isoformat(), "ended": (now - timedelta(minutes=5)).isoformat(),
+            "outcome": "partial", "message": "Done: 3 new, 1 updated, 1 couldn't be downloaded.",
+            "report": {"new_assets": 3, "new_files": 5, "updated": 1, "skipped": 1, "failed": 1, "problems": [stopped],
+                       "skipped_list": [no_page]},
+            "log": ["Reading Booth", "Reading Gumroad", "Downloading 6 files", "", "=== Summary ===",
+                    "New assets: 3   New files: 5   Updated files: 1   Skipped: 1   Failed: 1", "", "Skipped:",
+                    f"  - {no_page}", "", "Failed:", f"  - {stopped}"]})
+    library()
+    click("#tasksTab")
+    page.locator('#tasksBody details[data-id="j0"] summary').click()
+    snap("help-download-tasks", 700)
+    page.keyboard.press("Escape")
+    srv.jobs.history[:] = [h for h in srv.jobs.history if h["id"] != "j0"]
+    # Hoard's page opened without this run's access key (an old bookmark): "Hoard didn't recognise this page"
+    ctx = browser.new_context(viewport=SIZE, color_scheme=theme, locale=LOCALES[lang])
+    other = ctx.new_page()
+    other.add_init_script(NO_VERSION)
+    other.goto(srv.url)
+    other.locator("#splash").wait_for(state="detached")
+    snap("help-nokey", 900, pg=other)
+    ctx.close()
+    # The hidden library: three products hidden behind a PIN; unlocked, its PIN forgotten and reset, and too many tries
+    ms = marks.MarkStore()
+    before = ms.path.read_bytes() if ms.path.exists() else None
+    HIDDEN.update(pin="2468", phrase=ms.set_pin("2468"))
+    ms.change("hidden", set(hide), True, {i["key"]: k for i in made["items"] if (k := tag_key(i["store"], i["name"])) in hide})
+    library()
+    page.evaluate("pin => apiPost('/api/unlock', { pin })", HIDDEN["pin"])
+    page.evaluate("load().then(() => showView('hidden'))")
+    page.wait_for_timeout(900)
+    snap("hidden", 700)
+    page.evaluate("apiPost('/api/lock')")
+    library()
+    click('#views [data-view="hidden"]', "#pinDialog[open]")
+    snap("help-pin-unlock", 500)
+    page.locator("#pinForgot").click()
+    page.locator("#recoverWords").fill(HIDDEN["phrase"] or "")
+    new_pin = "1357" if HIDDEN["pin"] == "2468" else "2468"
+    page.locator("#pinInput").fill(new_pin)
+    page.locator("#pinAgain").fill(new_pin)
+    snap("help-pin-recover", 500)
+    page.locator("#pinOk").click()
+    page.wait_for_timeout(1200)
+    HIDDEN["pin"] = new_pin
+    snap("help-pin-fixed", 300)
+    page.evaluate("apiPost('/api/lock')")
+    library()
+    click('#views [data-view="hidden"]', "#pinDialog[open]")
+    for _ in range(6):
+        page.locator("#pinInput").fill("0000")
+        page.locator("#pinOk").click()
+        page.wait_for_timeout(350)
+    snap("help-pin-wait", 300)
+    page.keyboard.press("Escape")
+    if before is None:   # nothing hidden, and no PIN, again
+        ms.path.unlink()
+    else:
+        ms.path.write_bytes(before)
+    page.evaluate("apiPost('/api/lock')")
+
+
+def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark", "light"), only=None,
+          lang: str = "en", regions: dict | None = None) -> None:
     """Take every screenshot, in each theme, from a made-up library of the products."""
     from playwright.sync_api import sync_playwright
     root, made = build(items)
-    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style}
+    made["cfg"]["display"] = {**made["cfg"].get("display", {}), "style": style, "language": lang}
     # what a usual computer says (this one may have no keyring, and its folders are made up for the pictures)
     server.signin_protection = lambda cfg: "encrypted by your Windows account"
     from pathlib import PureWindowsPath
     server.signins_root = lambda cfg: PureWindowsPath(r"C:\Users\you\AppData\Local\Hoard\sign-ins")
+    signed = set()   # the stores signed in, in the pictures (none, but for the help videos' Booth)
+    server.signed_in = lambda cfg, store: store in signed
     srv = server.AppServer(("127.0.0.1", 0), made["cfg"], lan=False)
     now = made["now"]
     with srv.lib.lock:   # in memory only
@@ -339,20 +593,38 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         for theme in themes:
-            page = browser.new_page(viewport=SIZE, color_scheme=theme)
+            page = browser.new_page(viewport=SIZE, color_scheme=theme, locale=LOCALES[lang])
             page.add_init_script(SEEDED)
             page.add_init_script(NO_VERSION)
 
-            def snap(name, settle=500):
+            def snap(name, settle=500, pg=None):
                 """Take one screenshot, after the page settles, with nothing hovered."""
                 if only and name not in only:
                     return
-                page.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
-                page.wait_for_timeout(settle)
-                page.evaluate(SHOW_PATHS, str(WORK))
-                path = out / (f"{name}-{theme}.png" if style == "standard" else f"{name}-{style}-{theme}.png")
-                page.screenshot(path=str(path))
+                pg = pg or page
+                pg.mouse.move(SIZE["width"] - 4, SIZE["height"] - 4)   # nothing hovered
+                pg.wait_for_timeout(settle)
+                pg.evaluate(SHOW_PATHS, str(WORK))
+                path = out / ((f"{name}-{theme}" if style == "standard" else f"{name}-{style}-{theme}")
+                              + ("" if lang == "en" else f"-{lang}") + ".png")
+                pg.screenshot(path=str(path))
                 shots.append(path)
+                if regions and name in regions:
+                    boxes = pg.evaluate(REGION_BOXES, regions[name])
+                    missing = [k for k, v in boxes.items() if v is None]
+                    if missing:
+                        print(f"{path.name}: nothing shows for {', '.join(missing)}")
+                    path.with_suffix(".json").write_text(json.dumps(boxes, indent=1), "utf-8")
+
+            def video_snap(name, show, settle=900):
+                """A picture for the videos only (taken with --regions): scrolled so that show (a selector), and
+                what's round it, is whole on the page, for a video to look at closely."""
+                if not regions and not (only and name in only):
+                    return
+                if only and name not in only:
+                    return
+                page.evaluate(BRING_INTO_VIEW, show)
+                snap(name, settle)
 
             def click(selector, wait=None):
                 """Click something, and wait for what it opens (from the bar's Menu, when it's in there)."""
@@ -374,6 +646,32 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
                 click(button)
                 snap(name, 700)
                 page.keyboard.press("Escape")
+            # for the help videos (issue #274): Booth ended Hoard's sign-in, as Hoard shows it
+            if (regions and not only) or {"help-booth-library", "help-booth-stores", "help-booth-fixed"} & set(only or ()):
+                with srv.lib.lock:
+                    srv.lib.data["stores"]["booth"] = {**srv.lib.data["stores"]["booth"], "error": "Not signed in to Booth"}
+                page.goto(srv.entry_url())
+                page.reload()   # (the same address: a reload, so the page reads the library again)
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(1200)
+                snap("help-booth-library", 600)
+                click("#storesBtn")
+                snap("help-booth-stores", 700)
+                page.keyboard.press("Escape")
+                with srv.lib.lock:   # and signed in again: Booth's row as it is then
+                    srv.lib.data["stores"]["booth"]["error"] = None
+                signed.add("booth")
+                page.goto(srv.entry_url())
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(900)
+                click("#storesBtn")
+                snap("help-booth-fixed", 700)
+                page.keyboard.press("Escape")
+                signed.discard("booth")
+                page.reload()
+                page.locator(".slot").first.wait_for()
+                page.wait_for_timeout(600)
             # Projects: the list, a project's details, its packages and its source control, a new project, the backups
             click("#projectsTab", ".pj-row")
             page.locator("#pjSplash").wait_for(state="hidden")   # (its splash, the first time it's opened)
@@ -402,6 +700,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             page.locator("[data-setopen]", has_text="Booth").first.click()
             page.locator("[data-setx=back]").first.wait_for()
             snap("wishlist", 1200)
+            video_snap("wishlist-prices", ".slot:has(.price.down)")
             click("[data-setx=back]", "[data-setopen]")
             page.evaluate("MIX.fit = false")   # (the sample's clothes aren't tagged for its avatar)
             click("[data-setx=mix]", "dialog.mixdlg")
@@ -412,6 +711,7 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             snap("downloads", 1200)
             page.locator(".slot:not(:has-text('My Texture Set'))").first.click()   # a store's, not your own
             snap("downloads-details", 700)
+            video_snap("downloads-files", "#detail ul.files li:has([data-act=inside])")
             page.keyboard.press("Escape")
             click('#views [data-view="space"]')
             snap("space", 1500)
@@ -429,6 +729,9 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
             page.keyboard.press("Escape")
             click("#localAdd")
             snap("local-add", 600)
+            page.keyboard.press("Escape")
+            if (regions and not only) or VIDEO_SHOTS & set(only or ()):
+                video_shots(page, browser, srv, snap, click, theme, lang, made)
             page.close()
         browser.close()
     srv.shutdown()
@@ -448,11 +751,12 @@ def shoot(items: list[dict], out: Path, style: str = "standard", themes=("dark",
 if __name__ == "__main__":
     given = [a for a in sys.argv[1:] if not a.startswith("--")]
     opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
-    if not given or opts.get("style", "standard") not in server.themes.STYLES:
+    if not given or opts.get("style", "standard") not in server.themes.STYLES or opts.get("lang", "en") not in LOCALES:
         sys.exit(__doc__)
     try:
         shoot(products(Path(given[0])), Path(given[1]) if len(given) > 1 else REPO / "build" / "screenshots",
               opts.get("style", "standard"), tuple(opts.get("themes", "dark,light").split(",")),
-              set(opts["only"].split(",")) if opts.get("only") else None)
+              set(opts["only"].split(",")) if opts.get("only") else None, opts.get("lang", "en"),
+              json.loads(Path(opts["regions"]).read_text("utf-8")) if opts.get("regions") else None)
     finally:
         shutil.rmtree(WORK, ignore_errors=True)

@@ -1,0 +1,13 @@
+{
+ "site": "hoard.furryup.link",
+ "size": 2048,
+ "posters": [
+  {"name": "hoard", "look": "hero"},
+  {"name": "library", "look": "feature", "scene": 1, "box": "tile", "lens": "tile"},
+  {"name": "sync", "look": "feature", "scene": 2, "box": "booth", "lens": "booth"},
+  {"name": "updates", "look": "feature", "scene": 4, "box": "update", "lens": "update"},
+  {"name": "wishlists", "look": "feature", "scene": 8, "box": "cheaper", "lens": "card"},
+  {"name": "mix", "look": "feature", "scene": 9, "box": "picks", "lens": null},
+  {"name": "projects", "look": "feature", "scene": 10, "box": "unity", "lens": ["updates", "unity", "manage"]}
+ ]
+}
