@@ -12,6 +12,8 @@ data is): read again only when the file changes.
 """
 from __future__ import annotations
 
+from . import storage
+
 import json
 import os
 import re
@@ -24,7 +26,8 @@ from pathlib import Path
 
 from . import packages
 from .paths import data_dir
-from .safety import DataFileError, check_seal, read_json_file, remember_sealed, seal, write_file_safely
+from .safety import DataFileError, remember_sealed, seal
+from .storage import seal_status as check_seal, read_document as read_json_file, write_document as write_file_safely
 
 FORMAT = {"format": "hoard-package-needs", "version": 2}   # 2: what code each package holds (issue #303)
 KNOWN_FILE = Path(__file__).resolve().parent / "known_tools.json"
@@ -92,7 +95,9 @@ def read_file(path: Path) -> dict:
             with zipfile.ZipFile(path) as zf:
                 loose = {"scripts": 0, "plugins": 0, "editor": 0}
                 entry["loose"] = loose
+                from .scheduler import checkpoint
                 for info in zf.infolist()[:packages.MAX_ZIP_MEMBERS]:
+                    checkpoint()
                     name = packages.zip_name(info)
                     kind = None if info.is_dir() else packages.code_kind(name)
                     if kind:
@@ -161,10 +166,10 @@ class NeedsIndex:
 
     def __init__(self, path: Path | None = None):
         self.path = path or index_file()
-        self.lock = threading.Lock()
+        self.lock = storage.metadata_lock
         self.files: dict[str, dict] = {}
         self.changed_at = 0.0   # when what it knows last changed (time.monotonic), for whoever keeps answers from it
-        if self.path.is_file():
+        if storage.is_file(self.path):
             try:
                 raw = read_json_file(self.path, 256 * 1024 * 1024)
                 if (check_seal(raw, self.path) in ("sealed",) and raw.get("version") == FORMAT["version"]
@@ -423,10 +428,55 @@ class NeedsReader:
         self.wake = threading.Event()
         self.state = {"reading": False, "done": 0, "total": 0}
         self.on_read = None   # called (without arguments) after something new was read: the catalog can be rebuilt
+        self.scheduler = None
+        self._pending = None
+        self._read_since_scan = False
 
     def poke(self) -> None:
         """Look again now (after a download, a rescan or a move)."""
         self.wake.set()
+        self._pending = None
+        if self.scheduler is not None:
+            self.scheduler.wake("package-reader")
+
+    def register(self, scheduler) -> None:
+        """Register a resumable reader; the sealed index records each completed package."""
+        from .scheduler import PACKAGES
+        self.scheduler = scheduler
+        scheduler.add("package-reader", "Reading packages", self.step, priority=PACKAGES, delay=20)
+
+    def step(self, context):
+        """Read at most one changed package, saving it before yielding to the scheduler."""
+        from collections import deque
+        from .scheduler import Again
+        if self.busy():
+            return Again(1)
+        if self._pending is None:
+            items = package_files(self.assets())
+            self.index.keep_only({path for path, _ in items})
+            self._pending = deque(path for path, _ in items if not self.index.fresh(path))
+            self.state.update(total=len(items), done=len(items) - len(self._pending), reading=bool(self._pending))
+            self._read_since_scan = False
+        pending = self._pending   # poke() may request a new scan while this file is being read
+        if pending:
+            context.checkpoint()
+            path = pending[0]
+            try:
+                self.index.put(path, read_file(Path(path)))
+                self.index.save()   # a restart skips this completed package, even midway through the scan
+                self._read_since_scan = True
+            except OSError:
+                pass   # removed since the scan; it is forgotten at the next scan
+            pending.popleft()
+            self.state["done"] += 1
+            context.advance(done=self.state["done"], total=self.state["total"], message="Reading packages")
+            return Again()
+        self.state["reading"] = False
+        context.advance(done=self.state["done"], total=self.state["total"], message="Packages are up to date")
+        if self._read_since_scan and self.on_read:
+            self.on_read()
+        self._pending = None
+        return Again(self.IDLE)
 
     def run_once(self, stop: threading.Event | None = None) -> int:
         """Read what needs reading. Returns how many files were read."""
@@ -438,7 +488,10 @@ class NeedsReader:
         try:
             for path in todo:
                 while self.busy() and not (stop and stop.is_set()):
-                    time.sleep(2)
+                    if stop:
+                        stop.wait(2)
+                    else:
+                        time.sleep(2)
                 if stop and stop.is_set():
                     break
                 try:
@@ -452,19 +505,8 @@ class NeedsReader:
                     saved = time.monotonic()
         finally:
             self.state["reading"] = False
-            if read or not self.index.path.exists():
+            if read or not storage.exists(self.index.path):
                 self.index.save()
         if read and self.on_read:
             self.on_read()
         return read
-
-    def run_forever(self, stop: threading.Event) -> None:
-        """Read new and changed packages in the background, a little at a time, until Hoard stops."""
-        time.sleep(20)   # after Hoard has started up
-        while not stop.is_set():
-            try:
-                self.run_once(stop)
-            except Exception as e:   # never takes Hoard down: tried again later
-                print(f"Reading packages for What it needs stopped: {e}", flush=True)
-            self.wake.wait(self.IDLE)
-            self.wake.clear()

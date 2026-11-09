@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English c2d268d4010b). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English e250348f9857). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <a href="Hoardの保存場所">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard가 보관하는 것은 두 가지로 나뉘어요. 내가 고른 폴더에 있는 다운로드와, 그 밖의 모든 것을 담은 내 사용자 계정 전용의 비공개 앱 데이터 폴더예요.
@@ -10,6 +10,8 @@ Hoard가 보관하는 것은 두 가지로 나뉘어요. 내가 고른 폴더에
 | `%LOCALAPPDATA%\Hoard` | `~/Library/Application Support/Hoard` | `~/.local/share/Hoard` |
 
 Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 폴더가 아니에요). 그래서 소스로 실행하는 Hoard와 라이브러리를 같이 쓰고, Hoard for Unity도 찾을 수 있어요. Flatpak만의 것은 Hoard 브라우저의 사본(`~/.var/app/io.github.soloflighter1010.Hoard/cache`)뿐이에요.
+
+비공개 메타데이터는 이제 `metadata.sqlite3`에 저장돼요. 첫 표의 `.json` 이름은 그 안의 문서이며, 따로 편집하는 파일이 아니에요. 처음 이전할 때 기존 파일을 `.json.pre-sqlite-v1` 백업으로 한 릴리스 동안 남겨요. 이전 시점의 상태이고 이후 변경은 포함하지 않으니 보관하세요. 인증 정보, 이미지, 로그, 프로젝트 보고서는 별도 파일로 남아요. 스케줄러의 재개 위치, 대기 중인 작업, 스토어 상태도 데이터베이스에 들어가요. 작업 기록은 **지우기**로 비우세요. 옛 JSON 백업을 지워도 기록은 바뀌지 않아요. 앱 데이터를 복사하기 전에 Hoard를 종료하고, `metadata.sqlite3`와 그에 맞는 `integrity.key`를 함께 보관하세요.
 
 | 무엇 | 무엇을 위한 것인지 |
 |---|---|
@@ -38,8 +40,8 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 | `logs/projects-<date>_<time>.log` | 프로젝트의 로그(5.1.3). ALCOM과 Creator Companion이 남기는 것처럼, Hoard가 내 프로젝트, 패키지, 저장소에 한 일과 잘 안 된 일을 시간과 수준과 함께 한 줄씩 써요. 프로젝트에 남길 것이 있을 때 Hoard를 시작할 때마다 하나씩 만들고, 최근 30개를 남겨요. 프로젝트의 **로그**에는 이번 실행의 것이 나와요. [프로젝트](프로젝트#로그)를 보세요 |
 | `diagnostics/incidents.jsonl` | 최근 오류와 충돌 트레이스백의 로컬 전용 비공개 기록. 지원 보고서를 만들 때 쓰고, 절대 자동으로 보내지 않아요 |
 | `window/` | 창 자체의 저장 공간 |
-| `window-place.json` | 마지막으로 닫았을 때 창의 크기와 위치, 최대화했는지 여부. 다음에도 거기서 열기 위해서예요. 지우면 보통 크기로 가운데에서 열려요 |
-| `tasks.json` | 작업 창의 끝난 작업 목록(최근 60개). 각각 무엇을 했는지, 어떻게 됐는지, 진행 기록. 목록을 비우려면 이걸 지우거나 작업에서 **지우기**를 고르세요 |
+| `window-place.json` | 마지막으로 닫았을 때 창의 크기와 위치, 최대화했는지 여부. 다음에도 거기서 열기 위해서예요 |
+| `tasks.json` | 작업 창의 끝난 작업 목록(최근 60개). 각각 무엇을 했는지, 어떻게 됐는지, 진행 기록. 목록을 비우려면 작업에서 **지우기**를 고르세요 |
 | `sync.json` | 마지막 동기화를 시작한 때 |
 | `routine.json` | 정기 점검을 마지막으로 실행한 때(다음이 언제인지 알기 위해)와, 찾은 것 중 아직 보지 않은 것의 수 |
 | `update.json` | Hoard가 마지막으로 업데이트를 확인한 때와, 찾은 가장 새 버전 |
@@ -81,16 +83,19 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 
 ## 봉인
 
-Hoard가 쓰는 모든 기록(라이브러리 목록과 표시, 다운로드 폴더의 스토어마다 있는 `_manifest.json`, `catalog.json`, `tags.json`, 모든 `asset.json`)에는 `integrity.key`로 만든 봉인이 붙어 있어요. 기록이 Hoard가 아닌 다른 것에 의해 바뀌면 봉인으로 알 수 있고, Hoard는 이렇게 해요.
+데이터베이스에는 모든 문서와 상품 식별 정보를 포함하는 봉인 하나가 있어요. 봉인이 올바르지 않으면 접근을 멈춰요. 데이터베이스와 키를 보관하고 정상적인 백업에서 복원하세요. 조용히 빈 라이브러리로 초기화하지 않아요.
+
+다운로드 폴더에 내보내는 기록(스토어마다 있는 `_manifest.json`, `catalog.json`, `tags.json`, 모든 `asset.json`)에는 `integrity.key`로 만든 봉인이 붙어 있어요. 기록이 Hoard가 아닌 다른 것에 의해 바뀌면 봉인으로 알 수 있고, Hoard는 이렇게 해요.
 
 - 알려 주고, 바뀐 파일의 사본을 볼 수 있게 남겨 둬요(`_manifest.changed-<date>.json` 같은 것).
-- 기록은 남기지만 링크는 남기지 않고, 다음 새로고침이나 동기화 때 스토어에서 링크를 다시 가져와요(편집된 `marks.json`은 선택은 남기지만 숨긴 라이브러리의 PIN은 지워요).
+- 기록은 남기지만 링크는 남기지 않고, 다음 새로고침이나 동기화 때 스토어에서 링크를 다시 가져와요.
 
 `hoard-cli verify`는 다운로드 폴더의 모든 기록을 점검한 다음 카탈로그 파일을 다시 만들어요. 손상된 파일(올바른 JSON이 아닌 것 등)은 `<name>.damaged-<date>.json`으로 따로 두고, Hoard는 그것 없이 계속해요.
 
 ## 다운로드 폴더 하나를 컴퓨터 두 대에서
 
 컴퓨터마다 Hoard는 자기 키로 기록을 봉인해서, 상대의 기록을 확인되지 않은 것("saved by Hoard on another computer")으로 다루고 스토어 링크를 다시 가져와요. NAS 등에서 다운로드 폴더 하나를 같이 쓰려면, 한 컴퓨터의 Hoard 앱 데이터 폴더에 있는 `integrity.key`를 다른 컴퓨터의 같은 곳으로 복사하세요.
+두 번째 컴퓨터에서 처음 실행하기 전에 하세요. 이미 쓰고 있다면 설정에서 이동용 백업을 만들고, 공유 키를 둔 새 앱 데이터 폴더에 복원하세요. 기존 데이터베이스 옆의 키를 바꾸지 마세요. 그 데이터베이스의 봉인은 원래 키로 만들어졌어요.
 
 ## 백업, 그리고 새 컴퓨터로 옮기기
 

@@ -1,5 +1,7 @@
-"""Hoard's settings: one set for everything, kept in config.json in Hoard's app-data folder."""
+"""Shared settings: the private config.json document in SQLite, or an explicitly chosen external JSON file."""
 from __future__ import annotations
+
+from . import storage
 
 import json
 import os
@@ -10,7 +12,8 @@ import ipaddress
 import re
 from urllib.parse import urlparse
 
-from .safety import DataFileError, read_json_file, set_extra_sites, write_file_safely
+from .safety import DataFileError, set_extra_sites
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 DEFAULT_CONFIG = {
     "setup_done": False,           # set once the onboarding assistant has been completed (or skipped)
@@ -141,7 +144,7 @@ def load_config(path: Path | None = None) -> dict:
     """The built-in defaults, overlaid with config.json when it exists (and can be read)."""
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     path = path or CONFIG_FILE
-    if path.exists():
+    if storage.exists(path):
         try:
             saved = read_json_file(path, 1024 * 1024)
             if isinstance(saved, dict):

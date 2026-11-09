@@ -4,13 +4,13 @@ import json
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 import zipfile
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
-from hoard import downloader, needs, packages
+from hoard import downloader, needs, packages, storage
 from tests.test_packages import unitypackage
 
 LILTOON = "00795bf598b44dc4e9bd363348e77085"      # a lilToon shader (hoard/known_tools.json)
@@ -44,7 +44,7 @@ def outfit() -> bytes:
     })
 
 
-class Reading(unittest.TestCase):
+class Reading(IsolatedTestCase):
     def test_a_package_names_what_its_text_assets_use(self):
         refs = set()
         assets = packages.read_unitypackage(io.BytesIO(outfit()), refs=refs)
@@ -82,7 +82,7 @@ class Reading(unittest.TestCase):
         self.assertIn(LILTOON, e["packages"][0]["refs"])
 
 
-class WorkingOut(unittest.TestCase):
+class WorkingOut(IsolatedTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(self.tmp.name) / "data")})
@@ -106,8 +106,8 @@ class WorkingOut(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
-    def read_all(self) -> needs.NeedsIndex:
-        index = needs.NeedsIndex()
+    def read_all(self, path=None) -> needs.NeedsIndex:
+        index = needs.NeedsIndex(path)
         reader = needs.NeedsReader(index, lambda: self.assets, lambda: False)
         self.assertEqual(reader.run_once(), 2)
         return index
@@ -140,24 +140,25 @@ class WorkingOut(unittest.TestCase):
         os.utime(pkg, ns=(5, 5))
         self.assertEqual(reader.run_once(), 1)
         self.assertEqual(needs.work_out(self.assets, reader.index)[1]["unknown"], 2, "the avatar's prefab is gone from it")
-        self.assertTrue(index.path.is_file())
+        self.assertTrue(storage.is_file(index.path))
 
     def test_not_read_yet(self):
         got = needs.work_out(self.assets, needs.NeedsIndex())
         self.assertEqual({i: g["read"] for i, g in got.items()}, {0: False, 1: False})
 
     def test_an_edited_index_is_read_again(self):
-        self.read_all()
-        raw = json.loads(needs.index_file().read_text("utf-8"))
+        index = self.read_all(self.root / "legacy-index.json")
+        raw = json.loads(index.path.read_text("utf-8"))
         next(iter(raw["files"].values()))["packages"][0]["refs"] = []
-        needs.index_file().write_text(json.dumps(raw), "utf-8")
-        self.assertEqual(needs.NeedsIndex().files, {}, "not as Hoard sealed it: started again")
+        index.path.write_text(json.dumps(raw), "utf-8")
+        self.assertEqual(needs.NeedsIndex(index.path).files, {}, "not as Hoard sealed it: started again")
 
     def test_waits_while_a_job_runs(self):
         busy = iter([True, True, False] + [False] * 10)
-        with mock.patch.object(needs.time, "sleep") as slept:
-            needs.NeedsReader(needs.NeedsIndex(), lambda: self.assets, lambda: next(busy)).run_once()
-        self.assertEqual(slept.call_count, 2)
+        stop = mock.Mock()
+        stop.is_set.return_value = stop.wait.return_value = False
+        needs.NeedsReader(needs.NeedsIndex(), lambda: self.assets, lambda: next(busy)).run_once(stop)
+        self.assertEqual(stop.wait.call_args_list, [mock.call(2), mock.call(2)])
 
     @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
     def test_in_the_catalog(self):
@@ -178,7 +179,7 @@ class WorkingOut(unittest.TestCase):
 
 
 @mock.patch.object(needs, "MATCH_PRODUCTS", True)   # (off for now: these keep its working tested)
-class WeakMatches(unittest.TestCase):
+class WeakMatches(IsolatedTestCase):
     """What other products a product needs leaves out what's noise: a creator's shared files that many products carry,
     and a few files from another product by the same creator (most often their own files used again)."""
 
@@ -248,7 +249,7 @@ class WeakMatches(unittest.TestCase):
         self.assertEqual(self.named(assets, index), (["Rusk"], 0))
 
 
-class KnownTools(unittest.TestCase):
+class KnownTools(IsolatedTestCase):
     def test_the_table(self):
         k = needs.known()
         self.assertEqual(set(k["tools"]), {"liltoon", "poiyomi", "modular-avatar", "vrcfury", "ndmf", "avatar-optimizer", "vrchat-sdk"})
@@ -274,7 +275,7 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Page(unittest.TestCase):
+class Page(IsolatedTestCase):
     """Downloads: a product's What it needs, and a hidden product left out of it while the hidden library is locked."""
 
     @classmethod

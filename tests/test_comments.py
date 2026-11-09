@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import re
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -75,7 +76,7 @@ def uncommented(path: Path, pattern: re.Pattern, skip: str = "") -> list[str]:
     return out
 
 
-class EverythingSaysWhatItsFor(unittest.TestCase):
+class EverythingSaysWhatItsFor(IsolatedTestCase):
 
     def test_python(self):
         files = [p for d in PYTHON for p in sorted((REPO / d).rglob("*.py"))]

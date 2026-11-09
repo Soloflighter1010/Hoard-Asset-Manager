@@ -246,6 +246,7 @@ def _path_id(path: Path) -> str:
 def _sealed_file_ids() -> set:
     """Which files this install has sealed (by a hash of their location), so a removed seal is noticed."""
     global _sealed_ids
+    from .storage import read_document as read_json_file
     if _sealed_ids is None:
         try:
             data = read_json_file(_hoard_folder() / "sealed-files.json", 4 * 1024 * 1024)
@@ -259,6 +260,7 @@ def remember_sealed(path: Path) -> None:
     """Note that this install has sealed the file at path. Nothing is ever forgotten: a forgotten file whose seal
     was then removed would pass as one written by an older version. Only files that can't be rebuilt are noted
     (each store's _manifest.json and the library list), a handful per downloads folder, so the list stays small."""
+    from .storage import write_document as write_file_safely
     ids = _sealed_file_ids()
     pid = _path_id(path)
     if pid not in ids:

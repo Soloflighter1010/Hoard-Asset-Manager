@@ -3,9 +3,9 @@ import hashlib
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import downloader, space
 from hoard.tags import tag_key
@@ -30,7 +30,7 @@ def put(base: Path, store_dir: str, key: str, creator: str, name: str, files: di
     return folder
 
 
-class Copies(unittest.TestCase):
+class Copies(IsolatedTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.main, self.other = Path(self.tmp.name) / "main", Path(self.tmp.name) / "other"

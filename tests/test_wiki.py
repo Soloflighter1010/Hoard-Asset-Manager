@@ -12,11 +12,11 @@ import shutil
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 
@@ -59,7 +59,7 @@ def cli_commands() -> set:
     return set(re.findall(r'add_parser\("([a-z-]+)"', (REPO / "hoard" / "cli.py").read_text("utf-8")))
 
 
-class Wiki(unittest.TestCase):
+class Wiki(IsolatedTestCase):
 
     def test_links_between_pages(self):
         """Every link to another page, and to a heading on one, leads somewhere. A translation links to its own

@@ -2,15 +2,15 @@
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import notify
 
 
-class Notify(unittest.TestCase):
+class Notify(IsolatedTestCase):
     def test_what_it_says(self):
         self.assertEqual(notify.found_text({"new": 1, "updates": 0}),
                          "Found 1 new product. Open Hoard to choose what to download.")

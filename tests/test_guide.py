@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -32,7 +33,7 @@ def definitions() -> set[str]:
     return names
 
 
-class TheGuide(unittest.TestCase):
+class TheGuide(IsolatedTestCase):
 
     def test_every_file_it_names_is_there(self):
         named = [s for s in spans(GUIDE.read_text("utf-8")) if "<" not in s and " " not in s

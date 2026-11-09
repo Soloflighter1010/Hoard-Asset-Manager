@@ -81,3 +81,5 @@ crashlytics-build.properties
 Assets/PackageMakerWindowData.asset*
 .idea
 .vscode
+node_modules/
+test-results/

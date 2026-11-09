@@ -8,12 +8,12 @@ import os
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import common, config, downloader, tags  # noqa: E402
@@ -42,7 +42,7 @@ def image(src):
     return {"type": "image", "attrs": {"src": src, "link": None}}
 
 
-class GumroadPictures(unittest.TestCase):
+class GumroadPictures(IsolatedTestCase):
 
     def test_the_pictures_are_found(self):
         content = rich(image("https://public-files.gumroad.com/aaa"), {"type": "paragraph"},
@@ -125,7 +125,7 @@ FREE_ITEM = """<!doctype html><html><head><meta charset="utf-8"><title>Toothless
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class BoothFreeItems(unittest.TestCase):
+class BoothFreeItems(IsolatedTestCase):
 
     def test_the_item_page_lists_the_files(self):
         with sync_playwright() as p:
@@ -142,7 +142,7 @@ class BoothFreeItems(unittest.TestCase):
                          "where the page shows none (the download's own name is used then)")
 
 
-class BoothFreeItemsInASync(unittest.TestCase):
+class BoothFreeItemsInASync(IsolatedTestCase):
     """A free item (no files in the library) gets its files from its page, and downloads like any other."""
 
     def test_a_free_item_is_downloaded(self):
@@ -177,7 +177,7 @@ class BoothFreeItemsInASync(unittest.TestCase):
         self.assertEqual(report.skipped, [])
 
 
-class BoothNewFileInAProductYouHave(unittest.TestCase):
+class BoothNewFileInAProductYouHave(IsolatedTestCase):
     """A file new to a Booth product you already have is a new file, not an update; one replacing a file is one."""
 
     def test_new_and_updated(self):
@@ -214,7 +214,7 @@ class BoothNewFileInAProductYouHave(unittest.TestCase):
         self.assertEqual(report.new_files, ["Booth: Mochi / Rusk / Rusk Quest.zip"])
 
 
-class BoothFilesFromTheOrder(unittest.TestCase):
+class BoothFilesFromTheOrder(IsolatedTestCase):
     """Issue #267: a purchase whose library card lists no files has them read from its order page (a free item's
     from its own page, as before), when nothing of it is downloaded yet or it was chosen: then it's listed to choose
     from, and downloaded."""
@@ -273,7 +273,7 @@ class BoothFilesFromTheOrder(unittest.TestCase):
         self.assertEqual(opened, ["https://booth.pm/en/items/78"] * 2, "every time, as before")
 
 
-class BoothDirectRoute(unittest.TestCase):
+class BoothDirectRoute(IsolatedTestCase):
     """Booth's direct downloads: a dropped connection is tried again the same way (it resumes); Booth turning one
     away sends that file through the browser, and twice running, the rest of the run."""
 
@@ -302,7 +302,7 @@ class BoothDirectRoute(unittest.TestCase):
         self.assertFalse(route["direct"])
 
 
-class GumroadChosenPurchasePicture(unittest.TestCase):
+class GumroadChosenPurchasePicture(IsolatedTestCase):
     """A Gumroad purchase downloaded from the Library gets its picture, from the library's listing."""
 
     def test_picture(self):

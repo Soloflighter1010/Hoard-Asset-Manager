@@ -12,6 +12,7 @@ import json
 import re
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -55,7 +56,7 @@ def words(v, where=""):
             yield from words(x, f"{where}[{i}]")
 
 
-class Films(unittest.TestCase):
+class Films(IsolatedTestCase):
     def test_every_scene_is_drawn(self):
         page = (PROMO / "video" / "film.html").read_text("utf-8")
         drawn = set(re.findall(r"^BUILD\.(\w+) =", page, re.M)) & set(re.findall(r"^DRAW\.(\w+) =", page, re.M))
@@ -128,7 +129,7 @@ class Films(unittest.TestCase):
         self.assertEqual(parts["svg"], heap.boxes_svg(heap.FULL))
 
 
-class Thumbnails(unittest.TestCase):
+class Thumbnails(IsolatedTestCase):
     def test_every_video_has_one(self):
         looks = set(re.findall(r"^LOOK\.(\w+) =", STILL, re.M))
         for name, film in FILMS.items():
@@ -171,7 +172,7 @@ class Thumbnails(unittest.TestCase):
         self.assertEqual(got["ダウンロードが何度も失敗する"], ["ダウンロードが", "何度も", "失敗する"])
 
 
-class Posters(unittest.TestCase):
+class Posters(IsolatedTestCase):
     def test_each_is_drawn_from_a_screen_the_long_promo_shows(self):
         looks = set(re.findall(r"^LOOK\.(\w+) =", STILL, re.M))
         self.assertEqual(POSTERS["size"], 2048)   # (the most VRChat's poster frames load)
@@ -197,7 +198,7 @@ class Posters(unittest.TestCase):
 
 
 @unittest.skipUnless(MUSIC, "needs numpy and SciPy (pip install -r promo/requirements.txt)")
-class Music(unittest.TestCase):
+class Music(IsolatedTestCase):
     def test_a_note_past_the_end_lands_on_the_start(self):
         import numpy as np
         loop = load("promo_loop", PROMO / "music" / "loop.py")
@@ -231,7 +232,7 @@ def _region_boxes() -> str:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Boxes(unittest.TestCase):
+class Boxes(IsolatedTestCase):
     def test_a_box_holds_all_it_draws(self):
         from playwright.sync_api import sync_playwright
         page_html = """<body style="margin:0">

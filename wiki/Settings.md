@@ -177,9 +177,11 @@ Also here:
 
 ## Settings only in config.json
 
-`config.json` is in Hoard's app-data folder: `%LOCALAPPDATA%\Hoard` on Windows,
-`~/Library/Application Support/Hoard` on macOS, `~/.local/share/Hoard` on Linux. Quit Hoard before editing it,
-and keep it valid JSON.
+Private settings now live in `metadata.sqlite3` in Hoard's app-data folder. The old `config.json` is retained as
+`config.json.pre-sqlite-v1` after migration; editing that backup does not change Hoard's settings. Do not edit the
+database directly. For the advanced settings below, create a valid JSON file outside Hoard's app-data folder
+and start Hoard with `--config <file>`. Missing settings use their defaults, so also include any everyday settings
+you want to keep. Use the same file on later launches, and quit Hoard before editing it.
 
 | Setting | Default | Meaning |
 |---|---|---|

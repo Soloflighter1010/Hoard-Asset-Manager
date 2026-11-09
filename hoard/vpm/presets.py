@@ -7,6 +7,8 @@ products that are plain .unitypackage files (ALCOM can't open one inside a .zip,
 """
 from __future__ import annotations
 
+from .. import storage
+
 import json
 import re
 import threading
@@ -14,7 +16,8 @@ import uuid
 from pathlib import Path
 
 from ..paths import data_dir
-from ..safety import DataFileError, clean_text, read_json_file, safe_join, write_file_safely
+from ..safety import DataFileError, clean_text, safe_join
+from ..storage import read_document as read_json_file, write_document as write_file_safely
 from . import templates
 from .manifest import valid_name
 from .version import VersionError, VersionRange
@@ -25,7 +28,7 @@ MAX_PRODUCTS = 200
 MAX_PACKAGES = 200
 ID = re.compile(r"[0-9a-f]{32}")
 KINDS = ("unitypackage", "vpm", "vpm-folder")
-_lock = threading.RLock()
+_lock = storage.metadata_lock
 
 
 class PresetError(ValueError):

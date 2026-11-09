@@ -9,10 +9,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard.vpm import git  # noqa: E402
 
@@ -38,7 +38,7 @@ def unity_project(folder: Path, packages=("com.vrchat.base", "com.vrchat.avatars
 
 
 @unittest.skipUnless(HAVE_GIT, "needs Git installed")
-class Git(unittest.TestCase):
+class Git(IsolatedTestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="hoard-git-")).resolve()
@@ -352,7 +352,7 @@ class Git(unittest.TestCase):
                          [("hook", "post-commit"), ("setting", "remote.origin.url")])
 
 
-class Addresses(unittest.TestCase):
+class Addresses(IsolatedTestCase):
     """What a remote's address may be, and what's taken out of what Git prints, with or without Git."""
 
     def test_addresses(self):

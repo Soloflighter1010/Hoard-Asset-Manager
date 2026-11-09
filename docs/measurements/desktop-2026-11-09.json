@@ -1,0 +1,191 @@
+{
+  "recorded_on": "2026-11-09",
+  "source": "GitHub release asset metadata and published VirusTotal summaries; no new scans performed",
+  "releases": [
+    {
+      "tag": "v5.2.0-beta.4",
+      "published": "2026-11-05T02:15:03Z",
+      "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/v5.2.0-beta.4",
+      "assets": [
+        {
+          "name": "Hoard-5.2.0-beta.4-linux-x86_64.flatpak",
+          "size_bytes": 40837352,
+          "digest": "sha256:335ca5cd2d07966a1601ca810eeee32813e4f2f7bbe0ef7bc863a24ab9841f15",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.4/Hoard-5.2.0-beta.4-linux-x86_64.flatpak",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/335ca5cd2d07966a1601ca810eeee32813e4f2f7bbe0ef7bc863a24ab9841f15",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 61
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-5.2.0-beta.4-macos-apple-silicon.pkg",
+          "size_bytes": 77223873,
+          "digest": "sha256:a67282a40cb58ad2ff72b068abecf1c83ce0f42578d4da26f214c70dbada77e0",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.4/Hoard-5.2.0-beta.4-macos-apple-silicon.pkg",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/a67282a40cb58ad2ff72b068abecf1c83ce0f42578d4da26f214c70dbada77e0",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 61
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-5.2.0-beta.4-macos-intel.pkg",
+          "size_bytes": 79213154,
+          "digest": "sha256:2479cba6d8c956184d624738249abd2c1aefe050889816d5a2f861b137d1ca1d",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.4/Hoard-5.2.0-beta.4-macos-intel.pkg",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/2479cba6d8c956184d624738249abd2c1aefe050889816d5a2f861b137d1ca1d",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 61
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-Setup-5.2.0-beta.4.exe",
+          "size_bytes": 58468680,
+          "digest": "sha256:27695d5e737c30c26dbfbc540a816125d18aeddccd9def1026a1c9a1c4f9336c",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.4/Hoard-Setup-5.2.0-beta.4.exe",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/27695d5e737c30c26dbfbc540a816125d18aeddccd9def1026a1c9a1c4f9336c",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 67
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        }
+      ]
+    },
+    {
+      "tag": "tauri-nuitka-beta.2",
+      "published": "2026-11-05T19:04:57Z",
+      "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/tauri-nuitka-beta.2",
+      "assets": [
+        {
+          "name": "Hoard-Tauri-5.2.0-beta.4-linux-amd64.deb",
+          "size_bytes": 110872102,
+          "digest": "sha256:b839f9250722d7c63f2ff17e14d2161af350606285e34cea8a21f3097168f7e9",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/tauri-nuitka-beta.2/Hoard-Tauri-5.2.0-beta.4-linux-amd64.deb",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/b839f9250722d7c63f2ff17e14d2161af350606285e34cea8a21f3097168f7e9",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 59
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-Tauri-5.2.0-beta.4-linux-x86_64.AppImage",
+          "size_bytes": 176523768,
+          "digest": "sha256:e85a37e843b0b81c20328348833a400702322e075b16220b2feb8a04e63de069",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/tauri-nuitka-beta.2/Hoard-Tauri-5.2.0-beta.4-linux-x86_64.AppImage",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/e85a37e843b0b81c20328348833a400702322e075b16220b2feb8a04e63de069",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 63
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-Tauri-5.2.0-beta.4-macos-apple-silicon.dmg",
+          "size_bytes": 79912114,
+          "digest": "sha256:f49b74a211446bed39a8ba8a35da6d113947c903e6c60cc998092b7f7a241042",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/tauri-nuitka-beta.2/Hoard-Tauri-5.2.0-beta.4-macos-apple-silicon.dmg",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/f49b74a211446bed39a8ba8a35da6d113947c903e6c60cc998092b7f7a241042",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 61
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-Tauri-5.2.0-beta.4-macos-intel.dmg",
+          "size_bytes": 84172333,
+          "digest": "sha256:fdca0eb186cc70293f6ab239a609b381e3fb2dd6339c13ff3a29afa36decee04",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/tauri-nuitka-beta.2/Hoard-Tauri-5.2.0-beta.4-macos-intel.dmg",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/fdca0eb186cc70293f6ab239a609b381e3fb2dd6339c13ff3a29afa36decee04",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 61
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        },
+        {
+          "name": "Hoard-Tauri-Setup-5.2.0-beta.4.exe",
+          "size_bytes": 52140928,
+          "digest": "sha256:9d2df9a1f9b3e9685996085edd901e729d9c984f2ec20a749417d4395aa4c149",
+          "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/tauri-nuitka-beta.2/Hoard-Tauri-Setup-5.2.0-beta.4.exe",
+          "published_av": {
+            "url": "https://www.virustotal.com/gui/file/9d2df9a1f9b3e9685996085edd901e729d9c984f2ec20a749417d4395aa4c149",
+            "malicious": 0,
+            "suspicious": 0,
+            "engines": 65
+          },
+          "installed_bytes": null,
+          "cold_start_seconds": null,
+          "warm_start_seconds": null,
+          "library_50000_seconds": null,
+          "idle_process_tree_memory_bytes": null,
+          "peak_process_tree_memory_bytes": null,
+          "native_drag_verified": null
+        }
+      ]
+    }
+  ]
+}

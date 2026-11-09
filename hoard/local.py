@@ -28,7 +28,8 @@ from .common import log
 from .downloader import Manifest, STORE_DIRS, build_catalog, record_folder, valid_location
 from .downloads import IMAGE_EXT, PREVIEW_HINT
 from .paths import data_dir
-from .safety import UnsafePath, _is_link, chosen_picture, clean_text, open_under, rel_to_path, write_file_safely
+from .safety import UnsafePath, _is_link, chosen_picture, clean_text, open_under, rel_to_path
+from .storage import write_document as write_file_safely
 
 LOCAL = STORE_DIRS["local"]
 MAX_FILES = 20000

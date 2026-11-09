@@ -22,6 +22,8 @@ phrases count toward the same lockout. It only unlocks Hoard's hidden library; i
 """
 from __future__ import annotations
 
+from . import storage
+
 import hashlib
 import json
 import hmac
@@ -33,7 +35,8 @@ import time
 from pathlib import Path
 
 from .paths import data_dir
-from .safety import DataFileError, check_seal, read_json_file, seal, write_file_safely
+from .safety import DataFileError, seal
+from .storage import seal_status as check_seal, read_document as read_json_file, write_document as write_file_safely
 from .tags import TAG_KEY_RX
 
 KINDS = ("archived", "unarchived", "removed", "hidden", "apart")   # apart: "Not a copy", kept out of stacks (issue #217)
@@ -76,8 +79,8 @@ def _hash(pin: str, salt: bytes, n: int, r: int, p: int) -> bytes:
 class MarkStore:
     """marks.json: one lock for every change. Read again whenever the file has changed (a page asks for it several
     times a request, and a download once a product): what was read is kept until then."""
-    _lock = threading.Lock()
-    _read_lock = threading.Lock()
+    _lock = storage.metadata_lock
+    _read_lock = storage.metadata_lock
     _read: dict = {}   # path -> (the file's stamp, what was read from it)
 
     def __init__(self, path: Path | None = None):
@@ -100,7 +103,7 @@ class MarkStore:
     def _cached(self) -> dict:
         """The choices file as last read, read again only when the file has changed (a new one each save)."""
         try:
-            st = self.path.stat()
+            st = storage.stat(self.path)
             stamp = (st.st_mtime_ns, st.st_size, st.st_ino)   # written by replacing it: a new file each time
         except OSError:
             stamp = None
@@ -120,7 +123,7 @@ class MarkStore:
         empty = {k: set() for k in KINDS} | {"ids": {k: {} for k in KINDS}, "pin": None, "recovery": None,
                                              "failures": 0, "wait_until": 0.0}
         try:
-            raw = read_json_file(self.path, 16 * 1024 * 1024) if self.path.exists() else None
+            raw = read_json_file(self.path, 16 * 1024 * 1024) if storage.exists(self.path) else None
         except (DataFileError, OSError, ValueError):
             return empty
         if not isinstance(raw, dict):
@@ -152,7 +155,7 @@ class MarkStore:
             "failures": data["failures"], "wait_until": data["wait_until"]}
         write_file_safely(self.path, json.dumps(seal(body), indent=1, sort_keys=True))
         if os.name == "posix":
-            os.chmod(self.path, 0o600)
+            storage.private(self.path)
 
     def change(self, kind: str, keys, on: bool, ids: dict | None = None) -> dict:
         """Mark (on) or unmark products. ids: the store's own keys of the products marked ({store:id: product key}),

@@ -1,6 +1,6 @@
 """Wishlists (issue #158; hoard/wishlists.py, kept as sets of the kind "wishlist" in hoard/sets.py): read from the
 stores' own lists, or from pages saved from your own browser, each product with its price, and a price that changed
-shown with what it was. The saved pages in tests/data/wishlists are made up, shaped like each store's."""
+shown with what it was. The saved pages in tests/data/stores are made up, shaped like each store's."""
 import contextlib
 import json
 import os
@@ -8,10 +8,10 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import library, sets, wishlists
 from hoard.tags import tag_key
@@ -21,14 +21,14 @@ try:
 except ImportError:
     BROWSER = False
 
-PAGES = Path(__file__).parent / "data" / "wishlists"
+PAGES = Path(__file__).parent / "data" / "stores"
 
 
 def saved(*names):
-    return [(n, (PAGES / n).read_text("utf-8")) for n in names]
+    return [(n, (PAGES / n.split("-")[0].split(".")[0] / ("wishlist" + n[len(n.split("-")[0].split(".")[0]):])).read_text("utf-8")) for n in names]
 
 
-class Prices(unittest.TestCase):
+class Prices(IsolatedTestCase):
     def test_as_the_stores_show_them(self):
         for text, amount, currency in (("1,000 JPY", 1000, "JPY"), ("15.00 - 50.00 USD", 15, "USD"), ("$22.46+", 22.46, "USD"),
                                        ("¥1,200", 1200, "JPY"), ("〜 800円", 800, "JPY"), ("€9.99", 9.99, "EUR"), ("Free", 0, "")):
@@ -50,7 +50,7 @@ def product(name, price, store="booth", **more):
             "price": wishlists.parse_price(price), **more}
 
 
-class Kept(unittest.TestCase):
+class Kept(IsolatedTestCase):
     def setUp(self):
         self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
 
@@ -109,7 +109,7 @@ class Kept(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class JinxxyElsewhere(unittest.TestCase):
+class JinxxyElsewhere(IsolatedTestCase):
     """A Jinxxy list can send you to a product on a site that isn't one of the stores: it keeps that page as its link,
     instead of showing No store link; one on a store Hoard knows is that store's, as before."""
 
@@ -142,7 +142,7 @@ class JinxxyElsewhere(unittest.TestCase):
         self.assertNotIn("ko-fi", json.dumps(sets.from_code(code)))
 
 
-class SavedPages(unittest.TestCase):
+class SavedPages(IsolatedTestCase):
     def test_each_stores_page(self):
         got = {r["filename"]: r for r in wishlists.from_saved_pages(saved("booth.html", "gumroad.html", "jinxxy-likes.html", "payhip.html"))}
         (booth,) = got["booth.html"]["lists"]
@@ -248,7 +248,7 @@ class SavedPages(unittest.TestCase):
         self.assertEqual([p["name"] for p in both["products"]], ["A", "B", "C"])
 
 
-class BoothLinks(unittest.TestCase):
+class BoothLinks(IsolatedTestCase):
     def test_an_items_english_page(self):
         """A Booth item's link that names no language (booth.pm/items/<id>, as 4.4.0 and the 5.0 betas kept a loved
         item's) doesn't open the item for everyone: it's its English page, kept, shared and shown. One that names
@@ -266,7 +266,7 @@ class BoothLinks(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class BoothPages(unittest.TestCase):
+class BoothPages(IsolatedTestCase):
     """Booth's loved items, 20 to a page: its page numbers are drawn by its script (an address with ?page=2 shows the
     first page again, so Hoard read only the first 20), and Hoard turns the pages with Booth's own arrow."""
     PAGE = """<html><body><main>
@@ -320,7 +320,7 @@ draw();
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class InHoard(unittest.TestCase):
+class InHoard(IsolatedTestCase):
     def setUp(self):
         from hoard import config, library, server
         tmp = Path(tempfile.mkdtemp())
@@ -364,7 +364,7 @@ class InHoard(unittest.TestCase):
         boots = next(i for i in wish["items"] if i["name"] == "Mochi Boots")
         self.assertTrue(boots["owned"], "yours already: in your library")
         # read again, cheaper: what it was shows
-        page = (PAGES / "booth.html").read_text("utf-8").replace("1,500 JPY", "1,200 JPY")
+        page = saved("booth.html")[0][1].replace("1,500 JPY", "1,200 JPY")
         self.api("/api/wishlists/import", {"files": [{"filename": "booth.html", "content": page}]})
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:

@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 import urllib.parse
 import urllib.error
 import urllib.request
@@ -27,8 +28,6 @@ from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-_TEST_HOME = Path(tempfile.mkdtemp(prefix="hoard-tests-"))
-os.environ["HOARD_DATA_DIR"] = str(_TEST_HOME / "Hoard")   # tests never touch your real Hoard data
 sys.path.insert(0, str(REPO))
 
 from hoard import browser, common, config, downloader, library, safety, server, tags  # noqa: E402
@@ -38,7 +37,9 @@ downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried ag
 def reset_keys():
     """Start with no sealing key and no record of sealed files (as on a fresh install)."""
     import shutil
-    shutil.rmtree(_TEST_HOME / "Hoard", ignore_errors=True)
+    from hoard import storage
+    storage.close_all()
+    shutil.rmtree(Path(os.environ["HOARD_DATA_DIR"]), ignore_errors=True)
     safety._integrity_key, safety._sealed_ids = None, None
 
 
@@ -70,7 +71,7 @@ def fake_addrinfo(*ips):
     return out
 
 
-class OneCopy(unittest.TestCase):
+class OneCopy(IsolatedTestCase):
     """Every piece of security code exists exactly once, so a fix can never miss a copy."""
 
     def test_each_is_defined_once(self):
@@ -87,7 +88,7 @@ class OneCopy(unittest.TestCase):
             self.assertEqual(len(seen.get(name, [])), 1, f"{name} is defined in {seen.get(name)}")
 
 
-class Links(unittest.TestCase):
+class Links(IsolatedTestCase):
     """Store text and links are untrusted: only plain web addresses become links."""
 
     def test_only_http_links(self):
@@ -111,7 +112,7 @@ class Links(unittest.TestCase):
         self.assertFalse(downloader.store_url("javascript:alert(1)", ["payhip.com"]))
 
 
-class PublicOnlyFetching(unittest.TestCase):
+class PublicOnlyFetching(IsolatedTestCase):
     """H-01: server-side fetches only reach public addresses, with no gap for DNS rebinding."""
 
     def test_private_addresses_are_not_public(self):
@@ -163,10 +164,13 @@ class PublicOnlyFetching(unittest.TestCase):
         bundle too, and still checks every certificate and host name."""
         import ssl
         bare = lambda *a, **k: ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)   # a Python that finds no certificates
-        self.assertEqual(bare().cert_store_stats()["x509_ca"], 0)
+        # Managed runtimes can inject their own CA into every context. Hoard must
+        # still add the public authorities, without weakening verification.
+        initial_authorities = bare().cert_store_stats()["x509_ca"]
         with mock.patch.object(safety, "_TLS", None), mock.patch.object(safety.ssl, "create_default_context", bare):
             context = safety.tls_context()
         self.assertGreater(context.cert_store_stats()["x509_ca"], 50, "the usual authorities, from certifi")
+        self.assertGreater(context.cert_store_stats()["x509_ca"], initial_authorities)
         self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
         self.assertTrue(context.check_hostname)
 
@@ -257,7 +261,7 @@ class PublicOnlyFetching(unittest.TestCase):
             opened.assert_not_called()
 
 
-class Pages(unittest.TestCase):
+class Pages(IsolatedTestCase):
     """The pages run only their own script, and nothing else from the server runs as a page."""
 
     def test_policy_allows_only_the_pages_own_script(self):
@@ -331,7 +335,7 @@ class Pages(unittest.TestCase):
                 srv.server_close()
 
 
-class NetworkMode(unittest.TestCase):
+class NetworkMode(IsolatedTestCase):
     """H-02: sharing on the network needs HTTPS or an explicit statement that the network is encrypted."""
 
     def test_network_mode_needs_https_or_plain_http_opt_in(self):
@@ -370,7 +374,7 @@ class NetworkMode(unittest.TestCase):
             self.assertFalse(self._access(m, key="s3cret", path="/files/a.png?k=wrong", in_address=True))
 
 
-class LocalAccess(unittest.TestCase):
+class LocalAccess(IsolatedTestCase):
     """S-01 (2.3.1 review): being on this computer isn't enough. Other programs, and other people's accounts on a
     shared computer, can reach 127.0.0.1 too, so every request for data, images or an action needs this run's
     access key. Without it, nothing can read your library or, say, point Hoard's downloads folder elsewhere."""
@@ -461,7 +465,7 @@ class LocalAccess(unittest.TestCase):
             other.server_close()
 
 
-class Thumbnails(unittest.TestCase):
+class Thumbnails(IsolatedTestCase):
     """H-07: only raster images are kept; SVG is never fetched into the cache or served."""
 
     def test_svg_is_refused_and_old_svg_is_removed(self):
@@ -483,7 +487,7 @@ class Thumbnails(unittest.TestCase):
             self.assertFalse(old.exists())
 
 
-class SignIns(unittest.TestCase):
+class SignIns(IsolatedTestCase):
     """CRED-01, CRED-03, CRED-06: sign-ins are per store, protected, locked and verifiably removed."""
 
     def setUp(self):
@@ -617,7 +621,7 @@ class SignIns(unittest.TestCase):
             self.assertIn("no saved sign-in", m.sign_out(None, self.cfg, "jinxxy", online=True))
 
 
-class GumroadCookie(unittest.TestCase):
+class GumroadCookie(IsolatedTestCase):
     """H-03 / CRED-02: a copied Gumroad session cookie is never read from files or the environment."""
 
     def test_config_and_environment_cookies_are_ignored(self):
@@ -631,7 +635,7 @@ class GumroadCookie(unittest.TestCase):
         from_browser.assert_called_once()
 
 
-class Files(unittest.TestCase):
+class Files(IsolatedTestCase):
     """Names from stores can't escape the download folder or hit reserved Windows names."""
 
     def test_safe_names(self):
@@ -650,7 +654,7 @@ class Files(unittest.TestCase):
                 self.assertTrue(joined is None or joined == root or root in joined.parents, attempt)
 
 
-class Tags(unittest.TestCase):
+class Tags(IsolatedTestCase):
     """Tag names are cleaned, and two programs saving at once lose nothing."""
 
     def test_clean_tag(self):
@@ -671,7 +675,7 @@ class Tags(unittest.TestCase):
             self.assertEqual(len(store.load()["items"]), 100)
 
 
-class Names(unittest.TestCase):
+class Names(IsolatedTestCase):
     """File, folder and item names can't hide their real meaning or contents."""
 
     SPOOF = "Cute Hoodie\u202egpj.exe"   # shows as "Cute Hoodieexe.jpg" where the override is honoured
@@ -690,7 +694,7 @@ class Names(unittest.TestCase):
             self.assertEqual(m.clean_text(None), "")
 
 
-class Paths(unittest.TestCase):
+class Paths(IsolatedTestCase):
     """Paths read from data files can never lead outside their folder."""
 
     def test_only_plain_relative_paths(self):
@@ -719,7 +723,7 @@ class Paths(unittest.TestCase):
                 safety.rel_to_path(root, "Booth/Trap/file.zip")
 
 
-class DataFiles(unittest.TestCase):
+class DataFiles(IsolatedTestCase):
     """Manifests, the catalog, tags and the library list are read defensively and written safely."""
 
     def setUp(self):
@@ -819,7 +823,7 @@ class DataFiles(unittest.TestCase):
         self.assertTrue(list(Path(self.tmp.name).glob("library.damaged-*.json")))
 
 
-class TagHardening(unittest.TestCase):
+class TagHardening(IsolatedTestCase):
     """Tags can't carry markup, invisible characters or object-breaking names, and tags.json is checked."""
 
     def test_tag_characters(self):
@@ -916,7 +920,7 @@ class TagHardening(unittest.TestCase):
                 srv.server_close()
 
 
-class StoreLinks(unittest.TestCase):
+class StoreLinks(IsolatedTestCase):
     """An edited record can't send you anywhere but the item's own store."""
 
     def test_rule(self):
@@ -949,7 +953,7 @@ class StoreLinks(unittest.TestCase):
                     self.assertEqual(use, "storeUrl", f"{page.name}: {field} must be checked with storeUrl")
 
 
-class Seals(unittest.TestCase):
+class Seals(IsolatedTestCase):
     """Edits made by other programs are noticed, and their links aren't trusted."""
 
     def setUp(self):
@@ -995,7 +999,7 @@ class Seals(unittest.TestCase):
         self.assertEqual(safety.integrity_key(), key)
         self.assertEqual(safety.integrity_key(), key)
         if os.name == "posix":
-            self.assertEqual(stat.S_IMODE((_TEST_HOME / "Hoard" / "integrity.key").stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE((Path(os.environ["HOARD_DATA_DIR"]) / "integrity.key").stat().st_mode), 0o600)
 
     def _download_folder(self):
         root = self.dir / "downloads"
@@ -1088,7 +1092,7 @@ class Seals(unittest.TestCase):
         self.assertEqual(item["download_url"], "https://booth.pm/ja/items/1")
 
 
-class SupplyChain(unittest.TestCase):
+class SupplyChain(IsolatedTestCase):
     """H-04, H-05, H-06: dependencies are locked with hashes, and workflow actions pinned to commits."""
 
     def test_requirements_are_locked(self):
@@ -1177,7 +1181,7 @@ def _hop_server():
     return srv
 
 
-class Egress(unittest.TestCase):
+class Egress(IsolatedTestCase):
     """Every store download and request goes through one checked path (H-01, H-02, H-03)."""
 
     @classmethod
@@ -1302,7 +1306,7 @@ class _Ranges(http.server.BaseHTTPRequestHandler):
         pass
 
 
-class Resuming(unittest.TestCase):
+class Resuming(IsolatedTestCase):
     """B-03 (2.3.1 review): a .part file left from last time is only added to with the part that follows it, and only
     counts as finished when the store says the file ends there. Otherwise the file starts again, rather than being
     joined from two different ones; and a file shorter than the store said is never put in place."""
@@ -1388,7 +1392,7 @@ class Resuming(unittest.TestCase):
         self.assertEqual(seen[0].get("Accept-Encoding"), "identity")
 
 
-class EgressOverHTTPS(unittest.TestCase):
+class EgressOverHTTPS(IsolatedTestCase):
     """The real HTTPS path (not the tests' plain-http stand-ins): a store redirecting to its file host, as Gumroad
     and Booth do. Names ending .localhost stand for public hosts; every other name is checked as usual."""
 
@@ -1457,7 +1461,7 @@ class EgressOverHTTPS(unittest.TestCase):
 
 
 @unittest.skipUnless(hasattr(os, "symlink") and os.name == "posix", "needs symlinks")
-class FileRaces(unittest.TestCase):
+class FileRaces(IsolatedTestCase):
     """Files are written and served without being redirected by a link or a swap (H-04, H-05)."""
 
     def setUp(self):
@@ -1501,7 +1505,7 @@ class FileRaces(unittest.TestCase):
                 safety.open_under(self.dir, rel).close()
 
 
-class CloudFolders(unittest.TestCase):
+class CloudFolders(IsolatedTestCase):
     """Issue #32: downloads into a OneDrive folder. Windows marks OneDrive's files (and other sync apps' and
     deduplicated ones) as reparse points, like links, but they hold their own data. Only a reparse point that
     stands for somewhere else (a symlink, junction or mount point) is a link."""
@@ -1605,7 +1609,7 @@ class CloudFolders(unittest.TestCase):
         self.assertEqual(outside.read_text(), "keep me")
 
 
-class NameCollisions(unittest.TestCase):
+class NameCollisions(IsolatedTestCase):
     """Names that clean up alike never share a folder or overwrite each other (H-08)."""
 
     def test_folders(self):
@@ -1626,7 +1630,7 @@ class NameCollisions(unittest.TestCase):
                          "the old file is no longer offered: this is the creator's update, which replaces it")
 
 
-class Diagnostics(unittest.TestCase):
+class Diagnostics(IsolatedTestCase):
     """What the troubleshooting commands save is scrubbed by default (H-09)."""
 
     def test_scrub(self):
@@ -1649,7 +1653,7 @@ class Diagnostics(unittest.TestCase):
                          {"items": 2, "fields_filled": {"name": 1, "files": 1}, "files": 2})
 
 
-class SmallerFindings(unittest.TestCase):
+class SmallerFindings(IsolatedTestCase):
     """H-07 (shop names), H-10 (manifests), H-11 (server limits), H-12 (sign-in location)."""
 
     def test_deceptive_shop_names_are_refused(self):
@@ -1680,7 +1684,7 @@ class SmallerFindings(unittest.TestCase):
             browser.signins_root(cfg)
 
 
-class ScriptHashLineEndings(unittest.TestCase):
+class ScriptHashLineEndings(IsolatedTestCase):
     """A page's script runs whatever line endings the file has: browsers hash it after turning CRLF into LF."""
 
     def test_crlf_page(self):
@@ -1693,7 +1697,7 @@ class ScriptHashLineEndings(unittest.TestCase):
             self.assertIn(want, safety.content_security_policy(page), repr(ending))
 
 
-class CodeScanningFindings(unittest.TestCase):
+class CodeScanningFindings(IsolatedTestCase):
     """The CodeQL findings of September 2026 (code-scanning alerts 1-22): each test names the alerts it guards."""
 
     def test_inline_scripts_are_found_however_the_tags_are_written(self):
@@ -1855,7 +1859,7 @@ class CodeScanningFindings(unittest.TestCase):
         self.assertEqual(asked, ["https://kitsu.itch.io/tail-pack"], "the address as Hoard put it together")
 
 
-class CodeScanningNovember(unittest.TestCase):
+class CodeScanningNovember(IsolatedTestCase):
     """The CodeQL findings on 5.2.0 beta 4 (code-scanning alerts 56-59): what each pattern was is read in its parts
     now, each part checked whole, so none can take longer than the text's length; each says the same as before."""
 

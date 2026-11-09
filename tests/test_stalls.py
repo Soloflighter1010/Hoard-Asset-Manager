@@ -9,11 +9,11 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import common, config, downloader, egress, jobs, library, safety  # noqa: E402
@@ -121,7 +121,7 @@ def _serve():
     return srv, f"http://127.0.0.1:{srv.server_port}"
 
 
-class DirectDownloads(unittest.TestCase):
+class DirectDownloads(IsolatedTestCase):
     """Gumroad, itch.io and Booth's direct route: a store that stops sending is given up on (the part that came is
     kept, and resumed); progress is reported as the file comes in, and Stop is noticed part way through a file."""
 
@@ -215,7 +215,7 @@ class DirectDownloads(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class BrowserDownloads(unittest.TestCase):
+class BrowserDownloads(IsolatedTestCase):
     """Jinxxy, and Booth when it turns away direct downloads: the file comes through the browser, where saving it
     used to wait with no time limit."""
 
@@ -339,7 +339,7 @@ class BrowserDownloads(unittest.TestCase):
         self.assertEqual(downloader.disposition_name("inline"), "")
 
 
-class StoppingAJob(unittest.TestCase):
+class StoppingAJob(IsolatedTestCase):
     """Progress while a file downloads is shown, but not kept (in the job's log or the Tasks tab); and Stop is
     noticed on it, so a job can be stopped part way through a file."""
 

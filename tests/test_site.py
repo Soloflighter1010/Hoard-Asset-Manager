@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from html.parser import HTMLParser
 from urllib.parse import unquote
 from pathlib import Path
@@ -84,7 +85,7 @@ class Refs(HTMLParser):
                     self.external_loads.append(one)
 
 
-class TheSite(unittest.TestCase):
+class TheSite(IsolatedTestCase):
 
     def setUp(self):
         self.html = (SITE / "index.html").read_text("utf-8")
@@ -295,7 +296,7 @@ class TheSite(unittest.TestCase):
         self.assertIn("@media (max-width: 760px)", (SITE / "styles.css").read_text("utf-8"))
 
 
-class Deploying(unittest.TestCase):
+class Deploying(IsolatedTestCase):
     """The site's workflow: a push that changes what builds it builds it again."""
 
     def test_every_script_it_runs_is_in_its_paths(self):
@@ -308,7 +309,7 @@ class Deploying(unittest.TestCase):
         self.assertEqual(run - listed, set(), "every script it runs, in its paths")
 
 
-class TheOtherPages(unittest.TestCase):
+class TheOtherPages(IsolatedTestCase):
 
     def test_every_tester_is_thanked(self):
         page = (SITE / "testers.html").read_text("utf-8")
@@ -498,7 +499,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")
-        versions = [v for v in re.findall(r"^## (.+)$", md, re.M) if "-beta." not in v]   # betas: on GitHub only
+        versions = [v for v in re.findall(r"^## (.+)$", md, re.M) if "-beta." not in v and v != "Unreleased"]
         page = changelog.page(md, {})
         self.assertEqual(re.findall(r'<h2><a href="#[^"]+">([^<]+)</a></h2>', page), versions)
         self.assertEqual(page.count('class="latest-badge"'), 1)
@@ -552,7 +553,7 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
 
 
-class TheThreeZeroChangelog(unittest.TestCase):
+class TheThreeZeroChangelog(IsolatedTestCase):
     """3.0.0's changelog (the betas folded into one) uses only what the What's new page can show."""
 
     def test_3_0_0_reads_on_the_whats_new_page(self):
@@ -571,7 +572,7 @@ class TheThreeZeroChangelog(unittest.TestCase):
         self.assertNotIn("## 3.0.0-beta", text, "the betas are folded into 3.0.0")
 
 
-class TheDeploy(unittest.TestCase):
+class TheDeploy(IsolatedTestCase):
 
     def setUp(self):
         self.text = WORKFLOW.read_text("utf-8")
@@ -660,7 +661,7 @@ def _browser() -> bool:
 
 
 @unittest.skipUnless(_browser(), "needs Playwright's Chromium (python -m playwright install chromium)")
-class InABrowser(unittest.TestCase):
+class InABrowser(IsolatedTestCase):
     """The front page's store tabs, as the app's: choosing one raises it and says what Hoard does there; and the
     things to find, as in the app. Opened from disk, so nothing is fetched (the download buttons keep their links)."""
 

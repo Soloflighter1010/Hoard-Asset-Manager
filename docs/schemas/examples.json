@@ -1,0 +1,205 @@
+[
+  {
+    "name": "minimal",
+    "valid": true,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "notes and code",
+    "valid": true,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": [],
+      "page": "https://booth.pm/en/items/1",
+      "your_note": "For Rusk\nBlue version",
+      "note": "For Rusk",
+      "needs": [
+        {
+          "kind": "tool",
+          "name": "lilToon",
+          "url": "https://lilxyzw.github.io/lilToon/",
+          "versions": [
+            "1.2"
+          ],
+          "guids": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        }
+      ],
+      "code": {
+        "scripts": 1,
+        "plugins": 0,
+        "editor": 1,
+        "tools": [
+          "lilToon"
+        ],
+        "folders": [
+          "Assets/Kitsu/Editor"
+        ]
+      }
+    }
+  },
+  {
+    "name": "bad name",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": null,
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad creator",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": 3,
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad folder",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "../escape",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad store",
+    "valid": false,
+    "entry": {
+      "store": "Steam",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad files",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": null,
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad tags",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": null,
+      "suggested_tags": []
+    }
+  },
+  {
+    "name": "bad suggested_tags",
+    "valid": false,
+    "entry": {
+      "store": "Booth",
+      "name": "Hoodie",
+      "creator": "Kitsu",
+      "folder": "Booth/Kitsu/Hoodie",
+      "files": [
+        "Hoodie.unitypackage"
+      ],
+      "url": "https://booth.pm/items/1",
+      "variants": null,
+      "added": null,
+      "tags": [
+        "clothing"
+      ],
+      "suggested_tags": null
+    }
+  }
+]

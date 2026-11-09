@@ -4,10 +4,10 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server  # noqa: E402
 
@@ -18,7 +18,7 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Selecting(unittest.TestCase):
+class Selecting(IsolatedTestCase):
     @classmethod
     def setUpClass(cls):
         from playwright.sync_api import sync_playwright

@@ -10,10 +10,11 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, downloads, jobs, library, local, server  # noqa: E402
@@ -53,7 +54,7 @@ def http_get(srv, path: str) -> bytes:
     return data
 
 
-class LocalItems(unittest.TestCase):
+class LocalItems(IsolatedTestCase):
 
     def setUp(self):
         self.base = Path(tempfile.mkdtemp()).resolve()   # (Windows: the long form, as Hoard resolves it, not RUNNER~1)
@@ -66,7 +67,7 @@ class LocalItems(unittest.TestCase):
         (self.src / "Skins" / "skin.png").write_bytes(b"png!")
         (self.src / "Thumbs.db").write_bytes(b"clutter")
         self.cfg = {**config.load_config(), "root": str(self.root)}
-        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
 
     def catalog(self):
         return downloader.collect_catalog(self.cfg, self.root)[0]
@@ -123,7 +124,7 @@ class LocalItems(unittest.TestCase):
         key = next(iter(downloader.Manifest(self.root / "Local").assets))
         own = self.root / "Local" / "_linked" / key
         self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.jpg"])
-        (self.src / "Preview.jpg").unlink()
+        storage.remove(self.src / "Preview.jpg")
         local.rescan(self.cfg, self.root, key)
         self.assertEqual([p.name for p in own.glob("_thumbnail.*")], ["_thumbnail.png"], "the picture it had is gone, so another")
 
@@ -259,7 +260,7 @@ class LocalItems(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class FolderOfFolders(unittest.TestCase):
+class FolderOfFolders(IsolatedTestCase):
     """Issue #109: what you already keep in folders (one per creator, a folder per product inside) added to Local
     in one go, each folder some levels down a package of its own."""
 
@@ -275,7 +276,7 @@ class FolderOfFolders(unittest.TestCase):
         (self.src / "readme.txt").write_bytes(b"loose")
         (self.src / "Someone" / "notes.txt").write_bytes(b"loose")
         self.cfg = {**config.load_config(), "root": str(self.root)}
-        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
 
     def test_split(self):
         two = local.split(self.root, str(self.src), 2, True)
@@ -351,7 +352,7 @@ class FolderOfFolders(unittest.TestCase):
         self.assertEqual(len(downloader.collect_catalog(self.cfg, self.root)[0]), 4, "no copies of the first three")
 
 
-class LocalPage(unittest.TestCase):
+class LocalPage(IsolatedTestCase):
 
     def test_add_your_own(self):
         base = Path(tempfile.mkdtemp())
@@ -372,7 +373,7 @@ class LocalPage(unittest.TestCase):
             page.goto(srv.entry_url())
             page.click("nav.apptabs a[href='/downloads#store=Local']")
             page.wait_for_url("**/downloads#store=Local")
-            page.locator("#stores [data-store='Local'][aria-checked='true']").wait_for()
+            page.locator("#storeSeg [data-store='Local'][aria-checked='true']").wait_for()
             page.click("#localAdd")
             page.locator("#localPanel.win:not([hidden])").wait_for()
             self.assertTrue(page.locator("#localCopy").is_checked(), "copying is offered first")
@@ -421,7 +422,7 @@ class LocalPage(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Browse(unittest.TestCase):
+class Browse(IsolatedTestCase):
     """Typing a full path to a folder was the hardest part of setting Hoard up. In Hoard's own window, Browse opens
     the system's folder (or file) picker; in a web browser, where there's no way to ask for one, it isn't shown."""
 
@@ -448,8 +449,18 @@ class Browse(unittest.TestCase):
             page.locator("#localPanel.win:not([hidden])").wait_for()
             self.assertTrue(page.locator("#localBrowseFolder").is_hidden(), "a web browser has no picker to offer")
             self.srv.pick_path = lambda kind, start: asked.append(kind) or str(self.src)   # as Hoard's window does
+            held = []
+            page.route("**/api/assets*", lambda route: held.append(route))
             page.reload()
             page.click("#localAdd")
+            # Opening Local before its projection arrives must still reveal the native picker when loading ends.
+            for _ in range(100):
+                if held:
+                    break
+                page.wait_for_timeout(50)
+            self.assertTrue(held)
+            held.pop().continue_()
+            page.unroute("**/api/assets*")
             page.click("#localBrowseFolder")
             page.wait_for_function("() => document.querySelector('#localPath').value !== ''")
             self.assertEqual(page.locator("#localPath").input_value(), str(self.src))
@@ -476,7 +487,7 @@ class Browse(unittest.TestCase):
             page.wait_for_function("() => document.title === 'Hoard: Local'")
             self.assertEqual(page.get_attribute('.apptabs a[href="/downloads#store=Local"]', "aria-current"), "page")
             self.assertIsNone(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"))
-            page.click('#stores [data-store=""]')
+            page.click('#storeSeg [data-store=""]')
             page.wait_for_function("() => document.title === 'Hoard: Downloads'")
             self.assertEqual(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"), "page")
             browser.close()

@@ -11,10 +11,12 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, konoasset, library, local, tags  # noqa: E402
@@ -72,7 +74,7 @@ def hashes(folder: Path) -> dict:
             for p in sorted(folder.rglob("*")) if p.is_file()}
 
 
-class BringingIn(unittest.TestCase):
+class BringingIn(IsolatedTestCase):
 
     def setUp(self):
         self.base = Path(tempfile.mkdtemp()).resolve()
@@ -82,8 +84,8 @@ class BringingIn(unittest.TestCase):
         self.cfg = {**config.load_config(), "root": str(self.root)}
         self.library = [library.item("booth", "1001", name="Rusk", creator="Kitsu Studio")]
         for f in (konoasset.remembered_file(), tags.tags_file(), downloader.integrity_file()):
-            f.unlink(missing_ok=True)
-            self.addCleanup(f.unlink, missing_ok=True)
+            storage.remove(f, missing_ok=True)
+            self.addCleanup(storage.remove, f, missing_ok=True)
         self.addCleanup(shutil.rmtree, local.pictures_dir(), True)
 
     def bring_in(self, folder):
@@ -96,7 +98,7 @@ class BringingIn(unittest.TestCase):
         self.assertEqual({k: seen[k] for k in ("total", "matched", "local", "left_out", "before")},
                          {"total": 5, "matched": 1, "local": 3, "left_out": 1, "before": 0})
         self.assertEqual(seen["left_out_names"], ["Lost Thing"])
-        self.assertFalse(tags.tags_file().exists(), "looking changes nothing")
+        self.assertFalse(storage.exists(tags.tags_file()), "looking changes nothing")
 
         done = self.bring_in(folder)
         self.assertEqual((done["matched"], done["local"], done["left_out"]), (1, 3, ["Lost Thing"]))
@@ -133,6 +135,23 @@ class BringingIn(unittest.TestCase):
 
     def test_the_current_shape(self):
         self.check(3)
+
+    def test_a_failure_after_tags_restores_local_products_and_notes(self):
+        folder = make_folder(self.base, 3)
+        before = hashes(folder)
+        change = tags.TagStore.change_all
+
+        def fail_after_change(store, bodies):
+            change(store, bodies)
+            raise RuntimeError("failed after saving tags")
+
+        with mock.patch.object(tags.TagStore, "change_all", fail_after_change):
+            with self.assertRaisesRegex(RuntimeError, "failed after saving tags"):
+                self.bring_in(folder)
+        self.assertEqual(tags.TagStore().load(), tags.TagStore.empty())
+        self.assertEqual(konoasset.remembered(), {})
+        self.assertEqual(downloader.collect_catalog(self.cfg, self.root)[0], [])
+        self.assertEqual(hashes(folder), before)
 
     def test_version_2(self):
         self.check(2)

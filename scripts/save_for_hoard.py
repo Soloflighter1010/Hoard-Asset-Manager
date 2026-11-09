@@ -1,5 +1,5 @@
 """The Save for Hoard bookmark's page on the website (site/save-for-hoard.html): the bookmark itself, a link to
-drag to the bookmarks bar, made from the same code as in Hoard (PAYHIP_SAVER in hoard/web/library.html), so the two
+drag to the bookmarks bar, made from the same code as in Hoard (PAYHIP_SAVER in hoard/web/library.js), so the two
 can't drift apart. It's on the website because a link can't be dragged out of Hoard's own window into another
 browser: Hoard opens this page in the person's usual browser instead.
 
@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 REPO = Path(__file__).resolve().parent.parent
-APP = REPO / "hoard" / "web" / "library.html"
+APP = REPO / "hoard" / "web" / "library.js"
 PAGE = REPO / "site" / "save-for-hoard.html"
 LINK = re.compile(r'(<a class="bookmarklet" id="saver" href=")([^"]*)(")')
 

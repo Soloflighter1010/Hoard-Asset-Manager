@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Library and Downloads share one app shell, product tiles and details. Switching views keeps the loaded data
+  and common windows; Back and Forward keep working. Look inside has a bounded Svelte component trial.
+- Private metadata moves to sealed SQLite transactions. Existing JSON files are retained as migration backups
+  for one release, and product tags, notes, marks and download preferences follow product renames. Public JSON
+  exports keep their existing formats, with versioned schemas shared by Python and Unity validation.
+- Store readers, downloads and wishlist parsing live in one adapter per store. Stores show safe reading-health
+  messages. Background readers and jobs share a priority scheduler with Pause, Stop and restart checkpoints.
+- Product and project dragging can use pointer events when the desktop engine does not start native dragging.
+- HTTP routes have a shared registration and generated reference. Translation keys use JavaScript/Svelte syntax
+  parsing. Tests use isolated homes and balanced CI shards, with two shuffled runs per interpreter.
+- See [the roadmap implementation record](docs/ROADMAP-315.md) for compatibility details and remaining native
+  desktop measurements. macOS signing and notarization remain deferred.
+
 ## 5.2.0-beta.4
 
 - **The top bar** ([#270](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/270)). The logo, then the pages (Library, Downloads, Local, Sets and Wishlists, Tasks,

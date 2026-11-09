@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -16,10 +17,10 @@ import site_chrome  # noqa: E402
 DISCORD = re.compile(r'<a href="https://discord\.gg/[A-Za-z0-9]+" target="_blank" rel="noopener noreferrer"[^>]*>Discord</a>')
 KOFI = re.compile(r'<a class="ghost sm" id="tipKofi" href="https://ko-fi\.com/[A-Za-z0-9_]+" target="_blank" '
                   r'rel="noopener noreferrer">Tip on Ko-fi</a>')
-PAGES = [REPO / "hoard" / "web" / n for n in ("library.html", "downloads.html")]
+PAGES = [REPO / "hoard" / "web" / n for n in ("library.html",)]
 
 
-class CommunityLinks(unittest.TestCase):
+class CommunityLinks(IsolatedTestCase):
 
     def test_discord_in_the_pages_bars(self):
         # (#270: Hoard's own links are in the bar, before Menu and Sync, and in the Menu when the bar has no room)

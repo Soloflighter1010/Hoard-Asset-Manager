@@ -5,10 +5,10 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server  # noqa: E402
 from hoard.marks import MarkStore  # noqa: E402
@@ -25,7 +25,7 @@ OWNED = (("Booth", "1", "Rusk"), ("Gumroad", "g1", "Rusk"), ("Booth", "2", "Hood
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Duplicates(unittest.TestCase):
+class Duplicates(IsolatedTestCase):
     owned = OWNED
 
     def setUp(self):

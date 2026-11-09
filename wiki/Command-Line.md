@@ -41,8 +41,8 @@ The examples below say `hoard-cli`; use whichever of these fits. Without a comma
 - `--only <text>`: only products whose name or creator contains the text
 - `--headed`: show the browser while downloading from Booth or Jinxxy
 
-Every command also takes `--config <file>`, to use a different settings file (default: `config.json` in Hoard's
-app-data folder).
+Every command also takes `--config <file>`, to use an external JSON settings file. By default, settings are the
+private `config.json` document inside Hoard's `metadata.sqlite3`. See [Settings](Settings#settings-only-in-configjson).
 
 ## Examples
 

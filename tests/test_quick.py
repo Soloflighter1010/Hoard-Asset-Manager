@@ -5,10 +5,10 @@ import os
 import tempfile
 import types
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import common, config, itch, jobs, library, sets, wishlists  # noqa: E402
 
@@ -20,7 +20,7 @@ except ImportError:
 QUICK = {"_quick": True}
 
 
-class TheRule(unittest.TestCase):
+class TheRule(IsolatedTestCase):
     def test_two_pages_or_fifty_products_whichever_comes_first(self):
         self.assertEqual((common.QUICK_PAGES, common.QUICK_ITEMS), (2, 50))
         self.assertFalse(common.quick_done({}, 40, 5000), "a full refresh reads on")
@@ -29,7 +29,7 @@ class TheRule(unittest.TestCase):
         self.assertTrue(common.quick_done(QUICK, 1, 50), "fifty products, on however few pages")
 
 
-class Gumroad(unittest.TestCase):
+class Gumroad(IsolatedTestCase):
     def read(self, per, total, cfg, archived=False):
         """Gumroad's library as gumroad_cards reads it, per a page: the cards it gives, and the pages asked for."""
         asked = []
@@ -58,7 +58,7 @@ class Gumroad(unittest.TestCase):
         self.assertEqual([("show_archived_only" in p) for p in asked], [False, False, True, True])
 
 
-class Booth(unittest.TestCase):
+class Booth(IsolatedTestCase):
     class Page:
         """Booth's library and gifts: per cards a page, total in each."""
 
@@ -98,7 +98,7 @@ class Booth(unittest.TestCase):
         self.assertEqual(len(ids), 50, "a full refresh: all 45 and the 5 gifts")
 
 
-class Jinxxy(unittest.TestCase):
+class Jinxxy(IsolatedTestCase):
     def test_the_inventory_stops_scrolling_at_fifty(self):
         page = types.SimpleNamespace(get_by_role=lambda *a, **k: types.SimpleNamespace(count=lambda: 0),
                                      mouse=types.SimpleNamespace(wheel=lambda x, y: None), wait_for_timeout=lambda ms: None)
@@ -114,7 +114,7 @@ class Jinxxy(unittest.TestCase):
         self.assertEqual(shown[-1], 130, "and a full refresh scrolls to the end")
 
 
-class Payhip(unittest.TestCase):
+class Payhip(IsolatedTestCase):
     def read(self, per, total, cfg):
         """One shop's library, per cards a page; the cards read and the pages visited."""
         page = types.SimpleNamespace(url="", visits=[])
@@ -146,7 +146,7 @@ class Payhip(unittest.TestCase):
         self.assertEqual((len(cards), len(visits)), (100, 7))
 
 
-class Itch(unittest.TestCase):
+class Itch(IsolatedTestCase):
     def test_its_api_from_the_start(self):
         for per, cfg, want in ((50, QUICK, (50, 1)), (20, QUICK, (40, 2)), (20, {}, (130, 7))):
             asked = []
@@ -168,7 +168,7 @@ def product(n, store="booth"):
             "price": wishlists.parse_price(f"{n * 100} JPY")}
 
 
-class Wishlists(unittest.TestCase):
+class Wishlists(IsolatedTestCase):
     def setUp(self):
         self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
         self.store.put_wishlists([{"store": "booth", "list": "Loved items", "products": [product(n) for n in range(1, 6)]}])
@@ -226,7 +226,7 @@ class Window:
         pass
 
 
-class TheTask(unittest.TestCase):
+class TheTask(IsolatedTestCase):
     def setUp(self):
         self.lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
         self.lib.replace_store("booth", [library.item("booth", n, name=f"Item {n}", creator="Kitsu") for n in ("1", "2", "3")])

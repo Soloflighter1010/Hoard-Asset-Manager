@@ -11,6 +11,13 @@ The Linux Flatpak uses `~/.local/share/Hoard` too (not a folder of its own under
 library with Hoard run from source, and Hoard for Unity finds it. Only its copy of Hoard's browser is its own, in
 `~/.var/app/io.github.soloflighter1010.Hoard/cache`.
 
+Private metadata now lives in `metadata.sqlite3`. The `.json` names in this first table identify documents
+inside it, not separate editable files. The first migration retains the old files as `.json.pre-sqlite-v1`
+backups for one release. Keep those backups; they contain the state at migration, not later edits. Credentials,
+pictures, logs and project reports remain separate files. Scheduler checkpoints, queued tasks and store health
+also live in the database. Use **Clear** in Tasks to clear its history; deleting an old JSON backup has no effect.
+Close Hoard before copying its app-data, and keep `metadata.sqlite3` with its matching `integrity.key`.
+
 | What | What it's for |
 |---|---|
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
@@ -38,8 +45,8 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `logs/projects-<date>_<time>.log` | Projects' log (5.1.3), as ALCOM and the Creator Companion keep theirs: what Hoard did to your projects, packages and repositories, and what went wrong, a line for each with its time and level. One for each time Hoard starts that Projects has something to say, the newest 30 kept. **Logs**, in Projects, shows this run's. See [Projects](Projects#logs) |
 | `diagnostics/incidents.jsonl` | Private local record of recent errors and crash tracebacks, used to build support reports; it is never sent automatically |
 | `window/` | The window's own storage |
-| `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |
-| `tasks.json` | The Tasks window's list of finished jobs (the last 60): what each did, how it went, and its progress. Delete it, or **Clear** in Tasks, to empty the list |
+| `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again |
+| `tasks.json` | The Tasks window's list of finished jobs (the last 60): what each did, how it went, and its progress. **Clear** in Tasks empties the list |
 | `sync.json` | When the last sync started |
 | `routine.json` | When the routine check last ran, so it knows when the next is due, and how much it found that you haven't looked at yet |
 | `update.json` | When Hoard last checked for updates, and the newest version it found |
@@ -86,13 +93,16 @@ on macOS and Linux.
 
 ## Seals
 
-Every record Hoard writes (its library list and marks, and in the downloads folder each store's `_manifest.json`,
-`catalog.json`, `tags.json` and every `asset.json`) carries a seal made with `integrity.key`. When a record was changed by something other than
+The database has one seal covering its documents and product identities. An invalid seal stops access; keep
+the database and key, and restore a known backup. It is never silently reset to an empty library.
+
+Exported records in the downloads folder (each store's `_manifest.json`,
+`catalog.json`, `tags.json` and every `asset.json`) carry a seal made with `integrity.key`. When a record was changed by something other than
 Hoard, the seal shows it, and Hoard:
 
 - tells you, and keeps a copy of the changed file to look at (`_manifest.changed-<date>.json`, say);
 - keeps the records, but not their links, and fetches the links from the store again on the next refresh or
-  sync (an edited `marks.json` keeps your choices but drops the hidden library's PIN).
+  sync.
 
 `hoard-cli verify` checks every record in the downloads folder, then rebuilds the catalog files. A damaged file
 (not valid JSON, say) is kept aside as `<name>.damaged-<date>.json`, and Hoard carries on without it.
@@ -102,6 +112,9 @@ Hoard, the seal shows it, and Hoard:
 Each computer's Hoard seals its records with its own key, so each would treat the other's records as unverified
 ("saved by Hoard on another computer") and fetch store links again. To share one downloads folder, on a NAS say,
 copy `integrity.key` from Hoard's app-data folder on one computer to the same place on the other.
+Do this before the second computer's first launch. For an existing installation, make a portable backup in
+Settings and restore it into a fresh home using the shared key. Never replace the key beside an existing
+database: that database is sealed with its original key.
 
 ## Backing up, and moving to a new computer
 

@@ -1,0 +1,10 @@
+{
+  "name": "hoard-development",
+  "private": true,
+  "description": "Build and validation tools; never needed to run the Python app",
+  "devDependencies": {
+    "acorn": "8.15.0",
+    "esbuild": "0.28.2",
+    "svelte": "5.57.3"
+  }
+}

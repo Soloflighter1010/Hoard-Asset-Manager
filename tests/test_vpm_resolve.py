@@ -9,6 +9,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 from hoard.vpm import resolve
@@ -37,7 +38,7 @@ class Collection:
         return next(i for i in self.infos if i.name == name and i.version == Version.parse(version))
 
 
-class Case(unittest.TestCase):
+class Case(IsolatedTestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root, True)

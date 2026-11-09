@@ -7,6 +7,8 @@ checked again. Updating a product is an ordinary download of just that product.
 """
 from __future__ import annotations
 
+from . import storage
+
 import json
 import threading
 from pathlib import Path
@@ -14,11 +16,12 @@ from pathlib import Path
 from .common import now_iso
 from .library import DOWNLOADABLE
 from .paths import data_dir
-from .safety import DataFileError, clean_text, read_json_file, write_file_safely
+from .safety import DataFileError, clean_text
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 MAX_PRODUCTS = 20000
 MAX_FILES = 200
-_lock = threading.Lock()
+_lock = storage.metadata_lock
 
 
 def updates_file() -> Path:
@@ -40,7 +43,7 @@ class AssetUpdates:
     def load(self) -> dict:
         """What was found, cleaned; empty when there's no file or it can't be read (it's only ever a hint)."""
         try:
-            raw = read_json_file(self.path, 32 * 1024 * 1024) if self.path.exists() else {}
+            raw = read_json_file(self.path, 32 * 1024 * 1024) if storage.exists(self.path) else {}
         except (DataFileError, OSError, ValueError, RecursionError):
             raw = {}
         return self.sanitize(raw)
