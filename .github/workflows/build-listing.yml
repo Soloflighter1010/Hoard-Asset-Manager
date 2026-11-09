@@ -30,6 +30,7 @@ on:
             "hoard/changelog.py", "hoard/versions.py",   # (the changelog page's renderer and its beta rule)
             "wiki/**", "scripts/build_site_docs.py", "scripts/site_chrome.py",   # (the docs, and every page's bar)
             "scripts/build_press_kit.py",   # (the press kit's download)
+            "scripts/version_assets.py",    # (each page's links to the stylesheets and scripts, with their version)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
@@ -175,6 +176,12 @@ jobs:
         run: |
           python3 scripts/build_press_kit.py "${{ env.listPublishDirectory }}"
           test -s "${{ env.listPublishDirectory }}/press/hoard-press-kit.zip"
+
+      # Last, once every page is there: each page's links to the site's stylesheets and scripts carry their version
+      # (styles.css?v=...), so a browser never shows a new page with the stylesheet it kept from the last deploy
+      # (issue #312: the front page's new video came out at its full size, without its styles).
+      - name: Version the stylesheets and scripts in every page's links
+        run: python3 scripts/version_assets.py "${{ env.listPublishDirectory }}"
 
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
