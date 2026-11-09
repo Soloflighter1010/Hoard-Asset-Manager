@@ -472,6 +472,9 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
   z-index: 40; padding: 5px 10px; border-radius: 8px; background: var(--gold); color: var(--gold-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
   font: 700 12px/1.3 var(--body); white-space: nowrap; pointer-events: none; }
 [draggable="true"]:active { cursor: grabbing; }
+/* A tile is dragged by itself, never by its picture (issue #313): a picture dragged on its own is the image, which on
+   Windows carries it as a file, so the drop was taken for saved pages to import */
+[draggable="true"] img { -webkit-user-drag: none; }
 
 /* A set's or wishlist's page (issue #272), laid out as a product's details are: its picture large beside its name,
    what's in it and where it's from, one main button (Share) and the rest of what's done with it gathered together,

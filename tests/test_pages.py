@@ -4,6 +4,7 @@ these run on every change.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -2458,14 +2459,23 @@ class WindowsTabsAndTasks(unittest.TestCase):
           to.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt })); }""")
         self.assertEqual(tile("Anko").get_attribute("data-drop-hint"), "Make a set with these")
         self.assertIn("drop-on", tile("Anko").get_attribute("class"))
+        # a product dragged is never taken for saved pages to import (issue #313: on Windows a picture carries a file)
+        page.evaluate("""() => { const dt = new DataTransfer(); dt.items.add(new File(["x"], "rusk.png", { type: "image/png" }));
+          document.querySelector('#grid .slot').dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer: dt })); }""")
+        self.assertTrue(page.locator("#drop").is_hidden(), "Drop saved store pages isn't shown")
         page.evaluate("() => document.dispatchEvent(new DragEvent('dragend', { bubbles: true }))")
         self.assertIsNone(tile("Anko").get_attribute("data-drop-hint"), "let go: nothing marked")
-        # dropped: a set of both, named now
-        tile("Rusk").drag_to(tile("Anko"))
+        # dropped: a set of both, named now; taken by its picture, it's the tile that's dragged, never the picture
+        page.evaluate("""src => { const art = [...document.querySelectorAll('#grid .slot')].find(s => s.textContent.includes('Rusk')).querySelector('.art');
+          art.insertAdjacentHTML('afterbegin', `<img alt="" src="${src}" style="position:absolute;inset:0;width:100%;height:100%;z-index:5">`);
+          window.dragged = []; document.addEventListener('dragstart', e => dragged.push(e.target.tagName), true); }""",
+                      "data:image/png;base64," + base64.b64encode(png()).decode())
+        tile("Rusk").locator("img").drag_to(tile("Anko"))
         page.locator("dialog[open] #askName").wait_for()
         page.fill("dialog[open] #askName", "Kitsu pair")
         page.keyboard.press("Enter")
         page.locator(".toast", has_text="Made the set Kitsu pair, with 2 products in it.").wait_for()
+        self.assertEqual(page.evaluate("dragged"), ["BUTTON"], "the tile, not its picture")
         sets = page.evaluate("DATA.sets")
         pair = next(x for x in sets if x["name"] == "Kitsu pair")
         made.append(pair["id"])
