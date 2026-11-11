@@ -287,7 +287,7 @@ function dupesPanel() {
       const twice = st => g.filter(a => a.store === st).length > 1;   // two from one store: which is which, by name
       return `<li><span class="nm"><b translate="no">${esc(g[0].name)}</b> <span class="muted" translate="no">${esc(tr("by {0}", g[0].creator))}</span></span><span class="opts">` +
         g.map(a => opt(a.id, esc(tr("Keep {0}", storeName(a.store))) + (twice(a.store) ? ` <span translate="no">${esc(a.name)}</span>` : "") +
-                             ` <span class="muted">(${sizeText(a.size)})</span>`, keep === a.id)).join("") +
+                             ` <span class="muted">(${esc(sizeText(a.size))})</span>`, keep === a.id)).join("") +
         opt("", esc(tr("Keep all")), keep == null || !g.some(a => a.id === keep)) + `</span></li>`;
     }).join("")}</ul>` +
     `<button class="primary sm danger" data-dupe="go"${going.length ? "" : " disabled"}>${dupeGoText(going, bytes)}</button></div>`;
@@ -371,7 +371,7 @@ function spaceSection(a) {
   const e = copiesOf(a);
   if (!e) return "";
   return `<div class="update"><strong>${esc(tr(e.files === 1 ? "1 file is kept elsewhere too" : "{0} files are kept elsewhere too", e.files.toLocaleString()))}</strong>` +
-    ` <span class="muted-inline">(${sizeText(e.bytes)})</span><ul>` +
+    ` <span class="muted-inline">(${esc(sizeText(e.bytes))})</span><ul>` +
     [...e.others].map(id => byId.get(id)).filter(Boolean).map(o => `<li>${esc(o.name)} <span class="muted-inline">(${esc(storeName(o.store))}` +
       `${(DATA.libraries || []).length > 1 ? `, ${esc(libName(o.library || 0))}` : ""})</span> ` +
       `<button class="linkish" data-act="goto" data-id="${o.id}">View</button></li>`).join("") + `</ul></div>`;
@@ -620,7 +620,7 @@ function renderStatus(list) {
     ? esc(tr(list.length === 1 ? "1 package of your own" : "{0} packages of your own", list.length))
     : filtersActive() ? `${list.length} <span class="of">of ${things(total)}</span>`
     : `${things(total)} ${{ archive: "archived", removed: "removed", hidden: "hidden" }[state.view] || "on disk"}` +
-      (state.view === "space" ? `, ${sizeText(list.reduce((t, a) => t + a.size, 0))}` : "");
+      (state.view === "space" ? `, ${esc(sizeText(list.reduce((t, a) => t + a.size, 0)))}` : "");
   $("#status").innerHTML =
     pills.map(([k, v, label, text]) =>
       `<button class="pill" data-clear="${k}" data-v="${esc(v)}" aria-label="Remove ${label.toLowerCase()} filter ${esc(text)}">` +
@@ -790,7 +790,7 @@ function insideFolder(node, n) {   // one folder's contents: its folders (closed
     return `<li><details data-node><summary>${pickBox(`d:${n}:${d.path}`, d.count, name)}<span translate="no">${esc(name)}</span>` +
       `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
-    `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
+    `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${esc(sizeText(f.size))}</span></li>`).join("") + `</ul>`;
 }
 // What's in a package, as a tree of folders, with how many files and their size.
 function insidePackage(items, n, open) {
@@ -814,7 +814,7 @@ function insideFound(q, onlyCode = false) {
   return `<p class="sum">${esc(tr(found.length === 1 ? "{0} file matches." : "{0} files match.", found.length.toLocaleString()))}</p>` +
     `<ul class="found">${found.slice(0, 500).map(f => `<li class="f">${pickBox(f.zip ? `z:${f.path}` : `${f.size == null ? "d" : "p"}:${f.n}:${f.path}`, 1, f.path)}` +
       `${f.zip ? `<span class="pv" aria-hidden="true">zip</span>` : previewImg(f, f.n)}` +
-      `<span class="nm" translate="no">${esc(f.path)}${codeTag(f)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${f.size == null ? "" : sizeText(f.size)}</span></li>`).join("")}</ul>` +
+      `<span class="nm" translate="no">${esc(f.path)}${codeTag(f)}${f.where ? `<small>${esc(f.where)}</small>` : ""}</span><span class="sz">${f.size == null ? "" : esc(sizeText(f.size))}</span></li>`).join("")}</ul>` +
     (found.length > 500 ? `<p class="more">${esc(tr("The first 500 are shown: search for more words to narrow it down."))}</p>` : "");
 }
 /* What code a package holds (issue #303): its scripts and plugins, which of them run in the editor, which are a tool's
@@ -875,7 +875,7 @@ function drawInside(q = "") {
       I.packages.map((p, n) => `<details class="pkg"${I.packages.length === 1 ? " open" : ""} data-pkg="${n}"><summary translate="no">${esc(p.name)}</summary>` +
         (p.error ? `<p class="note">${esc(tr(p.error))}</p>` : insidePackage(p.items, n, false)) + `</details>`).join("") +
       `<details><summary>${esc(tr("Every file in the zip"))}</summary><ul class="zipfiles">${I.files.map(f =>
-        `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("")}</ul>` +
+        `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${esc(sizeText(f.size))}</span></li>`).join("")}</ul>` +
       (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
   } else html = insidePackage(I.items, 0, true);
   HoardInside.render(body, { name: I.name, query: q, onlyCode: !!I.onlyCode, ...insideCode(I), ...insideBar(),
