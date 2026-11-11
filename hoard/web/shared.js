@@ -3483,6 +3483,11 @@ async function pjLoadAbout(path) {
   panel.querySelector(".pj-facts").outerHTML = pjFacts(p);
   panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
 }
+// Run something once Projects isn't busy with a change (at most 10 seconds' wait): what's asked meanwhile isn't lost.
+async function pjWhenFree(run) {
+  for (let n = 0; PJ.busy && n < 200; n++) await new Promise(ok => setTimeout(ok, 50));
+  run();
+}
 // A project's folder or tags, changed in its details: saved, and the list drawn again.
 async function pjOrganizeSome(path, change) {   // (true once it's saved and the list read again)
   const r = await apiPost("/api/vpm/organize", { path, ...change });
@@ -4692,7 +4697,7 @@ async function pjAct(b) {
     if (PJ.selected) pjLoadAbout(PJ.selected);
     return;
   }
-  if (act === "untag" || act === "tagadd") {   // a project's tags, changed in its details
+  if (act === "untag" || act === "tagadd") {   // a project's tags, changed in its details (pjWhenFree: Enter in its box)
     const p = (PJ.data.projects || []).find(x => x.path === path), input = $("#pjTagInput");
     if (!p) return;
     const typed = act === "tagadd" ? (input ? input.value.trim() : "") : "";
@@ -4968,7 +4973,10 @@ function wireProjects() {
   win.addEventListener("keydown", e => {
     if (e.key !== "Enter" || e.isComposing) return;
     if (e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); }
-    if (e.target.id === "pjTagInput") { e.preventDefault(); $("#projectsBody [data-pj=tagadd]").click(); }   // (a project's tag)
+    if (e.target.id === "pjTagInput") {   // (a project's tag: added once what Projects is saving now is done; an Enter
+      e.preventDefault();                 //  while a change was being saved was dropped, the tag left in its box)
+      pjWhenFree(() => { const add = $("#projectsBody [data-pj=tagadd]"); if (add) add.click(); });
+    }
   });
   win.addEventListener("change", async e => {   // the backups panel's rule for which are old
     if (e.target.id !== "pjBkKeep" && e.target.id !== "pjBkDays") return;

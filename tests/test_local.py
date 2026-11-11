@@ -241,8 +241,10 @@ class LocalItems(IsolatedTestCase):
         finally:
             srv.jobs.busy.release()
             srv.jobs.kick()
-        for _ in range(100):
-            if not srv.jobs.state["running"] and not srv.jobs.state["queue"]:
+        # until both have ended (not only until nothing's running: between the two, the second's been taken off the
+        # queue before it's marked as running, and a slow runner can be looked at just then)
+        for _ in range(600):
+            if [h["task"] for h in srv.jobs.history[-2:]] == ["rescan-local", "remove-local"] and not srv.jobs.state["running"]:
                 break
             time.sleep(0.05)
         self.assertEqual([(h["task"], h["outcome"]) for h in srv.jobs.history[-2:]], [("rescan-local", "done"), ("remove-local", "done")])
@@ -454,11 +456,12 @@ class Browse(IsolatedTestCase):
             page.reload()
             page.click("#localAdd")
             # Opening Local before its projection arrives must still reveal the native picker when loading ends.
-            for _ in range(100):
+            # (The reloaded page asks for it as it starts: given 30 seconds, as a busy runner can take more than 5.)
+            for _ in range(600):
                 if held:
                     break
                 page.wait_for_timeout(50)
-            self.assertTrue(held)
+            self.assertTrue(held, "the page asked for its downloads")
             held.pop().continue_()
             page.unroute("**/api/assets*")
             page.click("#localBrowseFolder")

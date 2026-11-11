@@ -43,7 +43,7 @@ def pj_folder(page, name, folder):
         choose.select_option(label="New folder...")
         page.fill("dialog[open] #askName", folder)
         page.keyboard.press("Enter")
-    page.wait_for_function("f => PJ.data.projects.some(p => (p.folder || '') === f)", arg=folder)
+    page.wait_for_function("f => PJ.data.projects.some(p => (p.folder || '') === f) && !PJ.busy", arg=folder)
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -335,6 +335,11 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertTrue(page.evaluate("document.activeElement.id === 'pjTagInput'"), "where you were typing")
         page.press("#pjTagInput", "Enter")
         page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.includes('half-typed') && !PJ.busy")
+        # Enter while a change is still being saved: the tag is added once it's done, not dropped
+        page.fill("#pjTagInput", "while-busy")
+        page.evaluate("PJ.busy = true; setTimeout(() => { PJ.busy = false; }, 600)")
+        page.press("#pjTagInput", "Enter")
+        page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.includes('while-busy') && !PJ.busy")
         self.assertEqual(page.input_value("#pjTagInput"), "", "added, so not kept as typed")
 
     def test_folders_and_tags(self):
