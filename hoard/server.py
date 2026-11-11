@@ -660,7 +660,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             first = next((i for i in items if i.get("thumbnail") and i.get("store") in STORES), None)
             pic_url = sets.product_picture(first["store"], first["thumbnail"]) if first else None
             picture = (lambda: fetch_picture(pic_url, STORES[first["store"]]["referer"])) if pic_url else None   # (fetched as it's sent)
-            alerts.send(self.cfg, "prices", text, title="Cheaper on your wishlists", link=link, picture=picture)
+            alerts.send(self.cfg, "prices", text, title="Cheaper on your wishlists", link=link, picture=picture,
+                        picture_url=pic_url)   # (a Discord embed shows it from the store itself: issue #330)
         elif kind == "checked":
             parts = [alerts.plural(what[k], f"file {k}", f"files {k}") for k in ("changed", "missing") if what.get(k)]
             alerts.send(self.cfg, "other", f"The check of your downloads found **{' and '.join(parts)}**. "

@@ -371,6 +371,13 @@ class Jobs:
         """Where this lane's finished tasks are kept (Projects' apart from the rest)."""
         return project_tasks_file() if self.lane == PROJECTS else tasks_file()
 
+    def _counted(self, **counts: int) -> None:
+        """What a task did, in numbers alone, kept with its report for its news (issue #342: "Add to Local: done"
+        didn't say how many). Never a product's name: the news is sent to other services (alerts.task_text)."""
+        report = self.state.get("report") if isinstance(self.state.get("report"), dict) else {}
+        kept = {k: v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool) and v >= 0}
+        self.state["report"] = {**report, "counts": {**(report.get("counts") or {}), **kept}}
+
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
         message = kw.get("message")
@@ -724,6 +731,7 @@ class Jobs:
             return
         finally:
             self.on_download_done()
+        self._counted(moved=1, files=done["files"])
         self._set(message=f"Moved {done['name']}: {plural(done['files'], 'file')} to {done['to']}.")
 
     def _project(self, what: dict) -> None:
@@ -788,6 +796,7 @@ class Jobs:
                 done = delete_downloaded_files(self.cfg, root, set(what.get("keys") or []))
                 message = (f"Deleted {done['files']:,} {'file' if done['files'] == 1 else 'files'} of {name}."
                            + (" Its folder still has other files, so it was kept." if done["kept"] else ""))
+                self._counted(deleted=done["files"])
             else:
                 found = local.by_folder(root, str(what.get("folder") or ""))
                 if not found:
@@ -795,9 +804,11 @@ class Jobs:
                 if task == "rescan-local":
                     rec = local.rescan(self.cfg, root, found[0])
                     message = f"Rescanned {name}: {plural(len(rec['files']), 'file')}."
+                    self._counted(files=len(rec["files"]))
                 else:
                     local.remove(self.cfg, root, found[0])
                     message = f"Took {name} out of Local."
+                    self._counted(taken_out=1)
         except (ValueError, OSError) as e:
             self._set(message=str(e), error=str(e))
             return
@@ -818,6 +829,7 @@ class Jobs:
         except ValueError as e:
             self._set(message=str(e), error=str(e))
             return
+        self._counted(added=1, files=len(rec["files"]))
         self._set(message=f"Added {rec['name']} to Local: {plural(len(rec['files']), 'file')}"
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
@@ -837,6 +849,7 @@ class Jobs:
             return
         finally:
             self.on_download_done()
+        self._counted(matched=done["matched"], local=done["local"], notes=done["notes"], left_out=len(done["left_out"]))
         words = [f"{plural(done['matched'], 'product')} in your library", f"{plural(done['local'], 'Local product')}"]
         message = "Brought in from KonoAsset: " + " and ".join(words) + (
             f", with {plural(done['notes'], 'note')}." if done["notes"] else ".")
@@ -880,6 +893,7 @@ class Jobs:
                      f"{'was left as it was' if one else 'were left as they were'}.")
         if left:
             said += f" Left out {len(left)}: " + "; ".join(left[:5]) + ("…" if len(left) > 5 else "")
+        self._counted(added=added, already=len(already), left_out=len(left))
         self._set(message=said, log=[f"Left out {x}" for x in left][-200:], partial=bool(left))
         self.on_download_done()
 
@@ -1119,7 +1133,9 @@ class Jobs:
             for k in set(keys or []) | report.got:   # what they have that isn't on disk is read again, next time asked
                 self.listed.pop(k, None)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
-            self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
+            earlier = self.state.get("report") if isinstance(self.state.get("report"), dict) else {}   # (a sync's refresh)
+            self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20],
+                              **({"counts": earlier["counts"]} if isinstance(earlier.get("counts"), dict) else {})},
                       partial=bool(summary["failed"]) or None,
                       message=(f"Done: {summary['new_assets']} new, {summary['updated']} updated"
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
@@ -1171,6 +1187,7 @@ class Jobs:
                       error="You're offline. Your saved library still works.")
             return list(stores)
         refreshed, unread = [], [s for s in stores if s not in online]
+        read = found_new = 0   # (for the task's news: how many products were read, and how many of them are new)
         some_shops = False   # Payhip was read, but not every shop
         # itch.io is read through its API: Playwright isn't started (nor needed) when it's the only store read
         with (_playwright()() if any(s not in NO_BROWSER for s in online) else contextlib.nullcontext()) as p:
@@ -1212,7 +1229,10 @@ class Jobs:
                         else:
                             # a Payhip shop that couldn't be read keeps what Hoard had from it, as a quick refresh
                             # keeps all it didn't reach
+                            had = {i["key"] for i in self.lib.snapshot()[0] if i.get("store") == store}
                             self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick)
+                            read += len(items)
+                            found_new += len({i["key"] for i in items} - had)
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]
@@ -1263,6 +1283,8 @@ class Jobs:
                 build_catalog(self.cfg, root_dir(self.cfg))
             except Exception as e:   # never fails the refresh
                 print(f"Couldn't write catalog.json: {e}", flush=True)
+        if refreshed:
+            self._counted(read=read, new=found_new)
         if unread and not refreshed:
             why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
             self._set(message=why, error=why)
@@ -1330,6 +1352,7 @@ class Jobs:
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
+        self._counted(lists=done["lists"], cheaper=len(cheaper))
         read = f"{done['lists']} {'wishlist' if done['lists'] == 1 else 'wishlists'} read" + \
             (f", {len(cheaper)} {'product' if len(cheaper) == 1 else 'products'} cheaper than before" if cheaper else "")
         if failed and not got:
