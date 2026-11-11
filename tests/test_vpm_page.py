@@ -32,6 +32,27 @@ def pj_details(page, name):
     return panel
 
 
+def pj_saved(page, expr, arg=None):
+    """Wait until a change made in Projects shows on the page. When it doesn't, the failure says what the page has
+    instead (its list, a message it showed, requests that failed) and what Hoard saved, not just that time ran out:
+    a change that never showed failed Folders and tags on Windows runners, and the timeout alone said nothing."""
+    from playwright.sync_api import TimeoutError as TimedOut
+    try:
+        page.wait_for_function(expr, arg=arg)
+    except TimedOut as e:
+        from hoard.vpm import listing
+        seen = page.evaluate("""() => ({busy: PJ.busy, view: PJ.view, typed: ($('#pjTagInput') || {}).value,
+          projects: ((PJ.data || {}).projects || []).map(p => [p.name, p.path, p.folder, p.tags]),
+          message: ($('#projectsBody > p.none') || {}).textContent || '', toast: ($('#toast') || {}).textContent || ''})""")
+        try:
+            saved, listed = listing.load_state()["projects"], listing.shared_paths()[0]
+        except Exception as err:   # (what reading them says is worth knowing too)
+            saved, listed = repr(err), None
+        raise AssertionError(f"{e}\nthe page: {seen}\nsaved: {saved}\nlisted: {listed}\n"
+                             f"requests that failed: {getattr(page, 'hoard_failed', [])}\n"
+                             f"threads: {sorted(th.name for th in threading.enumerate())}") from None
+
+
 def pj_folder(page, name, folder):
     """Put a listed project in a folder, in its details: one there is, a new one (named when it's chosen), or none ("")."""
     choose = pj_details(page, name).locator("#pjDFolder")
@@ -43,7 +64,7 @@ def pj_folder(page, name, folder):
         choose.select_option(label="New folder...")
         page.fill("dialog[open] #askName", folder)
         page.keyboard.press("Enter")
-    page.wait_for_function("f => PJ.data.projects.some(p => (p.folder || '') === f) && !PJ.busy", arg=folder)
+    pj_saved(page, "f => PJ.data.projects.some(p => (p.folder || '') === f) && !PJ.busy", folder)
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
@@ -73,6 +94,9 @@ class ProjectsPanel(IsolatedTestCase):
         self.page = self.browser.new_page(viewport={"width": 1280, "height": 900})
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.page.hoard_failed = []   # (for pj_saved: what to say when a change doesn't show)
+        self.page.on("response", lambda r: r.status >= 400 and self.page.hoard_failed.append(f"{r.request.method} {r.url} {r.status}"))
+        self.page.on("requestfailed", lambda r: self.page.hoard_failed.append(f"{r.method} {r.url} {r.failure}"))
         self.page.add_init_script("sessionStorage.setItem('hoard-projects-opened', '1')")   # (its splash: test_the_splash)
         self.page.goto(self.srv.entry_url())
         self.page.wait_for_function("() => localStorage.getItem('hoard-key')")
@@ -352,8 +376,8 @@ class ProjectsPanel(IsolatedTestCase):
         for typed in ("Quest", "poiyomi", "quest"):   # (Enter adds one; a tag it has already isn't added twice)
             page.fill("#pjTagInput", typed)
             page.press("#pjTagInput", "Enter")
-            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n && !PJ.busy",
-                                   arg=1 if typed == "Quest" else 2)   # (saved: one action at a time, as you'd see it)
+            pj_saved(page, "n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n && !PJ.busy",
+                     1 if typed == "Quest" else 2)   # (saved: one action at a time, as you'd see it)
         bar = page.locator("#projectsBody .pj-folders")
         bar.wait_for()
         self.assertEqual(bar.locator(".chip").all_inner_texts(), ["All projects2", "Avatars WIP1", "Not in a folder1"])
@@ -382,7 +406,7 @@ class ProjectsPanel(IsolatedTestCase):
         page.wait_for_function("() => !document.querySelector('#projectsBody .pj-folders')")
         for left in (1, 0):
             page.locator(".pj-detail .tagpill .untag").first.click()
-            page.wait_for_function("n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", arg=left)
+            pj_saved(page, "n => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.length === n", left)
         self.assertEqual(tags.count(), 0)
         self.assertIn("No tags yet", page.locator(".pj-detail").inner_text())
 
