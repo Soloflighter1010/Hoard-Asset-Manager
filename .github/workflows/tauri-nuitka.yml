@@ -137,14 +137,30 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Sign hoard-server.exe
+      # Issue #327: Windows Defender took experiment 2 for a trojan. Its server folder held hoard-server.exe, signed,
+      # beside a great many libraries Nuitka compiled (.dll, .pyd) that weren't: every one of those is signed now too.
+      # Libraries already signed by whoever made them (Python's, Microsoft's) are left as they are.
+      - name: List the server's programs and libraries that aren't signed yet
+        if: env.SIGN_WINDOWS == 'true'
+        id: unsigned
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem build\nuitka\server -Recurse -File -Include *.exe, *.dll, *.pyd |
+            Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -eq "NotSigned" }
+          "{0} of the server's files to sign" -f @($files).Count
+          $end = "END_" + [guid]::NewGuid().ToString("N")
+          Add-Content $env:GITHUB_OUTPUT "files<<$end"
+          $files | ForEach-Object { Add-Content $env:GITHUB_OUTPUT $_.FullName }
+          Add-Content $env:GITHUB_OUTPUT $end
+
+      - name: Sign hoard-server.exe and its libraries
         if: env.SIGN_WINDOWS == 'true'
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
-          files: ${{ github.workspace }}\build\nuitka\server\hoard-server.exe
+          files: ${{ steps.unsigned.outputs.files }}
           description: Hoard
           description-url: https://github.com/${{ github.repository }}
           exclude-environment-credential: true
@@ -246,6 +262,14 @@ jobs:
             $sig = Get-AuthenticodeSignature $f.FullName
             "{0}: {1}, {2}" -f $f.Name, $sig.Status, $sig.SignerCertificate.Subject
             if ($sig.Status -ne "Valid") { Write-Output "::error::$($f.Name) isn't validly signed ($($sig.Status))"; exit 1 }
+          }
+          # the server's libraries (issue #327): none left unsigned; one its maker signed that Windows can't check is said
+          $libraries = Get-ChildItem build\nuitka\server -Recurse -File -Include *.dll, *.pyd
+          "{0} libraries in the server's folder" -f @($libraries).Count
+          foreach ($f in $libraries) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            if ($sig.Status -eq "NotSigned") { Write-Output "::error::$($f.Name) isn't signed"; exit 1 }
+            if ($sig.Status -ne "Valid") { Write-Output "::warning::$($f.Name): $($sig.Status), $($sig.SignerCertificate.Subject)" }
           }
           Get-ChildItem dist\*.exe | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-tauri-windows.txt
