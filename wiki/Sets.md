@@ -106,6 +106,13 @@ under **Sets you added from a link** (5.2.0 beta 2; ones added before then stay 
   the stores' own websites.
 - **A long link from before 5.0** (`set.html#H1.…`, with the set itself after the `#`) still opens in the viewer,
   and in **Add a shared set...**, as does its code.
+- **An Adult set** (5.2): a set with a product for adults in it (as its store, its tags or you say: see
+  [Library](Library#products-for-adults)) is marked 18+, on its tile and its page, until the last of them is taken
+  out; it can't be taken off by hand before then. Its viewer is asked whether they're 18 or older before anything
+  is shown. Under 18, they see the set without its products for adults and without your photos. The answer is kept
+  in a cookie in their own browser, for that page alone, for a year, so they aren't asked each time, and **Change
+  your answer** forgets it. Hoard never asks anyone for ID, and the answer is sent nowhere: see
+  [Security and privacy](Security-and-Privacy).
 
 ### Short links
 
@@ -118,6 +125,9 @@ under **Sets you added from a link** (5.2.0 beta 2; ones added before then stay 
   it before it runs out to share the set for longer: Hoard doesn't do it by itself. The dialog says when the set
   has changed since. **Delete the short link** deletes it from the server at once, and deleting the set deletes
   its short link too. Whoever opens a deleted or run-out link is told it's gone.
+- **How long it still works** (5.2): a set with a short link says on its tile how many days are left (in gold for
+  the last two), and on its page until when. Once it has run out, it says so and when, until **Share...** makes a
+  new one.
 - **Opening one:** the viewer fetches the locked set from the share server by the link's id, and unlocks it in
   the page. **Add a shared set...** does the same.
 - **Limits:** a short link holds a set of up to about 500 products (more or fewer, as their names and links are
@@ -149,6 +159,25 @@ from those sites. Where a page's picture can't be found (an album, or a post wit
 itself and copy its own link (right-click it, **Copy image address**). Discord's links stop working after a while,
 so for a set you'll share for long, use another site.
 
+### What's in a photo, marked
+
+Once a set's note and photos are saved (5.2), its page shows each photo, with a numbered mark where each product
+marked on it is, and the same numbers listed beside it with each product's picture, name and store. Point at a mark
+(or move to it with the keyboard) to see its product; choose it to open the product's details, or its store page
+when it isn't on the page. The viewer shows them the same way to whoever opens the set.
+
+**Mark products on it...** (or **Change what's marked...**) opens the photo with the set's products beside it.
+Choose a product's **Place**, then click where it is on the photo; **Move** puts it somewhere else, and **Take off**
+takes it off. By keyboard, **Place** puts the mark in the middle of the photo, the arrow keys move it (with Shift,
+in bigger steps) and Delete takes it off. Nothing's kept until **Save**.
+
+- A photo can have up to 30 products marked on it, each once.
+- Each mark is kept as a share of the photo's width and height, so the marks line up at whatever size the photo is
+  shown. A product taken out of the set, or a photo taken off, takes its marks with it.
+- Hoard shows the photo by fetching it from its photo site once, and keeping it, as it does for product pictures.
+- The marks are shared with the set, locked inside its short link with the rest. Your own products (**Local**)
+  can be marked, but aren't shared, so their marks aren't either.
+
 ## In Hoard for Unity
 
 Hoard for Unity's **Sets** pill lists your sets, and **Import set** imports the downloaded products in one go
@@ -171,6 +200,10 @@ already in your library show as yours.
 - Each time a wishlist is read again, it holds what the store's list does now, and a product whose price changed
   shows the new price with the old one struck through; one that's cheaper than before is marked (an arrow down,
   in gold), and one that costs more has an arrow up, and **Tasks** lists the cheaper ones. A name, note or picture you gave a wishlist stays.
+- **Read it again** and **Quick refresh** (5.2), on a wishlist read from a store, read that store's lists again:
+  **Read it again** all of them, and **Quick refresh** only the start of this one (its first 2 pages, or its first
+  50 products, whichever is fewer), keeping what it doesn't reach, and leaving the store's other lists as they are.
+  A list that isn't on the store any more says so.
 - A product a Jinxxy list sends you to on a site that isn't one of the stores (the creator's own, say) shows **Buy
   on** that site, and opens its page there (from 5.1.2). It stays in Hoard: a shared set leaves that link out, as its
   page opens only the stores' own.

@@ -14,6 +14,37 @@
   parsing. Tests use isolated homes and balanced CI shards, with two shuffled runs per interpreter.
 - See [the roadmap implementation record](docs/ROADMAP-315.md) for compatibility details and remaining native
   desktop measurements. macOS signing and notarization remain deferred.
+- **Products for adults** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311), [#337](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/337), [#338](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/338)). A product its store, its tags or its name say is for
+  adults (R-18, NSFW, 18+ and the like), or that you mark **Mark as 18+**, has an 18+ mark on its tile and its
+  picture blurred until you click it in its details. **It isn't for adults** says otherwise, and your word wins. A
+  set with one in it is an Adult set, marked 18+, until the last is taken out. **Blur the pictures of products
+  for adults (18+)** is in Settings, under Accessibility (on to begin with).
+- **The set viewer asks an Adult set's viewer their age** ([#337](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/337)). Under 18, it shows the set without its
+  products for adults or the sharer's photos. The answer is kept in a cookie in the viewer's own browser for a year,
+  and sent nowhere: see [the privacy policy](PRIVACY.md). Hoard never asks anyone for ID.
+- **What's in a set's photo, marked** ([#346](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/346)). On a set's page, each photo is shown with a numbered mark where
+  each product is, and the same numbers listed beside it with each product's picture and name; a mark opens its
+  product. **Mark products on it...** places them: choose a product, then click where it is (or, by keyboard,
+  **Place**, then the arrow keys). The marks are shared with the set, and the set viewer shows them the same way.
+- **How long a set's link still works** ([#333](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/333)), on its tile and its page, and when it has run out.
+- **An error mark on a product that has something wrong** ([#334](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/334)): files missing on disk, files the check of
+  your downloads found changed, a download that didn't finish, or a Local product's folder that's gone. What's wrong
+  is said on hover and to a screen reader; its details say what to do; Downloads has a **Problems** view.
+- **Quick refresh of one store, or one wishlist** ([#331](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/331)): beside each store's **Refresh** in Stores, and beside
+  **Read it again** on a wishlist's page.
+- **Make an editable copy** lists the copy in Local where it is, and opens it there ([#328](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/328)).
+- **Notifications** ([#330](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/330), [#342](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/342)): on Discord, a cheaper product's picture is inside the card, not a file
+  after it; a finished task says how many (products added, lists read, files moved...).
+- **A package change in Projects says what it does, and checks it was done** ([#335](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/335)): each package's version
+  now and the one it gets, in Projects' log and the done message; a change the project doesn't show afterwards
+  (Unity putting a package back while it had the project open, say) fails, naming it, rather than ending as done.
+- **Small things** ([#329](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/329), [#339](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/339), [#340](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/340), [#341](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/341), [#344](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/344), [#345](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/345)): a product's tile stays where it
+  was when its details open or close; **Copy store link** in a product's details on both pages; in Hoard's window,
+  right-clicking empty space no longer opens the web view's own menu; a chosen suggested tag reads as chosen; **Bring
+  in from KonoAsset...** is in Settings too; the setup assistant has no step for Hoard 1.x any more.
+- **Drag and drop**: a product is dragged by its tile, never by its picture ([#313](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/313)).
+- **The website**: its videos fit the window ([#312](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/312)); the page for stores says how Hoard works with them now
+  ([#336](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/336)); the acknowledgements credit every npm tool the Look inside component is built with ([#343](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/343)).
 
 ## 5.2.0-beta.4
 

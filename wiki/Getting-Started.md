@@ -22,31 +22,29 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
 5. **The browser Hoard signs in with.** Hoard reads your stores through a browser it controls, kept apart from
    the one you browse with: Microsoft Edge on Windows, and Hoard's own browser elsewhere (or on Windows without
    Edge). If that isn't installed yet, **Install Hoard's browser** downloads it (about 150 MB, once).
-6. **Used Hoard before?** If you used Hoard 1.x, **Bring it over** copies your library list and downloads
-   folder. New to Hoard? Skip it.
-7. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Tick the ones you use
+6. **Which stores have you bought from?** Booth, Gumroad, Jinxxy, Payhip and itch.io. Tick the ones you use
    (the first time, only stores you already have items from are ticked). Hoard only shows and
    reads the stores you pick. You can change this later in [Settings](Settings). Hoard keeps copies of your
    files from all of them but Payhip, which it lists: you download from Payhip yourself.
-8. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought
+7. **Your Payhip shops** (only if you picked Payhip). Payhip keeps your purchases in each shop you bought
    from, not in one library, so add each shop's address, one per line. Rather not sign in to Payhip? Leave
    this empty, save each shop's library page from your usual browser, and import them all from **Stores**
    afterwards. See [Stores](Stores#payhip).
-9. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
+8. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
    window, and Hoard reads what you own.
-10. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
+9. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
    with room to spare: VRChat assets add up.
-11. **Get Hoard's news where you are** (5.2.0 beta 4, where Apprise is installed, as it is in Hoard's apps): choose
+10. **Get Hoard's news where you are** (5.2.0 beta 4, where Apprise is installed, as it is in Hoard's apps): choose
    a service (Discord, Telegram, ntfy, email and more), fill in what it gives you, and **Add it**. **Send a test**
    checks it comes. Tick what to send: new products and updates the routine check finds, products on your
    wishlists that got cheaper, and tasks that finish or fail. Not now? Choose **Next**: nothing is sent until you
    add an address. It's the same as **Notifications through Apprise** in [Settings](Settings), where you can change
    it later.
-12. **When you close Hoard's window** (in Hoard's own window, from 3.1): **Keep Hoard running**, minimized to the
+11. **When you close Hoard's window** (in Hoard's own window, from 3.1): **Keep Hoard running**, minimized to the
    taskbar (the Dock on a Mac), so downloads, syncs and the routine check carry on, or **Quit Hoard**. It's the
    same choice as **Closing Hoard** in [Settings](Settings), where you can change it later. Hoard in your web
    browser doesn't ask: closing the tab is the browser's.
-13. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
+12. **Hoard's ready.** When you choose **Finish**, Hoard reads what you own from your stores.
 
 ## The tour
 

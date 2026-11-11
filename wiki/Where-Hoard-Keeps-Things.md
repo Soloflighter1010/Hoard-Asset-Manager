@@ -20,7 +20,7 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `tags.json` | Your tags, and what you set in a product's details: its type, and your note on it (5.2.0) |
 | `konoasset.json` | Which of KonoAsset's assets you've brought in, and the products they became, so bringing in again adds only what's new (5.2.0). See [Your Own Packages](Your-Own-Packages#from-konoasset) |
 | `picture-looks.json` | How product pictures look (a 64-bit hash of each, by the picture's SHA-256), so copies of one product saved differently by two stores stack. See [Library](Library#finding-things) |
-| `asset-updates.json` | What the last **Check for updates** found: for each thing you've downloaded, the files its store has that you don't yet. See [Downloads](Downloads#checking-for-updates-without-downloading) |
+| `asset-updates.json` | What the last **Check for updates** found: for each thing you've downloaded, the files its store has that you don't yet. See [Downloads](Downloads#checking-for-updates-without-downloading). From 5.2, also the products a download of which didn't finish, with why, until one goes through: see [Library](Library#something-wrong-with-a-product) |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |
 | `projects/` | One small report per Unity project you've opened Hoard's window in (Hoard for Unity 0.4.0 and newer): its name and folder, which of your assets it uses, and its credits settings. **Projects** in Hoard shows them; **Forget** deletes one. See [Hoard for Unity](Hoard-for-Unity#projects-in-hoard) |
 | `vpm-projects.json` | What Hoard notes about the projects in **Projects** (5.0): your favourites, when you opened each from Hoard, and the products from your library you put in each; and which project backups count as old, and where you last moved some. The list of projects itself is the Creator Companion's (below). See [Projects](Projects) |
@@ -30,7 +30,8 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `sealed-files.json` | Which records this install has sealed, so a removed seal is noticed |
 | `cache/thumbs/` | Product pictures, saved so the library works offline |
 | `cache/inside/` | What **Look inside** read from a package or zip, with its previews, for the 40 you looked inside most recently (4.0). See [Downloads](Downloads#the-downloads-view) |
-| `sets.json` | Your sets: their names, notes and photo links, and the products in each, by the same keys your tags use, with what each is (4.0; 4.2.0), and each one's short link, if you made one: its key, and the token that lets your Hoard update or delete it (4.3.0); and your wishlists, with each product's price when it was last read, and the one before if it changed (4.4.0). See [Sets](Sets#wishlists) |
+| `sets.json` | Your sets: their names, notes and photo links, and the products in each, by the same keys your tags use, with what each is (4.0; 4.2.0), and each one's short link, if you made one: its key, and the token that lets your Hoard update or delete it (4.3.0); and your wishlists, with each product's price when it was last read, and the one before if it changed (4.4.0); where its products are on its photos (5.2), and when its short link ran out. See [Sets](Sets#wishlists) |
+| `cache/thumbs/` (sets' photos) | The photos of your sets, fetched from their photo sites once for Hoard's own page to show them with what's marked on them (5.2), kept with the product pictures. See [Sets](Sets#whats-in-a-photo-marked) |
 | `set-pictures/` | The pictures you chose for your sets' tiles (4.2.0). Not in backups. See [Sets](Sets#its-picture) |
 | `local-pictures/` | The pictures you chose for your own packages' tiles, which Hoard also copies beside them (4.2.0). See [Your own packages](Your-Own-Packages#its-picture) |
 | `package-needs.json` | For each package you've downloaded, the IDs of what's in it and of what it uses, so **What it needs** knows without reading it again (4.0) |
@@ -41,6 +42,9 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |
 | `tasks.json` | The Tasks window's list of finished jobs (the last 60): what each did, how it went, and its progress. Delete it, or **Clear** in Tasks, to empty the list |
 | `sync.json` | When the last sync started |
+| `job-queue.json` | The tasks waiting their turn in Tasks (5.2), so they still start after Hoard is closed and opened again |
+| `scheduler.json` | Hoard's background work that carries on across a restart (5.2): what was paused, how far it got, and when it runs next |
+| `store-health.json` | How each store last went (5.2): when it was last read or downloaded from, whether that worked, and if not, what kind of trouble it was (never a message, product or address). **Stores** shows it, with **Report a problem**. See [Stores](Stores#when-a-store-cant-be-reached) |
 | `routine.json` | When the routine check last ran, so it knows when the next is due, and how much it found that you haven't looked at yet |
 | `update.json` | When Hoard last checked for updates, and the newest version it found |
 | `updates/` | A new version's installer, downloaded and checked, while Hoard updates. Deleted once the update is installed |
