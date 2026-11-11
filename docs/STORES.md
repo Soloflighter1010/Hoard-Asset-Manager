@@ -43,3 +43,25 @@ fixed failure code. Exception messages, purchase names, local paths, addresses,
 cookies and download tokens are never copied into that report. The user can
 review and add a description before submitting it. Hoard does not submit the
 issue itself.
+
+## What each store is read for
+
+The website's page for stores (`site/stores.html`) links its older claims to code
+pinned at Hoard 4.3.1. These are the newer ones, by where they're done:
+
+- **Quick refresh** (issues #300, #331): `common.quick_done()` ends a read after
+  `QUICK_PAGES` pages or `QUICK_ITEMS` products, whichever comes first; each
+  adapter's reader asks it. `jobs.Jobs._quick_refresh()` reads every store you
+  use, or one, then the start of the wishlists kept from them;
+  `jobs.Jobs._quick_wishlist()` reads one list, named to its reader by
+  `wishlists.wanted()`. What a quick read doesn't reach is kept
+  (`library.Library.replace_store(keep_others=True)`, a wishlist's `"partial"`).
+- **Wishlists** (issue #158): `wishlists.READERS`, each adapter's
+  `wish_read_*()`, read only when asked, in the store's own signed-in window.
+- **Creators' tags and the adult flag** (issues #206, #311):
+  `library.store_tags_from_pages()` reads at most `STORE_TAG_PAGES` (40) owned
+  products' public pages each time a store is refreshed, never in a quick
+  refresh; `adult.on_a_page()` reads the store's own flag from what's read.
+- **Each store's record** (issue #322): `stores/health.py`, from the results of
+  what was done anyway. It sends nothing.
+- **Pacing**: `pace.py`, with each adapter's `requests_per_minute` (Jinxxy's 120).
