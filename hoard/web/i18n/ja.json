@@ -2497,5 +2497,13 @@
  "Blur the pictures of products for adults (18+)": "成人向け(18+)の商品の画像をぼかす",
  "Adult: it has products for adults in it.": "成人向け:成人向けの商品が入っています。",
  "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "成人向け:成人向けの商品が入っています。共有すると、見る人にまず年齢を確認します。",
- "The copy is listed in Local, where it is, and opened there.": "コピーはその場所のままローカルに登録され、そこで開きます。"
+ "The copy is listed in Local, where it is, and opened there.": "コピーはその場所のままローカルに登録され、そこで開きます。",
+ "1 day": "1日",
+ "Today": "今日",
+ "{0} days": "{0}日",
+ "Its link runs out today.": "リンクは今日で切れます。",
+ "Its link works for 1 more day, until {1}.": "リンクはあと1日、{1}まで使えます。",
+ "Its link works for {0} more days, until {1}.": "リンクはあと{0}日、{1}まで使えます。",
+ "Ran out": "期限切れ",
+ "Its link ran out on {0}. Share... makes a new one.": "リンクは{0}に期限が切れました。「共有...」で新しいリンクを作れます。"
 }

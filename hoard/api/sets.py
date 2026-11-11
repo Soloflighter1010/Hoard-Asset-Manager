@@ -61,7 +61,8 @@ def _sets_view(self) -> dict:
                 row["words"] = sorted(words)
         out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                     "cover": f"/setcover/{s['id']}/{s['picture']}" if app.sets.picture_file(s) else None,
-                    "short": (s.get("short") or {}).get("expires"), "items": rows, "from_link": s.get("from_link") is True,
+                    "short": (s.get("short") or {}).get("expires"), "short_ended": s.get("short_ended"),
+                    "items": rows, "from_link": s.get("from_link") is True,
                     "adult": any(r["adult"] for r in rows),   # an Adult set, while any product in it is (issue #337)
                     **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
     return {"sets": out, "hidden_left_out": left_out, "viewer": app.sets.VIEWER, "photo_hosts": list(app.sets.PHOTO_HOSTS)}

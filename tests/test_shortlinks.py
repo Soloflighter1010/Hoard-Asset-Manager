@@ -167,6 +167,25 @@ class Kept(IsolatedTestCase):
         self.store.path.write_text(json.dumps(data), "utf-8")
         self.assertNotIn("short", self.store.load()["sets"][0], "run out: forgotten")
 
+    def test_a_link_that_ran_out_is_remembered_until_theres_a_new_one(self):
+        """Issue #333: a set says how long its link still works, and that it has run out, until it has a new one."""
+        ended = int(time.time()) - 5
+        data = json.loads(self.store.path.read_text("utf-8"))
+        data["sets"][0]["short"] = {**self.rec, "expires": ended}
+        self.store.path.write_text(json.dumps(data), "utf-8")
+        s = self.store.load()["sets"][0]
+        self.assertEqual((s.get("short"), s["short_ended"]), (None, ended))
+        self.store.change({"action": "rename", "id": self.made, "name": "Rusk 2"})
+        self.assertEqual(self.store.load()["sets"][0]["short_ended"], ended, "kept in the file, through other changes")
+        self.assertNotIn("short_ended", sets.share_code(self.store.load()["sets"][0])[0], "never in what's shared")
+        self.store.set_short(self.made, self.rec)
+        self.assertNotIn("short_ended", self.store.load()["sets"][0], "a new link: nothing has run out")
+        data = json.loads(self.store.path.read_text("utf-8"))
+        data["sets"][0].pop("short")
+        data["sets"][0]["short_ended"] = int(time.time()) + 999   # (not a time gone by: not kept)
+        self.store.path.write_text(json.dumps(data), "utf-8")
+        self.assertNotIn("short_ended", self.store.load()["sets"][0])
+
     def test_not_in_a_code_nor_taken_from_one(self):
         self.store.set_short(self.made, self.rec)
         s = self.store.load()["sets"][0]

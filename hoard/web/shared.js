@@ -5215,6 +5215,22 @@ function setCounts(s) {
   return { got, owned, buy, text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length),
     got && tr("{0} downloaded", got), owned && tr("{0} to download", owned), buy && tr("{0} to buy", buy)].filter(Boolean).join(", ") };
 }
+/* How long a set's short link still works (issue #333): { days, text, mark } for a set with a link, or one whose link
+   has run out (days: -1); null for a set with neither. text is said on the set's page, mark on its tile. */
+function linkLeft(s) {
+  if (s.short) {
+    const days = Math.max(0, Math.ceil((s.short * 1000 - Date.now()) / 86400000));
+    return { days, mark: days <= 1 ? tr(days ? "1 day" : "Today") : tr("{0} days", days),
+             text: days === 0 ? tr("Its link runs out today.") : tr(days === 1 ? "Its link works for 1 more day, until {1}." : "Its link works for {0} more days, until {1}.", days, day(s.short)) };
+  }
+  return s.short_ended ? { days: -1, mark: tr("Ran out"), text: tr("Its link ran out on {0}. Share... makes a new one.", day(s.short_ended)) } : null;
+}
+const LINK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.8 9.2a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.9.9M9.2 6.8a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.9-.9"/></svg>';
+// A set's link mark on its tile: how long its link still works, or that it has run out.
+function linkMark(s) {
+  const left = linkLeft(s);
+  return left ? `<span class="link-mark${left.days < 0 ? " over" : left.days <= 2 ? " soon" : ""}" title="${esc(left.text)}">${LINK_ICON}${esc(left.mark)}</span>` : "";
+}
 // The 18+ mark on an adult set's picture, and on an adult product's in it (products.js draws a product tile's).
 const ADULT_MARK = '<span class="adult-mark" translate="no" aria-hidden="true">18+</span>';
 // A set's tile.
@@ -5222,7 +5238,7 @@ function setTile(s) {
   const c = setCounts(s);
   // (an Adult set, issue #337: one with a product for adults in it, marked 18+ as they are)
   return `<button class="slot settile${s.adult ? " adult" : ""}" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text) + (s.adult ? ", " + tr("for adults (18+)") : ""))}">` +
-    `<span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
+    `<span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}${linkMark(s)}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
 }
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
 function setsRoot() {
@@ -5294,6 +5310,7 @@ function setHead(s) {
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
     `<div class="sethead${s.adult ? " adult" : ""}"><span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
+      (linkLeft(s) ? `<p class="muted set-linkleft">${LINK_ICON} ${esc(linkLeft(s).text)}</p>` : "") +
       (s.adult ? `<p class="muted set-adult"><span class="adult-chip" translate="no">18+</span> ${esc(tr(isWish(s)
         ? "Adult: it has products for adults in it." : "Adult: it has products for adults in it. Shared, it asks its viewer's age first."))}</p>` : "") +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +

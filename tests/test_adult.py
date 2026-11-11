@@ -188,6 +188,38 @@ class InHoard(IsolatedTestCase):
         self.call("POST", "/api/marks", {"kind": "adult", "keys": [HAT], "on": True})
         self.assertTrue(shown()["adult"], "you marked one in it")
 
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_a_sets_tile_says_how_long_its_link_works(self):
+        """Issue #333: a shared set's tile and page say how long its link still works, and when it has run out."""
+        import time
+        store = sets.SetStore()
+        rec = lambda days: {"id": "abcDEF0123", "key": "k" * 22, "token": "t" * 43, "made": "0123456789abcdef",   # noqa: E731
+                            "expires": int(time.time()) + int(days * 86400)}
+        long_, soon, over, none = (store.change({"action": "create", "name": n, "items": [HAT]})["sets"][-1]["id"]
+                                   for n in ("Long", "Soon", "Over", "None"))
+        store.set_short(long_, rec(11.5))
+        store.set_short(soon, rec(0.5))
+        data = json.loads(store.path.read_text("utf-8"))
+        next(s for s in data["sets"] if s["id"] == over)["short_ended"] = int(time.time()) - 86400
+        store.path.write_text(json.dumps(data), "utf-8")
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            page.click('#storeSeg [data-store="Sets"]')
+            mark = lambda sid: page.locator(f'#setView .settile[data-setopen="{sid}"] .link-mark')   # noqa: E731
+            mark(long_).wait_for()
+            self.assertEqual((mark(long_).inner_text().strip(), mark(long_).get_attribute("class")), ("12 days", "link-mark"))
+            self.assertEqual((mark(soon).inner_text().strip(), mark(soon).get_attribute("class")), ("1 day", "link-mark soon"))
+            self.assertEqual((mark(over).inner_text().strip(), mark(over).get_attribute("class")), ("Ran out", "link-mark over"))
+            self.assertEqual(mark(none).count(), 0, "a set with no link says nothing")
+            self.assertIn("works for 12 more days, until", mark(long_).get_attribute("title"))
+            page.locator(f'#setView .settile[data-setopen="{over}"]').click()
+            page.locator(".set-linkleft", has_text="Its link ran out on").wait_for()
+            self.assertIn("Share... makes a new one.", page.locator(".set-linkleft").inner_text())
+            browser.close()
+
     def test_blurring_is_a_setting(self):
         self.assertTrue(server.display_settings({})["blur_adult"], "on unless you turn it off")
         self.assertFalse(server.display_settings({"display": {"blur_adult": False}})["blur_adult"])

@@ -2497,5 +2497,13 @@
  "Blur the pictures of products for adults (18+)": "성인용(18+) 상품의 이미지를 흐리게 표시",
  "Adult: it has products for adults in it.": "성인용: 성인용 상품이 들어 있어요.",
  "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "성인용: 성인용 상품이 들어 있어요. 공유하면 보는 사람에게 먼저 나이를 물어봐요.",
- "The copy is listed in Local, where it is, and opened there.": "복사본은 있는 자리 그대로 로컬에 등록되고, 거기서 열려요."
+ "The copy is listed in Local, where it is, and opened there.": "복사본은 있는 자리 그대로 로컬에 등록되고, 거기서 열려요.",
+ "1 day": "1일",
+ "Today": "오늘",
+ "{0} days": "{0}일",
+ "Its link runs out today.": "링크가 오늘 만료됩니다.",
+ "Its link works for 1 more day, until {1}.": "링크는 앞으로 1일, {1}까지 사용할 수 있습니다.",
+ "Its link works for {0} more days, until {1}.": "링크는 앞으로 {0}일, {1}까지 사용할 수 있습니다.",
+ "Ran out": "만료됨",
+ "Its link ran out on {0}. Share... makes a new one.": "링크가 {0}에 만료되었습니다. '공유...'에서 새 링크를 만들 수 있습니다."
 }

@@ -19,7 +19,8 @@ in PHOTO_HOSTS (links they made there). The same code, pasted into Hoard, adds t
 A set can also have a short link (shortlinks.py): its code kept on Hoard's share server for 14 days, locked with a
 key that's only in the link. "short" is that link's id and key, the token that lets this Hoard update or delete it,
 when it runs out, and "made", which code it holds (code_mark), so the page can say when the set has changed since.
-A short link that has run out is dropped when the file is read.
+A short link that has run out is dropped when the file is read, leaving when it did ("short_ended") for the set to
+say so until it has a new one.
 """
 from __future__ import annotations
 
@@ -378,6 +379,10 @@ class SetStore:
             short = clean_short(s.get("short"))
             if short:
                 one["short"] = short
+            else:   # a link that has run out: when it did, so the set says so until it has a new one (issue #333)
+                ended = (s.get("short") or {}).get("expires") if isinstance(s.get("short"), dict) else s.get("short_ended")
+                if isinstance(ended, int) and not isinstance(ended, bool) and 0 < ended <= time.time():
+                    one["short_ended"] = ended
             if s.get("from_link") is True:   # added from someone's link (issue #258): shown apart from your own
                 one["from_link"] = True
             out["sets"].append(one)
@@ -516,6 +521,7 @@ class SetStore:
             if s is None:
                 raise ValueError("That set isn't there anymore.")
             s.pop("short", None)
+            s.pop("short_ended", None)   # (a new link, or one you deleted: nothing has run out any more)
             if rec is not None:
                 s["short"] = clean_short(rec)
                 if not s["short"]:
