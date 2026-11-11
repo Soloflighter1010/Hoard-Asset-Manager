@@ -10,20 +10,23 @@ put in it) is in vpm-projects.json in Hoard's own folder.
 """
 from __future__ import annotations
 
+from .. import storage
+
 import os
 import threading
 import time
 from pathlib import Path
 
 from ..paths import data_dir
-from ..safety import DataFileError, clean_text, read_json_file, write_file_safely
+from ..safety import DataFileError, clean_text
+from ..storage import read_document as read_json_file, write_document as write_file_safely
 from . import environment
 from .project import TYPE_NAMES, UNKNOWN, summary
 
 STATE = "vpm-projects.json"
 MAX_PRELOADED = 500
 MAX_PROJECT_TAGS = 12   # a project's tags (issue #190), and its folder: Hoard's own, never the Creator Companion's
-_lock = threading.RLock()
+_lock = storage.metadata_lock
 
 
 def _key(path: str) -> str:

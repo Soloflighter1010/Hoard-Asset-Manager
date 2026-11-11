@@ -298,6 +298,27 @@
      "license": "MIT",
      "url": "https://github.com/trezor/python-mnemonic",
      "in": "all"
+    },
+    {
+     "name": "Svelte",
+     "license": "MIT",
+     "url": "https://svelte.dev",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt"
+    },
+    {
+     "name": "clsx",
+     "license": "MIT",
+     "url": "https://github.com/lukeed/clsx",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt"
+    },
+    {
+     "name": "esm-env",
+     "license": "MIT",
+     "url": "https://github.com/benmccann/esm-env",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt"
     }
    ]
   },
@@ -364,6 +385,18 @@
      "name": "Inno Setup (the Windows installer)",
      "license": "Inno Setup License",
      "url": "https://jrsoftware.org/isinfo.php",
+     "in": "build"
+    },
+    {
+     "name": "Acorn",
+     "license": "MIT",
+     "url": "https://github.com/acornjs/acorn",
+     "in": "build"
+    },
+    {
+     "name": "esbuild",
+     "license": "MIT",
+     "url": "https://esbuild.github.io",
      "in": "build"
     }
    ]

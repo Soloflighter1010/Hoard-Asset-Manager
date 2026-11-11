@@ -4,6 +4,11 @@
    Everything below is for one of the two, except the parts only they show, which are out of sight in Standard. */
 .row-meta, .d-stats { display: none; }
 .local { --c: var(--local); }
+/* Maintenance stays separate from foreground jobs, with compact progress and no animated attention cue. */
+.background-tasks { border-top: 1px solid var(--seam); margin-top: 24px; padding-top: 8px; color: var(--dust); }
+.background-task { background: transparent; }
+.background-task progress { width: min(260px, 70%); margin-right: 12px; accent-color: var(--gold); }
+html.hoard-dragging, html.hoard-dragging * { cursor: grabbing !important; user-select: none !important; }
 /* a window's scroll stays in it (issue #264): scrolled to its end, Settings carried on scrolling the page behind it;
    and while Settings or Projects fills the window, the page behind doesn't scroll at all */
 .win-body, .setjump { overscroll-behavior: contain; }
@@ -574,3 +579,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 @media (prefers-reduced-motion: reduce) { .heap .hb, .heap .spark { animation: none !important; } }
 /* the Konami code's confetti: the heap's boxes, outlined as the logo's are */
 .heap-confetti i { width: 13px; height: 13px; border-radius: 4px; box-shadow: 0 0 0 2px #211C18; }
+
+/* View-specific controls share the shell, while windows remain mounted across navigation. */
+html[data-app-view="library"] [data-app-view="downloads"],
+html[data-app-view="downloads"] [data-app-view="library"] { display: none !important; }

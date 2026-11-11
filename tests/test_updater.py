@@ -14,13 +14,13 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 from urllib.parse import urlparse
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import __version__, config, egress, server, updater  # noqa: E402
@@ -113,7 +113,7 @@ class _GitHub:
         cls.seen.clear()
 
 
-class Versions(unittest.TestCase):
+class Versions(IsolatedTestCase):
     def test_newer(self):
         self.assertTrue(updater.newer("2.10.0", "2.9.9"))
         self.assertTrue(updater.newer("v3.0.0", "2.99.99"))
@@ -169,7 +169,7 @@ class Versions(unittest.TestCase):
         self.assertFalse(shown["has_installer"])
 
 
-class Checksums(unittest.TestCase):
+class Checksums(IsolatedTestCase):
     def test_sums_file(self):
         h = "ab" * 32
         text = f"\ufeff{h.upper()}  Hoard-Setup-3.0.0.exe\r\n{'cd' * 32} *Hoard-3.0.0-windows.zip\nnot a line\n"
@@ -187,7 +187,7 @@ class Checksums(unittest.TestCase):
         self.assertEqual(updater.expected_hash(no_digest, "Hoard-Setup-3.0.0.exe", f"{h}  Hoard-Setup-3.0.0.exe"), h)
 
 
-class Downloading(unittest.TestCase):
+class Downloading(IsolatedTestCase):
     """Against the stand-in GitHub."""
 
     @classmethod
@@ -300,7 +300,7 @@ class Downloading(unittest.TestCase):
         self.assertIsNone(updates.pending)
 
 
-class WhenHoardAsks(unittest.TestCase):
+class WhenHoardAsks(IsolatedTestCase):
     def test_each_time_hoard_starts_unless_turned_off(self):
         """On to begin with: Hoard checks for a newer version in the background each time it starts (whenever the
         last check was), and once a day while it stays open. Turned off, it never asks."""
@@ -334,8 +334,10 @@ class WhenHoardAsks(unittest.TestCase):
         again = updater.Updates(config.load_config())
         self.assertEqual(again.state["latest"]["version"], NEXT)
         self.assertTrue(again.view(False)["available"])
-        (updater.data_dir() / "update.json").write_text("{damaged", "utf-8")
-        self.assertIsNone(updater.Updates(config.load_config()).state["latest"])
+        legacy = updater.data_dir() / "legacy-update.json"
+        legacy.write_text("{damaged", "utf-8")
+        with mock.patch.object(updater, "_file_path", return_value=legacy):
+            self.assertIsNone(updater.Updates(config.load_config()).state["latest"])
 
     def test_old_installers_are_tidied(self):
         folder = updater.updates_dir()

@@ -2,10 +2,10 @@
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import downloader, downloads, previous, safety
 from hoard.tags import tag_key
@@ -21,7 +21,7 @@ def replace(dest: Path, data: bytes) -> None:
     safety.move_into_place(part, dest, identity)
 
 
-class Keeping(unittest.TestCase):
+class Keeping(IsolatedTestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, self.dir, True)
@@ -89,7 +89,7 @@ class Keeping(unittest.TestCase):
         self.assertEqual(self.file.read_bytes(), b"v2")
 
 
-class WithTheRecords(unittest.TestCase):
+class WithTheRecords(IsolatedTestCase):
     """Restoring updates the product's record; deleting and moving a product take its previous versions too."""
     catalog = library_folders.LibraryFolders.catalog
 
@@ -192,7 +192,7 @@ class WithTheRecords(unittest.TestCase):
         self.assertFalse(moved.exists())
 
 
-class Setting(unittest.TestCase):
+class Setting(IsolatedTestCase):
     def test_choices(self):
         from hoard import config, server
         cfg = config.load_config()
@@ -211,7 +211,7 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Page(unittest.TestCase):
+class Page(IsolatedTestCase):
     def test_restore_from_downloads(self):
         import threading
         from playwright.sync_api import sync_playwright

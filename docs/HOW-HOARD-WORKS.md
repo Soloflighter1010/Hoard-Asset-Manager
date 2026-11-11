@@ -7,20 +7,26 @@ writes, for other programs). Every file and function named in backticks here exi
 
 ## The parts, and where they are
 
-Hoard is one Python program, `hoard/`, with no build step. It runs a small web server on this computer, and its
+Hoard is one Python program, `hoard/`. Generated schemas are checked into the repository; changing them requires
+`python scripts/build_schemas.py`. Contributor checks also use the pinned JavaScript parser (`npm ci`). The Look inside
+trial is compiled with `node scripts/build_ui.mjs` and checked in, so running Hoard does not need Node.
+See [APP-SHELL.md](APP-SHELL.md) for its scope and measured cost. It runs a small web server on this computer, and its
 window (or your browser) shows the pages that server serves. Everything else is a part of that program.
+
+Private metadata is the JSON files in the table below. A sealed SQLite database for them is written and tested but
+held back behind `HOARD_METADATA=sqlite`: see [STORAGE.md](STORAGE.md) for why, and what it needs first.
 
 | Part | What it does | Code | Its files |
 | --- | --- | --- | --- |
 | The window | Starts the server, opens a window on it (pywebview: Edge WebView2, WebKit), one copy at a time, and quits cleanly | `hoard/app.py`: `run_app()`, `open_window()`, `quit_cleanly()` | `logs/` in the app-data folder |
 | The local server | Serves the pages and their API (`/api/...`), only to requests that carry this run's key | `hoard/server.py`: `AppServer`, `Handler`; `hoard/safety.py`: `check_access()` | `config.json` (settings) |
-| The pages | The Library and Downloads, with Projects, Sets, Tasks and Settings as windows over them; plain HTML and script, translated in place | `hoard/web/library.html`, `hoard/web/downloads.html`, `hoard/web/shared.js`, `hoard/web/looks.css`, `hoard/web/i18n/` | the window's own storage (`window/`) |
+| The pages | Library and Downloads views in one document, with shared windows, product components and cached data; a bounded Svelte trial for Look inside | `hoard/web/library.html`, `hoard/web/app.js`, `hoard/web/products.js`, `hoard/web/shared.js`, `hoard/web/looks.css`, `hoard/web/i18n/` | the window's own storage (`window/`) |
 | Tasks | Long work, one task at a time in each lane (Projects has its own), queued, stoppable, kept in Tasks | `hoard/jobs.py`: `Jobs` (`start`, `_finish`, `cancel`, `force_stop`), `Schedule` | `tasks.json`, `project-tasks.json` |
 | Sign-ins | A real Chromium (Playwright), one profile per store, belonging to Hoard alone | `hoard/browser.py`: `launch_context()`, `signin_protection()` | `sign-ins/` |
-| Reading stores | What you own on each store: its library pages read in Hoard's browser (itch.io: its API) | `hoard/library.py`: `fetch_booth()`, `fetch_gumroad()`, `fetch_jinxxy()`, `fetch_payhip()`, `fetch_itch()`, `FETCHERS`; `hoard/itch.py` | `library.json` |
+| Reading stores | What you own on each store: its library pages read in Hoard's browser (itch.io: its API) | `hoard/stores/`: `lib_fetch_booth()`, `lib_fetch_gumroad()`, `lib_fetch_jinxxy()`, `lib_fetch_payhip()`, `lib_fetch_itch()`, `FETCHERS`; `hoard/itch.py` | `library.json` |
 | The network rules | Every request for a store's pages, data or files: https only, public addresses only, one checked hop at a time, a store's cookies only to that store | `hoard/egress.py`: `session()`, `get()`, `download()`, `check_hop()` | `.part` files while downloading |
 | Rate limits | Jinxxy: never more than 120 requests a minute (the limit its API sets for creators), its pages' own requests counted with Hoard's | `hoard/pace.py`: `before()` ahead of a page, `sending()` in egress, `count_requests()` on each browser | none |
-| Downloading | What's new or changed on each store, downloaded into `<Store>/<Creator>/<Product>`, resumable, recorded | `hoard/downloader.py`: `cmd_sync()`, `sync_booth()`, `sync_gumroad()`, `sync_jinxxy()`, `sync_itch()`, `Manifest`, `left_out()` | each store's `_manifest.json` |
+| Downloading | What's new or changed on each store, downloaded into `<Store>/<Creator>/<Product>`, resumable, recorded | `hoard/downloader.py`: `cmd_sync()`; `hoard/stores/`: `dl_sync_booth()`, `dl_sync_gumroad()`, `dl_sync_jinxxy()`, `dl_sync_itch()`, `Manifest`, `left_out()` | each store's `_manifest.json` |
 | The catalog | What's on disk, for Hoard for Unity and other programs, sealed | `hoard/downloader.py`: `build_catalog()`, `write_catalog_files()`; `hoard/downloads.py`: `build_index()` | `catalog.json`, `asset.json`, `tags.json` |
 | Tags and types | Your tags, suggested tags, store tags, and what kind of product each is | `hoard/tags.py`: `TagStore`, `tag_key()`, `product_type()`; `hoard/library.py`: `enrich()` | `tags.json` |
 | Your choices | Archived, hidden and removed products, the hidden library's PIN | `hoard/marks.py`: `MarkStore` | `marks.json` |
@@ -38,6 +44,14 @@ Where the app-data folder is: `%LOCALAPPDATA%\Hoard` on Windows, `~/Library/Appl
 `~/.local/share/Hoard` on Linux (`hoard/paths.py`: `data_dir()`). The downloads folder is yours to choose
 (`hoard/config.py`: `root_dir()`).
 
+Private settings and metadata are JSON files in Hoard's app-data folder, as are the public catalog, asset and tag
+exports in the downloads folder. With `HOARD_METADATA=sqlite` (off by default, and not for everyday use yet) the
+private ones move into the sealed `metadata.sqlite3` instead. See [STORAGE.md](STORAGE.md).
+
+The server dispatches requests through the registry in `hoard/api/`. Store parsers and capabilities live together
+in `hoard/stores/`; see [STORES.md](STORES.md). One `Scheduler` owns foreground and maintenance work, including
+package reading, update checks, and the routine. See [SCHEDULER.md](SCHEDULER.md) for checkpoints and cancellation.
+
 ## A sync, end to end
 
 **Sync** is the job most of Hoard exists for. Here's what happens, in order.
@@ -47,7 +61,7 @@ Where the app-data folder is: `%LOCALAPPDATA%\Hoard` on Windows, `~/Library/Appl
    one waits in the queue; Tasks shows both.
 2. **Each store is read** (`Jobs._sync` calls `_refresh`). Hoard opens its browser on the store's own library
    page, signed in with the profile only Hoard uses, and reads what you own from the page as you would see it:
-   `FETCHERS[store](...)`, for example `fetch_booth()`. itch.io is read through its API with the key you gave
+   `FETCHERS[store](...)`, for example `lib_fetch_booth()`. itch.io is read through its API with the key you gave
    Hoard. Between pages Hoard waits (`request_delay` in Settings), and it never reads faster than a person
    scrolling would. The list replaces that store's part of `library.json` (`Library.replace_store`), unless the
    read failed or came back empty, when the old list is kept and the store says why.

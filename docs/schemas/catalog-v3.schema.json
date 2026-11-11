@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hoard.furryup.link/schemas/catalog-v3.schema.json",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "hoard-catalog"
+    },
+    "version": {
+      "const": 3
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "entry-v4.schema.json"
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "mac": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "alg",
+        "key_id",
+        "mac"
+      ],
+      "additionalProperties": false
+    },
+    "sets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "maxItems": 500
+          }
+        },
+        "required": [
+          "name",
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "generated_at",
+    "assets",
+    "integrity"
+  ],
+  "additionalProperties": false
+}

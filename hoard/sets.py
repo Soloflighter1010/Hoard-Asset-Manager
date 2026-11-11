@@ -23,6 +23,8 @@ A short link that has run out is dropped when the file is read.
 """
 from __future__ import annotations
 
+from . import storage
+
 import base64
 import hashlib
 import html
@@ -36,7 +38,8 @@ from pathlib import Path
 from urllib.parse import quote, urlparse, urlsplit, urlunparse
 
 from .paths import data_dir
-from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text, read_json_file, write_file_safely
+from .safety import STORE_LINK_SITES, DataFileError, chosen_picture, clean_text
+from .storage import read_document as read_json_file, write_document as write_file_safely
 from .shortlinks import CODE as SHORT_CODE, ID as SHORT_ID, KEY as SHORT_KEY, PREFIX as SHORT_PREFIX, TOKEN as SHORT_TOKEN
 from .shortlinks import fits as fits_short_link
 from .tags import TAG_KEY_RX, tag_key
@@ -71,7 +74,7 @@ _URL_SAFE = "/%:@!$&'()*+,;=-._~"   # what stays as it is in a page link's path 
 MAX_PHOTO_PAGE = 2 * 1024 * 1024
 PICTURE_NAME = re.compile(r"[0-9a-f]{8}\.(?:png|jpg|webp)")   # a set's "picture"
 CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's "made"
-_lock = threading.Lock()
+_lock = storage.metadata_lock
 
 
 def sets_file() -> Path:
@@ -381,7 +384,7 @@ class SetStore:
     def load(self) -> dict:
         """Your sets, as kept (none when there's no file, or it can't be read)."""
         try:
-            raw = read_json_file(self.path) if self.path.is_file() else {}
+            raw = read_json_file(self.path) if storage.is_file(self.path) else {}
         except (DataFileError, OSError):
             raw = {}
         return self.sanitize(raw)

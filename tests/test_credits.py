@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -17,7 +18,7 @@ LOCKS = ("requirements.txt", "requirements-app.txt", "requirements-mac.txt", "re
 norm = lambda name: re.sub(r"[-_.]+", "-", name).lower()  # noqa: E731
 
 
-class Acknowledgements(unittest.TestCase):
+class Acknowledgements(IsolatedTestCase):
 
     def test_every_locked_package_is_credited(self):
         """Every package any of Hoard's lock files pins (what Setup installs, and what each app ships or is built

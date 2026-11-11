@@ -7,10 +7,10 @@ import sys
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 
@@ -22,7 +22,7 @@ except ImportError:
     BROWSER = False
 
 
-class Layout(unittest.TestCase):
+class Layout(IsolatedTestCase):
     def test_a_heap_never_a_tower(self):
         """A pyramid, each row one fewer; a box that would be alone on top falls down beside the bottom row."""
         self.assertEqual([heap.rows(n) for n in range(9)], [[], [1], [2], [3], [4], [3, 2], [4, 2], [4, 3], [5, 3]])
@@ -64,7 +64,7 @@ class Layout(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class InTheApp(unittest.TestCase):
+class InTheApp(IsolatedTestCase):
     @classmethod
     def setUpClass(cls):
         import i18n_strings

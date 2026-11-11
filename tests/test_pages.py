@@ -16,12 +16,13 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from unittest import mock
 import zlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, library, server, tags, themes  # noqa: E402
@@ -97,7 +98,7 @@ APPRISE_BUILT = [
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class AccessKey(unittest.TestCase):
+class AccessKey(IsolatedTestCase):
     """S-01: Hoard opens its page with a one-time link, which the page trades for the access key; from then on
     every request carries the key, the pictures included. A page without it gets nothing and says what to do."""
 
@@ -131,7 +132,7 @@ class AccessKey(unittest.TestCase):
         cls.pw.stop()
         cls.srv.shutdown()
         cls.srv.server_close()
-        cls.cached.unlink(missing_ok=True)
+        storage.remove(cls.cached, missing_ok=True)
         cls.tmp.cleanup()
 
     def open(self, url):
@@ -154,6 +155,44 @@ class AccessKey(unittest.TestCase):
         page.wait_for_function(LOADED, arg="/files/")
         self.assertEqual(refused, [])
         page.close()
+
+    def test_tabs_keep_the_shell_data_and_history(self):
+        """Issue #321: tabs and Back/Forward reuse the document, windows and fetched products."""
+        page = self.browser.new_page()
+        self.addCleanup(page.close)
+        reads, errors = [], []
+        page.on("request", lambda request: reads.append(request.url) if request.url.endswith(("/api/library", "/api/assets")) else None)
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        goto(page, self.srv.entry_url())
+        page.wait_for_selector("#grid .slot[data-key]")
+        page.evaluate("window.shellNodes = ['detail', 'settingsPanel', 'tasksWin', 'projectsWin'].map(id => document.getElementById(id)); window.shellTime = performance.timeOrigin")
+        for _ in range(3):
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_selector("#grid .slot[data-id]")
+            page.go_back()
+            page.wait_for_selector("#grid .slot[data-key]")
+            page.go_forward()
+            page.wait_for_selector("#grid .slot[data-id]")
+            page.click("nav.apptabs a[href='/']")
+            page.wait_for_selector("#grid .slot[data-key]")
+        self.assertTrue(page.evaluate("shellNodes.every(node => node === document.getElementById(node.id)) && shellTime === performance.timeOrigin"))
+        self.assertEqual(len(reads), 2, "one Library projection and one Downloads projection for the app lifetime")
+        self.assertEqual(errors, [])
+
+    def test_a_note_change_updates_both_cached_views(self):
+        """A change in one projection invalidates the shared snapshot before the other view is shown."""
+        page, _ = self.open(self.srv.entry_url())
+        self.addCleanup(page.close)
+        page.wait_for_selector("#grid .slot[data-key]")
+        try:
+            page.evaluate("async () => { await apiPost('/api/tags', {action: 'note', keys: [DATA.items[0].tag_key], note: 'Shared shell note'}); await load(); }")
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_selector("#grid .slot[data-id] .note-mark")
+            self.assertEqual(page.evaluate("DATA.assets[0].your_note"), "Shared shell note")
+            page.locator("#grid .slot").click()
+            self.assertEqual(page.locator("#detail .pnote").inner_text(), "Shared shell note")
+        finally:
+            page.evaluate("apiPost('/api/tags', {action: 'note', keys: [APP.views.library.DATA.items[0].tag_key], note: ''})")
 
     def test_the_address_hoard_serve_prints(self):
         page, refused = self.open(f"{self.srv.url}#key={self.srv.key}")
@@ -264,7 +303,7 @@ class AccessKey(unittest.TestCase):
         store = AssetUpdates()
         store.record_check(["booth"], None, [{"store": "booth", "key": rusk, "name": "Rusk", "creator": "Kitsu Studio",
                                               "file": "Rusk_v2.zip", "kind": "new"}])
-        self.addCleanup(store.path.unlink, missing_ok=True)
+        self.addCleanup(storage.remove, store.path, missing_ok=True)
         started = []
 
         def start(task, stores, skip_imported=False, only=None, scheduled=False, keys=None, **_kw):
@@ -501,10 +540,10 @@ class AccessKey(unittest.TestCase):
         Downloads page's summary (it said "Which files is in Tasks")."""
         from hoard import downloader
         where = downloader.integrity_file()
-        self.addCleanup(where.unlink, missing_ok=True)
+        self.addCleanup(storage.remove, where, missing_ok=True)
         root = str(self.srv.cfg["root"])
         where.parent.mkdir(parents=True, exist_ok=True)
-        where.write_text(json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
+        storage.write_document(where, json.dumps({"checked": "2026-10-28T10:00:00+00:00", "products": 1, "files": 1, "fine": 0,
                                      "changed": ["Rusk (Booth): rusk.zip"], "missing": ["Rusk (Booth): rusk.psd"], "data_changed": [], "complete": True,
                                      "problems": [{"kind": "changed", "base": root, "store": "booth", "folder": "Kitsu Studio/Rusk",
                                                    "path": "rusk.zip", "name": "Rusk"},
@@ -530,6 +569,36 @@ class AccessKey(unittest.TestCase):
         dialog.get_by_text("Nothing left to deal with.").wait_for()
         self.assertEqual(downloader.last_integrity()["changed"], [])
         dialog.locator("[data-check-close]").click()
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_store_health_links_only_include_safe_categories(self):
+        from hoard.stores import health
+        from hoard.paths import data_dir
+        self.addCleanup(storage.remove, data_dir() / "store-health.json", missing_ok=True)
+        health.record("booth", "library")
+        health.record("booth", "library", "layout")
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.evaluate("openStores(true)")
+        report = page.locator(".store-health a", has_text="Report a problem")
+        report.wait_for()
+        self.assertIn("Failure%3A+layout", report.get_attribute("href"))
+        self.assertNotIn("Rusk", report.get_attribute("href"))
+        self.assertIn("Last read successfully", page.locator("#storeRows").inner_text())
+        self.assertEqual(refused, [])
+        page.close()
+
+    def test_background_reader_controls_in_tasks(self):
+        self.srv.scheduler.add("package-reader", "Reading packages", lambda context: None, delay=3600)
+        self.srv.scheduler.action("package-reader", "pause")
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        page.evaluate("openTasks(true)")
+        row = page.locator('.background-task[data-background-id="package-reader"]')
+        row.get_by_role("button", name="Resume", exact=True).click()
+        row.get_by_role("button", name="Pause", exact=True).click()
+        row.get_by_role("button", name="Resume", exact=True).wait_for()
         self.assertEqual(refused, [])
         page.close()
 
@@ -614,12 +683,12 @@ class AccessKey(unittest.TestCase):
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
-        shown = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.dataset.store)"
+        shown = "() => [...document.querySelectorAll('#storeSeg [data-store]')].filter(b => !b.hidden).map(b => b.dataset.store)"
         self.assertEqual(page.evaluate(shown), ["", "Booth", "Sets"], "Everything, the one store with a download, and Sets")
         page.click("nav.apptabs a[href='/downloads#store=Local']")   # Local, with nothing in it yet
         page.wait_for_function(shown + ".includes('Local')")
         self.assertEqual(page.evaluate(shown), ["", "Booth", "Local", "Sets"])
-        counts = "() => [...document.querySelectorAll('#stores [data-store]')].filter(b => !b.hidden).map(b => b.querySelector('.n').textContent)"
+        counts = "() => [...document.querySelectorAll('#storeSeg [data-store]')].filter(b => !b.hidden).map(b => b.querySelector('.n').textContent)"
         self.assertEqual(page.evaluate(counts), ["1", "1", "0", "0"], "counted, as the Library's tabs are (Sets: how many sets)")
         page.close()
 
@@ -806,14 +875,14 @@ class AccessKey(unittest.TestCase):
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Stores", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Settings", "Bring in from KonoAsset..."])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
-        self.assertEqual(page.locator("#syncBtn").count(), 0)
+        self.assertTrue(page.locator("#syncBtn").is_hidden())
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button").all_inner_texts(), ["Tags", "Rescan", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Rescan", "Settings", "Bring in from KonoAsset..."])
         page.close()
 
     def test_search_prefixes_in_downloads(self):
@@ -854,14 +923,13 @@ class AccessKey(unittest.TestCase):
         again.close()
 
 
-class DiskSpace(unittest.TestCase):
+class DiskSpace(IsolatedTestCase):
     """Downloads, Disk space: the biggest downloads first, the same file kept twice (from the integrity check's
     fingerprints), what no Unity project uses, and Select to archive or delete several."""
 
-    @classmethod
-    def setUpClass(cls):
-        cls.tmp = tempfile.TemporaryDirectory()
-        root = Path(cls.tmp.name)
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
         big = b"\x00" * (2 * 1024 * 1024)
         items = []
         for store, key, name, files in (("Booth", "1", "Rusk", {"rusk.unitypackage": big}),
@@ -878,22 +946,21 @@ class DiskSpace(unittest.TestCase):
                                          "mtime_ns": os.stat(folder / path).st_mtime_ns}
             man.save()
             items.append(library.item(store.lower(), key, name=name, creator="Kitsu Studio"))
-        cls.root = root
-        cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True},
+        self.root = root
+        self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(root), "setup_done": True},
                                    lan=False)
-        with cls.srv.lib.lock:   # in memory only
-            cls.srv.lib.data["items"] = items
-        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
-        cls.pw = sync_playwright().start()
-        cls.browser = cls.pw.chromium.launch()
+        with self.srv.lib.lock:   # in memory only
+            self.srv.lib.data["items"] = items
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.pw = sync_playwright().start()
+        self.browser = self.pw.chromium.launch()
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.browser.close()
-        cls.pw.stop()
-        cls.srv.shutdown()
-        cls.srv.server_close()
-        cls.tmp.cleanup()
+    def tearDown(self):
+        self.browser.close()
+        self.pw.stop()
+        self.srv.shutdown()
+        self.srv.server_close()
+        self.tmp.cleanup()
 
     def open(self):
         page = self.browser.new_page()
@@ -967,7 +1034,7 @@ class DiskSpace(unittest.TestCase):
         page.close()
 
 
-class StackingAcrossStores(unittest.TestCase):
+class StackingAcrossStores(IsolatedTestCase):
     """One product bought on two stores is one tile, in the Library and in Downloads: by the same name and creator,
     or, from one shop under two names, by the same name and a picture that looks the same, though each store saved
     it differently (the page works out how it looks). Two creators' products with one name and different pictures
@@ -1014,7 +1081,7 @@ class StackingAcrossStores(unittest.TestCase):
         cls.srv.shutdown()
         cls.srv.server_close()
         for p in cls.pictures:
-            p.unlink(missing_ok=True)
+            storage.remove(p, missing_ok=True)
         cls.tmp.cleanup()
 
     def tiles(self, page):
@@ -1065,7 +1132,7 @@ class StackingAcrossStores(unittest.TestCase):
         """Issue #247: a stack is every copy in the view, whatever the filters, so on one store's tab its tile still
         stands for its copy on another; a copy archived isn't in it, and then its details don't say it's shown with it."""
         from hoard.marks import MarkStore
-        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(MarkStore().path, missing_ok=True))
         page = self.browser.new_page()
         goto(page, self.srv.entry_url())
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
@@ -1116,7 +1183,7 @@ class StackingAcrossStores(unittest.TestCase):
         """Issue #217: a copy's details say why it's shown with its copies; Not a copy takes it out of its stack (for
         good, kept in marks.json), and Show it with its copies again puts it back."""
         from hoard.marks import MarkStore
-        self.addCleanup(lambda: MarkStore().path.unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(MarkStore().path, missing_ok=True))
         page = self.browser.new_page()
         goto(page, self.srv.entry_url())
         page.wait_for_function("() => document.querySelectorAll('.slot').length === 4")
@@ -1180,7 +1247,7 @@ class StackingAcrossStores(unittest.TestCase):
         page.close()
 
 
-class Delights(unittest.TestCase):
+class Delights(IsolatedTestCase):
     """The logo glows and shakes while an update to Hoard is waiting, and opens Updates when chosen; and a few
     things for people to find."""
 
@@ -1274,11 +1341,11 @@ ITCH_SAVED = ('<!-- saved from url=(0028)https://itch.io/my-purchases -->\n<html
 
 def payhip_saver() -> str:
     """The Save for Hoard bookmark's script, as the Library page keeps it."""
-    return re.search(r"const PAYHIP_SAVER = String\.raw`(.*?)`;", (Path(__file__).resolve().parent.parent / "hoard" / "web" / "library.html").read_text("utf-8"), re.S).group(1)
+    return re.search(r"const PAYHIP_SAVER = String\.raw`(.*?)`;", (Path(__file__).resolve().parent.parent / "hoard" / "web" / "library.js").read_text("utf-8"), re.S).group(1)
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class SaveForHoard(unittest.TestCase):
+class SaveForHoard(IsolatedTestCase):
     """Saving a Payhip library page by page was tedious. The Save for Hoard bookmark, run on a shop's library page in
     your usual browser, reads every page of it and saves them as one file, which Import pages reads like any other."""
 
@@ -1329,7 +1396,7 @@ class SaveForHoard(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ImportingFromTheLibrary(unittest.TestCase):
+class ImportingFromTheLibrary(IsolatedTestCase):
     """Import pages, in the Stores panel: several saved pages at once, a new Payhip shop's pages confirmed with one
     question, and what came of every page shown at the end."""
 
@@ -1381,7 +1448,7 @@ class ImportingFromTheLibrary(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class LargeLibrary(unittest.TestCase):
+class LargeLibrary(IsolatedTestCase):
     """Only the cards near the screen are drawn (review finding P-02), and nothing else notices."""
 
     @classmethod
@@ -1479,7 +1546,7 @@ if __name__ == "__main__":
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class CopiesAndActions(unittest.TestCase):
+class CopiesAndActions(IsolatedTestCase):
     """Issue #111: copies of one product (bought three times, say) stack into one tile, which opens to show them all.
     Issue #108: an item's details have one thing to do in gold, and the store's own pages named for the store."""
 
@@ -1512,6 +1579,13 @@ class CopiesAndActions(unittest.TestCase):
         cls.srv.shutdown()
         cls.srv.server_close()
         cls.tmp.cleanup()
+
+    def setUp(self):
+        self.srv.cfg.setdefault("ui", {})["stack"] = True
+
+    def tearDown(self):
+        for context in self.browser.contexts:
+            context.close()
 
     def open(self):
         page = self.browser.new_page()
@@ -1850,7 +1924,7 @@ class CopiesAndActions(unittest.TestCase):
         """Issue #113: what the routine check found, and a way to choose what to download from it, or put it off."""
         from hoard import jobs
         jobs.save_routine(found={"at": "2026-10-04T12:00:00+00:00", "new": 1, "updates": 0})
-        self.addCleanup(jobs._routine_file().unlink, missing_ok=True)
+        self.addCleanup(storage.remove, jobs._routine_file(), missing_ok=True)
         page = self.open()
         note = page.locator("#routineNote")
         note.wait_for()
@@ -1889,7 +1963,7 @@ class CopiesAndActions(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class HighlightsAndAccessibility(unittest.TestCase):
+class HighlightsAndAccessibility(IsolatedTestCase):
     """The open item stays marked, things you own twice have striped spines, and the Accessibility settings
     apply to the page: text size, reduced motion, and animated pictures paused as stills."""
 
@@ -1917,7 +1991,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         cls.pw.stop()
         cls.srv.shutdown()
         cls.srv.server_close()
-        cls.cached.unlink(missing_ok=True)
+        storage.remove(cls.cached, missing_ok=True)
         cls.tmp.cleanup()
 
     def setUp(self):
@@ -2012,7 +2086,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
         """Issue #23: locking the hidden library closes the open hidden item's details and empties them."""
         from hoard import marks
         store = marks.MarkStore()
-        self.addCleanup(store.path.unlink, missing_ok=True)
+        self.addCleanup(storage.remove, store.path, missing_ok=True)
         store.set_pin("2468")
         mochi = next(i for i in self.srv.lib.data["items"] if i["name"] == "Mochi")
         store.change("hidden", {library.tag_key(mochi["store"], mochi["name"])}, True)
@@ -2176,7 +2250,7 @@ class HighlightsAndAccessibility(unittest.TestCase):
             page.close()
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class SetupAssistant(unittest.TestCase):
+class SetupAssistant(IsolatedTestCase):
     """Issue #34: a sign-in started from the setup assistant keeps going if the assistant is closed, and the
     library page has to pick it up; before, nothing watched it any more and the item counts stayed at 0."""
 
@@ -2390,7 +2464,7 @@ class SetupAssistant(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class WindowsTabsAndTasks(unittest.TestCase):
+class WindowsTabsAndTasks(IsolatedTestCase):
     """The layout: Tags, Stores, Settings and Tasks in one panel over the page (issue #84), Settings
     saved as they change, a sidebar that folds, store folder tabs, the Tasks window (issue #49's queue included),
     and New with Recently added (issue #18)."""
@@ -2427,6 +2501,10 @@ class WindowsTabsAndTasks(unittest.TestCase):
         cls.srv.server_close()
         cls.jobs_file.stop()
         cls.tmp.cleanup()
+
+    def tearDown(self):
+        for context in self.browser.contexts:
+            context.close()
 
     def setUp(self):
         # The last test's job may still be finishing after its page has moved on; one of these tests' jobs would
@@ -2481,6 +2559,8 @@ class WindowsTabsAndTasks(unittest.TestCase):
         made.append(pair["id"])
         keys = page.evaluate("DATA.items.filter(a => a.name === 'Rusk' || a.name === 'Anko').map(a => a.tag_key).sort()")
         self.assertEqual(sorted(pair["items"]), keys)
+        # A desktop shell may take the browser's own drags for itself (#313): dragging still works from the pointer alone
+        page.evaluate("document.addEventListener('dragstart', e => { e.preventDefault(); e.stopImmediatePropagation(); }, true)")
         # on Sets and Wishlists: which set, then yes
         tile("Mochi").drag_to(page.locator('#storeSeg [data-store="Sets"]'))
         which = page.locator("dialog.setpick-dlg")
@@ -2810,13 +2890,16 @@ class WindowsTabsAndTasks(unittest.TestCase):
         page.locator("#settingsPanel:not([hidden])").wait_for()
         body = page.locator("#settingsPanel .win-body")
         self.assertEqual(body.evaluate("b => getComputedStyle(b).overscrollBehaviorY"), "contain")
+        # Opening/focusing the panel may scroll the document to its top edge.
+        # The wheel must leave that position unchanged while Settings is open.
+        behind = page.evaluate("() => scrollY")
         box = body.bounding_box()
         page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         for _ in range(40):   # past the end of Settings
             page.mouse.wheel(0, 600)
         page.wait_for_timeout(300)
         self.assertGreater(body.evaluate("b => b.scrollTop"), 0, "Settings scrolled")
-        self.assertEqual(page.evaluate("() => scrollY"), 0, "the page behind didn't")
+        self.assertEqual(page.evaluate("() => scrollY"), behind, "the page behind didn't")
         page.locator("#settingsPanel .win-x").click()
         page.mouse.wheel(0, 600)
         page.wait_for_function("() => scrollY > 0")   # (closed: the page scrolls again)
@@ -3094,7 +3177,12 @@ class WindowsTabsAndTasks(unittest.TestCase):
                         page.set_viewport_size({"width": width, "height": 800})
                         page.evaluate(f"""() => {{ document.documentElement.style.zoom = '{zoom}';
                           if ('{style}') document.documentElement.dataset.style = '{style}'; else delete document.documentElement.dataset.style; }}""")
-                        page.wait_for_timeout(120)
+                        # Wait for ResizeObserver and the fonts to settle under
+                        # parallel CI load, rather than assuming a 120 ms frame.
+                        page.evaluate("document.fonts.ready")
+                        page.wait_for_function("() => { const got = (" + check + ")(); return got.order && !got.over.length; }")
+                        if width == 2600 and zoom == 1:
+                            page.wait_for_function("() => document.querySelector('.bar').dataset.links !== 'menu'")
                         got = page.evaluate(check)
                         seen.add(got["fit"])
                         folded.add(got["folded"])

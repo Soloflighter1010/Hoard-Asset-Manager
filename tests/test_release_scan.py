@@ -11,6 +11,7 @@ import re
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 import urllib.error
 from pathlib import Path
 
@@ -87,7 +88,7 @@ def run(fake: FakeVirusTotal, folder: Path, allow: bool = False, checked: str | 
     return vt.main(folder, client, env=env)
 
 
-class Scanning(unittest.TestCase):
+class Scanning(IsolatedTestCase):
 
     def test_new_files_are_uploaded_and_waited_for(self):
         folder = release_folder({"Hoard-Setup-2.11.0.exe": b"MZ installer", "Hoard-2.11.0.zip": b"PK zip",
@@ -199,7 +200,7 @@ class Scanning(unittest.TestCase):
             vt.main(release_folder({"a.zip": b"PK"}), None, env={})
 
 
-class TheGate(unittest.TestCase):
+class TheGate(IsolatedTestCase):
 
     def flagged(self):
         folder = release_folder({"Hoard-Setup-2.11.0.exe": b"MZ", "Hoard-2.11.0.zip": b"PK"})
@@ -274,7 +275,7 @@ class TheGate(unittest.TestCase):
         self.assertEqual(again, "## What's new\n\n- Things.\n\n## VirusTotal scan results\n\n- new\n")
 
 
-class TheWorkflow(unittest.TestCase):
+class TheWorkflow(IsolatedTestCase):
 
     def setUp(self):
         self.text = (REPO / ".github" / "workflows" / "release.yml").read_text("utf-8")

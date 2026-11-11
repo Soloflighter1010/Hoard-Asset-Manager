@@ -9,11 +9,11 @@ import os
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, library  # noqa: E402
@@ -57,7 +57,7 @@ ITEM = f'''<html>{HEAD}<body>{TOP}<div>{SIDE}<main>
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Jinxxy(unittest.TestCase):
+class Jinxxy(IsolatedTestCase):
 
     def page(self, html, at=None):
         self.pw = sync_playwright().start()
@@ -111,7 +111,7 @@ class Jinxxy(unittest.TestCase):
         self.assertTrue(info["thumbnail"].endswith("/paw.png"), info["thumbnail"])
 
 
-class ProductPages(unittest.TestCase):
+class ProductPages(IsolatedTestCase):
     """Each product's public page, which a shared set links to (never a page of the buyer's own)."""
 
     def test_gumroad(self):
@@ -217,7 +217,7 @@ PAYHIP_OWN_SHOP = PAYHIP_SHOP.replace(
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class PageThatNeverLoads(unittest.TestCase):
+class PageThatNeverLoads(IsolatedTestCase):
     """A tester's report (4.3.6): a Payhip shop on its own address sends every visit to Payhip's sign-in check on
     payhip.com and back; when that never ends, the browser gives up. Hoard says why, from the browser itself, with
     the addresses it went through, instead of "Navigation ... is interrupted by another navigation to
@@ -266,7 +266,7 @@ class PageThatNeverLoads(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class BoothAndPayhip(unittest.TestCase):
+class BoothAndPayhip(IsolatedTestCase):
 
     def page_at(self, url, html):
         pw = sync_playwright().start()
@@ -394,7 +394,7 @@ class BoothAndPayhip(unittest.TestCase):
             self.assertEqual(page.title(), "untouched")
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class DownloadButtons(unittest.TestCase):
+class DownloadButtons(IsolatedTestCase):
 
     def test_class_names_dont_hide_a_download_button(self):
         """Utility class names can contain any word ("review", "limit"): only what a button says counts."""
@@ -439,7 +439,7 @@ def itch_library(cells, extra=""):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Itch(unittest.TestCase):
+class Itch(IsolatedTestCase):
 
     def page_at(self, url, html):
         pw = sync_playwright().start()
@@ -492,7 +492,7 @@ class Itch(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class PackagedApp(unittest.TestCase):
+class PackagedApp(IsolatedTestCase):
 
     def test_the_browser_is_found_where_it_was_installed(self):
         """Packaged as an app (sys.frozen), Playwright would look for browsers inside the program folder; Hoard's
@@ -517,7 +517,7 @@ def mhtml(page_html: str, url: str) -> str:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ImportingSeveralPages(unittest.TestCase):
+class ImportingSeveralPages(IsolatedTestCase):
     """Bulk import: pages from several stores, and several pages of one shop, read together in one offline browser,
     each with its own result. A page that can't be read doesn't stop the rest."""
 
@@ -564,7 +564,7 @@ class ImportingSeveralPages(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class SigningInPlainly(unittest.TestCase):
+class SigningInPlainly(IsolatedTestCase):
     """Issue #21: a sign-in in the browser's own window (not driven by Hoard) is saved in the store's profile so that
     Hoard's window reads it afterwards, encrypted the same way. With the real Chromium: a page sets a cookie in a
     plain window; once it's closed, Hoard reads it. (About 40 seconds: Chromium writes cookies every 30.)"""
@@ -715,7 +715,7 @@ HOODIE = jx_listing("Cozy Hoodie", "nova", "CozyHoodie", "Nova")
 SCARF = jx_listing("Warm Scarf", "nova2", "Scarf", "Nova Two")
 
 
-class JinxxyData(unittest.TestCase):
+class JinxxyData(IsolatedTestCase):
     """What Jinxxy's pages load about your inventory: read as data, and only what's checked."""
 
     def test_the_data_a_page_came_with(self):
@@ -806,7 +806,7 @@ def jx_inventory(products, gifts, first_data, more_data, gifts_data):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class JinxxyGifts(unittest.TestCase):
+class JinxxyGifts(IsolatedTestCase):
     """Issues #275, #276: a refresh reads Jinxxy's own data as its pages load it, so gifts are gifts (and who sent
     them), and each product's page is known without opening its item's page."""
 
@@ -864,7 +864,7 @@ class JinxxyGifts(unittest.TestCase):
                           "1010": ("Bell Collar", "kitsu", True, "kitsu", "https://jinxxy.com/kitsu/Bell")})
 
 
-class JinxxyPaging(unittest.TestCase):
+class JinxxyPaging(IsolatedTestCase):
 
     def test_only_jinxxys_own_pages_are_followed(self):
         from hoard import library

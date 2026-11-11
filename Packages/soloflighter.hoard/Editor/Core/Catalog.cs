@@ -130,7 +130,7 @@ namespace SoloFlighter.Hoard
                 if (assets == null || assets.Kind != JsonKind.Array) { cat.Problem = "catalog.json has no asset list."; return cat; }
                 foreach (var entry in assets.Items)
                 {
-                    var asset = Read(entry, cat.SealStatus != SealState.Changed, cat.SealStatus == SealState.Sealed);
+                    var asset = Read(entry, cat.SealStatus != SealState.Changed, cat.SealStatus == SealState.Sealed, version >= 4);
                     if (asset != null) cat.Assets.Add(asset); else cat.LeftOut++;
                 }
                 cat.ReadSets(doc.Get("sets"));
@@ -144,9 +144,18 @@ namespace SoloFlighter.Hoard
         /// <summary>One catalog entry, or null when it breaks a promise. trustPlaces: the catalog was sealed by Hoard on
         /// this computer, so a Local item's own folder, or another library folder (both outside the downloads
         /// folder), can be believed; otherwise such an item is left out, as it can't be found.</summary>
-        static HoardAsset Read(JsonValue e, bool trustLinks, bool trustPlaces)
+        static HoardAsset Read(JsonValue e, bool trustLinks, bool trustPlaces, bool requireLists)
         {
             if (e == null || e.Kind != JsonKind.Object) return null;
+            // Version 4 requires these lists. Older catalogs omitted empty tag
+            // lists; keep reading those while rejecting mistyped lists in all versions.
+            foreach (string field in new[] { "files", "tags", "suggested_tags" })
+            {
+                var list = e.Get(field);
+                if (list == null && !requireLists) continue;
+                if (list == null || list.Kind != JsonKind.Array) return null;
+                foreach (var value in list.Items) if (value.Kind != JsonKind.String) return null;
+            }
             var a = new HoardAsset
             {
                 Store = e.Str("store"), Name = e.Str("name"), Creator = e.Str("creator"), Folder = e.Str("folder"),

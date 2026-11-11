@@ -100,10 +100,13 @@ def blocks(lines: list[str]) -> str:
 
 
 def releases(markdown: str) -> list[tuple[str, list[str]]]:
-    """(version, its lines) for each "## " section, newest first, as the changelog lists them."""
+    """Published (version, lines) sections, newest first; development notes stay out of What's new."""
     found, current = [], None
     for line in markdown.splitlines():
         if line.startswith("## "):
+            if line[3:].strip().casefold() == "unreleased":
+                current = None
+                continue
             current = (line[3:].strip(), [])
             found.append(current)
         elif current:

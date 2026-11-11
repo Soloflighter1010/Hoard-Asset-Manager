@@ -291,7 +291,11 @@ async function api(url, opts = {}) {
   await entered;
   // The request, with the key.
   const send = () => fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
-  if ((opts.method || "GET").toUpperCase() !== "GET") return send();
+  if ((opts.method || "GET").toUpperCase() !== "GET") {
+    const response = await send();
+    if (response.ok) invalidateAppData(url, opts);
+    return response;
+  }
   for (const wait of [300, 1000]) {
     try { return await send(); } catch (e) {
       if (!(e instanceof TypeError)) throw e;   // (an abort isn't one)
@@ -427,15 +431,34 @@ function pictureLook(src) {
 }
 const lookedAt = new Set();   // pictures already worked out while this page is open, found or not
 async function lookAtPictures(wanted) {   // [{look_for: its SHA-256, src}]: true when there's something new to stack by
-  const looks = {};
-  for (const w of wanted) {
-    if (lookedAt.has(w.look_for) || Object.keys(looks).length >= 500) continue;
+  const looks = {}, todo = wanted.filter(w => !lookedAt.has(w.look_for)).slice(0, 500);
+  let done = 0, changed = false;
+  // Persist small batches so a restart keeps completed comparisons without one database write per pixel hash.
+  async function keepLooks() {
+    if (!Object.keys(looks).length) return;
+    try {
+      if ((await apiPost("/api/picture-looks", { looks })).ok) {
+        changed = true; for (const key of Object.keys(looks)) delete looks[key];
+      }
+    } catch (e) { /* the next load can request comparisons not saved yet */ }
+  }
+  for (const w of todo) {
+    // The scheduler owns admission; a foreground job or Pause leaves this work
+    // for the next refresh, without a separate browser timer or private queue.
+    let permit;
+    try { permit = await apiPost("/api/tasks/pictures", { done, total: todo.length }); } catch (e) { break; }
+    if (!permit.ok || !permit.data.allowed) break;
     lookedAt.add(w.look_for);
     const hex = await pictureLook(w.src);
     if (hex) looks[w.look_for] = hex;
+    done++;
+    if (Object.keys(looks).length >= 32) await keepLooks();
   }
-  if (!Object.keys(looks).length) return false;
-  try { return (await apiPost("/api/picture-looks", { looks })).ok; } catch (e) { return false; }
+  if (todo.length) {
+    try { await apiPost("/api/tasks/pictures", { done, total: todo.length }); } catch (e) { /* resumed with the next load */ }
+  }
+  await keepLooks();
+  return changed;
 }
 // The item whose details are open stays marked in the grid.
 function markCurrent(selector) {
@@ -649,7 +672,12 @@ function lazyCards(box, batch = 120) {
     near.disconnect();
     const next = list.slice(shown, shown + count);
     if (next.length) {
-      box.insertAdjacentHTML("beforeend", next.map(card).join(""));
+      const fragment = document.createDocumentFragment();
+      for (const item of next) {
+        const node = card(item);
+        fragment.append(node instanceof Node ? node : legacyFragment(node));
+      }
+      box.append(fragment);
       shown += next.length;
       markSelected();   // cards drawn now get the marks the others have
     }
@@ -658,7 +686,7 @@ function lazyCards(box, batch = 120) {
   return {
     show(items, cardFor) {
       const keep = Math.max(batch, shown);
-      list = items; card = cardFor; shown = 0; box.innerHTML = "";
+      list = items; card = cardFor; shown = 0; box.replaceChildren();
       more(keep);
     },
     get drawn() { return shown; },
@@ -1001,6 +1029,7 @@ function allActions() {
    them (or goes in the other's folder), and on a folder it goes in it. What a drop will do shows on what's under it
    as you drag; Escape (the browser's own) or letting go anywhere else does nothing. Right-click does it all too. */
 const DRAG = { what: "", ids: [], over: null };
+const POINTER_DRAG = { source: null, id: null, x: 0, y: 0, active: false, suppressUntil: 0 };
 // The products a tile drags: those chosen with it, or it alone.
 function dragProducts(slot) {
   const id = tileId(slot);
@@ -1054,9 +1083,63 @@ function dropShow(t) {
 }
 // The drag is over: nothing marked any more.
 function dragDone() { dropShow(null); DRAG.what = ""; DRAG.ids = []; }
+// Internal grouping uses pointer events too: native desktop drop interception can swallow HTML drag events.
+function wirePointerDragging() {
+  // Release the captured pointer and forget the source without changing the user's selection.
+  const reset = () => {
+    const source = POINTER_DRAG.source;
+    if (source && source.hasPointerCapture(POINTER_DRAG.id)) source.releasePointerCapture(POINTER_DRAG.id);
+    POINTER_DRAG.source = null; POINTER_DRAG.id = null; POINTER_DRAG.active = false;
+    document.documentElement.classList.remove("hoard-dragging");
+  };
+  document.addEventListener("pointerdown", e => {
+    if (e.button !== 0 || e.pointerType === "touch") return;   // touch keeps normal scrolling
+    const source = e.target.closest && e.target.closest('#grid .slot[draggable=true], #projectsBody [data-path][draggable=true]');
+    if (!source) return;
+    Object.assign(POINTER_DRAG, { source, id: e.pointerId, x: e.clientX, y: e.clientY, active: false });
+  });
+  document.addEventListener("pointermove", e => {
+    if (!POINTER_DRAG.source || e.pointerId !== POINTER_DRAG.id) return;
+    if (!POINTER_DRAG.active) {
+      if (Math.hypot(e.clientX - POINTER_DRAG.x, e.clientY - POINTER_DRAG.y) < 7) return;
+      const source = POINTER_DRAG.source;
+      if (source.matches("#grid .slot")) {
+        const list = dragProducts(source);
+        if (!list.length) { reset(); return; }
+        Object.assign(DRAG, { what: "products", ids: list.map(T.id) });
+      } else Object.assign(DRAG, { what: "project", ids: [source.dataset.path] });
+      POINTER_DRAG.active = true; source.setPointerCapture(e.pointerId);
+      document.documentElement.classList.add("hoard-dragging");
+    }
+    e.preventDefault();
+    dropShow(dropTarget(document.elementFromPoint(e.clientX, e.clientY)));
+  });
+  document.addEventListener("pointerup", e => {
+    if (!POINTER_DRAG.source || e.pointerId !== POINTER_DRAG.id) return;
+    const active = POINTER_DRAG.active;
+    const target = active ? dropTarget(document.elementFromPoint(e.clientX, e.clientY)) : null;
+    reset();
+    if (!active) return;
+    POINTER_DRAG.suppressUntil = performance.now() + 400;
+    dragDone(); e.preventDefault();
+    if (target) target.run();
+  });
+  document.addEventListener("pointercancel", () => { reset(); dragDone(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && POINTER_DRAG.source) { reset(); dragDone(); }
+  });
+  document.addEventListener("click", e => {
+    // A drag's synthesized click must not open the source product after grouping it.
+    if (performance.now() < POINTER_DRAG.suppressUntil && e.target.closest('#grid .slot, #projectsBody [data-path]')) {
+      POINTER_DRAG.suppressUntil = 0; e.preventDefault(); e.stopImmediatePropagation();
+    }
+  }, true);
+}
 // Dragging products and projects, and dropping them on each other (issue #281).
 function wireDragging() {
+  wirePointerDragging();
   document.addEventListener("dragstart", e => {
+    if (POINTER_DRAG.source) { e.preventDefault(); return; }   // the pointer path owns in-window drags (#313)
     const el = e.target.closest ? e.target : e.target.parentElement;
     const slot = el && el.closest("#grid .slot[draggable=true]"), project = !slot && el && el.closest("#projectsBody [data-path][draggable=true]");
     if (slot) {
@@ -1536,7 +1619,7 @@ function goToAddress() {   // Back or Forward: show the place the address names
   } finally { NAV.quiet = false; }
   NAV.at = placeOf(new URLSearchParams(location.hash.slice(1)));
 }
-addEventListener("popstate", goToAddress);
+// app.js selects the view before restoring the address on Back/Forward.
 // the mouse's back and forward buttons, and Alt+Left and Alt+Right, here as in a browser (Hoard's window too)
 addEventListener("mouseup", e => {
   if (e.button !== 3 && e.button !== 4) return;
@@ -2956,6 +3039,7 @@ function renderTasks(t) {
       (problems(h).length ? `<ul class="problems">${problems(h).map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "") +
       ((h.log || []).length ? `<pre>${esc(h.log.join("\n"))}</pre>` : "") + `</details>`).join("")
       : `<p class="none">Nothing yet. Each refresh, sync and download is listed here when it's done.</p>`);
+  renderBackgroundTasks(t.background || []);
   for (const pre of document.querySelectorAll("#tasksBody details[data-id] pre")) {
     const d = pre.closest("details"), was = place.get(d.dataset.id);
     // what's running follows its newest lines, unless you've scrolled up to read; the rest stay where they were
@@ -2963,6 +3047,45 @@ function renderTasks(t) {
   }
   if (win) win.scrollTop = winTop;
   taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
+}
+// Background readers keep a quiet, separate group and use text nodes for all progress.
+function renderBackgroundTasks(tasks) {
+  if (!tasks.length) return;
+  const group = document.createElement("section"); group.className = "background-tasks";
+  const heading = document.createElement("h3"); heading.textContent = tr("Background work"); group.append(heading);
+  const note = document.createElement("p"); note.className = "none";
+  note.textContent = tr("Background work pauses while your tasks run. Completed work is kept when Hoard closes."); group.append(note);
+  const labels = { "package-reader": tr("Reading packages"), "routine-check": tr("Routine check"),
+    "hoard-update-check": tr("Checking Hoard updates"), "picture-matching": tr("Matching pictures") };
+  const maintenance = { "Checking Unity catalog": tr("Checking Unity catalog"), "Updating Unity catalog": tr("Updating Unity catalog"),
+    "Caching store pictures": tr("Caching store pictures"), "Forgetting old share links": tr("Forgetting old share links") };
+  const statuses = { running: tr("Running"), waiting: tr("Waiting"), paused: tr("Paused"), stopped: tr("Stopped"), complete: tr("Done") };
+  for (const task of tasks) {
+    const row = document.createElement("div"); row.className = "task background-task"; row.dataset.backgroundId = task.id;
+    const top = document.createElement("div"); top.className = "task-top";
+    const title = document.createElement("b"); title.textContent = labels[task.id] || maintenance[task.label] || task.label; top.append(title);
+    const status = document.createElement("span"); status.textContent = statuses[task.status] || ""; top.append(status);
+    const paused = task.status === "paused" || task.status === "stopped";
+    for (const action of paused ? ["resume"] : ["pause", "stop"]) {
+      const button = document.createElement("button"); button.className = "ghost sm";
+      button.dataset.backgroundAction = action; button.dataset.backgroundId = task.id;
+      button.textContent = action === "resume" ? tr("Resume") : action === "pause" ? tr("Pause") : tr("Stop");
+      top.append(button);
+    }
+    row.append(top);
+    const progress = task.progress || {};
+    if (Number.isFinite(progress.total) && progress.total > 0) {
+      const bar = document.createElement("progress"); bar.max = progress.total; bar.value = Math.min(progress.done || 0, progress.total);
+      bar.setAttribute("aria-label", title.textContent); row.append(bar);
+      const count = document.createElement("span"); count.textContent = tr("{0} of {1}", progress.done || 0, progress.total); row.append(count);
+    }
+    if (task.error) {
+      const error = document.createElement("p"); error.className = "err";
+      error.textContent = tr("Background task could not finish. Retry or create a diagnostic report."); row.append(error);
+    }
+    group.append(row);
+  }
+  $("#tasksBody").append(group);
 }
 // Add packages: a repository folded away stays so while you're in Projects
 document.addEventListener("toggle", e => {
@@ -3924,7 +4047,7 @@ function pjPickFromDownloads() {
   if (T.pickHere) return pickStart(pick);
   try { sessionStorage.setItem(PICK_KEY, JSON.stringify(pick)); }
   catch (e) { toast(tr("That can't be done.")); return; }
-  location.href = "/downloads";
+  navigateApp("/downloads");
 }
 function pickResume() {   // the Downloads page, opened from the Library page to choose for a project
   let pick = null;
@@ -5790,6 +5913,13 @@ function wireTasks() {
   makeWindow($("#tasksWin"));
   $("#tasksTab").addEventListener("click", () => openTasks());
   $("#tasksWin").addEventListener("click", async e => {
+    const background = e.target.closest("[data-background-action]");
+    if (background) {
+      const result = await apiPost("/api/tasks/background", { id: background.dataset.backgroundId, action: background.dataset.backgroundAction });
+      if (!result.ok) toast(result.data.error || tr("Hoard didn't answer. Try again."));
+      if (result.ok && background.dataset.backgroundId === "picture-matching" && background.dataset.backgroundAction === "resume") load();
+      tasksShown = ""; loadTasks(); return;
+    }
     const b = e.target.closest("[data-task]"); if (!b) return;
     const act = b.dataset.task;
     if (act === "stop") {   // (Hoard not answering isn't the job refusing to stop)
@@ -5951,7 +6081,8 @@ const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null
 // Moving between the tour's steps is slow enough to follow by eye (issue #265): the page scrolls smoothly to what's
 // next, the ring moves to it, and the card shows a moment later, beside it. With Reduce motion (motionOk), all at once.
 const TOUR_FOLLOW = 650;   // ms: the ring's move (.tour-ring's transition), and a moment to take it in
-const ON_DOWNLOADS = /downloads/.test(location.pathname);
+// Navigation changes the active view without replacing this script.
+const onDownloads = () => APP.active === "downloads";
 const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 // A name, as the tour shows it.
 const tourName = s => `<strong>${esc(s)}</strong>`;
@@ -5963,7 +6094,7 @@ function tourPick() {
   const pic = a => a.thumbnail || a.thumb;
   // Whether a product has a package or .zip downloaded, to look inside.
   const inside = a => (a.files || []).some(f => !f.missing && /\.(unitypackage|zip)$/i.test(f.path));
-  const item = (ON_DOWNLOADS ? drawn.find(a => inside(a) && pic(a)) || drawn.find(inside) : null) || drawn.find(pic) || drawn[0] || null;
+  const item = (onDownloads() ? drawn.find(a => inside(a) && pic(a)) || drawn.find(inside) : null) || drawn.find(pic) || drawn[0] || null;
   const words = item ? String(item.name).split(/[\s\-_|/()[\]【】「」『』〔〕.,:;!?+&]+/).filter(w => w.length >= 3) : [];
   return { item, word: words.sort((a, b) => b.length - a.length)[0] || (item ? String(item.name).slice(0, 12) : ""), inside: item && inside(item) };
 }
@@ -5978,7 +6109,7 @@ function tourStores() {
   return Object.keys(n).sort((a, b) => n[b] - n[a]).map(s => (DATA.labels || {})[s] || s);
 }
 // How many products the page has.
-const tourCount = () => (ON_DOWNLOADS ? DATA.assets : DATA.items || []).length;
+const tourCount = () => (onDownloads() ? DATA.assets : DATA.items || []).length;
 // Empty the search box, so the tour's product shows.
 function tourClearSearch() {
   const q = $("#q");
@@ -6073,7 +6204,7 @@ const TOUR_STEPS = [
     title: () => tr("Tags"),
     body: () => esc(tr("Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names. In Tags, give a tag a kind, such as Avatar or Clothing, and your tags are grouped by it.")),
     done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
-  { id: "sets", page: "downloads", at: () => $('#stores [data-store="Sets"]'),
+  { id: "sets", page: "downloads", at: () => $('#storeSeg [data-store="Sets"]'),
     enter: () => T.closeDetail(),
     title: () => tr("Sets and Wishlists"),
     body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a short link that shows what's in it and where to buy each, for 14 days. Hoard for Unity imports a whole set at once.")) +
@@ -6167,7 +6298,7 @@ function tourEnd(finished) {
 }
 // to step n, or the next one there's something to show for, going the way you went (dir 1 or -1)
 function tourShow(n, dir) {
-  const here = ON_DOWNLOADS ? "downloads" : "library";
+  const here = onDownloads() ? "downloads" : "library";
   for (; n >= 0 && n < TOUR.steps.length; n += dir) {
     const s = TOUR.steps[n];
     if (s.page !== here) break;
@@ -6180,7 +6311,7 @@ function tourShow(n, dir) {
   const s = TOUR.steps[n];
   if (s.page !== here) {   // the next step is on the other page: off there
     tourSave(s.id);
-    location.href = s.page === "downloads" ? "/downloads" : "/";
+    navigateApp(s.page === "downloads" ? "/downloads" : "/");
     return;
   }
   TOUR.i = n; TOUR.ready = Date.now() + 600;   // (what you did just before doesn't count for this step)
@@ -6195,7 +6326,7 @@ function tourMove(how) {
   const s = TOUR.steps[TOUR.i];
   if (how === "end") { tourEnd(false); return; }
   if (s && s.leave) try { s.leave(); } catch (e) { /* gone already */ }
-  if (how === "next" && s && s.go) { tourSave(s.id); location.href = s.go === "downloads" ? "/downloads" : "/"; return; }
+  if (how === "next" && s && s.go) { tourSave(s.id); navigateApp(s.go === "downloads" ? "/downloads" : "/"); return; }
   tourShow(TOUR.i + (how === "back" ? -1 : 1), how === "back" ? -1 : 1);
 }
 // Draw the tour's step: its words, its buttons, and the ring round what it's about.
@@ -6299,7 +6430,7 @@ function tourResume() {
   let id = null;
   try { id = sessionStorage.getItem("hoard-tour"); } catch (e) { id = null; }
   if (!id) return false;
-  const n = TOUR.steps.findIndex(s => s.id === id), here = ON_DOWNLOADS ? "downloads" : "library";
+  const n = TOUR.steps.findIndex(s => s.id === id), here = onDownloads() ? "downloads" : "library";
   if (n < 0) { tourSave(null); return false; }
   const s = TOUR.steps[n];
   if (s.page === here) tourStart(n);
@@ -6320,7 +6451,7 @@ function tourOffer() {
 function wireTour() {
   const again = $("#tourAgain");
   if (again) again.addEventListener("click", () => {
-    if (ON_DOWNLOADS) { tourSave(TOUR.steps[0].id); location.href = "/"; } else tourStart(0);
+    if (onDownloads()) { tourSave(TOUR.steps[0].id); navigateApp("/"); } else tourStart(0);
   });
   const note = $("#tourNote");
   if (note) note.addEventListener("click", e => {

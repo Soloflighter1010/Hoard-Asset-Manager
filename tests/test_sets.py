@@ -3,10 +3,10 @@ import json
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import downloader, sets
 from hoard.tags import tag_key
@@ -14,7 +14,7 @@ from hoard.tags import tag_key
 RUSK, HOODIE = tag_key("Booth", "Rusk"), tag_key("Booth", "Hoodie for Rusk")
 
 
-class Store(unittest.TestCase):
+class Store(IsolatedTestCase):
     def setUp(self):
         self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
 
@@ -74,7 +74,7 @@ def packed(doc: dict) -> str:
     return sets.CODE_PREFIX + base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-class Pictures(unittest.TestCase):
+class Pictures(IsolatedTestCase):
     """A picture you choose for a set's tile: checked by what it is, a new file each time, gone with its set."""
 
     def setUp(self):
@@ -125,11 +125,14 @@ def long_wishlist(count: int) -> list[dict]:
              "price": {"text": "¥500", "amount": 500, "currency": "JPY"}} for n in range(count)]
 
 
-class Splitting(unittest.TestCase):
+class Splitting(IsolatedTestCase):
     """A set too big for one short link (Booth's Loved items of 808 products, say) is split into sets that each fit,
     in its order, each as full as it can be; the set stays as it is."""
 
     def setUp(self):
+        patch = mock.patch.dict(sets._parts_kept, {}, clear=True)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
         self.store.put_wishlists([{"store": "booth", "list": "Loved items", "products": long_wishlist(900)}])
         wish = self.store.load()["sets"][0]
@@ -231,7 +234,7 @@ class Splitting(unittest.TestCase):
         self.assertEqual([len(n) <= 60 and n.endswith(f"({i} of 2)") for i, n in enumerate(names, 1)], [True, True])
 
 
-class Sharing(unittest.TestCase):
+class Sharing(IsolatedTestCase):
     """A set shared as a code: the set itself, in a link to the viewer on Hoard's website, never uploaded."""
 
     def test_there_and_back(self):
@@ -343,7 +346,7 @@ LINKS = [("gumroad", "https://gumroad.com/d/38f42c7471ed9fd07cfad9261e7fce75", N
          ("gumroad", "https://user@kitsu.gumroad.com/l/a", None), ("local", "https://kitsu.gumroad.com/l/a", None)]
 
 
-class PublicPagesOnly(unittest.TestCase):
+class PublicPagesOnly(IsolatedTestCase):
     def test_only_a_public_page(self):
         for store, url, want in LINKS:
             with self.subTest(url=url):
@@ -396,7 +399,7 @@ class PublicPagesOnly(unittest.TestCase):
         self.assertEqual((got["url"], got["creator"]), ("https://kitsu.gumroad.com/l/ears", "Kitsu"))
 
 
-class PhotoPages(unittest.TestCase):
+class PhotoPages(IsolatedTestCase):
     """A photo's page on a photo site (imgur.com/<id>, as people copy it) is read for the picture it shows."""
 
     def test_the_picture_a_page_shows(self):
@@ -453,7 +456,7 @@ class PhotoPages(unittest.TestCase):
                          "only the photo site's own page is asked for")
 
 
-class InTheCatalog(unittest.TestCase):
+class InTheCatalog(IsolatedTestCase):
     def test_sets_by_their_products_folders(self):
         tmp = Path(tempfile.mkdtemp())
         env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})
@@ -484,7 +487,7 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Page(unittest.TestCase):
+class Page(IsolatedTestCase):
     def test_make_a_set_and_show_it(self):
         import threading
         from playwright.sync_api import sync_playwright
@@ -528,7 +531,7 @@ class Page(unittest.TestCase):
                              ["New set from these...", "Add to Rusk, winter"])
             page.keyboard.press("Escape")
             page.click("#bulkDone")
-            page.click('#stores [data-store="Sets"]')
+            page.click('#storeSeg [data-store="Sets"]')
             page.locator("#setView .settile", has_text="Rusk, winter").click()
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")
             self.assertIn("set=", page.url)
@@ -579,7 +582,7 @@ class Page(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Tab(unittest.TestCase):
+class Tab(IsolatedTestCase):
     """The Sets tab: sets of any products, downloaded or not, yours or not yet; shared, and added from a share."""
 
     def setUp(self):
@@ -891,7 +894,7 @@ class Tab(unittest.TestCase):
             page.click('#setView [data-setx="cancel"]')
             # in Downloads, the same set: what's downloaded as its tiles, the rest after them
             page.click("nav.apptabs a[href='/downloads']")
-            page.click('#stores [data-store="Sets"]')
+            page.click('#storeSeg [data-store="Sets"]')
             page.locator("#setView .settile", has_text="Rusk, winter").click()
             page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 1")
             hoodie = page.locator("#setMore .slot", has_text="Hoodie for Rusk")

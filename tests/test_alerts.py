@@ -13,6 +13,7 @@ import threading
 import time
 import types
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
@@ -69,7 +70,7 @@ def fake_apprise() -> types.ModuleType:
     return fake
 
 
-class Alerts(unittest.TestCase):
+class Alerts(IsolatedTestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -223,7 +224,7 @@ class Alerts(unittest.TestCase):
         self.assertEqual(news, [("checked", {"changed": 1, "missing": 2}), ("checked", {"changed": 0, "missing": 1})])
 
 
-class AlertsInHoard(unittest.TestCase):
+class AlertsInHoard(IsolatedTestCase):
     """The server's side: the addresses kept through /api/apprise (and never sent back), a test sent to them, what's
     sent chosen in Settings, and the tasks' news turned into what's sent."""
 
@@ -234,7 +235,7 @@ class AlertsInHoard(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         for patch in (mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(self.tmp / "data")}),
                       mock.patch.object(server, "save_config"), mock.patch.object(alerts, "available", lambda: True),
-                      mock.patch.object(alerts, "_kept", None)):
+                      mock.patch.object(alerts, "_kept", None), mock.patch.object(alerts, "_described", None)):
             patch.start()
             self.addCleanup(patch.stop)
         fake = fake_apprise()
@@ -321,7 +322,7 @@ class AlertsInHoard(unittest.TestCase):
         self.assertEqual(FakeApprise.sent, [], "tasks aren't ticked: nothing sent")
 
 
-class Addresses(unittest.TestCase):
+class Addresses(IsolatedTestCase):
     """Issues #285, #287: what Settings is shown of an address (never a secret), and how one is sent to."""
 
     def test_described_without_secrets(self):
@@ -360,7 +361,7 @@ class Addresses(unittest.TestCase):
 
 
 @unittest.skipUnless(importlib.util.find_spec("apprise"), "Apprise isn't installed here")
-class RealApprise(unittest.TestCase):
+class RealApprise(IsolatedTestCase):
     """Issue #237: Send a test, through Apprise itself, reaches a service (one on this computer, answering as a webhook
     would), and a service that refuses it says why, its address never in what's said."""
 

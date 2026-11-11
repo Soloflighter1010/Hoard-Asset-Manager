@@ -1,6 +1,8 @@
 """Keeping local copies: downloading from each store, the records of what's on disk, and the catalog files."""
 from __future__ import annotations
 
+from . import storage
+
 import hashlib
 import json
 import os
@@ -22,7 +24,8 @@ from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, pace, vault
-from .safety import DataFileError, UnsafePath, check_seal, clean_text, fetch_public, open_under, read_json_file, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, set_aside, store_link, valid_rel, write_file_safely
+from .safety import DataFileError, UnsafePath, clean_text, fetch_public, open_under, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, store_link, valid_rel
+from .storage import seal_status as check_seal, read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
 from .tags import TagMatcher, TagStore, clean_note, clean_tag, tag_key
 
 try:
@@ -31,19 +34,9 @@ except ImportError:  # progress bars are optional
     tqdm = None
 
 
-GR_BASE = "https://app.gumroad.com"
-
-
-GR_LIBRARY = GR_BASE + "/library"
-
-
-GR_LOGIN = GR_BASE + "/login"
-
-
-JX_BASE = "https://jinxxy.com"
-
-
-JX_INVENTORY = JX_BASE + "/my/inventory"
+# Store code lives in hoard/stores; these aliases preserve the public Python API.
+from .stores import install as _install_stores
+_install_stores('downloader', globals())
 
 
 STOPWORDS = set("""
@@ -245,7 +238,7 @@ def ruled_out(rules: list[dict], store: str, file: str) -> str | None:
 
 def remembered_files(cfg: dict) -> dict[str, set]:
     """The files you left out of each product (Download new's Choose files), by its tag key: left out from then on."""
-    raw = cfg.get("file_skip") if isinstance(cfg.get("file_skip"), dict) else {}
+    raw = storage.current_references("config.json", cfg).get("file_skip") if isinstance(cfg.get("file_skip"), dict) else {}
     return {k: {n for n in v[:500] if isinstance(n, str) and n} for k, v in list(raw.items())[:MAX_REMEMBERED]
             if isinstance(k, str) and 0 < len(k) <= 400 and isinstance(v, list)}
 
@@ -475,6 +468,8 @@ class Manifest:
             log(f"{store_dir.name}: ignored {dropped} entries in _manifest.json that pointed outside {store_dir} "
                 "or weren't valid. Check who else can change that folder.")
         self.assets: dict = self.data.setdefault("assets", {})
+        if store_dir.name == "Local" and trusted:
+            storage.identify_local(self.assets)
         self._saved, self._saved_at = self._contents(), 0.0   # what's on disk, and when this last wrote it
 
     def _check(self, raw) -> bool:
@@ -506,6 +501,8 @@ class Manifest:
         """Seal the manifest and write it through a temporary file, so a crash can't leave it half-written."""
         write_file_safely(self.path, json.dumps(seal(self.data), indent=2, ensure_ascii=False))
         remember_sealed(self.path)
+        if self.store_dir.name == "Local":
+            storage.identify_local(self.assets)
         self._saved, self._saved_at = self._contents(), time.monotonic()
 
     def save_changes(self) -> None:
@@ -664,98 +661,6 @@ def browser_cookies(cfg: dict, store: str) -> tuple[list, str]:
     return cookies, ua
 
 
-# ----------------------------------------------------------------------------- Gumroad
-
-def gumroad_session(cfg: dict) -> requests.Session:
-    """An HTTP session signed in to Gumroad, using your Gumroad sign-in in Hoard's browser.
-
-    Earlier versions also accepted a copied session cookie from config.json or an environment variable.
-    That's a password-equivalent in plain text, so it's no longer read; sign in with `login gumroad` instead.
-    """
-    if cfg["gumroad"].get("session_cookie") or os.environ.get("HOARD_GUMROAD_SESSION"):
-        log("Note: a Gumroad session cookie in config.json or HOARD_GUMROAD_SESSION is no longer used, because "
-            "anyone who sees it can use your account. Delete it (and sign out of Gumroad on its website to end that "
-            "session), then sign in with: login gumroad")
-    s = egress.session()
-    cookies, ua = browser_cookies(cfg, "gumroad")
-    if not any(c["name"].startswith("_gumroad_app_session") for c in cookies):
-        raise NotLoggedIn("Not signed in to Gumroad")
-    for c in cookies:
-        s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c.get("path", "/"))
-    s.headers["User-Agent"] = ua
-    return s
-
-
-class Gumroad:
-    """Reads Gumroad pages. Gumroad embeds each page's data as JSON, so no scraping is needed."""
-    def __init__(self, cfg: dict, sess: requests.Session):
-        """Wrap a signed-in session; request_delay from the config spaces out page loads."""
-        self.cfg, self.sess = cfg, sess
-        self.delay = float(cfg.get("request_delay", 1.0))
-
-    def page(self, url: str, params: dict | None = None) -> dict:
-        """Load a Gumroad page and return its embedded page data (component and props)."""
-        pause(self.delay)
-        r = egress.get(self.sess, url, STORE_SITES["gumroad"], params=params, timeout=60)
-        if "/login" in urlparse(r.url).path:
-            raise NotLoggedIn("Gumroad session expired")
-        r.raise_for_status()
-        data = extract_page_json(r.text)
-        if not data:
-            raise RuntimeError(f"no page data found at {r.url} (Gumroad's markup may have changed)")
-        return data
-
-    def library(self):
-        """Every purchase card in the library, archived ones included if configured."""
-        yield from gumroad_cards(lambda params: self.page(GR_LIBRARY, params).get("props", {}),
-                                 self.cfg["gumroad"].get("include_archived", True))   # (page() waits between pages)
-
-    def file_url(self, page_url: str, token: str, file_id: str, fallback: str | None) -> str | None:
-        """Ask for a signed download URL; fall back to the redirecting link on the download page."""
-        try:
-            r = egress.get(self.sess, urljoin(page_url, f"/r/{token}/product_files.json"), STORE_SITES["gumroad"],
-                           params={"product_file_ids[]": file_id}, headers={"Accept": "application/json"}, timeout=60)
-            if r.ok:
-                files = r.json().get("files") or []
-                if files and files[0].get("url"):
-                    return files[0]["url"]
-        except (requests.RequestException, ValueError):
-            pass
-        return urljoin(page_url, fallback) if fallback else None
-
-
-def gumroad_files(items, prefix: str = ""):
-    """Yield (sub-folder, file) for every file on a download page, following Gumroad's folders."""
-    for it in items or []:
-        if it.get("type") == "folder":
-            yield from gumroad_files(it.get("children"), prefix + safe_name(it.get("name") or "Folder") + "/")
-        elif it.get("type") == "file":
-            yield prefix, it
-
-
-def gumroad_page_images(content: dict) -> list[str]:
-    """The pictures a creator put in a download page itself (Gumroad's rich content), in page order. Some products
-    are only that: a set of PNG textures shown on the page, with no files listed."""
-    found: list[str] = []
-
-    def walk(node):
-        """Note each picture from Gumroad's own file host in this part of the page, and in what's under it."""
-        if isinstance(node, dict):
-            if node.get("type") == "image":
-                src = (node.get("attrs") or {}).get("src")
-                if isinstance(src, str) and urlparse(src).scheme == "https" and urlparse(src).hostname == "public-files.gumroad.com":
-                    found.append(src)
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-    for page in (content or {}).get("rich_content_pages") or []:
-        if isinstance(page, dict):
-            walk(page.get("description"))
-    return list(dict.fromkeys(found))
-
-
 PICTURE_TYPES = ((b"\x89PNG\r\n\x1a\n", "png"), (b"\xff\xd8\xff", "jpg"), (b"GIF87a", "gif"), (b"GIF89a", "gif"))
 
 
@@ -769,15 +674,6 @@ def picture_extension(path: Path) -> str | None:
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return "webp"
     return next((ext for magic, ext in PICTURE_TYPES if head.startswith(magic)), None)
-
-
-def gumroad_filename(f: dict) -> str:
-    """A safe local name for a Gumroad file: its name plus its extension, in lower case."""
-    name = (f.get("file_name") or f.get("id") or "file").strip()
-    ext = (f.get("extension") or "").strip().lower().lstrip(".")
-    if ext and not name.lower().endswith("." + ext):
-        name = f"{name}.{ext}"
-    return safe_name(name, 150)
 
 
 def save_thumbnail(url: str | None, folder: Path, referer: str | None = None) -> None:
@@ -804,162 +700,6 @@ def store_url(url: str, sites: list[str]) -> bool:
     """True when url is an https (or http) address on one of the store's own sites."""
     u = urlparse(url or "")
     return u.scheme == "https" and bool(u.hostname) and not u.username and _on_sites(u.hostname, sites)
-
-
-def _gumroad_page_images(gr, content: dict, rec: dict, folder: Path, name: str, creator: str, man, args,
-                         report: Report) -> bool:
-    """Save the pictures in a download page that lists no files, into "Page images", each named by its place on the
-    page and typed by what it is. True when one was downloaded."""
-    got_any = False
-    public = egress.session()   # public pictures: fetched without your Gumroad sign-in
-    for n, src in enumerate(gumroad_page_images(content), 1):
-        token = urlparse(src).path.rstrip("/").rsplit("/", 1)[-1]
-        fid = "page-image:" + token
-        old = rec["files"].get(fid)
-        if old and rel_to_path(folder, old["path"]).exists():
-            continue
-        stem = f"Page images/{n:02d} {safe_name(token, 40)}"
-        if left_out(args, report, "gumroad", name, stem):
-            continue
-        if args.dry_run:
-            would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
-            continue
-        staged = rel_to_path(folder, stem + ".download")
-        try:
-            with_retries(report, stem, lambda src=src, staged=staged: egress.download(
-                public, src, staged, ["public-files.gumroad.com"], desc=stem, progress=downloading(stem)))
-        except Exception as e:
-            report.failed.append(f"Gumroad: {creator} / {name} / {stem} - {e}")
-            continue
-        ext = picture_extension(staged)
-        if not ext:   # not a picture after all: not kept
-            staged.unlink(missing_ok=True)
-            report.skipped.append(f"Gumroad: {name} / {stem} - not a picture")
-            continue
-        relpath = f"{stem}.{ext}"
-        os.replace(staged, rel_to_path(folder, relpath))
-        rec["files"][fid] = {"path": relpath, "size": rel_to_path(folder, relpath).stat().st_size, "downloaded_at": now_iso()}
-        log(f"    saved: {relpath}")
-        report.new_files.append(f"Gumroad: {creator} / {name} / {relpath}")
-        report.saved("gumroad", name, stem)
-        got_any = True
-        man.checkpoint()
-    return got_any
-
-
-def sync_gumroad(cfg: dict, root: Path, args, report: Report) -> None:
-    """Download everything new or changed in your Gumroad library."""
-    store_dir = root / "Gumroad"
-    man = StoreRecords(cfg, root, "Gumroad")
-    gr = Gumroad(cfg, gumroad_session(cfg))
-
-    try:
-        _sync_gumroad_purchases(cfg, gr, store_dir, man, args, report)
-    finally:
-        gr.sess.cookies.clear()  # the copied sign-in only lives for this sync
-        gr.sess.close()
-        man.save_changes()   # every finished file recorded, however the sync ended
-
-
-def _sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: Path, man: StoreRecords, args, report: Report) -> None:
-    """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
-    chosen = (getattr(args, "targets", None) or {}).get("gumroad")
-    if chosen:   # straight to the chosen purchases' download pages
-        cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")},
-                              "thumbnail_url": i.get("thumbnail")},   # its picture, as the library has it
-                  "purchase": {"id": i.get("id"), "download_url": i.get("download_url"), "variants": i.get("variants") or ""}}
-                 for i in chosen]
-        log(f"Gumroad: {len(cards)} chosen {'purchase' if len(cards) == 1 else 'purchases'}")
-    else:
-        cards = list(gr.library())
-        log(f"Gumroad: {len(cards)} purchases in your library")
-    seen: set[str] = set()
-
-    for n, card in enumerate(cards, 1):
-        tick(f"Gumroad: purchase {n} of {len(cards)}")   # Stop is noticed here too
-        prod, pur = card.get("product") or {}, card.get("purchase") or {}
-        name = (prod.get("name") or "Untitled").strip()
-        creator = ((prod.get("creator") or {}).get("name") or "Unknown Creator").strip()
-        if not chosen and skip_product(args, "gumroad", name, creator):
-            continue
-        page_url = pur.get("download_url")
-        if not page_url:
-            report.skipped.append(f"Gumroad: {name} - no download page (refunded or membership inactive)")
-            continue
-        try:
-            page = gr.page(page_url)
-        except NotLoggedIn:
-            raise
-        except Exception as e:
-            report.failed.append(f"Gumroad: {name} - couldn't open download page: {e}")
-            continue
-
-        props = page.get("props") or {}
-        content = props.get("content")
-        if not content:
-            report.skipped.append(f"Gumroad: {name} - page type {page.get('component')!r} has no files "
-                                  "(may need email confirmation - open it once in the browser)")
-            continue
-
-        p = props.get("purchase") or {}
-        key = f"{p.get('product_id') or pur.get('id')}:{p.get('variant_id') or ''}"
-        if key in seen:  # bought the same product/variant twice
-            continue
-        seen.add(key)
-
-        variants = (pur.get("variants") or "").strip()
-        if removed_product("gumroad", name, report) or man.away(key, f"Gumroad: {name}", report):
-            continue
-        rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
-        is_new_asset = not rec["files"]
-        rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
-                   last_synced=now_iso())
-        folder = man.folder_of(rec)
-        token = props.get("token")
-        log(f"\n[Gumroad] {creator} / {name}{f' ({variants})' if variants else ''}")
-
-        got_any = False
-        offered = {f.get("id") for _sub, f in gumroad_files(content.get("content_items"))}
-        for sub, f in gumroad_files(content.get("content_items")):
-            fid, size = f.get("id"), f.get("file_size")
-            relpath = distinct_name(sub + gumroad_filename(f), fid, rec, offered)
-            target = rel_to_path(folder, relpath)
-            old = rec["files"].get(fid)
-            if target.exists() and (not size or target.stat().st_size == size):
-                rec["files"][fid] = {**(old or {}), "path": relpath, "size": target.stat().st_size}
-                continue
-            if not f.get("download_url"):
-                report.skipped.append(f"Gumroad: {name} / {relpath} - streaming only, no download")
-                continue
-            is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
-            label = f"{creator} / {name} / {relpath}"
-            if left_out(args, report, "gumroad", name, relpath):
-                continue
-            if args.dry_run:
-                would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
-                continue
-            try:
-                got = with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: egress.download(
-                    gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, STORE_SITES["gumroad"],
-                    desc=relpath, progress=downloading(relpath)))
-            except Exception as e:
-                report.failed.append(f"Gumroad: {label} - {e}")
-                continue
-            log(f"    {'updated' if is_update else 'saved'}: {relpath}")
-            (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
-            report.saved("gumroad", name, relpath)
-            rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": now_iso()}
-            got_any = True
-            man.checkpoint()
-
-        if not offered:   # no files: what the creator put in the page itself, such as a set of textures
-            got_any = _gumroad_page_images(gr, content, rec, folder, name, creator, man, args, report) or got_any
-
-        if got_any and is_new_asset:
-            report.new_assets.append(f"Gumroad: {creator} / {name}")
-        if cfg["gumroad"].get("save_thumbnails", True) and not args.dry_run:
-            save_thumbnail(prod.get("thumbnail_url"), folder)
-        man.checkpoint()
 
 
 # ----------------------------------------------------------------------------- Jinxxy
@@ -1005,118 +745,6 @@ DOWNLOAD_BUTTONS_JS = r"""
   });
 }
 """
-
-
-JX_HOSTS = ["jinxxy\\.com"]
-
-
-JX_INFO_JS = r"""
-() => {
-  const meta = p => (document.querySelector(`meta[property="${p}"]`) || {}).content || '';
-  const LANDMARKS = 'nav, aside, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
-  const GENERIC = /^(navigation|menu|profile|likes|lists|wishlist|inventory|marketplace|popular|leaderboard|product details|details|support info|my review|instructions from the creator.*)$/i;
-  // A heading's own words, without its buttons and icons (a back arrow, a menu)
-  const words = h => { const c = h.cloneNode(true); c.querySelectorAll('button, svg, [aria-hidden="true"]').forEach(x => x.remove());
-    return c.textContent.replace(/\s+/g, ' ').trim(); };
-  const bare = t => t.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-  // The product's title: the first heading in the page's content that isn't page furniture
-  const h1 = [...document.querySelectorAll('main h1, main h2, h1, h2, h3')]
-    .find(h => !h.closest(LANDMARKS) && bare(words(h)) && !GENERIC.test(bare(words(h))));
-  const ogTitle = meta('og:title');
-  const name = ((h1 && words(h1)) || (ogTitle && !/^jinxxy$/i.test(ogTitle.trim()) ? ogTitle : '')
-    || (document.title || '').replace(/\s*[|\-\u2013]\s*jinxxy\s*$/i, '') || '').trim();
-  // You, the signed-in user: your "Profile" link is never the creator
-  const own = new Set();
-  for (const l of document.querySelectorAll('a[href]')) {
-    const t = (l.innerText || l.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (!/^(profile|my profile|view profile|account|my account)$/i.test(t)) continue;
-    try { const segs = new URL(l.href).pathname.split('/').filter(Boolean); if (segs.length === 1) own.add(segs[0].toLowerCase()); } catch (e) {}
-  }
-  const reserved = new Set(['my','login','signin','signup','register','market','marketplace','search','help',
-    'about','terms','privacy','discover','cart','checkout','settings','creators','categories','tags','blog',
-    'api','dashboard','products','inventory','support','faq','legal']);
-  const links = [];
-  for (const a of document.querySelectorAll('a[href]')) {
-    let u; try { u = new URL(a.href); } catch (e) { continue; }
-    if (!/(^|\.)jinxxy\.com$/.test(u.hostname)) continue;
-    const segs = u.pathname.split('/').filter(Boolean);
-    if (!(segs.length === 1 || (segs.length === 2 && segs[1] === 'products'))) continue;
-    if (reserved.has(segs[0].toLowerCase()) || own.has(segs[0].toLowerCase()) || a.closest(LANDMARKS)) continue;
-    const after = h1 ? !!(h1.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) : true;
-    links.push({ after, creator: (a.innerText || '').trim() || segs[0] });
-  }
-  const pick = links.find(l => l.after) || links[0];
-  const big = img => { const r = img.getBoundingClientRect(); return r.width >= 100 && r.height >= 100; };
-  const usable = img => !img.closest(LANDMARKS) && big(img) && (img.currentSrc || img.src || '').startsWith('http');
-  let thumbnail = '';
-  for (let box = h1; box && box !== document.body && !thumbnail; box = box.parentElement) {
-    const imgs = [...box.querySelectorAll('img')].filter(usable);
-    if (imgs.length) thumbnail = imgs[0].currentSrc || imgs[0].src;   // the nearest picture to the title
-  }
-  return { name, creator: pick ? pick.creator : '', thumbnail };
-}
-"""
-
-
-def jinxxy_require_login(page) -> None:
-    """Raise NotLoggedIn when Jinxxy is showing its sign-in form."""
-    path = urlparse(page.url).path.lower()
-    if "login" in path or "signin" in path or page.locator("input[type=password]").count():
-        raise NotLoggedIn("Not signed in to Jinxxy")
-
-
-def jinxxy_link(u) -> bool:
-    """Is this parsed link on Jinxxy itself: https, on jinxxy.com or one of its subdomains, with no user name,
-    password or unusual port? (Not "jinxxy.com" anywhere in the address: notjinxxy.com, jinxxy.com.example.net and
-    example.net/?jinxxy.com aren't Jinxxy.)"""
-    try:
-        port = u.port
-    except ValueError:
-        return False
-    host = (u.hostname or "").lower()
-    return (u.scheme == "https" and port in (None, 443) and u.username is None and u.password is None
-            and (host == "jinxxy.com" or host.endswith(".jinxxy.com")))
-
-
-def _scan_inventory(page, rx, inv_path: str, found: dict) -> list[str]:
-    """Scroll / click 'load more' until this page stops growing. Returns numbered-page links seen."""
-    page_links: list[str] = []
-
-    def read() -> int:
-        """Read the links now on the page: products noted, and numbered pages of the inventory kept for later; returns
-        how many products are known."""
-        for href in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)"):
-            u = urlparse(href)
-            if not jinxxy_link(u):
-                continue
-            path = u.path.rstrip("/")
-            if path == inv_path and re.search(r"(^|&)page=\d+", u.query):
-                page_links.append(href)
-            elif path != inv_path and rx.search(u.path):
-                found.setdefault(f"{u.scheme}://{u.netloc}{path}", None)
-        return len(found)
-    scroll_inventory(page, read, settle_ms=600, wait_ms=1200)
-    return page_links
-
-
-def jinxxy_item_links(page, pattern: str) -> list[str]:
-    """Every item URL in the inventory, whether it scrolls, has 'load more', or has numbered pages."""
-    rx = re.compile(pattern)
-    inv_path = urlparse(JX_INVENTORY).path.rstrip("/")
-    found: dict[str, None] = {}
-    visited, pending = {page.url}, []
-    for _ in range(100):
-        for href in _scan_inventory(page, rx, inv_path, found):
-            if href not in visited and href not in pending:
-                pending.append(href)
-        if not pending:
-            break
-        nxt = pending.pop(0)
-        visited.add(nxt)
-        pace.before(nxt)
-        page.goto(nxt, wait_until="domcontentloaded")
-        settle(page)
-    return list(found)
 
 
 def click_download(ctx, page, idx: int, timeout_s: int):
@@ -1317,109 +945,6 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
     return got_any
 
 
-def forget_repeated_thumbnails(store_dir: Path) -> int:
-    """Delete Jinxxy's default banner where versions before 2.0.1 saved it as product pictures: a picture
-    byte-for-byte identical across different creators' products (Creator/Product/_thumbnail.*). One creator's
-    products sharing a picture (copies of one product, issue #111) are real pictures, and kept. Done once: a
-    marker in Hoard's own folder says so, so pictures aren't read again on every sync. Returns how many were
-    removed."""
-    from .paths import data_dir
-    done = data_dir() / "jinxxy-banners-checked"
-    if done.exists():
-        return 0
-    by_hash: dict = {}
-    for p in store_dir.glob("*/*/_thumbnail.*"):
-        if p.is_file() and not p.is_symlink():
-            by_hash.setdefault(hashlib.sha256(p.read_bytes()).hexdigest(), []).append(p)
-    removed = 0
-    for same in by_hash.values():
-        if len({p.parent.parent.name for p in same}) > 1:   # more than one creator: the site's banner
-            for p in same:
-                p.unlink()
-                removed += 1
-    try:
-        done.parent.mkdir(parents=True, exist_ok=True)
-        done.write_text("Jinxxy's default banner, saved as product pictures before 2.0.1, was cleared.\n", "utf-8")
-    except OSError:
-        pass
-    return removed
-
-
-def sync_jinxxy(cfg: dict, root: Path, args, report: Report) -> None:
-    """Download everything new or changed in your Jinxxy inventory."""
-    jcfg = cfg["jinxxy"]
-    store_dir = root / "Jinxxy"
-    man = StoreRecords(cfg, root, "Jinxxy")
-    if store_dir.is_dir() and not args.dry_run:
-        banners = forget_repeated_thumbnails(store_dir)
-        if banners:
-            log(f"Jinxxy: removed {banners} copies of Jinxxy's default banner saved as product pictures; "
-                "the real pictures are saved this time.")
-    delay = float(cfg.get("request_delay", 1.0))
-
-    with _playwright()() as p:
-        browser = {"ctx": launch_context(p, cfg, not args.headed, "jinxxy")}
-        direct = None
-        try:
-            ctx = browser["ctx"]
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            # files come straight from Jinxxy with your sign-in, not through the browser (unless Jinxxy turns that away)
-            direct = {"sess": session_from_context(ctx, "jinxxy.com"), "sites": STORE_SITES["jinxxy"],
-                      "on": bool(jcfg.get("direct_downloads", True))}
-            chosen = (getattr(args, "targets", None) or {}).get("jinxxy")
-            listed = {}   # a chosen item's name in your library, which may not be its page's
-            if chosen:   # straight to the chosen items' pages (each checks the sign-in as it opens)
-                links = [i["url"] for i in chosen if jinxxy_link(urlparse(i["url"]))]
-                listed = {i["url"]: i.get("name") for i in chosen}
-                log(f"Jinxxy: {len(links)} chosen {'item' if len(links) == 1 else 'items'}")
-            else:
-                pace.before(JX_INVENTORY)
-                page.goto(JX_INVENTORY, wait_until="domcontentloaded")
-                settle(page, 1500)
-                jinxxy_require_login(page)
-                links = jinxxy_item_links(page, jcfg["item_link_pattern"])
-                if not links:
-                    raise RuntimeError("found no items on the inventory page - run the command: probe jinxxy")
-                log(f"Jinxxy: {len(links)} items in your inventory")
-
-            reopened = 0
-            for n, url in enumerate(links, 1):
-                tick(f"Jinxxy: item {n} of {len(links)}")   # Stop is noticed here, even when items fail fast
-                pause(delay)
-                for again in (False, True):
-                    if page.is_closed():
-                        if reopened >= REOPENS:
-                            raise RuntimeError(f"Jinxxy's browser closed by itself {reopened} times, so the rest of "
-                                               "Jinxxy was left for next time. Hoard's log has what happened before each (Settings, "
-                                               "Open logs folder).")
-                        reopened += 1
-                        page = reopen_tab(p, cfg, args, "jinxxy", browser)
-                    try:
-                        _jinxxy_item(browser["ctx"], page, url, man, store_dir, jcfg, args, report, chosen=bool(chosen),
-                                     direct=direct, listed_name=listed.get(url))
-                    except NotLoggedIn:
-                        raise
-                    except Exception as e:
-                        if not again and (tab_closed(e) or page.is_closed()):
-                            log(f"    Jinxxy's browser closed while on {url} ({e}); trying it again")
-                            if not page.is_closed():
-                                try:
-                                    page.close()
-                                except Exception:
-                                    pass
-                            continue
-                        report.failed.append(f"Jinxxy: {url} - {e}")
-                    break
-        finally:
-            man.save_changes()   # every finished file recorded, however the sync ended
-            if direct:
-                direct["sess"].cookies.clear()   # the copied sign-in only lives for this sync
-            try:
-                browser["ctx"].close()
-            except Exception:
-                pass   # a browser that already closed by itself
-
-
 REOPENS = 3   # how often a store's browser that closed by itself is opened again in one sync
 
 
@@ -1443,52 +968,6 @@ def reopen_tab(p, cfg: dict, args, store: str, browser: dict):
     return browser["ctx"].pages[0] if browser["ctx"].pages else browser["ctx"].new_page()
 
 
-def _jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: bool = False, direct=None,
-                 listed_name: str | None = None) -> None:
-    """Open one Jinxxy item and download the files its page offers."""
-    pace.before(url)
-    page.goto(url, wait_until="domcontentloaded")
-    settle(page)
-    jinxxy_require_login(page)
-    info = page.evaluate(JX_INFO_JS)
-    key = urlparse(url).path.rstrip("/").split("/")[-1]
-    name = (info.get("name") or key).strip()
-    creator = (info.get("creator") or "Unknown Creator").strip()
-    if not chosen and skip_product(args, "jinxxy", name, creator):   # (a chosen item was picked by its page, not its name)
-        return
-    if removed_product("jinxxy", name, report) or man.away(key, f"Jinxxy: {name}", report):
-        return
-    rec = man.record(key, creator, name)
-    is_new_asset = not rec["files"]
-    rec.update(name=name, creator=creator, url=url, last_synced=now_iso())
-    folder = man.folder_of(rec)
-    log(f"\n[Jinxxy] {creator} / {name}")
-
-    got_any = download_by_clicking(ctx, page, url, rec, folder, "Jinxxy", JX_HOSTS,
-                                   int(jcfg.get("download_start_timeout", 90)), name, creator, man, args, report,
-                                   direct=direct, listed_name=listed_name)
-
-    if got_any and is_new_asset:
-        report.new_assets.append(f"Jinxxy: {creator} / {name}")
-    if jcfg.get("save_thumbnails", True) and not args.dry_run:
-        save_thumbnail(info.get("thumbnail"), folder, "https://jinxxy.com/")
-    man.checkpoint()
-
-
-# ----------------------------------------------------------------------------- Booth
-#
-# Booth lists every purchase and gift at accounts.booth.pm/library, with a link for each file.
-# The list is read in the browser with your saved login; the files then come straight from
-# Booth over HTTP, so big downloads resume if they're interrupted.
-
-BOOTH_LIBRARY = "https://accounts.booth.pm/library"
-
-
-def booth_library(page, cfg: dict) -> list[dict]:
-    """Every purchase (and, if enabled, gift) in your Booth library, one dict per item (as the library reads it)."""
-    return [{**b, "gift": gift} for b, gift, _base in booth_cards(page, cfg, float(cfg.get("request_delay", 1.0)))]
-
-
 def session_from_context(ctx, domain: str) -> requests.Session:
     """A requests session carrying the browser's cookies for one site, and the same User-Agent."""
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
@@ -1499,236 +978,9 @@ def session_from_context(ctx, domain: str) -> requests.Session:
     return s
 
 
-def booth_file_location(sess: requests.Session, url: str) -> str:
-    """Booth answers a file link with a redirect to a short-lived download address."""
-    r = egress.get(sess, url, STORE_SITES["booth"], follow=False, timeout=60, headers={"Referer": BOOTH_LIBRARY})
-    if r.status_code in (301, 302, 303, 307, 308):
-        loc = urljoin(url, r.headers.get("Location", ""))
-        if "sign_in" in loc or urlparse(loc).path.startswith("/users"):
-            raise NotLoggedIn("Booth session expired")
-        return loc
-    if r.ok and not r.headers.get("Content-Type", "").startswith("text/html"):
-        return url
-    if r.ok:
-        raise NotLoggedIn("Booth sent a web page instead of the file; the session may have expired")
-    raise RuntimeError(f"booth.pm answered HTTP {r.status_code} instead of sending the file")
-
-
-def booth_filename(label: str, location: str, fallback: str) -> str:
-    """A safe local name for a Booth file: the name Booth shows, or the one in its download address."""
-    name = (label or "").strip()
-    if not re.search(r"\.[A-Za-z0-9]{1,12}$", name):  # Booth shows the file name; if not, use the download address
-        name = unquote(Path(urlparse(location).path).name) or name or fallback
-    return safe_name(name, 150)
-
-
-BOOTH_ITEM_FILES_JS = r"""
-() => {
-  // A Booth item's own page (booth.pm/.../items/<id>): each file's download link, booth.pm/downloadables/<id>.
-  // Items in the library's "free downloads" list only have their files here.
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const fileName = /[^\s\/\\]+\.[A-Za-z][A-Za-z0-9]{0,11}(?=\s|$)/;   // (an extension starts with a letter: not "Ver1.2")
-  const LINKS = 'a[href*="/downloadables/"], [data-href*="/downloadables/"]';
-  const idOf = e => { const m = (e.getAttribute('href') || e.getAttribute('data-href') || '').match(/\/downloadables\/(\d+)/); return m && m[1]; };
-  const out = new Map();
-  for (const e of document.querySelectorAll(LINKS)) {
-    let u; try { u = new URL(e.getAttribute('href') || e.getAttribute('data-href') || '', location.href); } catch (x) { continue; }
-    const m = u.pathname.match(/^\/downloadables\/(\d+)\/?$/);   // not a deeplink for Booth's app, not "open in browser"
-    if (!m || u.searchParams.has('browse') || !/(^|\.)booth\.pm$/.test(u.hostname) || out.has(m[1])) continue;
-    // the file's name: in its own row (widened from the link while the row is about this file only)
-    let row = e;
-    while (row.parentElement && row.parentElement !== document.body
-           && [...row.parentElement.querySelectorAll(LINKS)].every(x => idOf(x) === m[1])) row = row.parentElement;
-    const f = text(row).match(fileName);
-    const name = f ? f[0] : '';
-    out.set(m[1], { name, url: 'https://booth.pm/downloadables/' + m[1] });
-  }
-  return [...out.values()];
-}
-"""
-
-
 def chosen_here(args) -> bool:
     """Was this download (or look at what's there to choose from) of products chosen, not a whole store's?"""
     return bool(getattr(args, "keys", None) or getattr(args, "only", None) or getattr(args, "listing", False))
-
-
-def booth_item_files(page, url: str) -> list[dict]:
-    """The files on a Booth item's own page (a free download), or on a purchase's order page, for an item the library
-    lists without them."""
-    pace.before(url)
-    page.goto(url, wait_until="domcontentloaded")
-    settle(page)
-    u = urlparse(page.url)   # (an item page is public: only a move to the sign-in page means the session ended)
-    if "sign_in" in u.path or (u.hostname == "accounts.booth.pm" and page.locator("input[type=password]").count()):
-        raise NotLoggedIn("Not signed in to Booth")
-    return [f for f in page.evaluate(BOOTH_ITEM_FILES_JS) if store_url(f.get("url"), ["booth.pm"])]
-
-
-BOOTH_CLICK_JS = """url => { const a = document.createElement('a'); a.href = url; a.rel = 'noreferrer';
-  document.body.appendChild(a); a.click(); a.remove(); }"""
-
-
-def booth_browser_download(page, url: str, folder: Path, label: str, fid: str, timeout_s: float,
-                           name_for=lambda n: n) -> tuple[str, int]:
-    """Download one Booth file through the signed-in browser, just as clicking its download button would.
-
-    Returns (file name, size). Raises NotLoggedIn when Booth answers with its sign-in page instead.
-    """
-    started: list = []
-
-    def on_download(download):
-        """Note the download the click started."""
-        started.append(download)
-
-    page.on("download", on_download)
-    try:
-        page.evaluate(BOOTH_CLICK_JS, url)
-        deadline = time.time() + timeout_s
-        while not started and time.time() < deadline:
-            page.wait_for_timeout(250)
-            if "sign_in" in page.url or urlparse(page.url).path.startswith("/users"):
-                raise NotLoggedIn("Booth session expired")
-    finally:
-        page.remove_listener("download", on_download)
-    if not started:
-        raise RuntimeError("Booth didn't start the download")
-    dl = started[0]
-    fname = name_for(booth_filename(label, dl.suggested_filename or dl.url, f"file-{fid}"))
-    wait_for_browser_download(dl, fname)
-    target = save_browser_download(dl, folder, fname)
-    return fname, target.stat().st_size
-
-
-def booth_fetch(page, sess, f: dict, folder: Path, fid: str, route: dict, timeout_s: float,
-                name_for=lambda n: n) -> tuple[str, int]:
-    """Download one Booth file. The direct route is fastest and resumes where it stopped; if Booth turns it away
-    (sites often screen out anything that isn't a real browser), that file goes through the browser, and once it has
-    turned it away twice running, the rest of the run does. A dropped connection isn't Booth turning it away: it's
-    raised to be tried again (with_retries), so the file resumes where it stopped. Signed out shows in the browser."""
-    if route["direct"]:
-        try:
-            loc = booth_file_location(sess, f["url"])
-            fname = name_for(booth_filename(f["name"], loc, f"file-{fid}"))
-            got = egress.download(sess, loc, folder / fname, STORE_SITES["booth"], desc=fname, progress=downloading(fname))
-            route["refused"] = 0
-            return fname, got
-        except (requests.ConnectionError, requests.Timeout):
-            raise
-        except (NotLoggedIn, RuntimeError, requests.RequestException, egress.UnsafeRequest) as e:
-            route["refused"] = route.get("refused", 0) + 1
-            if route["refused"] >= 2:
-                route["direct"] = False
-                log(f"    Booth turned the direct download away again ({e}), so Hoard downloads through the browser from now on.")
-            else:
-                log(f"    Booth turned the direct download away ({e}), so Hoard downloads this file through the browser.")
-    return booth_browser_download(page, f["url"], folder, f["name"], fid, timeout_s, name_for)
-
-
-def sync_booth(cfg: dict, root: Path, args, report: Report) -> None:
-    """Download everything new or changed in your Booth library and gifts."""
-    bcfg = cfg["booth"]
-    man = StoreRecords(cfg, root, "Booth")
-    delay = float(cfg.get("request_delay", 1.0))
-    timeout_s = float(bcfg.get("download_start_timeout", 90))
-    route = {"direct": True}
-    with _playwright()() as p:
-        ctx = launch_context(p, cfg, not args.headed, "booth")
-        try:
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            items = booth_library(page, cfg)
-            sess = session_from_context(ctx, "booth.pm")
-            log(f"Booth: {len(items)} items in your library")
-            try:
-                for n, b in enumerate(items, 1):
-                    tick(f"Booth: item {n} of {len(items)}")   # Stop is noticed here, even when items fail fast
-                    name = (b["name"] or f"Booth item {b['id']}").strip()
-                    creator = (b["creator"] or "Unknown Creator").strip()
-                    if skip_product(args, "booth", name, creator):
-                        continue
-                    if removed_product("booth", name, report) or man.away(b["id"], f"Booth: {name}", report):
-                        continue
-                    rec = man.record(b["id"], creator, name)
-                    is_new_asset = not rec["files"]
-                    rec.update(name=name, creator=creator, url=b["url"], gift=b["gift"] or None, last_synced=now_iso())
-                    folder = man.folder_of(rec)
-                    log(f"\n[Booth] {creator} / {name}")
-                    if not b["files"] and (not b.get("order_url") or not rec["files"] or chosen_here(args)):
-                        # none on its library card: a free item's are on its own page (looked at every time, as
-                        # before); a purchase's on its order page (issue #267: Booth's library card has stopped listing
-                        # them before), looked at when nothing of it is downloaded yet, or it was chosen, so a sync of
-                        # a big library doesn't open every order
-                        for where, what in ((b.get("order_url"), "order"), (b.get("url"), "item")):
-                            if b["files"] or not store_url(where, ["booth.pm"]):
-                                continue
-                            try:
-                                b["files"] = booth_item_files(page, where)
-                            except NotLoggedIn:
-                                raise
-                            except Exception as e:
-                                log(f"    couldn't read the {what}'s page for its files: {e}")
-                    if not b["files"]:
-                        report.skipped.append(f"Booth: {name} - no files listed in your library or on its page")
-                        continue
-
-                    got_any, on_disk = False, None
-                    for f in b["files"]:
-                        if not store_url(f["url"], ["booth.pm"]):
-                            report.skipped.append(f"Booth: {name} - a file link that isn't on booth.pm was ignored")
-                            continue
-                        m = re.search(r"/downloadables/(\d+)", f["url"])
-                        fid = m.group(1) if m else f["url"]
-                        old = rec["files"].get(fid)
-                        if old and rel_to_path(folder, old["path"]).exists():
-                            continue
-                        guess = booth_filename(f["name"], "", f"file-{fid}")
-                        replaces = next((k for k, v in rec["files"].items() if v.get("path") == guess), None)
-                        if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
-                            rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
-                            continue
-                        if left_out(args, report, "booth", name, f["name"] or guess):
-                            continue
-                        if args.dry_run:
-                            would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)
-                            continue
-                        if on_disk is None:   # what's in its folder, listed once a product (each file saved is added)
-                            on_disk = {x.name for x in folder.iterdir()} if folder.is_dir() else set()
-                        try:
-                            offered = {(re.search(r"/downloadables/(\d+)", x["url"]) or [None, x["url"]])[1] for x in b["files"]}
-                            fname, got = with_retries(report, f["name"] or guess, lambda f=f, fid=fid, offered=offered: booth_fetch(
-                                page, sess, f, folder, fid, route, timeout_s,
-                                name_for=lambda n, fid=fid, offered=offered: distinct_name(n, fid, rec, offered)))
-                            prev = next((k for k, v in rec["files"].items() if v.get("path") == fname and k != fid), None)
-                            # an update replaces a file: one it had (this file, or one saved under this name), or
-                            # one already on disk by this name; a file new to the product isn't one
-                            is_update = old is not None or bool(replaces) or prev is not None or fname in on_disk
-                        except NotLoggedIn:
-                            raise
-                        except Exception as e:
-                            report.failed.append(f"Booth: {creator} / {name} / {f['name']} - {e}")
-                            continue
-                        if prev:
-                            rec["files"].pop(prev, None)
-                        rec["files"][fid] = {"path": fname, "size": got, "label": f["name"], "downloaded_at": now_iso()}
-                        on_disk.add(fname)
-                        log(f"    {'updated' if is_update else 'saved'}: {fname}")
-                        (report.updated if is_update else report.new_files).append(f"Booth: {creator} / {name} / {fname}")
-                        report.saved("booth", name, f["name"] or guess)
-                        got_any = True
-                        man.checkpoint()
-                        pause(delay)
-
-                    if got_any and is_new_asset:
-                        report.new_assets.append(f"Booth: {creator} / {name}")
-                    if bcfg.get("save_thumbnails", True) and not args.dry_run:
-                        save_thumbnail(b["thumbnail"], folder, "https://booth.pm/")
-                    man.checkpoint()
-            finally:
-                sess.cookies.clear()  # the copied sign-in only lives for this sync
-                sess.close()
-        finally:
-            man.save_changes()   # every finished file recorded, however the sync ended
-            ctx.close()
 
 
 # ----------------------------------------------------------------------------- itch.io
@@ -1748,110 +1000,6 @@ def md5_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def sync_itch(cfg: dict, root: Path, args, report: Report) -> None:
-    """Download everything new or changed in your itch.io library."""
-    key = vault.load_key(cfg, "itch")
-    if not key:
-        raise NotLoggedIn("no itch.io API key yet")
-    store_dir = root / STORE_DIRS["itch"]
-    man = StoreRecords(cfg, root, STORE_DIRS["itch"])
-    delay = float(cfg.get("request_delay", 1.0))
-    sess = itch.session(key)
-    try:
-        keys = itch.owned_keys(sess, delay)
-        log(f"itch.io: {len(keys)} {'item' if len(keys) == 1 else 'items'} in your library")
-        for k in keys:
-            g = itch.game_of(k)
-            name = clean_text(g["title"], 300) or f"itch.io project {g['id']}"
-            creator = clean_text(g["creator"], 200) or "Unknown Creator"
-            if not g["id"] or skip_product(args, "itch", name, creator):
-                continue
-            if removed_product("itch", name, report) or man.away(str(g["id"]), f"itch.io: {name}", report):
-                continue
-            pause(delay)
-            try:
-                _itch_project(sess, k, g, name, creator, man, store_dir, cfg["itch"], args, report)
-            except NotLoggedIn:
-                raise
-            except Exception as e:
-                report.failed.append(f"itch.io: {creator} / {name} - {e}")
-    finally:
-        sess.headers.pop("Authorization", None)   # the key only lives for this sync
-        sess.close()
-        man.save_changes()   # every finished file recorded, however the sync ended
-
-
-def _itch_project(sess, k: dict, g: dict, name: str, creator: str, man: StoreRecords, store_dir: Path, icfg: dict, args,
-                  report: Report) -> None:
-    """Download each of one project's files that isn't here yet, or has changed."""
-    files = itch.uploads(sess, g["id"], k["id"])
-    if not files:
-        report.skipped.append(f"itch.io: {name} - no files to download")
-        return
-    rec = man.record(str(g["id"]), creator, name)
-    is_new_asset = not rec["files"]
-    rec.update(name=name, creator=creator, url=store_link("itch", g["url"]), last_synced=now_iso())
-    folder = man.folder_of(rec)
-    log(f"\n[itch.io] {creator} / {name}")
-    offered = {str(u["id"]) for u in files}
-    got_any = False
-    for u in files:
-        fid = str(u["id"])
-        label = clean_text(u.get("display_name") or u.get("filename"), 200) or f"file {fid}"
-        # what itch.io says about the file: when it changes, the creator updated it
-        shown = str(u.get("md5_hash") or f"{u.get('filename')}|{u.get('size')}|{u.get('updated_at')}")
-        old = rec["files"].get(fid)
-        if old and old.get("shown", shown) == shown and rel_to_path(folder, old["path"]).exists():
-            continue
-        if u.get("storage") == "external":
-            report.skipped.append(f"itch.io: {name} / {label} - kept on another website, so not downloaded")
-            continue
-        if itch.systems(u) and icfg.get("skip_game_builds", True):
-            report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(itch.systems(u))}, so not "
-                                  "downloaded (Settings, itch.io: Skip game builds)")
-            continue
-        if left_out(args, report, "itch", name, label):
-            continue
-        if args.dry_run:
-            would_get(args, report, "itch", rec, name, creator, label, old is not None and old.get("shown", shown) != shown,
-                      old is not None and old.get("shown", shown) == shown)
-            continue
-        fname = distinct_name(safe_name(u.get("filename") or label, 150), fid, rec, offered)
-        target = folder / fname
-        prev = next((f for f, v in rec["files"].items() if v.get("path") == fname and f != fid), None)
-        is_update = old is not None or prev is not None or target.exists()
-        def fetch(fid=fid, target=target, fname=fname, u=u):
-            """Download one of the project's files from itch.io, deleting it when it doesn't match itch.io's
-            checksum."""
-            got = egress.download(sess, itch.download_address(fid, k["id"]), target, itch.sites(), desc=fname,
-                                 progress=downloading(fname))
-            expected = str(u.get("md5_hash") or "").lower()
-            if expected and md5_of(target) != expected:
-                target.unlink(missing_ok=True)
-                raise RuntimeError("the file didn't match itch.io's checksum, so it was deleted")
-            return got
-        try:
-            size = with_retries(report, fname, fetch)
-        except NotLoggedIn:
-            raise
-        except Exception as e:
-            report.failed.append(f"itch.io: {creator} / {name} / {fname} - {e}")
-            continue
-        if prev:
-            rec["files"].pop(prev, None)
-        rec["files"][fid] = {"path": fname, "size": size, "label": label, "shown": shown, "downloaded_at": now_iso()}
-        log(f"    {'updated' if is_update else 'saved'}: {fname}")
-        (report.updated if is_update else report.new_files).append(f"itch.io: {creator} / {name} / {fname}")
-        report.saved("itch", name, label)
-        got_any = True
-        man.checkpoint()
-    if got_any and is_new_asset:
-        report.new_assets.append(f"itch.io: {creator} / {name}")
-    if rec["files"] and icfg.get("save_thumbnails", True) and not args.dry_run:
-        save_thumbnail(g["cover"], folder, "https://itch.io/")
-    man.checkpoint()
-
-
 REDACT_KEYS = re.compile(r'("[^"]*(?:email|token|password|secret|session|cookie|authorization|jwt|license)[^"]*"\s*:\s*)"[^"]*"', re.I)
 
 
@@ -1861,63 +1009,6 @@ REDACT_QS = re.compile(r'((?:X-Amz-[A-Za-z-]+|Signature|Key-Pair-Id|Policy|token
 def redact(s: str) -> str:
     """Mask emails, tokens, passwords and signed-URL parts in text saved for troubleshooting."""
     return REDACT_QS.sub(r"\1***", REDACT_KEYS.sub(r'\1"***"', s or ""))
-
-
-def cmd_probe(cfg: dict, args) -> None:
-    """Record what Jinxxy's inventory and first item page load, for tuning the adapter."""
-    PROBE_DIR.mkdir(parents=True, exist_ok=True)
-    out = open(PROBE_DIR / "jinxxy_network.jsonl", "w", encoding="utf-8")
-    with _playwright()() as p:
-        ctx = launch_context(p, cfg, False, "jinxxy")
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        responses = []
-        page.on("response", responses.append)
-
-        def dump(stage):
-            """Record the JSON responses seen so far, for this stage of the probe, with any key or pass taken out."""
-            for r in responses:
-                try:
-                    if "json" not in r.headers.get("content-type", "") and "graphql" not in r.url:
-                        continue
-                    body = r.text()
-                except Exception:
-                    continue
-                out.write(json.dumps({"stage": stage, "method": r.request.method, "status": r.status,
-                                      "url": redact(r.url), "request": redact((r.request.post_data or "")[:4000]),
-                                      "response": redact(body[:30000])}, ensure_ascii=False) + "\n")
-            responses.clear()
-
-        pace.before(JX_INVENTORY)
-        page.goto(JX_INVENTORY, wait_until="domcontentloaded")
-        settle(page, 2000)
-        jinxxy_require_login(page)
-        links = jinxxy_item_links(page, cfg["jinxxy"]["item_link_pattern"])
-        dump("inventory")
-        raw = bool(getattr(args, "raw", False))
-        (PROBE_DIR / "inventory.html").write_text(page.content() if raw else scrub(page.content()), "utf-8")
-        if raw:
-            page.screenshot(path=str(PROBE_DIR / "inventory.png"), full_page=True)
-        hrefs = sorted({urlparse(h).path for h in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")})
-        (PROBE_DIR / "inventory_links.txt").write_text("\n".join(hrefs), "utf-8")
-        log(f"Item links matching item_link_pattern: {len(links)}")
-
-        if links:
-            pace.before(links[0])
-            page.goto(links[0], wait_until="domcontentloaded")
-            settle(page, 2000)
-            dump("item")
-            (PROBE_DIR / "item.html").write_text(page.content() if raw else scrub(page.content()), "utf-8")
-            if raw:
-                page.screenshot(path=str(PROBE_DIR / "item.png"), full_page=True)
-            log(f"First item: {page.evaluate(JX_INFO_JS)}")
-            for b in page.evaluate(DOWNLOAD_BUTTONS_JS, {"allowAll": True, "hosts": JX_HOSTS}):
-                log(f"  download button: {b['label'][:120]}")
-        ctx.close()
-    out.close()
-    log(f"\nWrote {PROBE_DIR}. " + ("These files are exactly what Jinxxy showed you, including your purchases and "
-                                     "account details: only share them with someone you trust." if getattr(args, "raw", False)
-                                     else "Email addresses, form values, tokens and signed links were removed, and there are "
-                                          "no screenshots. If someone helping you needs more, run again with --raw."))
 
 
 # ----------------------------------------------------------------------------- tags & catalog
@@ -2364,7 +1455,7 @@ def integrity_file() -> Path:
 def last_integrity() -> dict | None:
     """What the last check of the downloads found (issue #83), or None if there hasn't been one."""
     try:
-        raw = read_json_file(integrity_file()) if integrity_file().is_file() else None
+        raw = read_json_file(integrity_file()) if storage.is_file(integrity_file()) else None
     except (DataFileError, OSError):
         return None
     if not isinstance(raw, dict) or not isinstance(raw.get("checked"), str):
@@ -2614,7 +1705,10 @@ CATALOG_FORMAT = {"catalog": {"format": "hoard-catalog", "version": 3},
 
 def validate_catalog_entry(entry: dict) -> list[str]:
     """Problems with one catalog entry, measured against the promises in docs/DATA-FORMATS.md (empty when fine)."""
-    problems = []
+    from .schema import errors
+    problems = errors(entry)
+    if not isinstance(entry, dict):
+        return problems
     label = str(entry.get("folder"))[:80]
     if entry.get("store") not in STORE_DIRS.values():
         problems.append(f"{label}: unknown store")
@@ -2687,7 +1781,9 @@ def build_catalog(cfg: dict, root: Path) -> None:
         except UnsafePath:
             continue
         if adir.is_dir():
-            write_file_safely(adir / "asset.json", json.dumps(seal({**CATALOG_FORMAT["asset"], **entry}), indent=2,
+            from .schema import require
+            write_file_safely(adir / "asset.json", json.dumps(require(seal({**CATALOG_FORMAT["asset"], **entry}),
+                                                                    "asset-v3.schema.json"), indent=2,
                                                               ensure_ascii=False), base)
     write_catalog_files(root, catalog, ordered)
     top = ", ".join(f"{t} ({len(v)})" for t, v in list(ordered.items())[:25])
@@ -2702,8 +1798,10 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
     form = {**CATALOG_FORMAT["catalog"], **({"version": 4} if any(e.get("library") for e in catalog) else {})}
     from .sets import for_catalog   # your sets (hoard/sets.py), by their products' folders: Import set in Unity
     grouped = for_catalog(catalog) if catalog else []
-    write_file_safely(root / "catalog.json", json.dumps(seal({**form, "generated_at": now_iso(), "assets": catalog,
+    from .schema import require
+    write_file_safely(root / "catalog.json", json.dumps(require(seal({**form, "generated_at": now_iso(), "assets": catalog,
                                                               **({"sets": grouped} if grouped else {})}),
+                                                              f"catalog-v{form['version']}.schema.json"),
                                                         indent=2, ensure_ascii=False), root)
     yours: dict[str, list] = {}
     for entry in catalog:
@@ -2711,12 +1809,12 @@ def write_catalog_files(root: Path, catalog: list, ordered: dict) -> None:
             yours.setdefault(t, []).append(entry["folder"])
     from .tags import TagStore
     kinds = {t: info["type"] for t, info in TagStore().load()["tags"].items() if info.get("type")}   # (issue #157)
-    write_file_safely(root / "tags.json", json.dumps(seal({
+    write_file_safely(root / "tags.json", json.dumps(require(seal({
         **CATALOG_FORMAT["tags"], "generated_at": now_iso(), "total_assets": len(catalog),
         "tags": {t: {"count": len(v), "assets": v, **({"type": kinds[t]} if t in kinds else {})}
                  for t, v in sorted(yours.items(), key=lambda kv: (-len(kv[1]), kv[0]))},
         "suggested": {t: {"count": len(v), "assets": v} for t, v in ordered.items()},
-    }), indent=2, ensure_ascii=False), root)
+    }), "tags-v3.schema.json"), indent=2, ensure_ascii=False), root)
 
 
 def catalog_seal(root: Path) -> str | None:
@@ -2805,7 +1903,8 @@ def cmd_sync(cfg: dict, args) -> None:
     report = Report(retries=download_retries(cfg))
     asked = list(DOWNLOADABLE) if args.store == "all" else ([args.store] if isinstance(args.store, str) else list(args.store))
     stores = [s for s in asked if s in DOWNLOADABLE]   # Payhip is read, never downloaded from
-    syncers = {"booth": sync_booth, "gumroad": sync_gumroad, "jinxxy": sync_jinxxy, "itch": sync_itch}
+    from .stores import adapters
+    syncers = {key: a.transfer for key, a in adapters().items() if a.downloads}
     try:
         for store in stores:
             label, folder = STORES[store]["label"], STORE_DIRS[store]

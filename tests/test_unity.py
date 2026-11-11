@@ -16,10 +16,10 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import safety, sets  # noqa: E402
@@ -37,6 +37,18 @@ def asset(name, folder, url, files, **extra):
 def build_material(d: Path) -> None:
     """Everything CoreTests.cs checks against, made by Hoard's own code."""
     key = safety.integrity_key()
+    # Both readers consume the versioned schema's examples. Each gets a sealed
+    # catalog, so path and note checks run under the same trust as real exports.
+    examples = json.loads((REPO / "docs/schemas/examples.json").read_text("utf-8"))
+    expected_examples = []
+    for n, example in enumerate(examples):
+        folder = d / "schema-examples" / str(n)
+        folder.mkdir(parents=True)
+        doc = safety.seal({"format": "hoard-catalog", "version": 4,
+                           "generated_at": "2026-11-08T00:00:00Z", "assets": [example["entry"]]})
+        (folder / "catalog.json").write_text(json.dumps(doc), "utf-8")
+        expected_examples.append({"folder": str(n), "name": example["name"], "valid": example["valid"]})
+    (d / "schema-examples.json").write_text(json.dumps(expected_examples), "utf-8")
     (d / "integrity.key").write_text(key.hex(), "ascii")
     (d / "key_id.txt").write_text(safety._key_id(key))
 
@@ -251,7 +263,7 @@ def tar_header(name: str, size: int, kind: bytes) -> bytes:
 
 
 @unittest.skipUnless(HAVE_CSHARP, "needs a C# compiler and runtime (mono-mcs, mono-runtime)")
-class UnityCore(unittest.TestCase):
+class UnityCore(IsolatedTestCase):
 
     def test_core_against_hoards_own_material(self):
         d = Path(tempfile.mkdtemp(prefix="hoard-unity-"))
@@ -295,7 +307,7 @@ class UnityCore(unittest.TestCase):
             self.assertNotIn("using UnityEditor", text, f.name)
 
 
-class UnityPackage(unittest.TestCase):
+class UnityPackage(IsolatedTestCase):
     """The package VCC installs: complete, with fixed GUIDs, editor-only, and built the same way every time."""
     PKG = PACKAGE
 
@@ -353,7 +365,7 @@ class UnityPackage(unittest.TestCase):
         self.assertIn("Packages/soloflighter.hoard/Editor/HoardWindow.cs", paths)
 
 
-class TemplateLayout(unittest.TestCase):
+class TemplateLayout(IsolatedTestCase):
     """VRChat's template-package layout: a Unity project at the root, the package in Packages/, the listing's
     details in source.json, and the two workflows (pinned) that release and list it."""
 

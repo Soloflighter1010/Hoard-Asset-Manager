@@ -17,6 +17,8 @@ published from 4.3.6: antivirus engines kept flagging it) the installer, and pip
 """
 from __future__ import annotations
 
+from . import storage
+
 import hashlib
 import json
 import re
@@ -30,7 +32,8 @@ from urllib.parse import urlparse
 from . import __version__, egress
 from .paths import data_dir
 from .versions import TAG, is_beta, version_of  # noqa: F401  (one definition: hoard/versions.py)
-from .safety import DataFileError, read_json_file, write_file_safely
+from .safety import DataFileError
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 REPO = "Soloflighter1010/Hoard-Asset-Manager"
 API = "https://api.github.com"
@@ -256,7 +259,7 @@ class Updates:
         self.cfg = cfg
         self._lock = threading.Lock()
         try:
-            saved = read_json_file(_file_path()) if _file_path().is_file() else {}
+            saved = read_json_file(_file_path()) if storage.is_file(_file_path()) else {}
         except (DataFileError, OSError):
             saved = {}
         saved = saved if isinstance(saved, dict) else {}
@@ -269,6 +272,7 @@ class Updates:
         self.pending: Path | None = None   # checked and waiting to run once Hoard has stopped
         self.on_available = None   # (version): a newer Hoard was found (issue #230)
         self._told = ""
+        self.scheduler = None
 
     def view(self, can_install: bool) -> dict:
         """The update state, for the page: whether a newer version is available (a beta only with beta updates on), and
@@ -313,16 +317,11 @@ class Updates:
         """When Hoard starts, while automatic checks are on: a check, in the background so nothing waits for GitHub,
         then one a day for as long as Hoard stays open (it often does, in the taskbar). A check that fails (offline,
         say) is said in Hoard's log, and tried again next time."""
-        def run():
-            """Check now, then once every so often, while automatic checks are on."""
-            while True:
-                if self.due():
-                    try:
-                        self.check()
-                    except Exception as e:
-                        print(f"Couldn't check for updates ({type(e).__name__}: {e})")
-                time.sleep(every)
-        threading.Thread(target=run, daemon=True, name="update-check").start()
+        from .scheduler import Scheduler
+        if self.scheduler is None:
+            self.scheduler = Scheduler(persistent=False)
+        self.scheduler.add("hoard-update-check", "Checking Hoard updates", lambda context: self.check() if self.due() else None,
+                           every=every)
 
     def start_install(self, on_ready) -> str | None:
         """Download and check the newest release's installer in the background, then call on_ready() (which quits
@@ -347,7 +346,10 @@ class Updates:
                 why = str(e) if isinstance(e, (UpdateRefused, egress.UnsafeRequest)) else f"{type(e).__name__}: {e}"
                 print(f"The update didn't download ({why})")
                 self.state.update(busy=False, message="", error=f"The update didn't download: {why}"[:400])
-        threading.Thread(target=run, daemon=True, name="update").start()
+        from .scheduler import Scheduler
+        if self.scheduler is None:
+            self.scheduler = Scheduler(persistent=False)
+        self.scheduler.call("Installing Hoard update", run)
         return None
 
 

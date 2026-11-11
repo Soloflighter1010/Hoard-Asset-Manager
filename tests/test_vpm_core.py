@@ -13,11 +13,11 @@ import shutil
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 import zipfile
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import egress
 from hoard.vpm import environment, litedb, repos, resolve
@@ -56,7 +56,7 @@ def _zip(files: dict) -> bytes:
     return buf.getvalue()
 
 
-class Served(unittest.TestCase):
+class Served(IsolatedTestCase):
     @classmethod
     def setUpClass(cls):
         cls.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Server)
@@ -86,7 +86,7 @@ class Served(unittest.TestCase):
                 "packages": {n: {"versions": {v: m for v, m in vs.items()}} for n, vs in packages.items()}}
 
 
-class Settings(unittest.TestCase):
+class Settings(IsolatedTestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.folder, True)
@@ -124,7 +124,7 @@ class Settings(unittest.TestCase):
             environment.Settings.load(self.folder)
 
 
-class LiteDB(unittest.TestCase):
+class LiteDB(IsolatedTestCase):
     """vcc-sample.liteDb.gz was written by vrc-get's own LiteDB writer (vrc-get-litedb 0.3.0-beta.8): 41 projects,
     one larger than a page (split over blocks), and one Unity editor."""
 
@@ -163,7 +163,7 @@ class LiteDB(unittest.TestCase):
                          "a damaged database reads as empty")
 
 
-class Manifests(unittest.TestCase):
+class Manifests(IsolatedTestCase):
     def test_names(self):
         for good in ("com.vrchat.avatars", "nadena.dev.modular-avatar", "jp.lilxyzw.liltoon", "a_b"):
             self.assertTrue(valid_name(good), good)
@@ -321,7 +321,7 @@ class Downloads(Served):
                 self.assertFalse((path.parent / "evil.txt").exists())
 
 
-class Projects(unittest.TestCase):
+class Projects(IsolatedTestCase):
     def make(self, manifest=None, upm=None, files=None):
         folder = Path(tempfile.mkdtemp()) / "Project"
         self.addCleanup(shutil.rmtree, folder.parent, True)

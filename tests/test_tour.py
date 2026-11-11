@@ -5,10 +5,10 @@ import re
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server  # noqa: E402
 from tests.browsing import menu  # noqa: E402
@@ -22,7 +22,7 @@ NAMES = (("1", "Boots"), ("2", "Hoodie"), ("3", "Rusk"), ("4", "Skirt"))
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Tour(unittest.TestCase):
+class Tour(IsolatedTestCase):
     def setUp(self):
         from playwright.sync_api import sync_playwright
         self.tmp = tempfile.TemporaryDirectory()
@@ -129,7 +129,7 @@ class Tour(unittest.TestCase):
         page.fill("#tagInput", "tour-tag")
         page.locator('#detail [data-act="addtyped"]').click()
         self.title(page, "Sets and Wishlists")
-        page.click('#stores [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
+        page.click('#storeSeg [data-store="Sets"]')   # opened: its wishlists and Mix and match are shown there
         self.title(page, re.compile(r"^Wishlists$"))   # (not "Sets and Wishlists", which has_text would match too)
         self.nxt(page)
         self.title(page, "Mix and match")

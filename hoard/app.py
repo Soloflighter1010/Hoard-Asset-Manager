@@ -8,6 +8,8 @@ Quit Hoard button in Settings, and stops by itself once no Hoard page has been o
 """
 from __future__ import annotations
 
+from . import storage
+
 import hmac
 import json
 import os
@@ -226,7 +228,7 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False) -> int:
             notify.found_text(counts, i18n.language(srv.cfg, srv.accept_language)))   # in the pages' language
         srv.can_notify = True
         srv.start_schedule()
-        from .safety import write_file_safely
+        from .storage import write_document as write_file_safely
         write_file_safely(running_file(), json.dumps({"url": url, "token": token, "pid": os.getpid()}))
         if os.name == "posix":
             os.chmod(running_file(), 0o600)
@@ -274,9 +276,10 @@ def window_place(screens: list[tuple[int, int, int, int]]) -> dict:
     """Where the window opens (issue #16): its size and place when it was last closed, and maximized if it was.
     A place that's no longer on any screen (a screen unplugged, or its resolution lowered) isn't used, so the
     window never opens out of sight; it opens centred instead, no bigger than the screen."""
-    from .safety import DataFileError, read_json_file
+    from .safety import DataFileError
+    from .storage import read_document as read_json_file
     try:
-        raw = read_json_file(place_file(), 64 * 1024) if place_file().exists() else {}
+        raw = read_json_file(place_file(), 64 * 1024) if storage.exists(place_file()) else {}
     except (DataFileError, OSError, ValueError, RecursionError):
         raw = {}
     raw = raw if isinstance(raw, dict) else {}
@@ -345,7 +348,7 @@ class PlaceKeeper:
 
     def save(self) -> None:
         """Keep the window's size and place for next time."""
-        from .safety import write_file_safely
+        from .storage import write_document as write_file_safely
         keep = {k: self.place[k] for k in ("width", "height", "x", "y", "maximized") if k in self.place}
         try:
             write_file_safely(place_file(), json.dumps(keep))

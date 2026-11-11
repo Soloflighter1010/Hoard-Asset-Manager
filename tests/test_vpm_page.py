@@ -9,10 +9,10 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from hoard import server  # noqa: E402
@@ -47,7 +47,7 @@ def pj_folder(page, name, folder):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ProjectsPanel(unittest.TestCase):
+class ProjectsPanel(IsolatedTestCase):
     def setUp(self):
         import i18n_strings
         from playwright.sync_api import sync_playwright

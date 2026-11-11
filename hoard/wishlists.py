@@ -21,8 +21,12 @@ from .safety import clean_text, fetch_public, inert_html, is_video_address, offl
 
 MAX_PAGES = 200            # pages of one list (Booth shows 20 on each: 4,000 products)
 MAX_LISTS = 50             # lists from one store
-BOOTH_WISHES = "https://accounts.booth.pm/wish_lists"
-GUMROAD_WISHLISTS = "https://gumroad.com/wishlists"
+
+
+# Store code lives in hoard/stores; these aliases preserve the public Python API.
+from .stores import install as _install_stores
+_install_stores('wishlists', globals())
+
 JX_WISHLIST, JX_LIKES, JX_LISTS = "https://jinxxy.com/my/wishlist", "https://jinxxy.com/my/likes", "https://jinxxy.com/my/lists"
 LIST_NAMES = {"booth": "Loved items", "jinxxy-wishlist": "Wishlist", "jinxxy-likes": "Likes"}
 
@@ -190,19 +194,9 @@ def store_tags_in(store: str, got) -> list[str]:
     import html as html_text
     from .tags import clean_tag
     raw: list = []
-    if store == "booth" and isinstance(got, dict):
-        raw = [t.get("name") for t in got.get("tags") or [] if isinstance(t, dict)]
-        cat = got.get("category") if isinstance(got.get("category"), dict) else {}
-        raw += [cat.get("name"), (cat.get("parent") or {}).get("name") if isinstance(cat.get("parent"), dict) else None]
-    elif store == "jinxxy" and isinstance(got, str):   # (in the page's data, as JSON inside a script's string)
-        m = re.search(r'\\"tags\\":(\[[^\]]{0,4000}\])', got) or re.search(r'"tags":(\[[^\]]{0,4000}\])', got)
-        try:
-            raw = json.loads(m.group(1).replace('\\"', '"')) if m else []
-        except ValueError:
-            raw = []
-    elif store == "itch" and isinstance(got, str):   # the page's More information: <td>Tags</td><td><a>...</a>...</td>
-        m = re.search(r"<td>Tags</td>\s*<td>(.*?)</td>", got, re.S)
-        raw = [html_text.unescape(x) for x in re.findall(r"<a[^>]*>([^<]{1,80})</a>", m.group(1))] if m else []
+    from .stores import adapters
+    adapter = adapters().get(store)
+    raw = adapter.tags(got) if adapter else []
     out: list[str] = []
     for t in raw if isinstance(raw, list) else []:
         tag = clean_tag(t) if isinstance(t, str) else ""
@@ -295,169 +289,6 @@ def _ld_product(page: str) -> dict | None:
     return None
 
 
-# ----------------------------------------------------------------------------- what's on a page
-
-# Booth's loved items (accounts.booth.pm/wish_lists): a card for each item, 20 to a page; above them, a button for
-# each of your lists ("all", "uncategorized" and any you made), the shown one data-state="default".
-BOOTH_JS = r"""() => {
-  const cards = [];
-  for (const w of document.querySelectorAll('.item-card-wrapper')) {
-    const links = [...w.querySelectorAll('a[href*="/items/"]')];
-    const m = links.length ? links[0].href.match(/\/items\/(\d+)/) : null;
-    if (!m) continue;
-    const title = w.querySelector('a[href*="/items/"] .break-all') || links.reverse().find(a => a.textContent.trim() && !/^Loading/.test(a.textContent.trim()));
-    const shop = [...w.querySelectorAll('a[href]')].find(a => /^https:\/\/[a-z0-9-]+\.booth\.pm\/?$/i.test(a.href));
-    const img = [...w.querySelectorAll('img')].find(i => !i.classList.contains('hidden') && /\/i\/\d+\//.test(i.src));
-    const leaves = [...w.querySelectorAll('div, span')].filter(e => !e.children.length).map(e => e.textContent.trim());
-    cards.push({id: m[1], url: 'https://booth.pm/en/items/' + m[1], name: title ? title.textContent.trim() : '',
-                creator: shop ? shop.textContent.trim() : '', creator_url: shop ? shop.href : '', thumbnail: img ? img.src : '',
-                price: leaves.find(t => /^[~〜]?\s*(¥\s*\d|\d[\d,]*\s*(JPY|円))/.test(t)) || ''});
-  }
-  const lists = [...document.querySelectorAll('button.charcoal-tag-item')].map(b => ({name: b.textContent.trim(),
-    shown: b.getAttribute('data-state') === 'default'})).filter(l => l.name);
-  return {cards, lists};
-}"""
-
-# Booth's next page of loved items: its page numbers, under the cards, are drawn by its script, not links (an address
-# with ?page=2 shows the first page again), so its arrow to the next page is chosen. False on the last page.
-BOOTH_NEXT_JS = r"""() => {
-  const arrow = [...document.querySelectorAll('pixiv-icon[name="24/ArrowOpenRight"]')].map(i => i.closest('.cursor-pointer'))
-    .find(el => el && el.offsetParent !== null);
-  if (!arrow) return false;
-  arrow.click();
-  return true;
-}"""
-# ...and the first card shown, to know when the next page has taken its place
-BOOTH_FIRST_JS = r"""() => { const a = document.querySelector('.item-card-wrapper a[href*="/items/"]');
-  const m = a && a.href.match(/\/items\/(\d+)/); return m ? m[1] : ''; }"""
-
-# Gumroad's wishlists (gumroad.com/wishlists): a row for each, its name and its own address.
-GUMROAD_INDEX_JS = r"""() => [...document.querySelectorAll('a[href*="/wishlists/"]')]
-  .filter(a => a.querySelector('h4, h3, h2')).map(a => ({name: a.textContent.trim(), url: a.href}))"""
-
-# A Gumroad wishlist's own page, when its page data can't be read: a card (<article>) for each product.
-GUMROAD_CARDS_JS = r"""() => [...document.querySelectorAll('article')].map(a => {
-  const link = a.querySelector('a[href*="/l/"]'), seller = a.querySelector('header a[href]:not([href*="/l/"])');
-  const price = a.querySelector('[itemprop="price"]'), cur = a.querySelector('[itemprop="priceCurrency"]');
-  return {url: link ? link.href : '', name: (a.querySelector('h4, h3') || {}).textContent || '',
-          creator: seller ? seller.textContent.trim() : '', thumbnail: (a.querySelector('figure img') || {}).src || '',
-          amount: price ? price.getAttribute('content') : '', currency: cur ? cur.textContent.trim() : '',
-          shown: price ? price.textContent.trim() : ''};
-}).filter(c => c.url && c.name.trim())"""
-
-# Jinxxy's wishlist, likes and lists all show a product the same way: its picture and name, each a link to its page
-# (jinxxy.com/<creator>/<product>, or a store elsewhere), its creator's link, and its price. And the lists page: a
-# link to each list, with its name.
-JINXXY_JS = r"""(base) => {
-  const abs = a => { try { return new URL(a.getAttribute('href'), base || location.href).href; } catch (e) { return ''; } };
-  const cards = [], seen = new Set();
-  for (const h of document.querySelectorAll('a[href] h3')) {
-    const a = h.closest('a'), url = abs(a);
-    if (!url || seen.has(url) || /\/my\//.test(new URL(url).pathname)) continue;
-    let card = a;   // the smallest box around it that has its price
-    while (card.parentElement && !/\d\s*[A-Z]{3}\s*$|^Free$/m.test(card.innerText || card.textContent)) card = card.parentElement;
-    if (!card.parentElement) continue;
-    seen.add(url);
-    const path = new URL(url).pathname.split('/').filter(Boolean);
-    const creator = [...card.querySelectorAll('a[href]')].find(x => x !== a && abs(x) !== url && path.length > 1
-      && abs(x) && new URL(abs(x)).pathname.replace(/\/$/, '') === '/' + path[0]);
-    const name = h.textContent.trim();
-    // its picture is the one in the other link to the same product (beside the name, not in the box around it), or the
-    // still of the video it shows first (issue #212)
-    const img = [...document.querySelectorAll('a[href] img')].find(i => abs(i.closest('a')) === url && !/profile picture/i.test(i.alt || ''));
-    const vid = [...document.querySelectorAll('a[href] video[poster]')].find(v => abs(v.closest('a')) === url);
-    const price = [...card.querySelectorAll('span')].map(s => s.textContent.trim())
-      .find(t => /^(\d[\d.,]*(\s*-\s*\d[\d.,]*)?\s*[A-Z]{3}|Free)$/.test(t));
-    cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : vid ? vid.poster : '',
-                price: price || ''});
-  }
-  const lists = [...document.querySelectorAll('a[href*="/my/lists/"]')].map(a => ({url: abs(a),
-    name: (a.querySelector('h3') || {}).textContent || ''})).filter(l => l.name.trim());
-  const next = document.querySelector('nav[aria-label="pagination"] a[aria-label="Go to next page"]:not([aria-disabled="true"])');
-  return {cards, lists, next: next ? abs(next) : ''};
-}"""
-
-# A Payhip shop's wishlists (<shop>/b-account/wishlists): its products, each a link to its page (/b/<code>).
-PAYHIP_JS = r"""() => {
-  const box = document.querySelector('.wishlist-rows-wrapper-outer') || document.body, cards = [], seen = new Set();
-  for (const a of box.querySelectorAll('a[href*="/b/"]')) {
-    if (seen.has(a.href)) continue;
-    let card = a;
-    while (card.parentElement && card.parentElement !== box && !card.querySelector('img')) card = card.parentElement;
-    const name = (a.textContent.trim() || (card.querySelector('h1,h2,h3,h4,h5,.title,[class*="title"]') || {}).textContent || '').trim();
-    if (!name) continue;
-    seen.add(a.href);
-    const price = [...card.querySelectorAll('*')].filter(e => !e.children.length).map(e => e.textContent.trim())
-      .find(t => /^(Free|[$€£¥]\s*\d|\d[\d.,]*\s*[A-Z]{3})/.test(t));
-    const list = card.closest('[class*="wishlist-row"]');
-    cards.push({url: a.href, name, thumbnail: (card.querySelector('img') || {}).src || '', price: price || '',
-                list: list ? ((list.querySelector('h2,h3,h4,.wishlist-name,[class*="name"]') || {}).textContent || '').trim() : ''});
-  }
-  return {cards};
-}"""
-
-
-def booth_products(cards) -> list[dict]:
-    """Booth's wishlist cards, as products."""
-    return [p for p in (product("booth", c.get("name"), id_=c.get("id"), creator=c.get("creator"), url=c.get("url"),
-                                thumbnail=c.get("thumbnail"), price=c.get("price")) for c in cards) if p]
-
-
-def jinxxy_products(cards) -> list[dict]:
-    """Jinxxy's wishlist and likes cards, as products: one Jinxxy lists from another store is that store's, and one from
-    a site that isn't a store keeps that page as its link."""
-    out = []
-    for c in cards:
-        store = _store_of(c.get("url"))   # a product Jinxxy lists from another store is that store's; one on a site
-        away = store is None              # that isn't a store keeps that page as its link, elsewhere
-        p = product(store or "jinxxy", c.get("name"), creator=c.get("creator"), url=None if away else c.get("url"),
-                    thumbnail=c.get("thumbnail"), price=c.get("price"), elsewhere=c.get("url") if away else None)
-        if p:
-            out.append(p)
-    return out
-
-
-def gumroad_products(items) -> list[dict]:
-    """A Gumroad wishlist's products, from its page data (props.items)."""
-    out = []
-    for it in items or []:
-        prod = (it or {}).get("product") or {}
-        seller = prod.get("seller") or {}
-        permalink = prod.get("permalink") if isinstance(prod.get("permalink"), str) else None
-        profile = (seller.get("profile_url") or "").split("?", 1)[0].rstrip("/")
-        url = f"{profile}/l/{permalink}" if profile and permalink else prod.get("url")
-        p = product("gumroad", prod.get("name"), id_=permalink, creator=seller.get("name"), url=url,
-                    thumbnail=prod.get("thumbnail_url"),
-                    price=cents_price(prod.get("price_cents"), prod.get("currency_code"), prod.get("is_pay_what_you_want") is True))
-        if p:
-            out.append(p)
-    return out
-
-
-def gumroad_card_products(cards) -> list[dict]:
-    """A Gumroad wishlist's products, from its cards (when its page data can't be read)."""
-    out = []
-    for c in cards:
-        price = None
-        try:
-            price = {"text": c["shown"] or f"{float(c['amount']):.2f} {c['currency']}", "amount": float(c["amount"]),
-                     "currency": (c.get("currency") or "").upper()[:3]}
-        except (KeyError, TypeError, ValueError):
-            price = parse_price(c.get("shown"))
-        m = re.search(r"/l/([A-Za-z0-9_-]{1,80})", c.get("url") or "")
-        p = product("gumroad", c.get("name"), id_=m.group(1) if m else None, creator=c.get("creator"), url=c.get("url"),
-                    thumbnail=c.get("thumbnail"), price=price)
-        if p:
-            out.append(p)
-    return out
-
-
-def payhip_products(cards) -> list[dict]:
-    """A Payhip shop's wishlist cards, as products."""
-    return [p for p in (product("payhip", c.get("name"), url=c.get("url"), thumbnail=c.get("thumbnail"),
-                                price=c.get("price")) for c in cards) if p]
-
-
 # ----------------------------------------------------------------------------- reading them, signed in
 
 def _with_page(url: str, n: int) -> str:
@@ -474,189 +305,8 @@ def _signed_in(page, host: str) -> None:
         raise NotLoggedIn()
 
 
-def read_booth(ctx, cfg, progress) -> list[dict]:
-    """Your loved items on Booth, all of them as one list, and each list of them you made as one more."""
-    page = ctx.new_page()
-    delay = float(cfg.get("request_delay", 0.8))
-    try:
-        def read_all(url: str, label: str) -> tuple[list[dict], bool]:
-            """Every product on one of your Booth lists, page by page; and whether a quick refresh stopped short."""
-            found: dict[str, dict] = {}
-            goto(page, url)
-            settle(page, 900)
-            _signed_in(page, "accounts.booth.pm")
-            short = False
-            for n in range(1, MAX_PAGES + 1):
-                new = 0
-                for c in page.evaluate(BOOTH_JS)["cards"]:
-                    if c["id"] in found:
-                        continue
-                    if cfg.get("_quick") and len(found) >= QUICK_ITEMS:   # (one past the limit: the rest left)
-                        short = True
-                        break
-                    found[c["id"]] = c
-                    new += 1
-                progress(f"{label}, page {n}: {len(found)} items")
-                first = page.evaluate(BOOTH_FIRST_JS)
-                if not new or not page.evaluate(BOOTH_NEXT_JS):   # the last page
-                    break
-                if quick_done(cfg, n, len(found)):
-                    short = True
-                    break
-                try:   # the next page's cards in place of these (Booth reads them as you turn the page)
-                    page.wait_for_function(f"() => ({BOOTH_FIRST_JS})() !== {first!r}", timeout=20000)
-                except Exception:
-                    break
-                settle(page, 600)
-                time.sleep(delay)
-            return booth_products(found.values()), short
-        everything, short = read_all(BOOTH_WISHES, LIST_NAMES["booth"])
-        out = [{"store": "booth", "list": LIST_NAMES["booth"], "url": BOOTH_WISHES, "products": everything,
-                **({"partial": True} if short else {})}]
-        goto(page, BOOTH_WISHES)
-        settle(page, 900)
-        names = [x["name"] for x in page.evaluate(BOOTH_JS)["lists"]][2:MAX_LISTS + 2]   # after "all" and "uncategorized"
-        for name in names:   # a list you made: its button shows it, and the address it goes to is the list's
-            try:
-                page.locator("button.charcoal-tag-item", has_text=name).first.click(timeout=10000)
-                page.wait_for_url(lambda u: u != BOOTH_WISHES, timeout=10000)
-            except Exception:
-                continue
-            url = page.url
-            products, short = read_all(url, name)
-            out.append({"store": "booth", "list": clean_text(name, 60), "url": url, "products": products,
-                        **({"partial": True} if short else {})})
-            goto(page, BOOTH_WISHES)
-            settle(page, 600)
-        return out
-    finally:
-        page.close()
-
-
-def read_gumroad(ctx, cfg, progress) -> list[dict]:
-    """Each of your Gumroad wishlists."""
-    from .library import extract_page_json
-    page = ctx.new_page()
-    delay = float(cfg.get("request_delay", 0.8))
-    try:
-        goto(page, GUMROAD_WISHLISTS)
-        settle(page, 1200)
-        _signed_in(page, "gumroad.com")
-        found = {w["url"]: w for w in page.evaluate(GUMROAD_INDEX_JS)}
-        out = []
-        for w in list(found.values())[:MAX_LISTS]:
-            products: dict[str, dict] = {}
-            short = False   # (a quick refresh stopped before its end: issue #300)
-            for n in range(1, MAX_PAGES + 1):
-                r = ctx.request.get(_with_page(w["url"], n), timeout=60000)
-                data = extract_page_json(r.text()) if r.ok else None
-                props = (data or {}).get("props") or {}
-                if not data or not isinstance(props.get("items"), list):   # no page data: its cards, as shown
-                    goto(page, w["url"])
-                    settle(page, 1500)
-                    page.mouse.wheel(0, 100000)
-                    settle(page, 1200)
-                    for p in gumroad_card_products(page.evaluate(GUMROAD_CARDS_JS)):
-                        products.setdefault(p["url"], p)
-                    break
-                for p in gumroad_products(props["items"]):
-                    if cfg.get("_quick") and len(products) >= QUICK_ITEMS:
-                        short = True
-                        break
-                    products.setdefault(p.get("url") or p["name"], p)
-                progress(f"{w['name']}, page {n}: {len(products)} products")
-                pages = (props.get("pagination") or {}).get("pages") or 1
-                if n >= pages:
-                    break
-                if quick_done(cfg, n, len(products)):
-                    short = True
-                    break
-                time.sleep(delay)
-            out.append({"store": "gumroad", "list": clean_text(w["name"], 60), "url": w["url"], "products": list(products.values()),
-                        **({"partial": True} if short else {})})
-        return out
-    finally:
-        page.close()
-
-
-def read_jinxxy(ctx, cfg, progress) -> list[dict]:
-    """Your Jinxxy wishlist, your likes, and each of your lists."""
-    page = ctx.new_page()
-    delay = float(cfg.get("request_delay", 0.8))
-    try:
-        def read_all(url: str, label: str) -> tuple[list[dict], list[dict], bool]:
-            """Every product on one of your Jinxxy lists, page by page, the other lists it links to, and whether a
-            quick refresh stopped short of its end (issue #300)."""
-            cards: dict[str, dict] = {}
-            lists: dict[str, dict] = {}
-            visited, short = set(), False
-            for n in range(1, MAX_PAGES + 1):
-                goto(page, url)
-                settle(page, 1500)
-                _signed_in(page, "jinxxy.com")
-                visited.add(url)
-                got = page.evaluate(JINXXY_JS, page.url)
-                for c in got["cards"]:
-                    if cfg.get("_quick") and len(cards) >= QUICK_ITEMS:
-                        short = True
-                        break
-                    cards.setdefault(c["url"], c)
-                for x in got["lists"]:
-                    lists.setdefault(x["url"], x)
-                progress(f"{label}, page {n}: {len(cards) or len(lists)}")
-                if not got["next"] or got["next"] in visited:
-                    break
-                if quick_done(cfg, n, len(cards)):
-                    short = True
-                    break
-                url = got["next"]
-                time.sleep(delay)
-            return jinxxy_products(cards.values()), list(lists.values()), short
-        out = []
-        for url, name in ((JX_WISHLIST, LIST_NAMES["jinxxy-wishlist"]), (JX_LIKES, LIST_NAMES["jinxxy-likes"])):
-            products, _, short = read_all(url, name)
-            out.append({"store": "jinxxy", "list": name, "url": url, "products": products, **({"partial": True} if short else {})})
-        _, lists, _ = read_all(JX_LISTS, "Lists")
-        for x in lists[:MAX_LISTS]:
-            products, _, short = read_all(x["url"], x["name"])
-            out.append({"store": "jinxxy", "list": clean_text(x["name"], 60), "url": x["url"], "products": products,
-                        **({"partial": True} if short else {})})
-        return out
-    finally:
-        page.close()
-
-
-def read_payhip(ctx, cfg, progress) -> list[dict]:
-    """The wishlists in each Payhip shop you've added."""
-    page = ctx.new_page()
-    try:
-        out = []
-        for shop in payhip_shops(cfg):
-            url = shop.rstrip("/") + "/b-account/wishlists"
-            goto_past_check(page, url, float(cfg.get("payhip", {}).get("check_wait", 60)), progress)
-            settle(page, 1000)
-            cards = page.evaluate(PAYHIP_JS)["cards"]
-            out.extend(_payhip_lists(cards, shop, url, bool(cfg.get("_quick"))))
-            progress(f"{urlparse(shop).hostname}: {len(cards)} products")
-        return out
-    finally:
-        page.close()
-
-
-def _payhip_lists(cards, shop: str, url: str, quick: bool = False) -> list[dict]:
-    """A Payhip shop's wishlists, one list for each name the shop gives them, named with the shop (in a quick refresh,
-    each list's first QUICK_ITEMS products: issue #300)."""
-    by: dict[str, list] = {}
-    for c in cards:
-        by.setdefault(c.get("list") or "Wishlist", []).append(c)
-    host = urlparse(shop).hostname or shop
-    return [{"store": "payhip", "list": clean_text(f"{host}: {name}", 60), "url": url,
-             "products": payhip_products(cs[:QUICK_ITEMS] if quick else cs),
-             **({"partial": True} if quick and len(cs) > QUICK_ITEMS else {})}
-            for name, cs in (by.items() or [("Wishlist", [])])]
-
-
-READERS = {"booth": read_booth, "gumroad": read_gumroad, "jinxxy": read_jinxxy, "payhip": read_payhip}
+from .stores import adapters
+READERS = {key: a.read_wishlists for key, a in adapters().items() if a.wishlists}
 
 
 # ----------------------------------------------------------------------------- from pages you saved
@@ -742,25 +392,8 @@ def from_saved_pages(pages) -> list[dict]:
                 try:
                     page.set_content(inert_html(html), wait_until="domcontentloaded")
                     name = _list_name(kind, url, page)
-                    if kind == "booth":
-                        lists = [{"store": "booth", "list": name, "url": url, "products": booth_products(page.evaluate(BOOTH_JS)["cards"])}]
-                    elif kind == "gumroad":
-                        data = extract_page_json(html)
-                        props = (data or {}).get("props") or {}
-                        products = gumroad_products(props["items"]) if isinstance(props.get("items"), list) \
-                            else gumroad_card_products(page.evaluate(GUMROAD_CARDS_JS))
-                        lists = [{"store": "gumroad", "list": clean_text(props.get("name") or name, 60), "url": url.split("?")[0],
-                                  "products": products}]
-                    elif kind == "gumroad-index":
-                        raise ValueError("that's the list of your Gumroad wishlists: save each wishlist's own page instead")
-                    elif kind == "jinxxy":
-                        got = page.evaluate(JINXXY_JS, url)
-                        if urlparse(url).path.rstrip("/").endswith("/my/lists"):
-                            raise ValueError("that's the list of your Jinxxy lists: save each list's own page instead")
-                        lists = [{"store": "jinxxy", "list": name, "url": url.split("?")[0], "products": jinxxy_products(got["cards"])}]
-                    else:
-                        u = urlparse(url)
-                        lists = _payhip_lists(page.evaluate(PAYHIP_JS)["cards"], f"{u.scheme}://{u.netloc}", url)
+                    from .stores import adapters
+                    lists = adapters()[kind.split("-")[0]].saved_wishlist(page, kind, url, html, name)
                     result["lists"] = lists
                 except Exception as e:
                     result["error"] = str(e).splitlines()[0] if str(e) else type(e).__name__

@@ -44,7 +44,7 @@ STEPS = {
                    '[data-view="space"]', '[data-view="downloads"]', "#selectBtn", "#selectBtn", "#tasksTab", "#projectsTab",
                    # a project's Put in products from your library: Downloads, choosing for it, and Cancel
                    "[data-pj=manage] >> nth=0", "[data-pj=sub][data-sub=library]", "[data-pj=addprod]", ".slot >> nth=0",
-                   "[data-pickcancel]", "Escape", '#stores [data-store="Sets"]', "[data-setopen] >> nth=0", '#stores [data-store=""]', "#settingsBtn"],
+                   "[data-pickcancel]", "Escape", '#storeSeg [data-store="Sets"]', "[data-setopen] >> nth=0", '#storeSeg [data-store=""]', "#settingsBtn"],
 }
 
 
@@ -137,6 +137,7 @@ def collect(lang: str) -> list[str]:
     from hoard import alerts
     with tempfile.TemporaryDirectory() as tmp, mock.patch.object(server, "save_config"), \
             mock.patch.object(alerts, "available", lambda: True), \
+            mock.patch.object(server.Jobs, "start", return_value="started"), \
             mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(tmp) / "data"), "HOARD_VCC_DIR": ""}):
         srv = sample_server(Path(tmp) / "library", lang)
         os.environ.update(sample_projects(Path(tmp)))

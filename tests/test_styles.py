@@ -7,10 +7,10 @@ import re
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import backup, config, server, themes  # noqa: E402
 from tests.browsing import menu  # noqa: E402
@@ -21,7 +21,7 @@ except ImportError:
     BROWSER = False
 
 
-class Setting(unittest.TestCase):
+class Setting(IsolatedTestCase):
     def test_checked(self):
         self.assertEqual(themes.STYLES, ("standard", "treasure", "workbench"))
         self.assertEqual(server.display_settings({})["style"], "standard", "Hoard as it has always looked")
@@ -61,7 +61,7 @@ class Setting(unittest.TestCase):
         self.assertEqual(cfg["display"]["style"], "treasure")
 
 
-class Served(unittest.TestCase):
+class Served(IsolatedTestCase):
     def test_marked_from_the_first_moment(self):
         for page in server.PAGES.values():
             plain = server.page_source(page, {"display": {"language": "en"}}).decode("utf-8")
@@ -81,7 +81,7 @@ class Served(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Chosen(unittest.TestCase):
+class Chosen(IsolatedTestCase):
     def serve(self, cfg_more, items=True):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -164,7 +164,7 @@ if __name__ == "__main__":
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class OwnedTwiceInTreasure(unittest.TestCase):
+class OwnedTwiceInTreasure(IsolatedTestCase):
     def test_the_frame_is_striped(self):
         """Issue #193: in Treasure, something you own on two stores had a band of both stores' stripes along the bottom,
         with the first store's frame drawn over half of it. Its frame is striped in both colours, all the way round,
@@ -192,7 +192,7 @@ class OwnedTwiceInTreasure(unittest.TestCase):
             browser.close()
 
 
-class CardOutlines(unittest.TestCase):
+class CardOutlines(IsolatedTestCase):
     """Issue #222 (Settings, Accessibility): each product's card can have an outline and a faint background of its own,
     so it stands apart from the page, everywhere cards show, in every style and theme. Kept as display.card_outlines,
     served with the page from its first moment, and changed at once in Settings and the setup assistant."""
@@ -284,7 +284,7 @@ class CardOutlines(unittest.TestCase):
             browser.close()
 
 
-class Guide(unittest.TestCase):
+class Guide(IsolatedTestCase):
     """The style guide (/styleguide): every part of the pages, drawn with a page's own stylesheet, the styles and a
     theme as chosen in its address, so it keeps up with the pages; nothing of yours is in it."""
 
