@@ -613,6 +613,12 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .sv-by { color: var(--dust); font-size: .9rem; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .sv-by .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; }
 .sv-none { color: var(--dust); font-size: .9rem; }
+/* An Adult set (issue #337): the question asked first, and an 18+ mark on each product for adults */
+.adult-mark, .adult-chip { display: inline-grid; place-items: center; min-width: 30px; height: 22px; padding: 0 6px; border-radius: 7px;
+  background: #b3261e; color: #fff; font: 800 12px/1 inherit; letter-spacing: .02em; }
+.sv-item .art { position: relative; }
+.sv-item .art > .adult-mark { position: absolute; left: 7px; bottom: 7px; }
+.sv-age-note .linkish, .sv-age .linkish { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .sv-get input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 8px 12px; border-radius: 12px;
   border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }
 .sv-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }

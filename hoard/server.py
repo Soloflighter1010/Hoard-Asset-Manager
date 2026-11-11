@@ -102,6 +102,7 @@ def display_settings(cfg: dict) -> dict:
             # easier reading: OpenDyslexic for Latin letters, and more space between letters, words and lines
             "font": d.get("font") if d.get("font") in FONTS else "standard", "spacing": bool(d.get("spacing")),
             "card_outlines": bool(d.get("card_outlines")),   # each card outlined, on a background of its own (#222)
+            "blur_adult": d.get("blur_adult") is not False,   # adult products' pictures blurred, unless you turn it off (#311)
             "colours": d.get("colours") if d.get("colours") in COLOUR_SCHEMES else "standard",
             "custom_colours": custom_colours(d.get("custom_colours")),
             # the theme and Light or Dark (Settings, Appearance), with its colours for the page to put in place
@@ -323,7 +324,7 @@ def apply_settings(cfg: dict, body: dict) -> dict:
                 raise ValueError("Choose a text size from the list.")
             display["text_size"] = given["text_size"]
         display.update({k: bool(given[k]) for k in ("pause_animations", "reduce_motion", "glow", "spacing", "card_outlines",
-                                                    "seasonal") if k in given})
+                                                    "seasonal", "blur_adult") if k in given})
         if "font" in given:
             if given["font"] not in FONTS:
                 raise ValueError("Choose a font from the list.")
@@ -885,6 +886,7 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     # first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")
     marks += ' data-cards="outlined"' if d.get("card_outlines") is True else ""
+    marks += ' data-adult="show"' if d.get("blur_adult") is False else ""   # (adult pictures blurred unless you say: #311)
     if themes.style_id(d.get("style")) != "standard":
         marks += f' data-style="{themes.style_id(d.get("style"))}"'
     if marks:

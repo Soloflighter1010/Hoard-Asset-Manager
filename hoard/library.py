@@ -63,6 +63,8 @@ def item(store: str, id_, **fields) -> dict:
             del d["gift_from"]
     added = d.get("added")
     d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
+    if "adult" in d:   # what its store says, once read (hoard/adult.py): for adults, or not
+        d["adult"] = d["adult"] is True
     if "store_tags" in d:   # the tags its creator gave it on its store's page (issue #206): read, even if none
         tags = d["store_tags"] if isinstance(d["store_tags"], list) else []
         d["store_tags"] = list(dict.fromkeys(c for c in (clean_tag(x) for x in tags[:60] if isinstance(x, str)) if c))[:30]
@@ -354,7 +356,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "gift_from", "added", "page", "store_tags")}
+                                             "variants", "archived", "gift", "gift_from", "added", "page", "store_tags", "adult")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -405,6 +407,8 @@ class Library:
                 i["page"] = before[i["key"]].get("page")
             if "store_tags" not in i and "store_tags" in before.get(i["key"], {}):   # (its store's tags, read before)
                 i["store_tags"] = before[i["key"]]["store_tags"]
+            if "adult" not in i and "adult" in before.get(i["key"], {}):   # (and whether it's for adults)
+                i["adult"] = before[i["key"]]["adult"]
         return first
 
     def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
@@ -864,23 +868,29 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
                           limit: int = STORE_TAG_PAGES) -> int:
     """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
     from each product's public page as anyone sees it, a few each time the store is read, until every product has
-    been read once (each keeps "store_tags", empty when its page has none). Only a product with a public page is read
+    been read once (each keeps "store_tags", empty when its page has none; and "adult", where its store says whether
+    it's for adults: one read before Hoard kept that is read once more, after the rest). Only a product with a public page is read
     (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
     read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
     how many products' pages were read."""
     from .sets import product_link
-    from .wishlists import TAGGED_STORES, LinkError, from_product_page
+    from .wishlists import ADULT_SAID_BY, TAGGED_STORES, LinkError, from_product_page
     if store not in TAGGED_STORES:
         return 0
     with lib.lock:
-        waiting = [(i["key"], link) for i in lib.data["items"] if i["store"] == store and "store_tags" not in i
+        waiting = [(i["key"], link, "store_tags" in i) for i in lib.data["items"] if i["store"] == store
+                   and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
                    and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
-    todo = sorted(waiting, key=lambda w: _TAG_PAGE_FAILS.get(w[0], 0))[:limit]   # (otherwise in the library's order)
+    # (those never read first, then those read before Hoard asked whether they're for adults; otherwise in the library's order)
+    todo = [(k, link) for k, link, _ in sorted(waiting, key=lambda w: (w[2], _TAG_PAGE_FAILS.get(w[0], 0)))[:limit]]
     read: dict[str, list] = {}
+    adult: dict[str, bool] = {}
     for n, (key, page) in enumerate(todo, 1):
         progress(f"The tags creators gave their products, {n} of {len(todo)}")
         try:
-            read[key] = from_product_page(page, fetch).get("store_tags") or []
+            got = from_product_page(page, fetch)
+            read[key] = got.get("store_tags") or []
+            adult[key] = got.get("adult") is True
         except LinkError as e:
             if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
                 read[key] = []
@@ -896,6 +906,8 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
             for i in lib.data["items"]:
                 if i["key"] in read:
                     i["store_tags"] = item(i["store"], i["id"], store_tags=read[i["key"]])["store_tags"]
+                    if store in ADULT_SAID_BY:   # (read: not asked again, whatever the answer)
+                        i["adult"] = adult.get(i["key"], False)
             lib.save()
     return len(read)
 

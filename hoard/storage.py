@@ -337,7 +337,7 @@ class Database:
                 if field in out:
                     out[field] = mapping(out[field])
         elif name == "marks.json":
-            for field in ("archived", "unarchived", "removed", "hidden", "apart"):
+            for field in ("archived", "unarchived", "removed", "hidden", "apart", "adult", "not_adult"):
                 if isinstance(out.get(field), list):
                     out[field] = [ref(k) for k in out[field]]
             if isinstance(out.get("ids"), dict):

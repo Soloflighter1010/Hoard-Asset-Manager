@@ -22,6 +22,8 @@ def _sets_view(self) -> dict:
     dl = {}
     for a in srv.index(stale_ok=True)["assets"]:
         dl.setdefault(a["tag_key"], a)
+    from .. import adult
+    mine = app.TagStore().load()["items"]
     out, left_out = [], False
     for s in app.sets.SetStore().load()["sets"]:
         known, rows = s.get("products") or {}, []
@@ -47,6 +49,10 @@ def _sets_view(self) -> dict:
                          "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                          "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
                          "local": store == "local", "mark": mark,
+                         # for adults (hoard/adult.py): as its store, tags or you say, or whoever shared the set
+                         "adult": bool(adult.why(key, name=(i or a or p).get("name") or "", marks=marks,
+                                                 tags=[*((i or {}).get("store_tags") or []), *mine.get(key, [])],
+                                                 flagged=(i or {}).get("adult") is True or p.get("adult") is True)),
                          **{k: p[k] for k in ("price", "was", "elsewhere") if p.get(k)}})   # on a wishlist: what it
                                                                                             # costs, and its page elsewhere
         if s.get("kind") == "wishlist":   # suggested tags, from words its products' names share, to narrow it down
@@ -56,6 +62,7 @@ def _sets_view(self) -> dict:
         out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
                     "cover": f"/setcover/{s['id']}/{s['picture']}" if app.sets.picture_file(s) else None,
                     "short": (s.get("short") or {}).get("expires"), "items": rows, "from_link": s.get("from_link") is True,
+                    "adult": any(r["adult"] for r in rows),   # an Adult set, while any product in it is (issue #337)
                     **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
     return {"sets": out, "hidden_left_out": left_out, "viewer": app.sets.VIEWER, "photo_hosts": list(app.sets.PHOTO_HOSTS)}
 

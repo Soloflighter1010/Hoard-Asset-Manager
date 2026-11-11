@@ -836,8 +836,9 @@ wish_JINXXY_JS = r"""(base) => {
     const vid = [...document.querySelectorAll('a[href] video[poster]')].find(v => abs(v.closest('a')) === url);
     const price = [...card.querySelectorAll('span')].map(s => s.textContent.trim())
       .find(t => /^(\d[\d.,]*(\s*-\s*\d[\d.,]*)?\s*[A-Z]{3}|Free)$/.test(t));
+    const adult = [...card.querySelectorAll('span, div')].some(e => !e.children.length && /^(NSFW|18\+)$/i.test(e.textContent.trim()));
     cards.push({url, name, creator: creator ? creator.textContent.trim() : '', thumbnail: img ? img.src : vid ? vid.poster : '',
-                price: price || ''});
+                price: price || '', adult});   // (adult: its NSFW badge, hoard/adult.py)
   }
   const lists = [...document.querySelectorAll('a[href*="/my/lists/"]')].map(a => ({url: abs(a),
     name: (a.querySelector('h3') || {}).textContent || ''})).filter(l => l.name.trim());
@@ -854,7 +855,8 @@ def wish_jinxxy_products(cards) -> list[dict]:
         store = wish._store_of(c.get("url"))   # a product Jinxxy lists from another store is that store's; one on a site
         away = store is None              # that isn't a store keeps that page as its link, elsewhere
         p = wish.product(store or "jinxxy", c.get("name"), creator=c.get("creator"), url=None if away else c.get("url"),
-                    thumbnail=c.get("thumbnail"), price=c.get("price"), elsewhere=c.get("url") if away else None)
+                    thumbnail=c.get("thumbnail"), price=c.get("price"), elsewhere=c.get("url") if away else None,
+                    adult=c.get("adult") is True)
         if p:
             out.append(p)
     return out

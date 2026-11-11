@@ -97,11 +97,48 @@
       const name = text(row[2], 300);
       if (!STORES[store] || !name) continue;
       items.push({ store, name, creator: text(row[3], 200), url: storePage(store, row[4]),
-                   picture: https(row[5], STORE_IMAGE_HOSTS[store], false) });
+                   picture: https(row[5], STORE_IMAGE_HOSTS[store], false),
+                   adult: row[6] === 1 || row[6] === true });   // (for adults: hoard/adult.py)
     }
     if (!items.length) throw new Error("empty");
     const photos = (Array.isArray(doc.p) ? doc.p.slice(0, MAX_PHOTOS) : []).map(u => https(u, PHOTO_HOSTS, false)).filter(Boolean);
-    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos: [...new Set(photos)], items };
+    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos: [...new Set(photos)], items,
+             adult: doc.a === 1 || items.some(i => i.adult) };   // an Adult set: one with a product for adults in it
+  }
+
+  /* An Adult set asks its viewer's age before it's shown (issue #337). The answer, "adult" or "minor" and nothing
+     more, is kept in a cookie for this page alone, for a year, so the question isn't asked each time. Hoard never
+     asks for ID, and no code of Hoard's reads the answer anywhere but here, in the viewer's browser. */
+  const AGE_COOKIE = "hoard_age";
+  // The answer kept, if there is one.
+  function ageKept() {
+    const m = document.cookie.match(/(?:^|;\s*)hoard_age=(adult|minor)(?:;|$)/);
+    return m ? m[1] : "";
+  }
+  // Keep the answer (or, with none, forget it).
+  function keepAge(answer) {
+    document.cookie = `${AGE_COOKIE}=${answer}; Max-Age=${answer ? 31536000 : 0}; Path=${location.pathname}; SameSite=Lax` +
+      (location.protocol === "https:" ? "; Secure" : "");
+  }
+  // Ask, unless it's been answered: "adult" or "minor".
+  function askAge() {
+    const kept = ageKept();
+    if (kept) return Promise.resolve(kept);
+    return new Promise(resolve => {
+      // Keep what was answered, and carry on.
+      const answer = a => { keepAge(a); $("#setAge").hidden = true; resolve(a); };
+      $("#ageYes").addEventListener("click", () => answer("adult"), { once: true });
+      $("#ageNo").addEventListener("click", () => answer("minor"), { once: true });
+      $("#setAge").hidden = false;
+      $("#ageYes").focus();
+    });
+  }
+  // The set as someone of that age sees it: under 18, without its products for adults or the sharer's photos.
+  function forAge(set, age) {
+    if (age === "adult") return { ...set, said: "You said you're 18 or older, so its products for adults are shown." };
+    const items = set.items.filter(i => !i.adult), left = set.items.length - items.length;
+    return { ...set, items, photos: [], said: (left === 1 ? "1 product for adults isn't shown" : left + " products for adults aren't shown") +
+      (set.photos.length ? ", and neither are the sharer's photos" : "") + ": you said you're under 18." };
   }
 
   // A short link's set, unlocked as Hoard's page locks it (hoard/web/shared.js: lockSet)
@@ -150,6 +187,12 @@
       (stores.length < 3 ? stores.join(" and ") : stores.slice(0, -1).join(", ") + " and " + stores[stores.length - 1]) + ".";
     if (set.note) for (const line of set.note.split("\n")) $("#setNote").append(el("p", {}, line || " "));
     $("#setNote").hidden = !set.note;
+    if (set.said) {   // an Adult set: what was answered, and a way to answer again
+      const again = el("button", { class: "linkish", type: "button", id: "ageAgain" }, "Change your answer");
+      again.addEventListener("click", () => { keepAge(""); location.reload(); });
+      $("#setAgeNote").append(el("span", { class: "adult-chip" }, "18+"), " " + set.said + " ", again);
+      $("#setAgeNote").hidden = false;
+    }
     if (set.photos.length) {
       const list = $("#setPhotos ul");
       set.photos.forEach((u, n) => list.append(el("li", {}, el("a", { href: u, target: "_blank", rel: "noopener noreferrer" },
@@ -161,7 +204,7 @@
       const store = STORES[i.store];
       grid.append(el("li", { class: "sv-item" },
         el("span", { class: "art" }, i.picture ? picture(i.picture, "", "pic", () => lettered(i)) : lettered(i),
-           el("i", { class: `notch ${i.store}`, "aria-hidden": "true" })),
+           el("i", { class: `notch ${i.store}`, "aria-hidden": "true" }), i.adult ? el("span", { class: "adult-mark", title: "For adults (18+)" }, "18+") : ""),
         el("span", { class: "sv-text" }, el("b", {}, i.name),
           el("span", { class: "sv-by" }, (i.creator ? "by " + i.creator + " · " : ""), el("span", { class: `dot ${i.store}`, "aria-hidden": "true" }), store)),
         i.url ? el("a", { class: "button ghost", href: i.url, target: "_blank", rel: "noopener noreferrer" }, "On " + store)
@@ -201,6 +244,16 @@
     let set;
     try { set = check(await unpack(code)); }
     catch (e) { problem("This link's set is damaged, or the link was cut short. Ask for it again, and copy all of it."); return; }
+    if (set.adult) {
+      set = forAge(set, await askAge());
+      if (!set.items.length) {   // under 18, and everything in it is for adults
+        problem("This set is for adults: all of its products are. You said you're under 18.");
+        const again = el("button", { class: "button ghost", type: "button", id: "ageAgain" }, "Change your answer");
+        again.addEventListener("click", () => { keepAge(""); location.reload(); });
+        $("#setProblemWhy").after(el("p", {}, again));
+        return;
+      }
+    }
     show(set, expires);
   }
   window.addEventListener("hashchange", () => location.reload());

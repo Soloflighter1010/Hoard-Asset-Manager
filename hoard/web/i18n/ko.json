@@ -2483,5 +2483,18 @@
  "Copied the store link.": "스토어 링크를 복사했어요.",
  "That couldn't be copied here: choose Open on the store, and copy its address there.": "여기서는 복사하지 못했어요. 스토어에서 열어서 주소를 복사하세요.",
  "Bring in from another tool": "다른 도구에서 가져오기",
- "Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder is changed.": "KonoAsset에서 옮겨 오시나요? Hoard는 KonoAsset의 라이브러리를 가져올 수 있어요. 가지고 있는 상품은 BOOTH 아이템으로 맞추고, 나머지는 로컬 상품으로, 파일은 있던 자리에 그대로 두고 가져와요. 태그와 메모도 함께 와요. KonoAsset의 폴더는 아무것도 바꾸지 않아요."
+ "Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder is changed.": "KonoAsset에서 옮겨 오시나요? Hoard는 KonoAsset의 라이브러리를 가져올 수 있어요. 가지고 있는 상품은 BOOTH 아이템으로 맞추고, 나머지는 로컬 상품으로, 파일은 있던 자리에 그대로 두고 가져와요. 태그와 메모도 함께 와요. KonoAsset의 폴더는 아무것도 바꾸지 않아요.",
+ "for adults (18+)": "성인용(18+)",
+ "For adults (18+)": "성인용(18+)",
+ "For adults: you marked it.": "성인용: 직접 표시했어요.",
+ "For adults: its store says so.": "성인용: 스토어에 그렇게 표시되어 있어요.",
+ "For adults: its tags or name say so.": "성인용: 태그나 이름에 그렇게 적혀 있어요.",
+ "It isn't for adults": "성인용이 아니에요",
+ "Mark as 18+": "18+로 표시",
+ "Blurred: for adults. Click to show it.": "성인용이라 흐리게 했어요. 클릭하면 보여요.",
+ "Marked as 18+.": "18+로 표시했어요.",
+ "Marked as not for adults.": "성인용이 아닌 것으로 표시했어요.",
+ "Blur the pictures of products for adults (18+)": "성인용(18+) 상품의 이미지를 흐리게 표시",
+ "Adult: it has products for adults in it.": "성인용: 성인용 상품이 들어 있어요.",
+ "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "성인용: 성인용 상품이 들어 있어요. 공유하면 보는 사람에게 먼저 나이를 물어봐요."
 }

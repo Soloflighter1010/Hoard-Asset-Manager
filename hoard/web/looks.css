@@ -166,6 +166,16 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 .note-mark { position: absolute; right: 7px; bottom: 7px; width: 24px; height: 24px; display: grid; place-items: center;
   border-radius: 7px; background: rgb(20 16 12 / .78); color: #F4EDE3; pointer-events: none; }
 .note-mark svg { width: 14px; height: 14px; }
+/* For adults (issues #311, #338): an 18+ mark on the picture of an adult product or set, and the picture blurred
+   unless you chose to see them (Settings, Appearance). The picture itself is never changed. In a product's details
+   a click shows it, and blurs it again. */
+.adult-mark, .adult-chip { display: inline-grid; place-items: center; min-width: 30px; height: 22px; padding: 0 6px; border-radius: 7px;
+  background: #b3261e; color: #fff; font: 800 12px/1 var(--body); letter-spacing: .02em; }
+.adult-mark { position: absolute; left: 7px; bottom: 7px; z-index: 2; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.d-adult { margin: 10px 0 0; font-size: 13.5px; color: var(--dust); }
+:root:not([data-adult="show"]) :is(.slot.adult .art, .sethead.adult .art, .d-art.adult:not(.seen)) :is(img, video) {
+  filter: blur(22px) saturate(.6); transform: scale(1.15); }
+:root:not([data-adult="show"]) .d-art.adult { cursor: pointer; overflow: hidden; }
 /* a note on what's new (issue #244, shared.js): beside what it's about, once */
 .new-spot { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0 12px; padding: 10px 12px;
   border-radius: 10px; background: var(--ledge); box-shadow: inset 0 0 0 1.5px var(--gold); font-size: 13px; line-height: 1.45; }

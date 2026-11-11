@@ -108,17 +108,26 @@ def _product_details(self):
     def public(store: str, *links) -> str | None:   # its own public page, else its creator's: never one of yours
         return next((u for u in (app.sets.product_link(store, x) for x in links) if u), None)
 
+    from .. import adult
+    marks, mine = app.MarkStore().view(), app.TagStore().load()["items"]
+
+    def for_adults(key: str, name: str, i: dict | None) -> bool:
+        """Whether a product is for adults (hoard/adult.py): a set shared with it in says so (issue #337)."""
+        return bool(adult.why(key, name=name, tags=[*((i or {}).get("store_tags") or []), *mine.get(key, [])],
+                              flagged=(i or {}).get("adult") is True, marks=marks))
+
     def details(key: str) -> dict | None:
         """A product's details for the page, from the library or the downloads, with only its public link."""
         i = lib.get(key)
         if i:
             return {"store": i["store"], "id": i.get("id"), "name": i["name"], "creator": i.get("creator"),
                     "url": public(i["store"], i.get("page"), i.get("url"), i.get("creator_url")),
-                    "thumbnail": i.get("thumbnail")}
+                    "thumbnail": i.get("thumbnail"), "adult": for_adults(key, i["name"], i)}
         a = dl.get(key)
         if a:
             store = str(a["store"]).lower()
-            return {"store": store, "name": a["name"], "creator": a.get("creator"), "url": public(store, a.get("url"))}
+            return {"store": store, "name": a["name"], "creator": a.get("creator"), "url": public(store, a.get("url")),
+                    "adult": for_adults(key, a["name"], None)}
         return None
     return details
 
@@ -155,6 +164,7 @@ def get_api_library(self, path, body, query):
     """GET /api/library. Serve this endpoint through the shared HTTP boundary."""
     srv = self.server
     u = app.urlparse(self.path)
+    from .. import adult
     items, stores = srv.lib.snapshot()   # enrich() makes new items, so the library's own are never changed
     tagdata = app.TagStore().load()
     items = app.enrich(items, srv.cfg["tags"], tagdata, apart=app.MarkStore().keys("apart"),
@@ -175,6 +185,11 @@ def get_api_library(self, path, body, query):
         i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                      else "archived" if app.is_archived(i, marks) else None)
         i["apart"] = i["tag_key"] in marks["apart"]   # "Not a copy": never stacked (issue #217)
+        # for adults (issues #311, #338): by your word, its store's, or its tags and name; and which of them said so
+        i["adult_from"] = adult.why(i["tag_key"], name=i["name"], tags=[*(i.get("store_tags") or []), *i["tags"]],
+                                    flagged=i.get("adult") is True, marks=marks)
+        i["adult"] = bool(i["adult_from"])
+        i["not_adult"] = i["tag_key"] in marks["not_adult"]
         # hidden items never leave the server while it's locked: hidden by the mark itself, whatever else
         # it's marked (a hidden product also removed is labelled removed, and was let out)
         if i["tag_key"] not in marks["hidden"] or unlocked:

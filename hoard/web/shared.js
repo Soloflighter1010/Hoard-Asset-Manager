@@ -529,6 +529,7 @@ function applyDisplay(d) {
   if (d.font === "dyslexic") html.dataset.font = "dyslexic"; else delete html.dataset.font;
   if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
   if (d.card_outlines) html.dataset.cards = "outlined"; else delete html.dataset.cards;   // (issue #222: looks.css)
+  if (d.blur_adult === false) html.dataset.adult = "show"; else delete html.dataset.adult;   // (issue #311: looks.css)
   document.body.classList.toggle("no-glow", d.glow === false);
   SECRETS.kind = d.seasonal !== false && SECRET_THEMES.includes(d.theme) ? d.theme : "";   // (issue #260)
   secretsDraw();
@@ -2236,6 +2237,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setFont").value = SETTINGS.display.font || "standard";
   $("#setSpacing").checked = !!SETTINGS.display.spacing;
   $("#setCardOutlines").checked = !!SETTINGS.display.card_outlines;
+  $("#setBlurAdult").checked = SETTINGS.display.blur_adult !== false;
   $("#setGlowOn").checked = SETTINGS.display.glow;
   $("#setSeasonal").checked = SETTINGS.display.seasonal !== false;
   $("#setColours").value = SETTINGS.display.colours;
@@ -2853,6 +2855,7 @@ function settingsPart(el) {
     case "setFont": return { display: { font: el.value } };
     case "setSpacing": return { display: { spacing: el.checked } };
     case "setCardOutlines": return { display: { card_outlines: el.checked } };
+    case "setBlurAdult": return { display: { blur_adult: el.checked } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };
@@ -5212,11 +5215,14 @@ function setCounts(s) {
   return { got, owned, buy, text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length),
     got && tr("{0} downloaded", got), owned && tr("{0} to download", owned), buy && tr("{0} to buy", buy)].filter(Boolean).join(", ") };
 }
+// The 18+ mark on an adult set's picture, and on an adult product's in it (products.js draws a product tile's).
+const ADULT_MARK = '<span class="adult-mark" translate="no" aria-hidden="true">18+</span>';
 // A set's tile.
 function setTile(s) {
   const c = setCounts(s);
-  return `<button class="slot settile" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text))}">` +
-    `<span class="art">${setArt(s)}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
+  // (an Adult set, issue #337: one with a product for adults in it, marked 18+ as they are)
+  return `<button class="slot settile${s.adult ? " adult" : ""}" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text) + (s.adult ? ", " + tr("for adults (18+)") : ""))}">` +
+    `<span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
 }
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
 function setsRoot() {
@@ -5286,8 +5292,10 @@ function setHead(s) {
     `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
-    `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
+    `<div class="sethead${s.adult ? " adult" : ""}"><span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
+      (s.adult ? `<p class="muted set-adult"><span class="adult-chip" translate="no">18+</span> ${esc(tr(isWish(s)
+        ? "Adult: it has products for adults in it." : "Adult: it has products for adults in it. Shared, it asks its viewer's age first."))}</p>` : "") +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
         `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
       `<div class="set-main"><button class="primary" data-setx="share">${esc(tr("Share..."))}</button></div>` +
@@ -5459,9 +5467,9 @@ function setExtraTile(s, i) {
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
   const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
   const price = !i.owned && !i.local ? priceHTML(i) : "";
-  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}</span>` +
+  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}${i.adult ? ADULT_MARK : ""}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
-  return `<div class="slot ext${buy ? " wanted" : ""}">` +
+  return `<div class="slot ext${buy ? " wanted" : ""}${i.adult ? " adult" : ""}">` +
     (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
     (price ? `<span class="ext-price">${price}</span>` : "") +

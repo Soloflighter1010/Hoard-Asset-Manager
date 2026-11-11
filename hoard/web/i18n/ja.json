@@ -2483,5 +2483,18 @@
  "Copied the store link.": "ストアのリンクをコピーしました。",
  "That couldn't be copied here: choose Open on the store, and copy its address there.": "ここではコピーできませんでした。ストアで開いて、そこでアドレスをコピーしてください。",
  "Bring in from another tool": "ほかのツールから取り込む",
- "Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder is changed.": "KonoAssetから移行しますか?HoardはKonoAssetのライブラリを取り込めます。持っている商品はBOOTHのアイテムで照合し、それ以外はローカルの商品として、ファイルをそのままの場所に残して取り込みます。タグとメモも引き継ぎます。KonoAssetのフォルダーは何も変更しません。"
+ "Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder is changed.": "KonoAssetから移行しますか?HoardはKonoAssetのライブラリを取り込めます。持っている商品はBOOTHのアイテムで照合し、それ以外はローカルの商品として、ファイルをそのままの場所に残して取り込みます。タグとメモも引き継ぎます。KonoAssetのフォルダーは何も変更しません。",
+ "for adults (18+)": "成人向け(18+)",
+ "For adults (18+)": "成人向け(18+)",
+ "For adults: you marked it.": "成人向け:あなたが設定しました。",
+ "For adults: its store says so.": "成人向け:ストアの表示によります。",
+ "For adults: its tags or name say so.": "成人向け:タグまたは名前によります。",
+ "It isn't for adults": "成人向けではない",
+ "Mark as 18+": "18+にする",
+ "Blurred: for adults. Click to show it.": "成人向けのため、ぼかしています。クリックすると表示します。",
+ "Marked as 18+.": "18+にしました。",
+ "Marked as not for adults.": "成人向けではないと設定しました。",
+ "Blur the pictures of products for adults (18+)": "成人向け(18+)の商品の画像をぼかす",
+ "Adult: it has products for adults in it.": "成人向け:成人向けの商品が入っています。",
+ "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "成人向け:成人向けの商品が入っています。共有すると、見る人にまず年齢を確認します。"
 }

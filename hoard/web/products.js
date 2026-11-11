@@ -16,6 +16,12 @@ function productIcon(path) {
   line.setAttribute("d", path); svg.append(line);
   return svg;
 }
+// The 18+ mark on an adult product's or set's picture (issue #338).
+function adultMark() {
+  return productElement("span", { class: "adult-mark", title: tr("For adults (18+)"), "aria-hidden": "true", translate: "no" }, "18+");
+}
+// Who says a product is for adults, in words: you, its store, or its tags and name.
+const ADULT_SAYS = { you: "For adults: you marked it.", store: "For adults: its store says so.", tags: "For adults: its tags or name say so." };
 // The only bridge for existing escaped HTML sections. Do not pass raw product data or new templates here.
 function legacyFragment(html) {
   const template = document.createElement("template");
@@ -45,11 +51,13 @@ function productNotch(store, others = []) {
 }
 // One tile for both views. The view model owns the differences in badges, file sizes and available actions.
 function productTile(a, model) {
-  const button = productElement("button", { draggable: "true", class: `slot ${model.store}${model.count > 1 ? " stacked" : ""}${model.wrapped ? " wrapped" : ""}`,
-    "aria-label": model.description.filter(Boolean).join(", "), "aria-current": model.current ? "true" : null });
+  // (for adults, issues #311 and #338: said in its label, marked 18+, and its picture blurred unless you chose to see them)
+  const button = productElement("button", { draggable: "true", class: `slot ${model.store}${model.count > 1 ? " stacked" : ""}${model.wrapped ? " wrapped" : ""}${a.adult ? " adult" : ""}`,
+    "aria-label": [...model.description, a.adult && tr("for adults (18+)")].filter(Boolean).join(", "), "aria-current": model.current ? "true" : null });
   button.dataset[model.key] = model.id;
   const art = productElement("span", { class: "art" }, productPicture(a, model.src, model.type),
     productNotch(model.store, model.others), productElement("i", { class: "tick", "aria-hidden": "true" }));
+  if (a.adult) art.append(adultMark());
   if (a.your_note) art.append(productElement("span", { class: "note-mark", title: tr("Has a note"), "aria-hidden": "true" },
     productIcon("M3.5 2.5h6.2l2.8 2.8v8.2h-9zM6 7.5h4M6 10h4")));
   if (model.downloaded) art.append(productElement("span", { class: "ondisk-mark", title: tr("Downloaded"), "aria-hidden": "true" },
@@ -94,15 +102,38 @@ function renderProductDetail(a, model, sections, focus = true) {
   if (page) store.append(" ", productElement("button", { class: "linkish", type: "button", "data-store-link": page }, tr("Copy store link")));
   const facts = productElement("div", { class: "d-stats" });
   for (const [name, value] of model.facts) facts.append(productElement("span", {}, productElement("small", {}, tr(name)), productElement("b", {}, value)));
+  // For adults (issues #311, #338): its 18+ mark and who says so; and your own word for it, which wins, and is how a
+  // product of your own in Local gets the mark.
+  const grown = productElement("p", { class: "d-adult" });
+  if (a.adult) grown.append(productElement("span", { class: "adult-chip", translate: "no" }, "18+"), " ", tr(ADULT_SAYS[a.adult_from] || ADULT_SAYS.tags), " ");
+  if (a.tag_key) grown.append(productElement("button", { class: "linkish", type: "button", "data-adult-mark": a.adult ? "not_adult" : "adult", "data-key": a.tag_key },
+    tr(a.adult ? "It isn't for adults" : "Mark as 18+")));
   keepTileInPlace(document.querySelector('#grid .slot[aria-current="true"]'), () => {
     detail.replaceChildren(productElement("button", { class: "x", "data-act": "close", "aria-label": tr("Close details") }, "×"),
-      productElement("div", { class: `d-art ${model.store}` }, productPicture(a, model.src, model.type, false)),
-      productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, facts, legacyFragment(sections));
+      productElement("div", { class: `d-art ${model.store}${a.adult ? " adult" : ""}`, title: a.adult && blursAdult() ? tr("Blurred: for adults. Click to show it.") : null },
+        productPicture(a, model.src, model.type, false)),
+      productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, facts, grown, legacyFragment(sections));
     detail.classList.add("open"); document.body.classList.add("panel-open");
     $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
     if (focus) detail.querySelector(".x").focus({ preventScroll: true });
   });
 }
+// Whether adult products' pictures are blurred (Settings, Appearance: on unless you turn it off).
+const blursAdult = () => document.documentElement.dataset.adult !== "show";
+// Mark as 18+, or It isn't for adults, in a product's details: your word, kept with your other choices (marks.json).
+document.addEventListener("click", async e => {
+  const b = e.target.closest ? e.target.closest("[data-adult-mark]") : null;
+  if (b) {
+    b.disabled = true;
+    const r = await apiPost("/api/marks", { kind: b.dataset.adultMark, keys: [b.dataset.key], on: true });
+    if (!r.ok) { b.disabled = false; toast(r.data.error || "That didn't work."); return; }
+    await load();
+    toast(b.dataset.adultMark === "adult" ? "Marked as 18+." : "Marked as not for adults.");
+    return;
+  }
+  const art = e.target.closest ? e.target.closest("#detail .d-art.adult") : null;   // a blurred picture, shown or blurred again
+  if (art && blursAdult()) art.classList.toggle("seen");
+});
 // Copy store link, in a product's details on either page (issue #345).
 document.addEventListener("click", async e => {
   const b = e.target.closest ? e.target.closest("[data-store-link]") : null;

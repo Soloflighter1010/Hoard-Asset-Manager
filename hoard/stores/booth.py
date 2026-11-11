@@ -379,7 +379,8 @@ wish_BOOTH_JS = r"""() => {
     const leaves = [...w.querySelectorAll('div, span')].filter(e => !e.children.length).map(e => e.textContent.trim());
     cards.push({id: m[1], url: 'https://booth.pm/en/items/' + m[1], name: title ? title.textContent.trim() : '',
                 creator: shop ? shop.textContent.trim() : '', creator_url: shop ? shop.href : '', thumbnail: img ? img.src : '',
-                price: leaves.find(t => /^[~〜]?\s*(¥\s*\d|\d[\d,]*\s*(JPY|円))/.test(t)) || ''});
+                price: leaves.find(t => /^[~〜]?\s*(¥\s*\d|\d[\d,]*\s*(JPY|円))/.test(t)) || '',
+                adult: leaves.some(t => /^R-?18G?$/i.test(t))});   // (its R-18 badge: hoard/adult.py)
   }
   const lists = [...document.querySelectorAll('button.charcoal-tag-item')].map(b => ({name: b.textContent.trim(),
     shown: b.getAttribute('data-state') === 'default'})).filter(l => l.name);
@@ -406,7 +407,8 @@ wish_BOOTH_FIRST_JS = r"""() => { const a = document.querySelector('.item-card-w
 def wish_booth_products(cards) -> list[dict]:
     """Booth's wishlist cards, as products."""
     return [p for p in (wish.product("booth", c.get("name"), id_=c.get("id"), creator=c.get("creator"), url=c.get("url"),
-                                thumbnail=c.get("thumbnail"), price=c.get("price")) for c in cards) if p]
+                                thumbnail=c.get("thumbnail"), price=c.get("price"), adult=c.get("adult") is True)
+                   for c in cards) if p]
 
 
 def wish_read_booth(ctx, cfg, progress) -> list[dict]:

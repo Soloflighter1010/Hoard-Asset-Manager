@@ -11,6 +11,8 @@ update, its new name is marked too (follow), rather than the product coming back
 - removed: out of everything but the Removed view. Kept out after refreshes, so a store can't bring it back.
 - hidden: out of view everywhere (library, Downloads, counts, tags) until unlocked with your PIN.
 - apart: not a copy of anything, whatever its name or picture: never stacked with other products (issue #217).
+- adult, not_adult: for adults (18+), or not, as you say: it wins over what a product's store and tags say, and is
+  how a product of your own in Local is marked (issue #338, hoard/adult.py).
 
 The PIN is stored only as a slow, salted hash (scrypt). Wrong guesses lock the hidden library for longer each
 time, and that survives restarts. It's a privacy screen for the app, not encryption: anyone who can open your
@@ -39,7 +41,10 @@ from .safety import DataFileError, seal
 from .storage import seal_status as check_seal, read_document as read_json_file, write_document as write_file_safely
 from .tags import TAG_KEY_RX
 
-KINDS = ("archived", "unarchived", "removed", "hidden", "apart")   # apart: "Not a copy", kept out of stacks (issue #217)
+# apart: "Not a copy", kept out of stacks (issue #217). adult, not_adult: for adults, or not, by your word, which wins
+# over what its store and tags say (issue #338, hoard/adult.py)
+KINDS = ("archived", "unarchived", "removed", "hidden", "apart", "adult", "not_adult")
+OPPOSITES = {"archived": "unarchived", "unarchived": "archived", "adult": "not_adult", "not_adult": "adult"}
 ITEM_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):\S{1,300}\Z")   # a store's own key: store:id
 PHRASE_WORDS = 6
 WORDS = (Path(__file__).with_name("recovery_words.txt")).read_text("utf-8").split()   # the BIP-39 English list
@@ -171,10 +176,8 @@ class MarkStore:
                     raise PinError("Set a PIN for your hidden library first.")
                 data[kind] |= keys
                 data["ids"][kind].update(ids)
-                if kind == "archived":
-                    self._unmark(data, "unarchived", keys)
-                if kind == "unarchived":
-                    self._unmark(data, "archived", keys)
+                if kind in OPPOSITES:   # (one or the other)
+                    self._unmark(data, OPPOSITES[kind], keys)
             else:
                 self._unmark(data, kind, keys)
             if len(data[kind]) > MAX_KEYS or len(data["ids"][kind]) > MAX_KEYS:

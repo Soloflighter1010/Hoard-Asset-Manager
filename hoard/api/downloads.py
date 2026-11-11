@@ -210,6 +210,8 @@ def get_api_assets(self, path, body, query):
     stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
     listed = [dict(i) for i in srv.lib.snapshot()[0]]
     store_tags = {app.tag_key(i["store"], i["name"]): i["store_tags"] for i in listed if i.get("store_tags")}   # (#206)
+    from .. import adult
+    flagged = {app.tag_key(i["store"], i["name"]) for i in listed if i.get("adult") is True}   # (its store says: #311)
     tagdata = app.TagStore().load()   # (for each product's type, as the Library has it: issue #223)
     app.stack_by_picture(listed, apart=marks["apart"])
     for i in listed:
@@ -231,7 +233,10 @@ def get_api_assets(self, path, body, query):
                 else "archived" if app.is_archived({"tag_key": key, "archived": key in by_store}, marks) else None)
         if key not in marks["hidden"] or unlocked:   # (hidden, whatever else it's marked)
             kind, known = app.product_type(tagdata, key, a["name"], a.get("tags") or [], store_tags.get(key, []))
+            grown = adult.why(key, name=a["name"], tags=[*store_tags.get(key, []), *(a.get("tags") or [])],
+                              flagged=key in flagged, marks=marks)   # for adults, and who says so (issues #311, #338)
             assets.append({**a, "mark": mark, "update": (updates["items"].get(key) or {}).get("files", []),
+                           "adult": bool(grown), "adult_from": grown, "not_adult": key in marks["not_adult"],
                            "files": srv.files_with_code(a),   # (what code each holds: issue #303)
                            "store_tags": store_tags.get(key, []), "type": kind, "type_from": known,
                            "your_note": tagdata["notes"].get(key, ""),   # (issue #304; "note" is a Local item's own)

@@ -14,6 +14,7 @@ import re
 import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
+from .adult import on_a_page as adult_on_a_page
 from .browser import goto, goto_past_check, has_password_field, settle
 from .common import QUICK_ITEMS, NotLoggedIn, pause, quick_done
 from .config import payhip_shops
@@ -74,9 +75,10 @@ def cents_price(cents, currency, more: bool = False) -> dict | None:
 
 
 def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=None, price=None,
-            elsewhere=None) -> dict | None:
+            elsewhere=None, adult=False) -> dict | None:
     """One product on a wishlist, cleaned: None without a name. elsewhere: its page on a site that isn't one of the
-    stores (one a Jinxxy list sends you to), kept as it is but for anything after #."""
+    stores (one a Jinxxy list sends you to), kept as it is but for anything after #. adult: its store marks it as
+    for adults (hoard/adult.py)."""
     name = clean_text(name if isinstance(name, str) else "", 300)
     if not name:
         return None
@@ -95,6 +97,8 @@ def product(store: str, name, *, id_=None, creator=None, url=None, thumbnail=Non
         p = price if isinstance(price, dict) else parse_price(price)
         if p:
             out["price"] = p
+    if adult is True:
+        out["adult"] = True
     return out
 
 
@@ -159,7 +163,7 @@ def from_product_page(link: str, fetch) -> dict:
         pics = [x.get("original") or x.get("resized") for x in data.get("images") or [] if isinstance(x, dict)]
         got = product("booth", data.get("name"), id_=item, creator=(data.get("shop") or {}).get("name"),
                       url=url, thumbnail=next((x for x in pics if x), None), price=data.get("price"))
-        return {**got, "store_tags": store_tags_in("booth", data)} if got else got
+        return {**got, "store_tags": store_tags_in("booth", data), "adult": adult_on_a_page("booth", data) is True} if got else got
     address = page_address(store, url)
     got = fetch(address, tuple(dict.fromkeys((host,) + LINK_HOSTS[store]))) if address else None
     if not got or "html" not in got[1]:
@@ -179,10 +183,12 @@ def from_product_page(link: str, fetch) -> dict:
     if price is None and amount not in (None, "") and str(amount).strip() in ("0", "0.0", "0.00"):
         price = {"text": "Free", "amount": 0.0, "currency": ""}
     got = product(store, name, creator=creator, url=url, thumbnail=found.get("image") or meta("og:image"), price=price)
-    return {**got, "store_tags": store_tags_in(store, page)} if got else got
+    said = adult_on_a_page(store, page)
+    return {**got, "store_tags": store_tags_in(store, page), **({"adult": said} if said is not None else {})} if got else got
 
 
 TAGGED_STORES = ("booth", "jinxxy", "itch")   # where a product's own page shows the tags its creator gave it
+ADULT_SAID_BY = ("booth", "jinxxy")           # ...and where it says whether the product is for adults (hoard/adult.py)
 MAX_STORE_TAGS = 30
 
 

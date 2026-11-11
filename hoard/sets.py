@@ -310,6 +310,8 @@ def clean_product(p) -> dict | None:
         price = clean_price(p.get(k))
         if price:
             out[k] = price
+    if p.get("adult") is True:   # its store, or whoever shared it, says it's for adults (hoard/adult.py)
+        out["adult"] = True
     return out
 
 
@@ -709,7 +711,8 @@ def share_rows(s: dict, details=None) -> list[list | None]:
             continue
         if now and now.get("url"):   # its page as Hoard knows it now: its own, once a refresh has found it, not
             p["url"] = now["url"]    # the creator's page remembered before then
-        row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", "")]
+        row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", ""),
+               1 if (now or {}).get("adult") or (remembered or {}).get("adult") else ""]   # (1: for adults, issue #337)
         while row and row[-1] == "":   # (what's left out at the end costs nothing)
             row.pop()
         rows.append(row)
@@ -719,6 +722,8 @@ def share_rows(s: dict, details=None) -> list[list | None]:
 def _pack(s: dict, rows: list[list]) -> str:
     """A set's name, note and photos, and these rows (share_rows'), as a share code."""
     doc = {"v": 1, "n": s.get("name", ""), "i": rows}
+    if any(len(r) > 6 and r[6] for r in rows):   # a set with a product for adults in it: its viewer is asked first
+        doc["a"] = 1
     if s.get("note"):
         doc["d"] = s["note"]
     if s.get("photos"):
@@ -775,9 +780,9 @@ def from_code(text) -> dict:
     for row in doc["i"][:MAX_ITEMS]:
         if not isinstance(row, list):
             continue
-        row = (row + ["", "", "", "", "", ""])[:6]
+        row = (row + ["", "", "", "", "", "", ""])[:7]
         p = clean_product({"store": row[0], "id": row[1] or None, "name": row[2], "creator": row[3], "url": row[4],
-                           "thumbnail": row[5]})
+                           "thumbnail": row[5], "adult": row[6] in (1, True)})
         if not p or p["store"] not in STORES:
             continue
         key = tag_key(p["store"], p["name"])
