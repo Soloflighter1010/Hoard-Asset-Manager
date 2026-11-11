@@ -673,6 +673,10 @@ class LookInsidePage(IsolatedTestCase):
         win.locator("summary", has_text="Assets").click()   # its one package is open already
         win.locator("summary", has_text="Kitsu").click()
         win.get_by_text("Hoodie v2.prefab").wait_for()
+        # what a folder not drawn yet holds is kept by the page's script, never written on the page and read back from
+        # it to decide what's drawn (CodeQL's js/xss-through-dom)
+        self.assertEqual(page.evaluate("""() => [...document.querySelectorAll('#insideWin [data-node], #insideWin [data-pkg-node]')]
+          .filter(e => e.getAttribute('data-node') || e.getAttribute('data-pkg-node') || !e.hasAttribute('data-held')).length"""), 0)
         win.locator("summary", has_text="Every file in the zip").click()
         win.get_by_text("Hoodie/利用規約.txt").wait_for()
 

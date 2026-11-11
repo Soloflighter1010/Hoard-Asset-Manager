@@ -726,6 +726,16 @@ async function copyPath() {
 /* ---------- Look inside: what a .unitypackage or .zip holds, read without extracting it (hoard/packages.py) */
 const canLookInside = name => /\.(unitypackage|zip)$/i.test(name);
 let INSIDE = null;   // what's shown: {id, kind, items | files + packages, nodes: folders drawn when opened}
+// A folder of Look inside's tree not drawn yet, by its element: what it holds (its tree node and its package's number).
+// Kept here, not written on the page and read back from it, so nothing from the page decides what's drawn.
+let INSIDE_HELD = new WeakMap();
+// Each folder just drawn (marked data-node, or a package's data-pkg-node), in the order insideFolder and insidePackage
+// gave them (INSIDE.nodes): what each holds, kept with it (INSIDE_HELD).
+function holdNodes(root) {
+  const marked = root.querySelectorAll("[data-node]:not([data-held]), [data-pkg-node]:not([data-held])");
+  marked.forEach((el, i) => { if (INSIDE.nodes[i]) INSIDE_HELD.set(el, INSIDE.nodes[i]); el.setAttribute("data-held", ""); });
+  INSIDE.nodes = [];
+}
 // Open Look inside, or close it (open: which; else the other way).
 function openInside(open) {
   const w = $("#insideWin"), show = open ?? w.hidden;
@@ -770,14 +780,14 @@ function insideTree(items) {
 // A file's preview in Look inside (its type, when it has no picture).
 function previewImg(it, n) {
   const ext = (it.name || it.path).split(".").pop();
-  return it.preview ? `<img class="pv" loading="lazy" alt="" src="${keyed(`/inside/${INSIDE.id}/${n}-${it.guid}.png`)}">`
+  return it.preview ? `<img class="pv" loading="lazy" alt="" src="${esc(keyed(`/inside/${encodeURIComponent(INSIDE.id)}/${encodeURIComponent(n)}-${encodeURIComponent(it.guid)}.png`))}">`
     : `<span class="pv" aria-hidden="true">${esc(ext.length <= 6 ? ext : "")}</span>`;
 }
 function insideFolder(node, n) {   // one folder's contents: its folders (closed), then its files
   const dirs = [...node.dirs.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   return `<ul>` + dirs.map(([name, d]) => {
-    INSIDE.nodes.push({ node: d, n });
-    return `<li><details data-node="${INSIDE.nodes.length - 1}"><summary>${pickBox(`d:${n}:${d.path}`, d.count, name)}<span translate="no">${esc(name)}</span>` +
+    INSIDE.nodes.push({ node: d, n });   // (kept with its element once it's drawn: holdNodes)
+    return `<li><details data-node><summary>${pickBox(`d:${n}:${d.path}`, d.count, name)}<span translate="no">${esc(name)}</span>` +
       `<span class="n">${esc(tr(d.count === 1 ? "{0} file, {1}" : "{0} files, {1}", d.count.toLocaleString(), sizeText(d.size)))}</span></summary></details></li>`;
   }).join("") + node.files.sort((a, b) => a.name.localeCompare(b.name)).map(f =>
     `<li class="f">${pickBox(`p:${n}:${f.path}`, 1, f.name)}${previewImg(f, n)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${sizeText(f.size)}</span></li>`).join("") + `</ul>`;
@@ -787,7 +797,7 @@ function insidePackage(items, n, open) {
   const tree = insideTree(items);
   if (!tree.count) return `<p class="sum">${esc(tr("No files in it."))}</p>`;
   const sum = `<p class="sum">${esc(tr(tree.count === 1 ? "{0} file, {1}" : "{0} files, {1}", tree.count.toLocaleString(), sizeText(tree.size)))}</p>`;
-  return sum + (open ? insideFolder(tree, n) : (INSIDE.nodes.push({ node: tree, n }), `<div data-pkg-node="${INSIDE.nodes.length - 1}"></div>`));
+  return sum + (open ? insideFolder(tree, n) : (INSIDE.nodes.push({ node: tree, n }), `<div data-pkg-node></div>`));
 }
 // searching: every file whose path has these words, wherever it is (with Only code, only scripts and plugins)
 function insideFound(q, onlyCode = false) {
@@ -870,6 +880,7 @@ function drawInside(q = "") {
   } else html = insidePackage(I.items, 0, true);
   HoardInside.render(body, { name: I.name, query: q, onlyCode: !!I.onlyCode, ...insideCode(I), ...insideBar(),
     controls: I.kind !== "zip" || !!I.files.length, content: legacyFragment(html) }, tr);
+  holdNodes(body);
   for (const d of body.querySelectorAll("details.pkg[open]")) fillPackage(d);
 }
 // Extract: what's chosen (a file "p:<package>:<path>", a folder and everything in it "d:...", a zip's file "z:<name>")
@@ -927,8 +938,8 @@ async function extractInside(what) {
 }
 // Fill a folder of the package's tree, the first time it's opened.
 function fillPackage(d) {
-  const slot = d.querySelector("[data-pkg-node]");
-  if (slot && !slot.childElementCount) { const { node, n } = INSIDE.nodes[+slot.dataset.pkgNode]; slot.innerHTML = insideFolder(node, n); }
+  const slot = d.querySelector("[data-pkg-node]"), held = slot && INSIDE_HELD.get(slot);
+  if (held && !slot.childElementCount) { INSIDE.nodes = []; slot.innerHTML = insideFolder(held.node, held.n); holdNodes(slot); }
 }
 // Look inside's window, its search, ticks and buttons.
 function wireInside() {
@@ -938,9 +949,11 @@ function wireInside() {
   viewListen("downloads", w, "toggle", e => {   // a folder, or a package in a zip, is drawn as it's opened
     const d = e.target;
     if (!INSIDE || !d.open) return;
-    if (d.dataset.node != null && d.childElementCount === 1) {
-      const { node, n } = INSIDE.nodes[+d.dataset.node];
-      d.insertAdjacentHTML("beforeend", insideFolder(node, n));
+    const held = INSIDE_HELD.get(d);
+    if (held && d.matches("[data-node]") && d.childElementCount === 1) {
+      INSIDE.nodes = [];
+      d.insertAdjacentHTML("beforeend", insideFolder(held.node, held.n));
+      holdNodes(d);
     } else if (d.classList.contains("pkg")) fillPackage(d);
   }, true);
   viewListen("downloads", w, "change", e => {
