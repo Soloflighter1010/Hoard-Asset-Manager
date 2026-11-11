@@ -142,7 +142,13 @@ async function startApp() {
     if (url.origin !== location.origin || !["/", "/index.html", "/downloads"].includes(url.pathname)) return;
     event.preventDefault(); navigateApp(url.href);
   });
-  addEventListener("popstate", () => activateView());
+  addEventListener("popstate", () => {
+    // A step Hoard went back over itself (a window closed: setAddress, shared.js) is already shown, and its address
+    // is the older one until goToAddress puts the newer in its place. Reading it would undo what's changed since:
+    // a search typed as Settings closed came back empty when this arrived late.
+    if (NAV.back !== null) { goToAddress(); return; }
+    activateView();
+  });
   const askedSetup = /(^|[#&])setup\b/.test(location.hash);
   try {
     await activateView(false);
