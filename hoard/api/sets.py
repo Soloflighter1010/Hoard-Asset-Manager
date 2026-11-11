@@ -60,6 +60,9 @@ def _sets_view(self) -> dict:
             for row, words in zip(rows, app.common_words([r["name"] for r in rows], 2, 0.5, block)):
                 row["words"] = sorted(words)
         out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
+                    # where its products are on its photos (issue #346), only those shown
+                    "marks": {u: [m for m in ms if m[0] not in hidden] for u, ms in (s.get("marks") or {}).items()},
+                    "photo_p": [app.pic_for(u) for u in s.get("photos", [])],   # (each photo's address mark: /setphoto)
                     "cover": f"/setcover/{s['id']}/{s['picture']}" if app.sets.picture_file(s) else None,
                     "short": (s.get("short") or {}).get("expires"), "short_ended": s.get("short_ended"),
                     "items": rows, "from_link": s.get("from_link") is True,
@@ -244,6 +247,24 @@ def get_setpic(self, path, body, query):
     return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
 
 
+def get_setphoto(self, path, body, query):
+    """GET /setphoto/*. one of a set's photos (/setphoto/<set id>/<n>?p=<its address' mark>), fetched from its photo
+    site once and kept, for its page to show it with what's marked on it (issue #346): Hoard's pages load pictures only
+    from Hoard. Only a set's own photos, on the photo sites a set allows (sets.photo_url), are fetched."""
+    srv = self.server
+    u = app.urlparse(self.path)
+    sid, _, n = path[len("/setphoto/"):].partition("/")
+    s = next((x for x in app.sets.SetStore().load()["sets"] if x["id"] == sid), None)
+    photos = (s or {}).get("photos") or []
+    url = app.sets.photo_url(photos[int(n)]) if n.isdigit() and int(n) < len(photos) else None
+    if url and app.parse_qs(u.query).get("p", [""])[0] != app.pic_for(url):
+        url = None   # an address from before the photos changed: that place is another photo's now
+    got = app.fetch_picture(url, f"https://{app.urlparse(url).hostname}/") if url else None
+    if not got:
+        return self._send(404, b"Not found", "text/plain")
+    return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
+
+
 def get_setcover(self, path, body, query):
     """GET /setcover/*. the picture you chose for a set's tile"""
     srv = self.server
@@ -338,8 +359,9 @@ METHODS = {'_sets_view': _sets_view, '_add_links': _add_links, '_set_code': _set
 ROUTES = [
     Route('GET', '/api/sets', get_api_sets, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
+    Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
-    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

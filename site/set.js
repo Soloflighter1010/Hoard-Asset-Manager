@@ -13,7 +13,7 @@
   const PHOTO_HOSTS = ["i.imgur.com", "i.gyazo.com", "pbs.twimg.com", "cdn.bsky.app", "i.redd.it", "i.postimg.cc", "i.ibb.co",
                        "cdn.discordapp.com", "media.discordapp.net", "booth.pximg.net", "img.itch.zone",
                        "public-files.gumroad.com"];
-  const PREFIX = "H1.", MAX_CODE = 256 * 1024, MAX_JSON = 1024 * 1024, MAX_ITEMS = 500, MAX_PHOTOS = 8;
+  const PREFIX = "H1.", MAX_CODE = 256 * 1024, MAX_JSON = 1024 * 1024, MAX_ITEMS = 500, MAX_PHOTOS = 8, MAX_MARKS = 30;
   const SHARE_SERVER = "https://hoard-share.furryup.link";
   const SHORT = /^S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})$/;
 
@@ -90,8 +90,8 @@
   }
   function check(doc) {   // as hoard/sets.py's from_code checks it
     if (!doc || doc.v !== 1 || !Array.isArray(doc.i)) throw new Error("not a set");
-    const items = [];
-    for (const row of doc.i.slice(0, MAX_ITEMS)) {
+    const items = [], rowAt = new Map();   // (each product by its place in the code, for the marks on the photos)
+    for (const [n, row] of doc.i.slice(0, MAX_ITEMS).entries()) {
       if (!Array.isArray(row)) continue;
       const store = typeof row[0] === "string" ? row[0].toLowerCase() : "";
       const name = text(row[2], 300);
@@ -99,10 +99,21 @@
       items.push({ store, name, creator: text(row[3], 200), url: storePage(store, row[4]),
                    picture: https(row[5], STORE_IMAGE_HOSTS[store], false),
                    adult: row[6] === 1 || row[6] === true });   // (for adults: hoard/adult.py)
+      rowAt.set(n, items[items.length - 1]);
     }
     if (!items.length) throw new Error("empty");
-    const photos = (Array.isArray(doc.p) ? doc.p.slice(0, MAX_PHOTOS) : []).map(u => https(u, PHOTO_HOSTS, false)).filter(Boolean);
-    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos: [...new Set(photos)], items,
+    const given = (Array.isArray(doc.p) ? doc.p.slice(0, MAX_PHOTOS) : []).map(u => https(u, PHOTO_HOSTS, false));
+    const photos = [...new Set(given.filter(Boolean))];
+    // what's marked on each photo (issue #346): [photo, product, x, y], by their places in the code; x and y of 1000
+    const marks = new Map();
+    for (const m of Array.isArray(doc.m) ? doc.m.slice(0, MAX_PHOTOS * MAX_MARKS) : []) {
+      if (!Array.isArray(m) || m.length !== 4 || !m.every(Number.isInteger)) continue;
+      const url = given[m[0]], item = rowAt.get(m[1]), list = marks.get(url) || [];
+      if (!url || !item || m[2] < 0 || m[2] > 1000 || m[3] < 0 || m[3] > 1000 || list.length >= MAX_MARKS || list.some(x => x.item === item)) continue;
+      list.push({ item, x: m[2], y: m[3] });
+      marks.set(url, list);
+    }
+    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos, marks, items,
              adult: doc.a === 1 || items.some(i => i.adult) };   // an Adult set: one with a product for adults in it
   }
 
@@ -195,8 +206,29 @@
     }
     if (set.photos.length) {
       const list = $("#setPhotos ul");
-      set.photos.forEach((u, n) => list.append(el("li", {}, el("a", { href: u, target: "_blank", rel: "noopener noreferrer" },
-        picture(u, `The sharer's photo ${n + 1} of ${set.photos.length}`, "photo")))));
+      set.photos.forEach((u, n) => {
+        const alt = `The sharer's photo ${n + 1} of ${set.photos.length}`, marked = (set.marks && set.marks.get(u)) || [];
+        if (!marked.length) {
+          list.append(el("li", {}, el("a", { href: u, target: "_blank", rel: "noopener noreferrer" }, picture(u, alt, "photo"))));
+          return;
+        }
+        // a photo with what's in it marked (issue #346): a numbered mark on each product, and the same numbers listed
+        const pic = el("div", { class: "sv-photo-pic" }, picture(u, alt, "photo"));
+        const names = el("ol", { class: "sv-pmarks" });
+        marked.forEach((m, i) => {
+          const store = STORES[m.item.store], label = `${i + 1}: ${m.item.name}, on ${store}`;
+          const card = el("span", { class: "sv-pcard", "aria-hidden": "true" },
+            m.item.picture ? picture(m.item.picture, "", "pic") : "", el("b", {}, m.item.name));
+          pic.append(el(m.item.url ? "a" : "span", { class: "sv-pmark", style: `left:${m.x / 10}%;top:${m.y / 10}%`, "aria-label": label,
+            href: m.item.url || null, target: m.item.url ? "_blank" : null, rel: m.item.url ? "noopener noreferrer" : null,
+            tabindex: m.item.url ? null : "0" }, String(i + 1), card));
+          names.append(el("li", {}, el("span", { class: "sv-pnum", "aria-hidden": "true" }, String(i + 1)),
+            m.item.picture ? picture(m.item.picture, "", "pic") : el("span", { class: "pic none", "aria-hidden": "true" }),
+            el("span", { class: "sv-text" }, el("b", {}, m.item.name), el("span", { class: "sv-by" }, store)),
+            m.item.url ? el("a", { class: "button ghost", href: m.item.url, target: "_blank", rel: "noopener noreferrer" }, "On " + store) : ""));
+        });
+        list.append(el("li", { class: "sv-marked" }, el("figure", {}, pic, el("figcaption", {}, names))));
+      });
       $("#setPhotos").hidden = false;
     }
     const grid = $("#setItems");

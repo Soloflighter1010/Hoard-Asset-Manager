@@ -100,7 +100,11 @@ An `<asset>`:
 A set's products are kept in `sets.json` in the app-data folder (4.0; 4.2.0 added the rest):
 `{"version": 1, "sets": [{"id", "name", "items": [<product key>, ...], "note"?, "photos"?: [<https link>, ...],
 "picture"?: "<8 hex digits>.<png|jpg|webp>", "products"?: {<product key>: {"store", "id"?, "name", "creator"?, "url"?,
-"thumbnail"?}}, "short"?: {"id", "key", "token", "expires", "made"}}]}`. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
+"thumbnail"?}}, "marks"?: {<photo link>: [[<product key>, x, y], ...]}, "short"?: {"id", "key", "token", "expires",
+"made"}, "short_ended"?: <Unix seconds>}]}`. `marks` (5.2) are where the set's products are on its photos: `x` and `y`
+whole numbers from 0 to 1000, of the photo's width and height, each product once a photo and at most 30 a photo,
+only for photos and products the set has. `short_ended` (5.2) is when the set's short link ran out, kept until it has
+a new one. `picture` names the picture you chose for the set's tile, `set-pictures/<id>-<picture>` beside
 `sets.json` (a new name each time it changes). A product key is
 the one tags use (`booth:rusk`). `products` is what each was when it was added, so a set can list products that
 aren't in your library; `url` is only ever a public page on the store's own website, the product's or its creator's
@@ -113,7 +117,10 @@ the code it holds, to tell whether the set has changed since.
 
 A **share code** is `H1.` and then that set as JSON, compressed with raw DEFLATE and written in URL-safe base64
 without padding: `{"v": 1, "n": name, "d"?: note, "p"?: [photo links], "i": [[store, id, name, creator, url,
-thumbnail], ...]}` (a row's empty parts at its end are left out; Local and hidden products never are in it). The
+thumbnail, adult?], ...], "a"?: 1, "m"?: [[photo, row, x, y], ...]}` (a row's empty parts at its end are left out;
+Local and hidden products never are in it). A row's seventh part is `1` for a product for adults, and `"a": 1` says
+the set has one, so the viewer asks its age first (5.2). `"m"` (5.2) is what's marked on the photos: each mark by its
+photo's place in `"p"` and its product's row in `"i"`, counting from 0, and its place as in `sets.json`. The
 set viewer (`site/set.js`) and **Add a shared set** read it, checking every part as above. From 5.0 it's shared
 only inside a short link (below); Hoard before 5.0 shared it as a long link, `https://hoard.furryup.link/set.html#<code>`,
 which the viewer and **Add a shared set** still read.

@@ -4,7 +4,9 @@ shared with you lists what to buy, and where).
 
 Kept in sets.json in Hoard's app-data folder: {"sets": [{"id", "name", "items": [product key, ...], "note"?,
 "photos"?: [address, ...], "picture"?: "<version>.<png|jpg|webp>", "products"?: {product key: {"store", "id", "name",
-"creator", "url", "thumbnail"}}, "short"?: {"id", "key", "token", "expires", "made"}}]}. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
+"creator", "url", "thumbnail"}}, "marks"?: {photo address: [[product key, x, y], ...]},
+"short"?: {"id", "key", "token", "expires", "made"}}]}. "marks" are where each product is on a photo (issue #346): x
+and y from 0 to 1000, of the photo's width and height, so they line up at whatever size it's shown. A set's picture, if you chose one for its tile, is beside it in set-pictures/, as
 "<set id>-<picture>" (a new name each time, so a page never shows the one it replaced). A
 product is known by the same key your tags use (tags.tag_key), so a set keeps its products whichever store or library
 folder they're in; "products" remembers what each was when it was added (its store page and picture), so a set can be
@@ -51,6 +53,7 @@ MAX_WISH_ITEMS = 5000             # a wishlist read from a store holds what the 
 NAME_LENGTH = 60
 NOTE_LENGTH = 1000
 MAX_PHOTOS = 8
+MAX_MARKS = 30                    # products marked on one photo (issue #346)
 MAX_URL = 600
 VIEWER = "https://hoard.furryup.link/set.html"
 CODE_PREFIX = "H1."
@@ -127,6 +130,26 @@ def _https_on(value, hosts) -> str | None:
     if u.scheme != "https" or u.username or u.password or port not in (None, 443) or not host.isascii():
         return None
     return value.strip() if host in hosts else None
+
+
+def clean_marks(value, photos: list[str], items: list[str]) -> dict:
+    """A set's marks on its photos (issue #346), checked: only on photos it has, only for products in it, each once a
+    photo, at most MAX_MARKS a photo, and each place a whole number from 0 to 1000 (of the photo's width, then its
+    height)."""
+    if not isinstance(value, dict):
+        return {}
+    inside, out = set(items), {}
+    for url in photos:
+        seen, kept = set(), []
+        for m in (value.get(url) if isinstance(value.get(url), list) else [])[:MAX_MARKS * 2]:
+            if not (isinstance(m, list) and len(m) == 3 and m[0] in inside and m[0] not in seen and
+                    all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 1000 for v in m[1:])):
+                continue
+            seen.add(m[0])
+            kept.append([m[0], m[1], m[2]])
+        if kept:
+            out[url] = kept[:MAX_MARKS]
+    return out
 
 
 def photo_url(value) -> str | None:
@@ -370,6 +393,9 @@ class SetStore:
                                                     if isinstance(s.get("photos"), list)) if u))
             if photos:
                 one["photos"] = photos
+                marked = clean_marks(s.get("marks"), photos, one["items"])
+                if marked:
+                    one["marks"] = marked
             if isinstance(s.get("picture"), str) and PICTURE_NAME.fullmatch(s["picture"]):
                 one["picture"] = s["picture"]
             given = s.get("products") if isinstance(s.get("products"), dict) else {}
@@ -403,7 +429,9 @@ class SetStore:
     def change(self, body: dict, details=None) -> dict:
         """One change, from the page: {"action": "create", "name", "items"?, "note"?, "photos"?},
         {"action": "rename", "id", "name"}, {"action": "delete", "id"}, {"action": "add" or "remove", "id", "items"},
-        {"action": "note", "id", "note"}, {"action": "photos", "id", "photos"}, {"action": "picture", "id", "image"}
+        {"action": "note", "id", "note"}, {"action": "photos", "id", "photos"},
+        {"action": "marks", "id", "photo", "marks": [[product key, x, y], ...]} (where its products are on one of its
+        photos, issue #346: all of that photo's, replaced), {"action": "picture", "id", "image"}
         (a picture for its tile, as safety.chosen_picture takes it, or null to go back to its products' pictures),
         {"action": "import", "code"} (a set someone shared). details(key) gives what Hoard knows of a product added (clean_product's shape, or None), to
         keep with it. Returns the sets after it, and the new set's id for "create" and "import". Raises ValueError
@@ -438,7 +466,7 @@ class SetStore:
                 one = {"id": made, "name": name,
                        "items": list(dict.fromkeys(given["items"] if given else items))[:MAX_ITEMS]}
                 if given:
-                    one.update({k: given[k] for k in ("note", "photos", "products") if given.get(k)}, from_link=True)
+                    one.update({k: given[k] for k in ("note", "photos", "products", "marks") if given.get(k)}, from_link=True)
                 else:
                     one.update(note=clean_note(body.get("note")), photos=body.get("photos") or [])
                     if body.get("kind") == "wishlist":   # one of your own, product by product (issue #158)
@@ -475,6 +503,15 @@ class SetStore:
                         raise ValueError(f"{bad[0]} isn't a link to a picture on a photo site Hoard knows "
                                          f"({', '.join(PHOTO_HOSTS[:6])} and others).")
                     s["photos"] = given
+                elif action == "marks":
+                    photo = body.get("photo")
+                    if photo not in (s.get("photos") or []):
+                        raise ValueError("That photo isn't in this set anymore.")
+                    given = body.get("marks") if isinstance(body.get("marks"), list) else []
+                    if len(given) > MAX_MARKS:
+                        raise ValueError(f"A photo has up to {MAX_MARKS} products marked on it.")
+                    marks = {**(s.get("marks") or {}), photo: given}
+                    s["marks"] = clean_marks(marks, s["photos"], s["items"])
                 elif action == "picture":
                     s.pop("picture", None)
                     if body.get("image") is not None:
@@ -611,7 +648,7 @@ class SetStore:
             known, made, inside = s.get("products") or {}, [], set(s["items"])
             for n, keys in enumerate(parts, 1):
                 one = {"id": secrets.token_hex(4), "name": part_name(s["name"], n, len(parts)),
-                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos") if s.get(k)},
+                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks") if s.get(k)},
                        "products": {k: known[k] for k in keys if k in known}}
                 if s.get("kind") == "wishlist":
                     one["kind"] = "wishlist"
@@ -644,18 +681,17 @@ def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_li
     the last part's length; the answer is kept for the same set, products and details (issue #181)."""
     items = list(s.get("items") or [])
     rows = [None if k in leave_out else r for k, r in zip(items, share_rows(s, details))]
-    whole = [r for r in rows if r]
-    if len(items) <= MAX_ITEMS and fits(_pack(s, whole)):
+    if len(items) <= MAX_ITEMS and fits(_pack(s, [r for r in rows if r], [k for k, r in zip(items, rows) if r])):
         return [items] if items else []
     sized = {**s, "name": part_name(s.get("name", ""), 1, 1)}
-    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), items, rows,
+    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), s.get("marks"), items, rows,
                                       fits.__module__ + "." + fits.__qualname__], ensure_ascii=False).encode()).hexdigest()
     if seen in _parts_kept:
         return [list(p) for p in _parts_kept[seen]]
 
     def fit(a: int, b: int) -> bool:
         """Do these rows fit in one short link?"""
-        return fits(_pack(sized, [r for r in rows[a:b] if r]))
+        return fits(_pack(sized, [r for r in rows[a:b] if r], [k for k, r in zip(items[a:b], rows[a:b]) if r]))
 
     def most(start: int, low: int, high: int) -> int:   # the last end in low..high that fits, low's known to
         while low < high:
@@ -725,8 +761,10 @@ def share_rows(s: dict, details=None) -> list[list | None]:
     return rows
 
 
-def _pack(s: dict, rows: list[list]) -> str:
-    """A set's name, note and photos, and these rows (share_rows'), as a share code."""
+def _pack(s: dict, rows: list[list], keys: list[str] | None = None) -> str:
+    """A set's name, note and photos, and these rows (share_rows'), as a share code; with keys (each row's product
+    key), the marks on its photos of those products too (issue #346), as "m": [[photo, row, x, y], ...], by place in
+    "p" and "i"."""
     doc = {"v": 1, "n": s.get("name", ""), "i": rows}
     if any(len(r) > 6 and r[6] for r in rows):   # a set with a product for adults in it: its viewer is asked first
         doc["a"] = 1
@@ -734,6 +772,11 @@ def _pack(s: dict, rows: list[list]) -> str:
         doc["d"] = s["note"]
     if s.get("photos"):
         doc["p"] = s["photos"]
+        row_of = {k: n for n, k in enumerate(keys or [])}
+        marks = [[p, row_of[k], x, y] for p, url in enumerate(s["photos"])
+                 for k, x, y in (s.get("marks") or {}).get(url, []) if k in row_of]
+        if marks:
+            doc["m"] = marks
     raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode()
     packer = zlib.compressobj(9, zlib.DEFLATED, -15)   # raw deflate: what a browser's DecompressionStream reads
     return CODE_PREFIX + _b64(packer.compress(raw) + packer.flush())
@@ -744,8 +787,8 @@ def share_code(s: dict, details=None) -> tuple[str, int]:
     name, creator, store page and picture), packed. details(key) fills in what the set doesn't remember of a
     product. Products of your own (Local) aren't shared, and neither is one Hoard knows nothing about. Returns the
     code and how many products are in it."""
-    rows = [r for r in share_rows(s, details) if r]
-    return _pack(s, rows), len(rows)
+    pairs = [(k, r) for k, r in zip(s.get("items", []), share_rows(s, details)) if r]
+    return _pack(s, [r for _, r in pairs], [k for k, _ in pairs]), len(pairs)
 
 
 def share_link(code: str) -> str:
@@ -782,8 +825,8 @@ def from_code(text) -> dict:
         raise ValueError("That set code is damaged, or cut short: copy all of it, and try again.") from None
     if not isinstance(doc, dict) or doc.get("v") != 1 or not isinstance(doc.get("i"), list):
         raise ValueError("That set code was made by a newer Hoard, or isn't one. Update Hoard, then try again.")
-    items, products = [], {}
-    for row in doc["i"][:MAX_ITEMS]:
+    items, products, row_keys = [], {}, {}
+    for n, row in enumerate(doc["i"][:MAX_ITEMS]):
         if not isinstance(row, list):
             continue
         row = (row + ["", "", "", "", "", "", ""])[:7]
@@ -792,16 +835,22 @@ def from_code(text) -> dict:
         if not p or p["store"] not in STORES:
             continue
         key = tag_key(p["store"], p["name"])
+        row_keys[n] = key
         if key not in products:
             items.append(key)
             products[key] = p
     name = clean_name(doc.get("n")) or "A shared set"
     if not items:
         raise ValueError("That set code has no products in it.")
-    photos = [u for u in (photo_url(x) for x in (doc.get("p") or [])[:MAX_PHOTOS]) if u] \
-        if isinstance(doc.get("p"), list) else []
-    return {"name": name, "note": clean_note(doc.get("d")), "photos": list(dict.fromkeys(photos)), "items": items,
-            "products": products}
+    given = [photo_url(x) for x in doc["p"][:MAX_PHOTOS]] if isinstance(doc.get("p"), list) else []
+    photos = list(dict.fromkeys(u for u in given if u))
+    marks: dict[str, list] = {}   # (issue #346: by the places in "p" and "i" they were packed with)
+    for m in (doc.get("m") if isinstance(doc.get("m"), list) else [])[:MAX_PHOTOS * MAX_MARKS]:
+        if isinstance(m, list) and len(m) == 4 and all(isinstance(v, int) and not isinstance(v, bool) for v in m) \
+                and 0 <= m[0] < len(given) and given[m[0]] and m[1] in row_keys:
+            marks.setdefault(given[m[0]], []).append([row_keys[m[1]], m[2], m[3]])
+    return {"name": name, "note": clean_note(doc.get("d")), "photos": photos, "items": items,
+            "products": products, "marks": clean_marks(marks, photos, items)}
 
 
 def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:

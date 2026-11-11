@@ -5349,7 +5349,7 @@ function setExtraHTML(s) {
     (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
   if (saved && !editing) {
     return (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
-      (photos.length ? links(photos, false) : `<p class="none">${esc(tr("No photos."))}</p>`) +
+      (photos.length ? setPhotosHTML(s) : `<p class="none">${esc(tr("No photos."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
   }
   return `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
@@ -5359,6 +5359,119 @@ function setExtraHTML(s) {
     `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div>` +
     `<div class="row"><button class="primary sm" data-setx="save">${esc(tr("Save"))}</button>` +
     (saved ? `<button class="ghost sm" data-setx="cancel">${esc(tr("Cancel"))}</button>` : "") + `</div>`;
+}
+/* What's in a set's photos (issue #346): each photo with a numbered mark where each of its products is, and the same
+   numbers in a list beside it, each with the product's picture and name. A mark opens the product (its details, where
+   this page has its tile; else its store page). Places are kept as 0 to 1000 of the photo's width and height, so the
+   marks line up at whatever size it's shown. The photo comes through Hoard (/setphoto), which fetches it from its
+   photo site: Hoard's pages load pictures only from Hoard. */
+const photoSrc = (s, n) => keyed(`/setphoto/${encodeURIComponent(s.id)}/${n}?p=${(s.photo_p || [])[n] || ""}`);
+// A set's products marked on one of its photos, in order: [{n, row, x, y}], each with its row in the set.
+function photoMarks(s, url) {
+  const rows = new Map(s.items.map(i => [i.key, i]));
+  return ((s.marks || {})[url] || []).filter(m => rows.has(m[0])).map((m, i) => ({ n: i + 1, row: rows.get(m[0]), x: m[1], y: m[2] }));
+}
+// A mark on a photo: its number, where it is, and what it is when pointed at or focused.
+function photoMarkHTML(m, tag = "a", extra = "") {
+  const where = `left:${m.x / 10}%;top:${m.y / 10}%`, label = tr("{0}: {1}, on {2}", m.n, m.row.name, STORE_NAMES[m.row.store] || m.row.store);
+  return `<${tag} class="pmark" style="${where}" data-pmark="${esc(m.row.key)}" aria-label="${esc(label)}"` +
+    (tag === "a" && m.row.url ? ` href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer"` : "") + `${extra}>${m.n}` +
+    `<span class="pcard" aria-hidden="true">${m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="">` : ""}<b translate="no">${esc(m.row.name)}</b></span></${tag}>`;
+}
+// A set's photos, each with what's marked on it and a numbered list of those, and Mark products on it...
+function setPhotosHTML(s) {
+  return `<div class="setphotos-shown">` + s.photos.map((u, n) => {
+    const marks = photoMarks(s, u);
+    return `<figure class="setphoto"><div class="setphoto-pic"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}" loading="lazy">` +
+        marks.map(m => photoMarkHTML(m)).join("") + `</div><figcaption>` +
+      (marks.length ? `<ol class="pmarks">` + marks.map(m => `<li><span class="pnum" aria-hidden="true">${m.n}</span>` +
+        (m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="" loading="lazy">` : `<span class="pnopic"></span>`) +
+        `<span class="pname"><b translate="no">${esc(m.row.name)}</b><small>${esc(STORE_NAMES[m.row.store] || m.row.store)}</small></span>` +
+        (m.row.url ? `<a class="linkish" href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer" data-pmark="${esc(m.row.key)}">${esc(tr("Open"))}</a>` : "") +
+        `</li>`).join("") + `</ol>` : `<p class="none">${esc(tr("Nothing marked on it yet."))}</p>`) +
+      `<div class="row"><button class="ghost sm" data-setx="markphoto" data-n="${n}">${esc(tr(marks.length ? "Change what's marked..." : "Mark products on it..."))}</button>` +
+      `<a class="linkish" href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(new URL(u).hostname)}</a></div>` +
+      `</figcaption></figure>`;
+  }).join("") + `</div>`;
+}
+// A mark (or its line in the list) opens its product's details, where this page has its tile; else its link opens.
+document.addEventListener("click", e => {
+  const m = e.target.closest ? e.target.closest(".setphoto [data-pmark]") : null;
+  const s = m && SETS && SETS.sets.find(x => x.id === state.set);
+  const row = s && s.items.find(i => i.key === m.dataset.pmark);
+  const tile = row && (row.lib != null ? document.querySelector(`#grid .slot[data-key="${CSS.escape(String(row.lib))}"]`)
+    : row.download != null ? document.querySelector(`#grid .slot[data-id="${CSS.escape(String(row.download))}"]`) : null);
+  if (tile) { e.preventDefault(); tile.click(); }
+});
+/* Mark products on a set's photo (issue #346): choose a product, then click where it is on the photo (or, by
+   keyboard, Place puts it in the middle); a chosen mark moves with the arrow keys (Shift for bigger steps) and comes
+   off with Delete. Nothing's saved until Save. */
+async function markPhoto(s, n) {
+  const url = s.photos[n];
+  let marks = ((s.marks || {})[url] || []).map(m => [...m]), placing = null;
+  const d = document.createElement("dialog");
+  d.className = "ask pmark-dlg";
+  d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Mark products on this photo"))}</b></p>` +
+    `<p class="hint">${esc(tr("Choose a product, then click where it is on the photo. A chosen mark moves with the arrow keys, and Delete takes it off."))}</p>` +
+    `<div class="pm-body"><div class="setphoto-pic pm-edit"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}"></div>` +
+    `<ol class="pm-list"></ol></div><p class="pm-status" role="status" aria-live="polite"></p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Save"))}</button></div></form>`;
+  document.body.appendChild(d);
+  const pic = d.querySelector(".pm-edit"), list = d.querySelector(".pm-list"), status = d.querySelector(".pm-status");
+  const rows = s.items;   // (your own, in Local, can be marked too; they aren't shared)
+  // A place on the photo, as a whole number from 0 to 1000.
+  const clamp = v => Math.max(0, Math.min(1000, Math.round(v)));
+  // Draw the marks and the list as they are now (and put the focus back on a mark just moved).
+  const draw = focus => {
+    pic.querySelectorAll(".pmark").forEach(x => x.remove());
+    marks.forEach((m, i) => {
+      const row = rows.find(r => r.key === m[0]);
+      if (row) pic.insertAdjacentHTML("beforeend", photoMarkHTML({ n: i + 1, row, x: m[1], y: m[2] }, "button", ` type="button"`));
+    });
+    list.innerHTML = rows.map(r => {
+      const at = marks.findIndex(m => m[0] === r.key);
+      return `<li class="${placing === r.key ? "placing" : ""}"><span class="pnum" aria-hidden="true">${at < 0 ? "" : at + 1}</span>` +
+        `<span class="pname" translate="no">${esc(r.name)}</span>` +
+        `<button type="button" class="ghost sm" data-pm-place="${esc(r.key)}" aria-pressed="${placing === r.key}">${esc(tr(at < 0 ? "Place" : "Move"))}</button>` +
+        (at < 0 ? "" : `<button type="button" class="linkish" data-pm-off="${esc(r.key)}">${esc(tr("Take off"))}</button>`) + `</li>`;
+    }).join("");
+    if (focus) { const b = pic.querySelector(`.pmark[data-pmark="${CSS.escape(focus)}"]`); if (b) b.focus(); }
+  };
+  // Put a product's mark at a place (a new one goes last, so its number is the next).
+  const put = (key, x, y) => {
+    const m = marks.find(m => m[0] === key);
+    if (m) { m[1] = clamp(x); m[2] = clamp(y); } else if (marks.length < 30) marks.push([key, clamp(x), clamp(y)]);
+    else { status.textContent = tr("A photo has up to 30 products marked on it."); return; }
+    placing = null; draw(key);
+    status.textContent = tr("{0} is marked.", rows.find(r => r.key === key).name);
+  };
+  d.addEventListener("click", e => {
+    const place = e.target.closest("[data-pm-place]"), off = e.target.closest("[data-pm-off]");
+    if (place) {
+      if (e.detail === 0) { const m = marks.find(m => m[0] === place.dataset.pmPlace); put(place.dataset.pmPlace, m ? m[1] : 500, m ? m[2] : 500); return; }
+      placing = placing === place.dataset.pmPlace ? null : place.dataset.pmPlace; draw();
+      status.textContent = placing ? tr("Now click where it is on the photo.") : "";
+      return;
+    }
+    if (off) { marks = marks.filter(m => m[0] !== off.dataset.pmOff); draw(); return; }
+    if (placing && e.target.closest(".pm-edit") && !e.target.closest(".pmark")) {
+      const box = pic.getBoundingClientRect();
+      put(placing, (e.clientX - box.left) / box.width * 1000, (e.clientY - box.top) / box.height * 1000);
+    }
+  });
+  d.addEventListener("keydown", e => {
+    const b = e.target.closest(".pmark"); if (!b) return;
+    const m = marks.find(m => m[0] === b.dataset.pmark); if (!m) return;
+    const step = e.shiftKey ? 50 : 10, move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (move) { e.preventDefault(); put(m[0], m[1] + move[0], m[2] + move[1]); }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); marks = marks.filter(x => x !== m); draw(); }
+  });
+  draw();
+  const yes = await new Promise(resolve => {
+    d.addEventListener("close", () => { resolve(d.returnValue === "yes"); d.remove(); }, { once: true });
+    d.showModal();
+  });
+  if (yes && await changeSets({ action: "marks", id: s.id, photo: url, marks })) toast(tr("Saved what's marked on the photo."));
 }
 // Start changing a set's note and photos (none saved yet: as they are).
 const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", photos: [...s.photos] }; };
@@ -5754,6 +5867,7 @@ async function setAct(e) {
     return wishChanged();
   }
   if (act === "addlinks") return addByLinks(s);
+  if (act === "markphoto") return markPhoto(s, +b.dataset.n);
   if (act === "project") return newProjectWithSet(s);
   if (act === "share") shareSet(s);
   else if (act === "download") { const keys = notDownloaded([s]); if (keys.length) T.download(keys); }

@@ -600,6 +600,29 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .sv-photos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .sv-photos img, .sv-photos .none { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px;
   border: 1px solid var(--seam); background: var(--stone); }
+/* a photo with what's in it marked (issue #346): numbered marks placed as a share of the photo's width and height, so
+   they line up at any size; pointed at or focused, a mark shows its product; the same numbers listed beside it */
+.sv-photos li.sv-marked { grid-column: 1 / -1; }
+.sv-marked figure { margin: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .sv-marked figure { grid-template-columns: 1fr; } }
+.sv-photo-pic { position: relative; line-height: 0; }
+.sv-photos .sv-photo-pic img.photo { aspect-ratio: auto; height: auto; object-fit: contain; }
+.sv-pmark { position: absolute; transform: translate(-50%, -50%); z-index: 2; width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 999px; border: 2px solid #fff; background: var(--gold); color: var(--gold-ink); font-weight: 800; font-size: 13px; line-height: 1;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .45); text-decoration: none; }
+.sv-pmark:focus-visible { outline: 3px solid var(--bone); outline-offset: 2px; }
+.sv-pcard { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); display: none; gap: 8px; align-items: center;
+  width: max-content; max-width: 220px; padding: 6px 10px 6px 6px; border-radius: 10px; background: rgb(20 16 12 / .92); color: #F4EDE3;
+  line-height: 1.3; font-size: .85rem; box-shadow: 0 3px 12px rgba(0, 0, 0, .4); pointer-events: none; }
+.sv-photos .sv-pcard img { width: 38px; height: 38px; aspect-ratio: 1; border-radius: 7px; border: 0; }
+.sv-pmark:is(:hover, :focus-visible) .sv-pcard { display: flex; }
+.sv-pmarks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sv-pmarks li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sv-photos .sv-pmarks img, .sv-photos .sv-pmarks .pic.none { width: 44px; height: 44px; flex: none; border-radius: 8px; }
+.sv-pnum { flex: none; width: 24px; height: 24px; border-radius: 999px; display: grid; place-items: center; background: var(--gold);
+  color: var(--gold-ink); font-weight: 800; font-size: .8rem; }
+.sv-pmarks .sv-text { flex: 1; min-width: 0; display: grid; }
+.sv-pmarks .sv-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the products as tiles, as many to a row as fit */
 .sv-items { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); }

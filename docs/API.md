@@ -79,7 +79,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/refresh` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
 | POST | `/api/routine/seen` | key | yes | — | object |
 | GET | `/api/sets` | key | no | — | object |
-| POST | `/api/sets` | key | yes | `action: string`, `code: string`, `data: string`, `id: string`, `items: array`, `key: string`, `links: array`, `photos: array`, `short: string` | object |
+| POST | `/api/sets` | key | yes | `action: string`, `code: string`, `data: string`, `id: string`, `items: array`, `key: string`, `links: array`, `marks: array`, `photo: string`, `photos: array`, `short: string` | object |
 | GET | `/api/settings` | key | no | — | object |
 | POST | `/api/settings` | key | yes | — | object |
 | GET | `/api/setup` | key | no | — | object |
@@ -161,6 +161,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/index.html` | public | no | — | text/html |
 | GET | `/inside/*` | key | no | — | application/octet-stream |
 | GET | `/setcover/*` | key | no | — | application/octet-stream |
+| GET | `/setphoto/*` | key | no | — | application/octet-stream |
 | GET | `/setpic/*` | key | no | — | application/octet-stream |
 | GET | `/styleguide` | public | no | — | text/html |
 | GET | `/thumb/*` | key | no | — | application/octet-stream |
