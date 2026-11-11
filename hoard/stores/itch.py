@@ -153,7 +153,7 @@ def dl_sync_itch(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
             except dl.NotLoggedIn:
                 raise
             except Exception as e:
-                report.failed.append(f"itch.io: {creator} / {name} - {e}")
+                report.failed_product("itch", name, f"itch.io: {creator} / {name} - {e}", str(e))
     finally:
         sess.headers.pop("Authorization", None)   # the key only lives for this sync
         sess.close()
@@ -214,7 +214,7 @@ def dl__itch_project(sess, k: dict, g: dict, name: str, creator: str, man: dl.St
         except dl.NotLoggedIn:
             raise
         except Exception as e:
-            report.failed.append(f"itch.io: {creator} / {name} / {fname} - {e}")
+            report.failed_product("itch", name, f"itch.io: {creator} / {name} / {fname} - {e}", f"{fname}: {e}")
             continue
         if prev:
             rec["files"].pop(prev, None)

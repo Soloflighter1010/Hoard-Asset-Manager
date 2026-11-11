@@ -1131,7 +1131,7 @@ class Jobs:
                                    else "Checked: no updates") + (f" ({total} in all)" if total != found and not keys else "")
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
-            AssetUpdates().after_download(report.got, report.failed, report.got_files)
+            AssetUpdates().after_download(report.got, report.failed, report.got_files, report.failed_keys)
             for k in set(keys or []) | report.got:   # what they have that isn't on disk is read again, next time asked
                 self.listed.pop(k, None)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}

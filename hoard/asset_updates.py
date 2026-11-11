@@ -38,7 +38,7 @@ class AssetUpdates:
     @staticmethod
     def empty() -> dict:
         """Nothing checked yet."""
-        return {"checked": {}, "items": {}}
+        return {"checked": {}, "items": {}, "failed": {}}
 
     def load(self) -> dict:
         """What was found, cleaned; empty when there's no file or it can't be read (it's only ever a hint)."""
@@ -65,6 +65,11 @@ class AssetUpdates:
             if files:
                 out["items"][key] = {"store": e["store"], "name": clean_text(e.get("name"), 300) or "",
                                      "creator": clean_text(e.get("creator"), 200) or "", "files": files}
+        failed = raw.get("failed") if isinstance(raw.get("failed"), dict) else {}
+        for key, e in list(failed.items())[:MAX_PRODUCTS]:   # (issue #334: a download of it that didn't finish)
+            if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(e, dict) and e.get("store") in DOWNLOADABLE:
+                out["failed"][key] = {"store": e["store"], "why": clean_text(e.get("why"), 300) or "",
+                                      "at": clean_text(e.get("at"), 40) or ""}
         return out
 
     def save(self, data: dict) -> None:
@@ -90,13 +95,22 @@ class AssetUpdates:
             self.save(data)
             return len(data["items"])
 
-    def after_download(self, got: set, failed: list[str], got_files: set | None = None) -> None:
+    def after_download(self, got: set, failed: list[str], got_files: set | None = None,
+                       failed_keys: dict | None = None) -> None:
         """Take what came off the list. With got_files ((tag_key, file) saved), each update's files that came are
         taken off it, and the update once none are left: a file left out when choosing, or not reached because the
-        run stopped, stays an update. Without it (older callers), a product with files saved and none failing is."""
+        run stopped, stays an update. Without it (older callers), a product with files saved and none failing is.
+        failed_keys (downloader.Report's): the products a file of which couldn't be downloaded, kept with why until
+        a download of them saves a file and fails none (issue #334)."""
         with _lock:
             data = self.load()
             changed = False
+            for k in [k for k in data["failed"] if k in got and k not in (failed_keys or {})]:
+                del data["failed"][k]
+                changed = True
+            for k, e in (failed_keys or {}).items():
+                data["failed"][k] = {**e, "at": now_iso()}
+                changed = True
             for k, e in list(data["items"].items()):
                 if k not in got:
                     continue

@@ -20,6 +20,28 @@ function productIcon(path) {
 function adultMark() {
   return productElement("span", { class: "adult-mark", title: tr("For adults (18+)"), "aria-hidden": "true", translate: "no" }, "18+");
 }
+// What's wrong with a product (issue #334: the server's "problems"), in a few words each: for its tile's error mark,
+// what it says on hover, and its spoken label.
+function problemWords(list) {
+  return (list || []).map(p => p.kind === "folder" ? tr("Its folder isn't there any more")
+    : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk" : "{0} files are missing on disk", p.n)
+    : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded" : "{0} files changed since they were downloaded", p.n)
+    : p.kind === "failed" ? tr("Its last download didn't finish") : "").filter(Boolean);
+}
+// ...and in its details, with what to do about it.
+function problemAdvice(p) {
+  return p.kind === "folder" ? tr("Its folder isn't there any more. If you moved it, take it out of Local and add it again from where it is now.")
+    : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk. Download it again, or deal with it in Check downloads."
+                                          : "{0} files are missing on disk. Download it again, or deal with them in Check downloads.", p.n)
+    : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded. Check downloads keeps it as it is or downloads it again."
+                                          : "{0} files changed since they were downloaded. Check downloads keeps them as they are or downloads them again.", p.n)
+    : tr("Its last download didn't finish ({0}). Download it again.", p.why || tr("no reason given"));
+}
+// The error mark on a product's tile.
+function problemMark(words) {
+  return productElement("span", { class: "problem-mark", title: words.join(". ") + ".", "aria-hidden": "true" },
+    productIcon("M8 2.2 14.3 13.3H1.7zM8 6.4v3.4M8 11.6v.1"));
+}
 // Who says a product is for adults, in words: you, its store, or its tags and name.
 const ADULT_SAYS = { you: "For adults: you marked it.", store: "For adults: its store says so.", tags: "For adults: its tags or name say so." };
 // The only bridge for existing escaped HTML sections. Do not pass raw product data or new templates here.
@@ -52,12 +74,14 @@ function productNotch(store, others = []) {
 // One tile for both views. The view model owns the differences in badges, file sizes and available actions.
 function productTile(a, model) {
   // (for adults, issues #311 and #338: said in its label, marked 18+, and its picture blurred unless you chose to see them)
-  const button = productElement("button", { draggable: "true", class: `slot ${model.store}${model.count > 1 ? " stacked" : ""}${model.wrapped ? " wrapped" : ""}${a.adult ? " adult" : ""}`,
-    "aria-label": [...model.description, a.adult && tr("for adults (18+)")].filter(Boolean).join(", "), "aria-current": model.current ? "true" : null });
+  const wrong = problemWords(a.problems);   // (issue #334: an error mark, and said in its label)
+  const button = productElement("button", { draggable: "true", class: `slot ${model.store}${model.count > 1 ? " stacked" : ""}${model.wrapped ? " wrapped" : ""}${a.adult ? " adult" : ""}${wrong.length ? " has-problem" : ""}`,
+    "aria-label": [...model.description, a.adult && tr("for adults (18+)"), ...wrong].filter(Boolean).join(", "), "aria-current": model.current ? "true" : null });
   button.dataset[model.key] = model.id;
   const art = productElement("span", { class: "art" }, productPicture(a, model.src, model.type),
     productNotch(model.store, model.others), productElement("i", { class: "tick", "aria-hidden": "true" }));
   if (a.adult) art.append(adultMark());
+  if (wrong.length) art.append(problemMark(wrong));
   if (a.your_note) art.append(productElement("span", { class: "note-mark", title: tr("Has a note"), "aria-hidden": "true" },
     productIcon("M3.5 2.5h6.2l2.8 2.8v8.2h-9zM6 7.5h4M6 10h4")));
   if (model.downloaded) art.append(productElement("span", { class: "ondisk-mark", title: tr("Downloaded"), "aria-hidden": "true" },
@@ -108,11 +132,13 @@ function renderProductDetail(a, model, sections, focus = true) {
   if (a.adult) grown.append(productElement("span", { class: "adult-chip", translate: "no" }, "18+"), " ", tr(ADULT_SAYS[a.adult_from] || ADULT_SAYS.tags), " ");
   if (a.tag_key) grown.append(productElement("button", { class: "linkish", type: "button", "data-adult-mark": a.adult ? "not_adult" : "adult", "data-key": a.tag_key },
     tr(a.adult ? "It isn't for adults" : "Mark as 18+")));
+  const wrong = productElement("ul", { class: "d-problems" });   // what's wrong with it, and what to do (issue #334)
+  for (const p of a.problems || []) wrong.append(productElement("li", {}, problemMark([]), problemAdvice(p)));
   keepTileInPlace(document.querySelector('#grid .slot[aria-current="true"]'), () => {
     detail.replaceChildren(productElement("button", { class: "x", "data-act": "close", "aria-label": tr("Close details") }, "×"),
       productElement("div", { class: `d-art ${model.store}${a.adult ? " adult" : ""}`, title: a.adult && blursAdult() ? tr("Blurred: for adults. Click to show it.") : null },
         productPicture(a, model.src, model.type, false)),
-      productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, facts, grown, legacyFragment(sections));
+      productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, ...(wrong.children.length ? [wrong] : []), facts, grown, legacyFragment(sections));
     detail.classList.add("open"); document.body.classList.add("panel-open");
     $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
     if (focus) detail.querySelector(".x").focus({ preventScroll: true });

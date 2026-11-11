@@ -191,6 +191,12 @@ from when that shop isn't in the user's list (it's only added when the user conf
   `/api/assets` adds each asset's `update` files and `updates_checked`; `/api/library` an `update` flag.
   `POST /api/download` and `/api/check-updates` take `keys` (tag keys), which `skip_product()` limits the sync
   to; a download takes a product off the list once a file of its is saved and none of its files failed.
+- Problems (issue #334): `Report.failed_product()` keeps the products a file of which couldn't be downloaded, with
+  why, and `AssetUpdates.after_download()` holds them in `asset-updates.json`'s `"failed"` until a download of them
+  saves a file and fails none. `downloads.problems()` puts those together with files missing on disk, files the last
+  check found changed (`last_integrity()`) and a Local folder that's gone (`build_index()`'s `folder_gone`, kept
+  shown rather than dropped as an all-gone download is), and `/api/assets` and `/api/library` send each product's
+  `problems` for its tile's error mark, its details and Downloads' Problems view.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
   `catalog.json`, `tags.json` and each product's `asset.json`. With nothing downloaded, an existing
   `catalog.json` and `tags.json` are rewritten empty, so they never go on listing what's gone; a folder

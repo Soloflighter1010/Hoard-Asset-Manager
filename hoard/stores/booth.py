@@ -334,7 +334,7 @@ def dl_sync_booth(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
                         except dl.NotLoggedIn:
                             raise
                         except Exception as e:
-                            report.failed.append(f"Booth: {creator} / {name} / {f['name']} - {e}")
+                            report.failed_product("booth", name, f"Booth: {creator} / {name} / {f['name']} - {e}", f"{f['name']}: {e}")
                             continue
                         if prev:
                             rec["files"].pop(prev, None)

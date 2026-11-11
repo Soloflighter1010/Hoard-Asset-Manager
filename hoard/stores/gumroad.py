@@ -231,7 +231,7 @@ def dl__gumroad_page_images(gr, content: dict, rec: dict, folder: dl.Path, name:
             dl.with_retries(report, stem, lambda src=src, staged=staged: dl.egress.download(
                 public, src, staged, ["public-files.gumroad.com"], desc=stem, progress=dl.downloading(stem)))
         except Exception as e:
-            report.failed.append(f"Gumroad: {creator} / {name} / {stem} - {e}")
+            report.failed_product("gumroad", name, f"Gumroad: {creator} / {name} / {stem} - {e}", f"{stem}: {e}")
             continue
         ext = dl.picture_extension(staged)
         if not ext:   # not a picture after all: not kept
@@ -293,7 +293,8 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
         except dl.NotLoggedIn:
             raise
         except Exception as e:
-            report.failed.append(f"Gumroad: {name} - couldn't open download page: {e}")
+            report.failed_product("gumroad", name, f"Gumroad: {name} - couldn't open download page: {e}",
+                                  f"couldn't open its download page: {e}")
             continue
 
         props = page.get("props") or {}
@@ -345,7 +346,7 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
                     gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, dl.STORE_SITES["gumroad"],
                     desc=relpath, progress=dl.downloading(relpath)))
             except Exception as e:
-                report.failed.append(f"Gumroad: {label} - {e}")
+                report.failed_product("gumroad", name, f"Gumroad: {label} - {e}", f"{relpath}: {e}")
                 continue
             dl.log(f"    {'updated' if is_update else 'saved'}: {relpath}")
             (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")

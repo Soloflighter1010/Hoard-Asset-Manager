@@ -173,7 +173,10 @@ def get_api_library(self, path, body, query):
     app.loading.finished("library")
     app.MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
     marks, unlocked = app.MarkStore().view(), self._unlocked()
-    updates = app.AssetUpdates().load()["items"]
+    checked = app.AssetUpdates().load()
+    updates = checked["items"]
+    from ..downloads import problems
+    wrong = problems(srv.index(stale_ok=True)["assets"], app.last_integrity(), checked["failed"])   # (issue #334)
     cutoff = app.new_cutoff(srv.cfg)
     first_read = {s: (info.get("first_read") or "") for s, info in stores.items()}
     shown = []
@@ -182,6 +185,7 @@ def get_api_library(self, path, body, query):
         i["new"] = bool(cutoff and added and added >= cutoff and added > first_read.get(i["store"], ""))
         i["on_disk"] = on_disk.get(i["tag_key"])
         i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
+        i["problems"] = wrong.get(i["tag_key"], [])   # what's wrong with it, for its tile's error mark (issue #334)
         i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                      else "archived" if app.is_archived(i, marks) else None)
         i["apart"] = i["tag_key"] in marks["apart"]   # "Not a copy": never stacked (issue #217)

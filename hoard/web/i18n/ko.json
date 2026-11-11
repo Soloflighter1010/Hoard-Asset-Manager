@@ -2507,5 +2507,21 @@
  "Ran out": "만료됨",
  "Its link ran out on {0}. Share... makes a new one.": "링크가 {0}에 만료되었습니다. '공유...'에서 새 링크를 만들 수 있습니다.",
  "Refreshing this wishlist after what Hoard is doing now. See Tasks.": "지금 하는 작업이 끝나면 이 위시리스트를 빠르게 새로 고칩니다. 작업에서 확인할 수 있습니다.",
- "Refreshing the start of this wishlist. See Tasks for how it's going.": "이 위시리스트의 앞부분을 새로 고치고 있습니다. 진행 상황은 작업에서 확인할 수 있습니다."
+ "Refreshing the start of this wishlist. See Tasks for how it's going.": "이 위시리스트의 앞부분을 새로 고치고 있습니다. 진행 상황은 작업에서 확인할 수 있습니다.",
+ "Its folder isn't there any more": "폴더가 더 이상 없어요",
+ "1 file is missing on disk": "파일 1개가 디스크에 없어요",
+ "{0} files are missing on disk": "파일 {0}개가 디스크에 없어요",
+ "1 file changed since it was downloaded": "파일 1개가 다운로드한 뒤에 바뀌었어요",
+ "{0} files changed since they were downloaded": "파일 {0}개가 다운로드한 뒤에 바뀌었어요",
+ "Its last download didn't finish": "지난 다운로드가 끝까지 되지 않았어요",
+ "Its folder isn't there any more. If you moved it, take it out of Local and add it again from where it is now.": "폴더가 더 이상 없어요. 옮겼다면 로컬에서 빼고 지금 있는 곳에서 다시 추가하세요.",
+ "1 file is missing on disk. Download it again, or deal with it in Check downloads.": "파일 1개가 디스크에 없어요. 다시 다운로드하거나 다운로드 확인에서 처리하세요.",
+ "{0} files are missing on disk. Download it again, or deal with them in Check downloads.": "파일 {0}개가 디스크에 없어요. 다시 다운로드하거나 다운로드 확인에서 처리하세요.",
+ "1 file changed since it was downloaded. Check downloads keeps it as it is or downloads it again.": "파일 1개가 다운로드한 뒤에 바뀌었어요. 다운로드 확인에서 그대로 두거나 다시 다운로드할 수 있어요.",
+ "{0} files changed since they were downloaded. Check downloads keeps them as they are or downloads them again.": "파일 {0}개가 다운로드한 뒤에 바뀌었어요. 다운로드 확인에서 그대로 두거나 다시 다운로드할 수 있어요.",
+ "Its last download didn't finish ({0}). Download it again.": "지난 다운로드가 끝까지 되지 않았어요({0}). 다시 다운로드하세요.",
+ "no reason given": "이유를 알 수 없어요",
+ "Folder gone": "폴더 없음",
+ "Problems": "문제",
+ "Downloads with something wrong: files missing or changed on disk, a download that didn't finish, or a Local folder that's gone. Open one to see what to do.": "문제가 있는 다운로드예요: 디스크의 파일이 없거나 바뀌었거나, 다운로드가 끝나지 않았거나, 로컬 폴더가 없어요. 열면 어떻게 하면 되는지 볼 수 있어요."
 }

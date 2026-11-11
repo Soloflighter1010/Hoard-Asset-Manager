@@ -2507,5 +2507,21 @@
  "Ran out": "期限切れ",
  "Its link ran out on {0}. Share... makes a new one.": "リンクは{0}に期限が切れました。「共有...」で新しいリンクを作れます。",
  "Refreshing this wishlist after what Hoard is doing now. See Tasks.": "今の作業が終わったら、このほしい物リストをクイック更新します。タスクで確認できます。",
- "Refreshing the start of this wishlist. See Tasks for how it's going.": "このほしい物リストの最初の部分を更新しています。進み具合はタスクで確認できます。"
+ "Refreshing the start of this wishlist. See Tasks for how it's going.": "このほしい物リストの最初の部分を更新しています。進み具合はタスクで確認できます。",
+ "Its folder isn't there any more": "フォルダーがもうありません",
+ "1 file is missing on disk": "1個のファイルがディスクにありません",
+ "{0} files are missing on disk": "{0}個のファイルがディスクにありません",
+ "1 file changed since it was downloaded": "1個のファイルがダウンロード後に変わりました",
+ "{0} files changed since they were downloaded": "{0}個のファイルがダウンロード後に変わりました",
+ "Its last download didn't finish": "前回のダウンロードが最後まで終わりませんでした",
+ "Its folder isn't there any more. If you moved it, take it out of Local and add it again from where it is now.": "フォルダーがもうありません。移動した場合は、ローカルから外して、今ある場所からもう一度追加してください。",
+ "1 file is missing on disk. Download it again, or deal with it in Check downloads.": "1個のファイルがディスクにありません。もう一度ダウンロードするか、ダウンロードの確認で対処してください。",
+ "{0} files are missing on disk. Download it again, or deal with them in Check downloads.": "{0}個のファイルがディスクにありません。もう一度ダウンロードするか、ダウンロードの確認で対処してください。",
+ "1 file changed since it was downloaded. Check downloads keeps it as it is or downloads it again.": "1個のファイルがダウンロード後に変わりました。ダウンロードの確認で、そのまま残すか、もう一度ダウンロードできます。",
+ "{0} files changed since they were downloaded. Check downloads keeps them as they are or downloads them again.": "{0}個のファイルがダウンロード後に変わりました。ダウンロードの確認で、そのまま残すか、もう一度ダウンロードできます。",
+ "Its last download didn't finish ({0}). Download it again.": "前回のダウンロードが最後まで終わりませんでした({0})。もう一度ダウンロードしてください。",
+ "no reason given": "理由はわかりません",
+ "Folder gone": "フォルダーなし",
+ "Problems": "問題",
+ "Downloads with something wrong: files missing or changed on disk, a download that didn't finish, or a Local folder that's gone. Open one to see what to do.": "問題のあるダウンロード:ディスク上のファイルがない、変わった、ダウンロードが終わらなかった、ローカルのフォルダーがない。開くと、どうすればよいかがわかります。"
 }

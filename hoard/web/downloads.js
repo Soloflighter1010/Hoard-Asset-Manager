@@ -94,19 +94,23 @@ function render() {
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
-const VIEWS = { downloads: "Downloads", updates: "Asset updates", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
+const VIEWS = { downloads: "Downloads", updates: "Asset updates", problems: "Problems", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
 // The view a download is in (Downloads, Archive, Hidden or Removed).
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
 // Updates: what the last check found, from the Downloads and the Archive (issue #26)
 const hasUpdate = a => !!(a.update && a.update.length);
-// Whether a download belongs in the view shown (Updates and Disk space are views of their own).
+// Problems (issue #334): files missing or changed, a download that didn't finish, a Local folder that's gone.
+const hasProblem = a => !!(a.problems && a.problems.length);
+// Whether a download belongs in the view shown (Updates, Problems and Disk space are views of their own).
 const inView = a => state.view === "updates" ? hasUpdate(a) && a.mark !== "removed"
+  : state.view === "problems" ? hasProblem(a) && a.mark !== "removed"
   : state.view === "space" ? inSpace(a) : viewOf(a) === state.view;
 // The views to choose from, with their counts (Disk space's: the size downloads take).
 function renderViews() {
   const p = DATA.privacy || {}, count = {};
   for (const a of DATA.assets) count[viewOf(a)] = (count[viewOf(a)] || 0) + 1;
   count.updates = DATA.assets.filter(a => hasUpdate(a) && a.mark !== "removed").length;
+  count.problems = DATA.assets.filter(a => hasProblem(a) && a.mark !== "removed").length;
   // How many downloads a view has.
   const n = v => count[v] || 0;
   const onDisk = DATA.assets.filter(takesSpace).reduce((t, a) => t + a.size, 0);   // Disk space: its count is the size
@@ -118,6 +122,7 @@ function renderViews() {
   const bar = $("#viewBar");
   bar.hidden = state.view === "downloads";
   bar.innerHTML = state.view === "updates" ? updatesBar(n("updates")) : state.view === "space" ? spaceBar()
+    : state.view === "problems" ? `<p>${esc(tr("Downloads with something wrong: files missing or changed on disk, a download that didn't finish, or a Local folder that's gone. Open one to see what to do."))}</p>`
     : state.view === "archive" ? `<p>Downloads of what you archived in the Library. Their files stay where they are.</p>`
     : state.view === "removed" ? `<p>Downloads of what you removed from the Library. The files stay on disk until you delete them: open one and choose <b>Delete downloaded files</b>.</p>`
     : state.view === "hidden" ? `<p>Downloads of your hidden items, shown while the hidden library is unlocked. Change your PIN in the Library.</p>
@@ -451,14 +456,14 @@ function otherCopies(a) {
 const slotHTML = a => {
   const n = stackSize.get(a.id) || 0, others = otherCopies(a), store = storeName(a.store);
   const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
-  const [status, statusKind] = a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
+  const [status, statusKind] = a.folder_gone ? [tr("Folder gone"), "bad"] : a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
     : [tr(a.files.length === 1 ? "{0} file, {1}" : "{0} files, {1}", a.files.length, fmtSize(a.size)), ""];
   return productTile(a, { key: "id", id: a.id, current: a.id === openId, store: a.store.toLowerCase(), storeName: store,
     src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0], count: n, others: others.map(o => o.store.toLowerCase()),
     description: [tr("{0}, by {1}, from {2}", a.name, a.creator, store), n > 1 && tr("{0} copies", n),
       also.length && tr("also from {0}", listed(also)), a.your_note && tr("has a note")],
     badges: [n > 1 && { kind: "count", text: `×${n}`, hidden: true }, hasUpdate(a) && { kind: "upd", text: tr("Update") },
-      a.missing && { text: tr("Missing files") }, state.view === "space" && copiesOf(a) && { kind: "upd", text: tr("Copies") }],
+      state.view === "space" && copiesOf(a) && { kind: "upd", text: tr("Copies") }],
     size: state.view === "space" ? fmtSize(a.size) : "", status, statusKind,
     added: shortDay(a.added || (a.modified && new Date(a.modified * 1000).toISOString())),
   });

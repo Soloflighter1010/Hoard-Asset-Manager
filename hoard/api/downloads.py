@@ -227,6 +227,8 @@ def get_api_assets(self, path, body, query):
     needed = srv.needs_view(index)
     from .. import local
     chosen = local.chosen_folders(app.root_dir(srv.cfg))   # Local items with a picture you chose
+    from ..downloads import problems
+    wrong = problems(index["assets"], app.last_integrity(), updates.get("failed"))   # (its error mark: issue #334)
     for a in index["assets"]:
         key = a.get("tag_key")
         mark = ("removed" if key in marks["removed"] else "hidden" if key in marks["hidden"]
@@ -241,7 +243,7 @@ def get_api_assets(self, path, body, query):
                            "store_tags": store_tags.get(key, []), "type": kind, "type_from": known,
                            "your_note": tagdata["notes"].get(key, ""),   # (issue #304; "note" is a Local item's own)
                            "stack_key": stacks.get((str(a["store"]).lower(), a["name"]), stacks.get(key, "")),
-                           "needs": needed.get(a["id"]),
+                           "needs": needed.get(a["id"]), "problems": wrong.get(key, []),
                            "own_picture": a.get("catalog_folder") in chosen,
                            "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
     shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked

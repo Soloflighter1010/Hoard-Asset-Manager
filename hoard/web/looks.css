@@ -173,6 +173,18 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
   background: #b3261e; color: #fff; font: 800 12px/1 var(--body); letter-spacing: .02em; }
 .adult-mark { position: absolute; left: 7px; bottom: 7px; z-index: 2; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
 .d-adult { margin: 10px 0 0; font-size: 13.5px; color: var(--dust); }
+/* Something wrong with a product (issue #334): files missing or changed, a download that didn't finish, a Local
+   folder that's gone. A red mark on its tile, beside its note's (which moves over for it); in its details, a list of
+   what and what to do. */
+.problem-mark { position: absolute; right: 7px; bottom: 7px; z-index: 2; width: 24px; height: 24px; display: grid; place-items: center;
+  border-radius: 7px; background: #b3261e; color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.problem-mark svg { width: 15px; height: 15px; stroke-width: 2; }
+.slot.has-problem .note-mark { right: 36px; }
+.d-problems { list-style: none; margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(179 38 30 / .12);
+  border: 1px solid rgb(179 38 30 / .35); display: grid; gap: 8px; font-size: 13.5px; }
+.d-problems li { display: flex; gap: 9px; align-items: flex-start; }
+.d-problems .problem-mark { position: static; flex: none; width: 20px; height: 20px; border-radius: 6px; box-shadow: none; }
+.d-problems .problem-mark svg { width: 13px; height: 13px; }
 /* A shared set's link (issue #333): on its tile, how long the link still works (gold when it's nearly over, muted
    once it has run out); on its page, the same in words */
 .link-mark { position: absolute; left: 7px; top: 7px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px;

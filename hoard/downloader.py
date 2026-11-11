@@ -101,6 +101,15 @@ class Report:
     got_files: set = field(default_factory=set)       # (tag_key, file) saved in this run, named as a check names it
     # what each product has on its store, read without downloading it (issue #225: to choose from): {tag_key: {...}}
     listed: dict = field(default_factory=dict)
+    # products a file of which couldn't be downloaded, and why (issue #334: said on its tile): {tag_key: {store, why}}
+    failed_keys: dict = field(default_factory=dict)
+
+    def failed_product(self, store: str, name: str, line: str, why: str) -> None:
+        """A file of a product that couldn't be downloaded: line in the task's report, and the product kept with why
+        (asset_updates.AssetUpdates.after_download), so its tile says so until a download of it goes through."""
+        self.failed.append(line)
+        if name:
+            self.failed_keys[tag_key(store, name)] = {"store": store.lower(), "why": why}
 
     def saved(self, store: str, name: str, file: str, *also: str | None) -> None:
         """A file saved: its product, and the file as Check for updates names it, so only what came is taken off
@@ -931,7 +940,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         except Exception as e:
             if tab_closed(e) or page.is_closed():   # not this file's doing: every file after it would fail too
                 raise BrowserClosed(str(e)) from e
-            report.failed.append(f"{store}: {name} / {k} - {e}")
+            report.failed_product(store.lower(), name, f"{store}: {name} / {k} - {e}", f"{label or k}: {e}")
             continue
         target = folder / fname
         if prev:

@@ -3433,7 +3433,7 @@ class CheckingForUpdates(IsolatedTestCase):
         path.write_text('{"items": {"booth:x": {"store": "nowhere", "files": [{"file": "a"}]}, '
                         '"booth:y": {"store": "booth", "files": [{"file": "b", "kind": "odd"}]}}, "checked": [1]}')
         self.assertEqual(AssetUpdates(path).load(), {"checked": {}, "items": {
-            "booth:y": {"store": "booth", "name": "", "creator": "", "files": [{"file": "b", "kind": "new"}]}}})
+            "booth:y": {"store": "booth", "name": "", "creator": "", "files": [{"file": "b", "kind": "new"}]}}, "failed": {}})
         path.write_text("{not json")
         self.assertEqual(AssetUpdates(path).load(), AssetUpdates.empty())
 
