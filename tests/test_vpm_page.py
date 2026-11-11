@@ -244,7 +244,8 @@ class ProjectsPanel(IsolatedTestCase):
         page.locator("#pjFind").wait_for()
         page.wait_for_timeout(300)   # (the list drawn, with its details still open)
         pj_details(page, "Rusk Avatar")
-        page.wait_for_function("() => PJ.about && PJ.about.git")
+        # (the details read again: until then they can say what was read before Git was set up)
+        pj_details(page, "Rusk Avatar").locator(".pj-facts dd", has_text="main · 1 change").wait_for()
         facts = dict(zip(*(pj_details(page, "Rusk Avatar").locator(f".pj-facts {t}").all_inner_texts() for t in ("dt", "dd"))))
         self.assertEqual(facts["Source control"], "main · 1 change")
 

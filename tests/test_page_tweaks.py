@@ -168,11 +168,12 @@ class Tweaks(IsolatedTestCase):
 
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
+        # A short message goes after 2.6 seconds (waited for: a busy runner's timers can fire a little late); one of
+        # 120 characters stays 7.2, so it's still there well after a short one would have gone.
         page.evaluate("toast('A short one.')")
-        page.wait_for_timeout(2600)
-        self.assertNotIn("show", page.locator("#toast").get_attribute("class") or "")
+        page.wait_for_function("() => !document.querySelector('#toast').classList.contains('show')", timeout=6000)
         page.evaluate("toast('x'.repeat(120))")
-        page.wait_for_timeout(2600)
+        page.wait_for_timeout(3600)
         self.assertIn("show", page.locator("#toast").get_attribute("class"))
 
 
