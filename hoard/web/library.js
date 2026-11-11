@@ -152,6 +152,7 @@ function renderStores() {
         ? `<button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>${DATA.itch_key ? "Change API key" : "Add API key"}</button>`
         : signedIn ? "" : `<button class="ghost sm" data-login="${s}" ${busy ? "disabled" : ""}>Sign in</button>`) +
       `<button class="ghost sm" data-refresh="${s}" ${busy ? "disabled" : ""}>Refresh</button>` +
+      (info.source === "import" ? "" : `<button class="ghost sm" data-quick="${s}" ${busy ? "disabled" : ""}>Quick refresh</button>`) +
       (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
       (signedIn ? `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button>` : "") + `</span>` +
@@ -1648,13 +1649,14 @@ viewListen("library", $("#signOutAll"), "click", async () => {
 });
 viewListen("library", $("#storeRows"), "click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");
-  const o = e.target.closest("[data-logout]");
+  const o = e.target.closest("[data-logout]"), q = e.target.closest("[data-quick]");
   const d = e.target.closest("[data-download]");
   if (d) downloadNew([d.dataset.download]);
   else if (o) runJob("/api/logout", [o.dataset.logout]);
   else if (l && l.dataset.login === "itch") openItchKey();
   else if (l) runJob("/api/login", [l.dataset.login]);
   else if (r) runJob("/api/refresh", [r.dataset.refresh]);
+  else if (q) runJob("/api/refresh", [q.dataset.quick], false, { quick: true });   // (one store's start: issue #331)
   else if (i) { importStore = i.dataset.import; $("#importFile").value = ""; $("#importFile").click(); }
 });
 viewListen("library", $("#itchSave"), "click", saveItchKey);

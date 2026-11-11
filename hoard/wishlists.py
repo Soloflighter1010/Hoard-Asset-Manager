@@ -32,6 +32,13 @@ JX_WISHLIST, JX_LIKES, JX_LISTS = "https://jinxxy.com/my/wishlist", "https://jin
 LIST_NAMES = {"booth": "Loved items", "jinxxy-wishlist": "Wishlist", "jinxxy-likes": "Likes"}
 
 
+def wanted(cfg: dict, name: str) -> bool:
+    """Whether a reader reads this list: every list, or only the one a quick refresh of one wishlist names (issue
+    #331: its settings' "_only_list", the list's name as a wishlist keeps it in its "source")."""
+    only = cfg.get("_only_list")
+    return not only or clean_text(name if isinstance(name, str) else "", 60) == only
+
+
 # ----------------------------------------------------------------------------- prices
 
 _AMOUNT = r"\d[\d,]*(?:\.\d+)?"

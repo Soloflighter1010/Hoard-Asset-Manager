@@ -263,11 +263,14 @@ def wish_read_payhip(ctx, cfg, progress) -> list[dict]:
     try:
         out = []
         for shop in wish.payhip_shops(cfg):
+            only, host = cfg.get("_only_list"), wish.urlparse(shop).hostname or shop
+            if only and not only.startswith(f"{host}:"):   # (a quick refresh of another shop's list: issue #331)
+                continue
             url = shop.rstrip("/") + "/b-account/wishlists"
             wish.goto_past_check(page, url, float(cfg.get("payhip", {}).get("check_wait", 60)), progress)
             wish.settle(page, 1000)
             cards = page.evaluate(wish.PAYHIP_JS)["cards"]
-            out.extend(wish._payhip_lists(cards, shop, url, bool(cfg.get("_quick"))))
+            out.extend(x for x in wish._payhip_lists(cards, shop, url, bool(cfg.get("_quick"))) if wish.wanted(cfg, x["list"]))
             progress(f"{wish.urlparse(shop).hostname}: {len(cards)} products")
         return out
     finally:

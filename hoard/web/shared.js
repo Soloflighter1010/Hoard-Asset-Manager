@@ -5314,7 +5314,8 @@ function setHead(s) {
       (s.adult ? `<p class="muted set-adult"><span class="adult-chip" translate="no">18+</span> ${esc(tr(isWish(s)
         ? "Adult: it has products for adults in it." : "Adult: it has products for adults in it. Shared, it asks its viewer's age first."))}</p>` : "") +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
-        `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
+        `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button> · ` +
+        `<button class="linkish" data-setx="quickwish" data-store="${esc(s.source.store)}" data-list="${esc(s.source.list)}">${esc(tr("Quick refresh"))}</button></p>` : "") +
       `<div class="set-main"><button class="primary" data-setx="share">${esc(tr("Share..."))}</button></div>` +
       `<div class="set-quiet" role="group" aria-label="${esc(tr(isWish(s) ? "More for this wishlist" : "More for this set"))}">${quiet.join("")}</div>` +
     `</div></div>` +
@@ -5735,6 +5736,7 @@ async function setAct(e) {
     return;
   }
   if (act === "readwish" || act === "reread") { readWishlists(act === "reread" ? [b.dataset.store] : null); return; }
+  if (act === "quickwish") { readWishlists([b.dataset.store], b.dataset.list); return; }
   if (act === "mix") { mixAndMatch(); return; }
   if (act === "importwish") { importWishlists(); return; }
   if (act === "import") {
@@ -5791,8 +5793,9 @@ async function setAct(e) {
 }
 // Read my wishlists: from each store chosen, in its own signed-in window, as a task (hoard/wishlists.py)
 const WISH_STORES = ["booth", "gumroad", "jinxxy", "payhip"];
-// Read your wishlists from the stores (asking which, unless only names them).
-async function readWishlists(only) {
+// Read your wishlists from the stores (asking which, unless only names them); with list, a quick refresh of that one
+// wishlist on only's store (issue #331): the start of it, the rest kept.
+async function readWishlists(only, list) {
   let stores = only;
   if (!stores) {
     const d = document.createElement("dialog");
@@ -5811,10 +5814,11 @@ async function readWishlists(only) {
     });
     if (!stores.length) return;
   }
-  const r = await apiPost("/api/wishlists/read", { stores });
+  const r = await apiPost("/api/wishlists/read", list ? { stores, list } : { stores });
   if (!r.ok) { toast(r.data.error || "Hoard is busy. Try again when it's done."); return; }
-  toast(r.data.started === "queued" ? "Reading your wishlists after what Hoard is doing now. See Tasks." : "Reading your wishlists. See Tasks for how it's going.");
-  const done = await whenTaskEnds("wishlists");   // then they show as read, without opening them again
+  toast(r.data.started === "queued" ? (list ? "Refreshing this wishlist after what Hoard is doing now. See Tasks." : "Reading your wishlists after what Hoard is doing now. See Tasks.")
+    : list ? "Refreshing the start of this wishlist. See Tasks for how it's going." : "Reading your wishlists. See Tasks for how it's going.");
+  const done = await whenTaskEnds(list ? "quick-wishlist" : "wishlists");   // then they show as read, without opening them again
   await loadSets();
   if (done && done.message) toast(done.message);
 }

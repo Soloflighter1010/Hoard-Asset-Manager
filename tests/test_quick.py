@@ -185,6 +185,13 @@ class Wishlists(IsolatedTestCase):
         self.store.put_wishlists([{"store": "booth", "list": "Loved items", "products": [product(9), product(2)]}])
         self.assertEqual(self.names(), ["Kuromitsu", "Mochi"], "a list read to its end holds what it does now")
 
+    def test_one_list_asked_for(self):
+        """Issue #331: a quick refresh of one wishlist names it to its store's reader, by the name the wishlist keeps."""
+        self.assertTrue(wishlists.wanted({}, "Anything"), "every list, when none is named")
+        self.assertTrue(wishlists.wanted({"_only_list": "Winter"}, "Winter"))
+        self.assertTrue(wishlists.wanted({"_only_list": "Winter"}, " Winter\u200b"), "as the wishlist keeps it")
+        self.assertFalse(wishlists.wanted({"_only_list": "Winter"}, "Summer"))
+
     def test_payhips_lists_cut_at_fifty(self):
         cards = [{"id": f"c{i}", "name": f"Item {i}", "url": f"https://payhip.com/b/c{i}", "list": "Wishlist"} for i in range(70)]
         with mock.patch.object(wishlists, "payhip_products", lambda cs: list(cs)):
@@ -211,6 +218,32 @@ class Wishlists(IsolatedTestCase):
             browser.close()
         self.assertEqual([x["name"] for x in loved["products"]], [f"Item {i}" for i in range(1, 41)], "two pages of three")
         self.assertIs(loved.get("partial"), True)
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_booths_one_list(self):
+        """Issue #331: asked for Loved items alone, Booth's reader reads it and goes no further; asked for a list of
+        your own, it doesn't read Loved items first."""
+        from playwright.sync_api import sync_playwright
+        from tests.test_wishlists import BoothPages
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            ctx = browser.new_context()
+            asked = []
+
+            def route(r):
+                asked.append(r.request.url)
+                if r.request.url.startswith(wishlists.BOOTH_WISHES):
+                    r.fulfill(status=200, content_type="text/html; charset=utf-8", body=BoothPages.PAGE)
+                else:
+                    r.abort()
+            ctx.route("**/*", route)
+            lists = wishlists.read_booth(ctx, {"request_delay": 0, **QUICK, "_only_list": "Loved items"}, lambda m: None)
+            self.assertEqual([x["list"] for x in lists], ["Loved items"])
+            pages = len(asked)
+            lists = wishlists.read_booth(ctx, {"request_delay": 0, **QUICK, "_only_list": "Not there"}, lambda m: None)
+            browser.close()
+        self.assertEqual(lists, [])
+        self.assertEqual(len(asked) - pages, 1, "only the page that lists your lists")
 
 
 class NoBrowser:

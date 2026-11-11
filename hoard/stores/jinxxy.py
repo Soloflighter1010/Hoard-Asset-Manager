@@ -896,11 +896,17 @@ def wish_read_jinxxy(ctx, cfg, progress) -> list[dict]:
                 wish.time.sleep(delay)
             return wish.jinxxy_products(cards.values()), list(lists.values()), short
         out = []
-        for url, name in ((wish.JX_WISHLIST, wish.LIST_NAMES["jinxxy-wishlist"]), (wish.JX_LIKES, wish.LIST_NAMES["jinxxy-likes"])):
-            products, _, short = read_all(url, name)
-            out.append({"store": "jinxxy", "list": name, "url": url, "products": products, **({"partial": True} if short else {})})
+        built_in = ((wish.JX_WISHLIST, wish.LIST_NAMES["jinxxy-wishlist"]), (wish.JX_LIKES, wish.LIST_NAMES["jinxxy-likes"]))
+        for url, name in built_in:
+            if wish.wanted(cfg, name):
+                products, _, short = read_all(url, name)
+                out.append({"store": "jinxxy", "list": name, "url": url, "products": products, **({"partial": True} if short else {})})
+        if cfg.get("_only_list") in {name for _, name in built_in}:   # (the one list asked for: issue #331)
+            return out
         _, lists, _ = read_all(wish.JX_LISTS, "Lists")
         for x in lists[:wish.MAX_LISTS]:
+            if not wish.wanted(cfg, x["name"]):
+                continue
             products, _, short = read_all(x["url"], x["name"])
             out.append({"store": "jinxxy", "list": wish.clean_text(x["name"], 60), "url": x["url"], "products": products,
                         **({"partial": True} if short else {})})

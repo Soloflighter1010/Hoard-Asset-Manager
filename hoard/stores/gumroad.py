@@ -430,6 +430,8 @@ def wish_read_gumroad(ctx, cfg, progress) -> list[dict]:
         found = {w["url"]: w for w in page.evaluate(wish.GUMROAD_INDEX_JS)}
         out = []
         for w in list(found.values())[:wish.MAX_LISTS]:
+            if not wish.wanted(cfg, w["name"]):   # (a quick refresh of another list: issue #331)
+                continue
             products: dict[str, dict] = {}
             short = False   # (a quick refresh stopped before its end: issue #300)
             for n in range(1, wish.MAX_PAGES + 1):

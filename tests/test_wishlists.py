@@ -631,6 +631,74 @@ class InHoard(IsolatedTestCase):
         self.assertIn("Not signed in to Booth", done["message"])
         self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"])
 
+    def test_quick_refresh_of_one_wishlist(self):
+        """Issue #331: Quick refresh on a wishlist's page reads the start of that list alone (the reader is told which,
+        and that it's quick), keeps what it didn't reach, and leaves the store's other lists as they were; a list
+        that isn't on the store any more says so."""
+        from hoard import jobs
+        sets.SetStore().put_wishlists([
+            {"store": "gumroad", "list": "Winter", "url": "u", "products": [product("Snow Cap", "12.50 USD", "gumroad"),
+                                                                         product("Scarf", "8 USD", "gumroad")]},
+            {"store": "gumroad", "list": "Summer", "url": "v", "products": [product("Sun Hat", "9 USD", "gumroad")]}])
+        told = []
+
+        def reader(ctx, cfg, progress):
+            told.append({k: cfg.get(k) for k in ("_quick", "_only_list")})
+            got = [{"store": "gumroad", "list": "Winter", "url": "u", "partial": True,
+                    "products": [product("Snow Boots", "20 USD", "gumroad")]},
+                   {"store": "gumroad", "list": "Summer", "url": "v", "products": []}]
+            return [x for x in got if wishlists.wanted(cfg, x["list"])]
+
+        class Ctx:
+            def close(self):
+                pass
+
+        def run(body):
+            n = len(self.srv.jobs.history)
+            answer = self.api("/api/wishlists/read", body)
+            if answer.get("status", 200) >= 400:
+                return answer
+            for _ in range(200):
+                if not self.srv.jobs.state["running"] and len(self.srv.jobs.history) > n:
+                    break
+                time.sleep(0.05)
+            return self.srv.jobs.history[-1]   # (the newest)
+        self.assertEqual(run({"stores": ["gumroad", "booth"], "list": "Winter"})["status"], 400, "one store's list")
+        self.assertEqual(run({"stores": ["gumroad"], "list": 5})["status"], 400)
+        with mock.patch.object(jobs, "reachable", lambda s: True), mock.patch.object(jobs, "launch", lambda *a: Ctx()), \
+                mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.dict(wishlists.READERS, {"gumroad": reader}):
+            done = run({"stores": ["gumroad"], "list": "Winter"})
+            self.assertEqual((done["task"], done["outcome"]), ("quick-wishlist", "done"))
+            self.assertEqual(done["label"], 'Quick refresh: Gumroad ("Winter")')
+            self.assertEqual(told, [{"_quick": True, "_only_list": "Winter"}])
+            lists = {s["name"]: [s["products"][k]["name"] for k in s["items"]] for s in sets.SetStore().load()["sets"]}
+            self.assertEqual(lists, {"Gumroad: Winter": ["Snow Boots", "Snow Cap", "Scarf"], "Gumroad: Summer": ["Sun Hat"]},
+                             "the start read, the rest kept; the other list as it was")
+            gone = run({"stores": ["gumroad"], "list": "Autumn"})
+            self.assertEqual(gone["outcome"], "failed")
+            self.assertIn("\u201cAutumn\u201d wasn't found among your Gumroad wishlists", gone["message"])
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_quick_refresh_on_a_wishlists_page(self):
+        """Issue #331: a wishlist's page offers Quick refresh beside Read it again: that one list, from its store."""
+        sets.SetStore().put_wishlists([{"store": "gumroad", "list": "Winter", "url": "u",
+                                        "products": [product("Snow Cap", "12.50 USD", "gumroad")]}])
+        started = []
+        from playwright.sync_api import sync_playwright
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"), \
+                sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            page.locator(".settile", has_text="Gumroad: Winter").click()
+            page.click("[data-setx=quickwish]")
+            page.locator(".toast", has_text="Refreshing the start of this wishlist").wait_for()
+            browser.close()
+        self.assertEqual(started, [("quick-wishlist", ["gumroad"], {"only": "Winter"})])
+
     def test_stopped_part_way_keeps_the_lists_read(self):
         """Stop or Force stop while a store's lists were being read (their pictures, say, which wait between pages)
         ended the task as stopped, but the lists already read from the stores before it were thrown away."""

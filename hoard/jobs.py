@@ -214,7 +214,7 @@ TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "S
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
+              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -536,6 +536,8 @@ class Jobs:
             target = self._wishlists
         elif task == "quick-refresh":
             target = self._quick_refresh
+        elif task == "quick-wishlist":
+            target = lambda s: self._quick_wishlist(s, only or "")  # noqa: E731
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
@@ -1296,10 +1298,11 @@ class Jobs:
             self._set(message="Library updated")
         return unread
 
-    def _wishlists(self, stores: list[str], quick: bool = False) -> None:
+    def _wishlists(self, stores: list[str], quick: bool = False, only: str | None = None) -> None:
         """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
         library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists). quick: only the start of
-        each list (issue #300), the rest kept."""
+        each list (issue #300), the rest kept. only: the one list read, by its name (issue #331); the others are
+        left as they are."""
         from .sets import SetStore
         from .wishlists import READERS, pictures_from_pages, read_store_page
         stores = [s for s in stores if s in READERS]
@@ -1324,7 +1327,8 @@ class Jobs:
                     continue
                 try:
                     said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
-                    lists = READERS[store](ctx, {**self.cfg, "_quick": True} if quick else self.cfg, said)
+                    lists = READERS[store](ctx, {**self.cfg, **({"_quick": True} if quick else {}),
+                                                 **({"_only_list": only} if only else {})}, said)
                     for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
                         pictures_from_pages(one.get("products") or [], read_store_page, said,
                                             float(self.cfg.get("request_delay", 0.8)))
@@ -1387,6 +1391,18 @@ class Jobs:
         wished, failed = self.state.get("message") or "", self.state.get("error")
         self._set(task="quick-refresh", message=f"{said.rstrip('.')}. {wished}".strip(), error=None,
                   partial=bool(partial or failed or self.state.get("partial")) or None)
+
+    def _quick_wishlist(self, stores: list[str], name: str) -> None:
+        """Issue #331: a quick refresh of one wishlist, by the list's name on its store: the start of it read, as a
+        quick refresh reads each (issue #300), and nothing else. A list that isn't on the store any more says so."""
+        self._wishlists(stores[:1], quick=True, only=name)
+        failed = self.state.get("error")
+        read = (self.state.get("report") or {}).get("counts", {}).get("lists")
+        if not failed and not read and not (self._forced or self.stop.is_set()):
+            why = (f"\u201c{name}\u201d wasn't found among your {_names(stores[:1])} wishlists: it may have been renamed "
+                   f"or deleted there. Read it again reads all of them.")
+            self._set(message=why, error=why)
+        self._set(task="quick-wishlist")
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""

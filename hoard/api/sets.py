@@ -315,6 +315,12 @@ def post_api_wishlists_read(self, path, body, query):
     stores = [x for x in body.get("stores") or [] if x in app.wishlists.READERS] if isinstance(body.get("stores"), list) else []
     if not stores:
         return self._json({"error": "Choose the stores to read your wishlists from."}, 400)
+    one = body.get("list")   # a quick refresh of one wishlist (issue #331): its store and its list's name on it
+    if one is not None:
+        if not isinstance(one, str) or not one.strip() or len(one) > 60 or len(stores) != 1:
+            return self._json({"error": "Choose one wishlist to refresh."}, 400)
+        started = srv.jobs.start("quick-wishlist", stores, only=app.wishlists.clean_text(one, 60))
+        return self._json({"ok": bool(started), "started": started}, 202 if started else 409)
     started = srv.jobs.start("wishlists", stores)
     return self._json({"ok": bool(started), "started": started}, 202 if started else 409)
 
@@ -334,6 +340,6 @@ ROUTES = [
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('photos', 'array'), ('short', 'string')), response='object'),
-    Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'),), response='object'),
+    Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

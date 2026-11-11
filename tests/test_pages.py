@@ -401,6 +401,18 @@ class AccessKey(IsolatedTestCase):
         self.assertEqual([t for t, _s, _k in started], ["quick-refresh", "refresh"])
         self.assertIn("booth", started[0][1])
         self.assertEqual(started[0][1], started[1][1], "the same stores")
+        # one store's own (issue #331), beside its Refresh
+        started.clear()
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"):
+            row = page.locator(".store-row", has=page.locator(".nm", has_text="Booth"))
+            self.assertEqual(row.locator(".btns button").all_inner_texts()[:2] if not row.locator("[data-login]").count()
+                             else row.locator(".btns button").all_inner_texts()[1:3], ["Refresh", "Quick refresh"])
+            row.locator("[data-quick]").click()
+            for _ in range(50):
+                if started:
+                    break
+                page.wait_for_timeout(100)
+        self.assertEqual([(t, s) for t, s, _k in started], [("quick-refresh", ["booth"])])
         self.assertEqual(refused, [])
         page.close()
 

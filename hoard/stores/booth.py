@@ -447,13 +447,19 @@ def wish_read_booth(ctx, cfg, progress) -> list[dict]:
                 wish.settle(page, 600)
                 wish.time.sleep(delay)
             return wish.booth_products(found.values()), short
-        everything, short = read_all(wish.BOOTH_WISHES, wish.LIST_NAMES["booth"])
-        out = [{"store": "booth", "list": wish.LIST_NAMES["booth"], "url": wish.BOOTH_WISHES, "products": everything,
-                **({"partial": True} if short else {})}]
+        out = []
+        if wish.wanted(cfg, wish.LIST_NAMES["booth"]):
+            everything, short = read_all(wish.BOOTH_WISHES, wish.LIST_NAMES["booth"])
+            out.append({"store": "booth", "list": wish.LIST_NAMES["booth"], "url": wish.BOOTH_WISHES, "products": everything,
+                        **({"partial": True} if short else {})})
+            if cfg.get("_only_list"):   # (the one list asked for: issue #331)
+                return out
         wish.goto(page, wish.BOOTH_WISHES)
         wish.settle(page, 900)
         names = [x["name"] for x in page.evaluate(wish.BOOTH_JS)["lists"]][2:wish.MAX_LISTS + 2]   # after "all" and "uncategorized"
         for name in names:   # a list you made: its button shows it, and the address it goes to is the list's
+            if not wish.wanted(cfg, name):
+                continue
             try:
                 page.locator("button.charcoal-tag-item", has_text=name).first.click(timeout=10000)
                 page.wait_for_url(lambda u: u != wish.BOOTH_WISHES, timeout=10000)
