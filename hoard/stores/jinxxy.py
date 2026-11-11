@@ -867,9 +867,11 @@ def wish_read_jinxxy(ctx, cfg, progress) -> list[dict]:
     page = ctx.new_page()
     delay = float(cfg.get("request_delay", 0.8))
     try:
-        def read_all(url: str, label: str) -> tuple[list[dict], list[dict], bool]:
+        def read_all(url: str, label: str, whole: bool = False) -> tuple[list[dict], list[dict], bool]:
             """Every product on one of your Jinxxy lists, page by page, the other lists it links to, and whether a
-            quick refresh stopped short of its end (issue #300)."""
+            quick refresh stopped short of its end (issue #300). whole: to its end even in a quick refresh (the
+            index of your lists, where the one asked for may be on any page)."""
+            quick = {**cfg, "_quick": False} if whole else cfg
             cards: dict[str, dict] = {}
             lists: dict[str, dict] = {}
             visited, short = set(), False
@@ -880,7 +882,7 @@ def wish_read_jinxxy(ctx, cfg, progress) -> list[dict]:
                 visited.add(url)
                 got = page.evaluate(wish.JINXXY_JS, page.url)
                 for c in got["cards"]:
-                    if cfg.get("_quick") and len(cards) >= wish.QUICK_ITEMS:
+                    if quick.get("_quick") and len(cards) >= wish.QUICK_ITEMS:
                         short = True
                         break
                     cards.setdefault(c["url"], c)
@@ -889,7 +891,7 @@ def wish_read_jinxxy(ctx, cfg, progress) -> list[dict]:
                 progress(f"{label}, page {n}: {len(cards) or len(lists)}")
                 if not got["next"] or got["next"] in visited:
                     break
-                if wish.quick_done(cfg, n, len(cards)):
+                if wish.quick_done(quick, n, len(cards)):
                     short = True
                     break
                 url = got["next"]
@@ -903,7 +905,8 @@ def wish_read_jinxxy(ctx, cfg, progress) -> list[dict]:
                 out.append({"store": "jinxxy", "list": name, "url": url, "products": products, **({"partial": True} if short else {})})
         if cfg.get("_only_list") in {name for _, name in built_in}:   # (the one list asked for: issue #331)
             return out
-        _, lists, _ = read_all(wish.JX_LISTS, "Lists")
+        # the index of your lists: read whole when one list is asked for (it may be past a quick refresh's pages)
+        _, lists, _ = read_all(wish.JX_LISTS, "Lists", whole=bool(cfg.get("_only_list")))
         for x in lists[:wish.MAX_LISTS]:
             if not wish.wanted(cfg, x["name"]):
                 continue

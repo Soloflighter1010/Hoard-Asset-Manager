@@ -45,6 +45,26 @@
 - **Drag and drop**: a product is dragged by its tile, never by its picture ([#313](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/313)).
 - **The website**: its videos fit the window ([#312](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/312)); the page for stores says how Hoard works with them now
   ([#336](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/336)); the acknowledgements credit every npm tool the Look inside component is built with ([#343](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/343)).
+- **From a review of this release:**
+  - **Copy store link** copies a product's public page, never the purchase's own link (a Gumroad purchase's is its
+    download page, which opens its files for whoever has it); with no public page, there's nothing to copy.
+  - Tasks still waiting when Hoard closed start again when it opens only if they read, download or add. One that
+    deletes or takes something out, signs in or out, moves your library or changes a project is listed in Tasks as
+    not started again, so it's done only when you ask again.
+  - A set you added from someone else's link shows its photos once you choose **Show the photos**. Set photos come
+    only from the photo sites a set may use, a redirect included.
+  - **It isn't for adults** wins in a shared set's link too, over what the set remembered when the product was added.
+  - Saving what's marked on a photo while hidden products are locked keeps their marks.
+  - Deleting a product's downloaded files clears the mark saying its last download didn't finish.
+  - A quick refresh of one Jinxxy list finds it however far down your lists it is.
+  - Putting products in a project notes them even when the packages they need couldn't all be made.
+  - A damaged record of how the stores went no longer stops the Library opening, and a record that can't be
+    written never costs a store read its result.
+  - A tag typed while Projects is saving a change is added however long that takes.
+  - A photo mark for a product of your own can be reached by keyboard. On Downloads, a mark for a product that's
+    also in your library opens its tile.
+  - Less waiting and writing: reading a large data file no longer holds up other saves, short-lived tasks no longer
+    rewrite scheduler.json, and Refresh and the Library read their data once rather than copying it.
 
 ## 5.2.0-beta.4
 

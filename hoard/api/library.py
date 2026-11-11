@@ -105,8 +105,7 @@ def _product_details(self):
     for a in srv.index(stale_ok=True)["assets"]:
         dl.setdefault(a["tag_key"], a)
 
-    def public(store: str, *links) -> str | None:   # its own public page, else its creator's: never one of yours
-        return next((u for u in (app.sets.product_link(store, x) for x in links) if u), None)
+    public = app.sets.public_page   # its own public page, else its creator's: never one of yours
 
     from .. import adult
     marks, mine = app.MarkStore().view(), app.TagStore().load()["items"]
@@ -116,7 +115,7 @@ def _product_details(self):
         return bool(adult.why(key, name=name, tags=[*((i or {}).get("store_tags") or []), *mine.get(key, [])],
                               flagged=(i or {}).get("adult") is True, marks=marks))
 
-    def details(key: str) -> dict | None:
+    def known(key: str) -> dict | None:
         """A product's details for the page, from the library or the downloads, with only its public link."""
         i = lib.get(key)
         if i:
@@ -129,6 +128,13 @@ def _product_details(self):
             return {"store": store, "name": a["name"], "creator": a.get("creator"), "url": public(store, a.get("url")),
                     "adult": for_adults(key, a["name"], None)}
         return None
+
+    def details(key: str) -> dict | None:
+        """known(key), and whether you said It isn't for adults (it wins over what a set remembers: issue #337)."""
+        got = known(key)
+        if key in marks.get("not_adult", ()):
+            return {**(got or {}), "not_adult": True}
+        return got
     return details
 
 
@@ -169,14 +175,15 @@ def get_api_library(self, path, body, query):
     tagdata = app.TagStore().load()
     items = app.enrich(items, srv.cfg["tags"], tagdata, apart=app.MarkStore().keys("apart"),
                    progress=app.loading.counter("library", "products", len(items)))   # (counted on the splash: #200)
-    on_disk = {a["tag_key"]: a["id"] for a in srv.index(stale_ok=True)["assets"]}   # never waits for a rebuild
+    downloaded = srv.index(stale_ok=True)["assets"]   # never waits for a rebuild; read once, for both below
+    on_disk = {a["tag_key"]: a["id"] for a in downloaded}
     app.loading.finished("library")
     app.MarkStore().follow(items)   # a product renamed since it was removed (or hidden...) stays so (issue #224)
     marks, unlocked = app.MarkStore().view(), self._unlocked()
     checked = app.AssetUpdates().load()
     updates = checked["items"]
     from ..downloads import problems
-    wrong = problems(srv.index(stale_ok=True)["assets"], app.last_integrity(), checked["failed"])   # (issue #334)
+    wrong = problems(downloaded, app.last_integrity(), checked["failed"])   # (issue #334)
     cutoff = app.new_cutoff(srv.cfg)
     first_read = {s: (info.get("first_read") or "") for s, info in stores.items()}
     shown = []
@@ -186,6 +193,9 @@ def get_api_library(self, path, body, query):
         i["on_disk"] = on_disk.get(i["tag_key"])
         i["update"] = i["on_disk"] is not None and i["tag_key"] in updates   # its store has newer files
         i["problems"] = wrong.get(i["tag_key"], [])   # what's wrong with it, for its tile's error mark (issue #334)
+        # what Copy store link copies: its public page, never a page of the buyer's own ("url" is a Gumroad
+        # purchase's download page, which opens its files for whoever has it)
+        i["public"] = app.sets.public_page(i["store"], i.get("page"), i.get("url"))
         i["mark"] = ("removed" if i["tag_key"] in marks["removed"] else "hidden" if i["tag_key"] in marks["hidden"]
                      else "archived" if app.is_archived(i, marks) else None)
         i["apart"] = i["tag_key"] in marks["apart"]   # "Not a copy": never stacked (issue #217)

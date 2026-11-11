@@ -421,7 +421,7 @@ function showDetail(a, focus = true) {
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
   saveHash();   // (first: the step left behind keeps the page's place as it was, for Back to return to, issue #329)
   renderProductDetail(a, { store: a.store, storeName: store, creatorUrl: storeUrl(a.store, a.creator_url), extra,
-    copyUrl: storeUrl(a.store, a.url),
+    copyUrl: a.public,   // (its public page: never the purchase's own link, which opens its files)
     src: a.thumbnail ? keyed("/thumb/" + encodeURIComponent(a.key)) : "",
     facts: [["Store", store], ["Files", a.files.length || "—"], ["Added", shortDay(a.added) || "—"], ["Tags", a.tags.length]],
   }, sections, focus);

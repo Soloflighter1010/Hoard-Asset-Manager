@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 762f3c95bbad). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 809e0d6a1861). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <b>日本語</b> · <a href="Hoard가-저장하는-곳">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 Hoardが保管するものは2つに分かれます。あなたが選んだフォルダーにあるダウンロードと、それ以外のすべてを入れた、あなたのユーザーアカウント専用の非公開のアプリデータフォルダーです。
@@ -42,7 +42,7 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 | `window-place.json` | 最後に閉じたときのウィンドウの大きさと位置、最大化していたかどうか。次もそこで開くためです。削除すると、ふつうの大きさで中央に開きます |
 | `tasks.json` | タスクのウィンドウの、終わったジョブの一覧(最新60件)。それぞれ何をしたか、どうなったか、その進み具合。一覧を空にするには、これを削除するか、タスクで **クリア** を選びます |
 | `sync.json` | 前回の同期を始めた日時 |
-| `job-queue.json` | タスクで順番を待っているタスク(5.2)。Hoardを閉じてまた開いても始まるようにします |
+| `job-queue.json` | タスクで順番を待っているタスク(5.2)。Hoardを閉じてまた開いても始まるようにします。削除や取り出し、サインインやサインアウト、ライブラリの移動、プロジェクトの変更をするタスクは、また始まりません。タスクにそう表示されるので、もう一度頼んでください |
 | `scheduler.json` | 再起動をまたいで続くHoardのバックグラウンドの作業(5.2)。一時停止したもの、どこまで進んだか、次にいつ実行するか |
 | `store-health.json` | 各ストアの直近の状況(5.2)。最後に読み込んだりダウンロードしたりした日時、それがうまくいったか、うまくいかなかった場合はどんな種類の問題だったか(メッセージ、商品、アドレスは記録しません)。**ストア** に **問題を報告** と一緒に表示されます。[ストア](ストア)をご覧ください |
 | `routine.json` | 定期チェックを前回実行した日時(次がいつかを知るため)と、見つかったもののうちまだ見ていないものの数 |

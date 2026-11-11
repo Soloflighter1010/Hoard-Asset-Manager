@@ -583,9 +583,9 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     return fetch_picture(*found) if found else None
 
 
-def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
+def fetch_picture(url: str, referer: str, hosts: tuple[str, ...] | None = None) -> tuple[bytes, str] | None:
     """A picture from a store's image host (an item's, or one a set remembers), fetched once with the store's
-    referrer and cached on disk: (its bytes, its type), or None."""
+    referrer and cached on disk: (its bytes, its type), or None. Given hosts, only from those, redirects included."""
     h = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
     for p in THUMB_DIR.glob(h + ".*"):
         ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)
@@ -593,7 +593,7 @@ def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
             return p.read_bytes(), ctype
         p.unlink(missing_ok=True)  # e.g. an SVG saved by an older version
     got = fetch_public(url, {"Referer": referer, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024)
+                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024, hosts=hosts)
     if not got:
         return None
     data, ctype = got

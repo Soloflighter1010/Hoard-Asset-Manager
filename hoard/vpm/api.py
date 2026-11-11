@@ -607,7 +607,7 @@ class Service:
             log("Installing what the added packages need")
             try:
                 self._apply(project, resolve.repair(project, self.collection()))
-            except resolve.ResolveError as e:
+            except (resolve.ResolveError, ProjectsError) as e:   # (ProjectsError: not all made, said by _apply)
                 done["failed"].append({"what": "the packages they need", "why": str(e)})
         listing.add_preloaded(path, [{"tag_key": a["tag_key"], "name": a["name"], "file": e["file"],
                                       "member": e.get("member"), "label": e.get("label"), "kind": e["kind"],

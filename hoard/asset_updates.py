@@ -95,6 +95,17 @@ class AssetUpdates:
             self.save(data)
             return len(data["items"])
 
+    def forget_failed(self, keys) -> None:
+        """Products whose downloaded files you deleted: a download of theirs that didn't finish (issue #334) isn't
+        something wrong with them any more, so their tiles' error mark for it goes."""
+        with _lock:
+            data = self.load()
+            gone = [k for k in keys if k in data["failed"]]
+            for k in gone:
+                del data["failed"][k]
+            if gone:
+                self.save(data)
+
     def after_download(self, got: set, failed: list[str], got_files: set | None = None,
                        failed_keys: dict | None = None) -> None:
         """Take what came off the list. With got_files ((tag_key, file) saved), each update's files that came are

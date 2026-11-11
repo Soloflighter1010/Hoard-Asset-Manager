@@ -2535,5 +2535,9 @@
  "A photo has up to 30 products marked on it.": "사진 한 장에 상품을 30개까지 표시할 수 있어요.",
  "{0} is marked.": "{0}을(를) 표시했어요.",
  "Now click where it is on the photo.": "이제 사진에서 그 위치를 클릭하세요.",
- "Saved what's marked on the photo.": "사진의 표시를 저장했어요."
+ "Saved what's marked on the photo.": "사진의 표시를 저장했어요.",
+ "This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.": "이 세트는 다른 사람의 링크에서 추가했어요. 사진은 {0}에 있어요. 보기로 선택하면 Hoard가 거기서 가져와요.",
+ "Show the photo": "사진 보기",
+ "Show the photos": "사진 보기",
+ "Projects is still saving a change: what you asked for is done once it's finished.": "프로젝트가 아직 변경 사항을 저장하고 있어요. 끝나면 요청하신 일을 할게요."
 }

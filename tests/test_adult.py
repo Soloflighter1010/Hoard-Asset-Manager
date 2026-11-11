@@ -183,6 +183,15 @@ class InHoard(IsolatedTestCase):
         self.assertEqual([r["adult"] for r in shown()["items"]], [True, False])
         shared = self.call("POST", "/api/sets", {"action": "share", "id": made})[1]
         self.assertIs(sets.from_code(shared["code"])["products"][BODY]["adult"], True, "its link says so")
+        # It isn't for adults wins over what a set remembered of it when it was added, in its link as in Hoard
+        kept = self.call("POST", "/api/sets", {"action": "create", "name": "Kept", "items": [BODY]})[1]["made"]
+        remembered = next(s for s in store.load()["sets"] if s["id"] == kept)["products"][BODY]
+        self.assertIs(remembered.get("adult"), True, "(remembered as it was added)")
+        self.call("POST", "/api/marks", {"kind": "not_adult", "keys": [BODY], "on": True})
+        self.assertFalse(next(s for s in self.call("GET", "/api/sets")[1]["sets"] if s["id"] == kept)["adult"])
+        shared = self.call("POST", "/api/sets", {"action": "share", "id": kept})[1]
+        self.assertNotIn("adult", sets.from_code(shared["code"])["products"][BODY], "nor in its link")
+        self.call("POST", "/api/marks", {"kind": "not_adult", "keys": [BODY], "on": False})
         store.change({"action": "remove", "id": made, "items": [BODY]})
         self.assertFalse(shown()["adult"], "the last one out: no longer an Adult set")
         self.call("POST", "/api/marks", {"kind": "adult", "keys": [HAT], "on": True})

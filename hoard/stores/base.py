@@ -43,14 +43,22 @@ class Adapter:
                 "requests_per_minute": self.requests_per_minute}
 
     def _call(self, operation: str, function, *args, result_problem=None):
-        """Keep a bounded, account-free health record for each attempted store operation."""
+        """Keep a bounded, account-free health record for each attempted store operation. The record is only a note:
+        one that can't be kept (a full disk, say) never costs the read its result, nor hides the store's own error."""
         from . import health
+
+        def note(problem: str) -> None:
+            """Keep how this operation went: a note that can't be kept is said in the log, never raised."""
+            try:
+                health.record(self.key, operation, problem)
+            except Exception as e:  # noqa: BLE001 (a note, never the read)
+                print(f"Couldn't note how {self.label} went: {type(e).__name__}", flush=True)
         try:
             result = function(*args)
         except Exception as error:
-            health.record(self.key, operation, health.classify(error))
+            note(health.classify(error))
             raise
-        health.record(self.key, operation, result_problem(result) if result_problem else "")
+        note(result_problem(result) if result_problem else "")
         return result
 
     def read_library(self, ctx, cfg: dict, progress, *, quick: bool = False) -> list[dict]:

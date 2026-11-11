@@ -352,6 +352,14 @@ class PublicPagesOnly(IsolatedTestCase):
             with self.subTest(url=url):
                 self.assertEqual(sets.product_link(store, url), want)
 
+    def test_the_first_public_one(self):
+        """What a product's details copy (Copy store link) and a set shares: its public page, else its store link only
+        when that's a public page too; a Gumroad purchase's own link (its download page) never."""
+        purchase = "https://app.gumroad.com/d/0123abcd"
+        self.assertIsNone(sets.public_page("gumroad", None, purchase))
+        self.assertEqual(sets.public_page("gumroad", "https://kitsu.gumroad.com/l/rusk", purchase), "https://kitsu.gumroad.com/l/rusk")
+        self.assertEqual(sets.public_page("booth", None, "https://booth.pm/ja/items/111"), "https://booth.pm/ja/items/111")
+
     def test_the_viewer_agrees(self):
         """site/set.js checks a link as product_link does, so a link shared from 4.2.0 doesn't show one of the
         sharer's own pages."""

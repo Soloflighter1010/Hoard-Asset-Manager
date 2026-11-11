@@ -27,6 +27,21 @@ class Scheduling(IsolatedTestCase):
                 self.assertTrue(ran.wait(5))
                 scheduler.close()
 
+    def test_a_transient_call_writes_nothing(self):
+        """scheduler.json keeps durable tasks only: each job's own call (and its end) never rewrites it."""
+        from hoard import storage
+        scheduler = self.scheduler(path=self.test_home / "transient-schedule.json")
+        ran = threading.Event()
+        with mock.patch.object(storage, "write_document", wraps=storage.write_document) as wrote:
+            for _ in range(3):
+                ran.clear()
+                scheduler.call("A job", ran.set)
+                self.assertTrue(ran.wait(5))
+            with scheduler._condition:   # (until each call has ended: its end is the other write it once made)
+                while scheduler._tasks or scheduler._workers:
+                    scheduler._condition.wait(0.1)
+        self.assertEqual([c for c in wrote.call_args_list if "transient-schedule" in str(c.args[0])], [])
+
     def test_stopping_the_routine_event_prevents_later_checks(self):
         from hoard.jobs import Schedule
         routine = Schedule.__new__(Schedule)
@@ -145,6 +160,42 @@ class Scheduling(IsolatedTestCase):
             self.assertTrue(done.wait(5))
             second.close()
         self.assertEqual(seen, ["First", "Second"])
+
+    def test_what_deletes_isnt_started_again_unasked(self):
+        """What changes or takes things away was confirmed when it was asked for, not when Hoard opens again: a
+        waiting delete, Take out of Local, sign-out or a project's delete isn't started again; Tasks says so. A
+        waiting refresh, or a project's backup, is."""
+        from hoard import config, jobs, library, storage
+        from hoard.paths import data_dir
+        storage.remove(data_dir() / "job-queue.json", missing_ok=True)
+        cfg = config.load_config()
+        lib = library.Library(self.test_home / "library.json")
+        first = self.scheduler(path=self.test_home / "queue-schedule-2.json")
+        queued = jobs.Jobs(cfg, lib, scheduler=first)
+        projects = jobs.Jobs(cfg, lib, lane=jobs.PROJECTS, scheduler=first)
+        queued.busy.acquire()
+        projects.busy.acquire()
+        try:
+            self.assertEqual(queued.start("delete-files", ["booth"], keys=["booth:1"]), "queued")
+            self.assertEqual(queued.start("refresh", ["booth"]), "queued")
+            self.assertEqual(queued.start("logout", ["gumroad"]), "queued")
+            self.assertEqual(projects.start("project", [], project={"op": "delete", "path": "/p/Rusk", "name": "Rusk"}), "queued")
+            self.assertEqual(projects.start("project", [], project={"op": "backup", "path": "/p/Rusk", "name": "Rusk"}), "queued")
+        finally:
+            queued.busy.release()
+            projects.busy.release()
+        first.close()
+        second = self.scheduler(path=self.test_home / "queue-schedule-2.json")
+        self.addCleanup(second.close)
+        again, again_projects = jobs.Jobs(cfg, lib, scheduler=second), jobs.Jobs(cfg, lib, lane=jobs.PROJECTS, scheduler=second)
+        self.assertEqual([q["task"] for q in again._queue], ["refresh"])
+        self.assertEqual([q["project"]["op"] for q in again_projects._queue], ["backup"])
+        said = [(h["task"], h["outcome"]) for h in again.history[-2:]]
+        self.assertEqual(said, [("delete-files", "stopped"), ("logout", "stopped")])
+        self.assertIn("Not started again", again.history[-1]["message"])
+        self.assertEqual(again_projects.history[-1]["label"], "Projects: " + jobs.PROJECT_WORK["delete"].replace("{0}", "Rusk"))
+        kept = [(h["task"], h["outcome"], h["message"]) for h in jobs.Jobs(cfg, lib, scheduler=second).history[-2:]]
+        self.assertEqual(kept, [(h["task"], h["outcome"], h["message"]) for h in again.history[-2:]], "kept in Tasks")
 
     def test_user_work_pauses_a_reader_and_it_carries_on_afterwards(self):
         scheduler = self.scheduler(persistent=False)

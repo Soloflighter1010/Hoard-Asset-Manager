@@ -2535,5 +2535,9 @@
  "A photo has up to 30 products marked on it.": "1枚の写真に印を付けられる商品は30個までです。",
  "{0} is marked.": "{0}に印を付けました。",
  "Now click where it is on the photo.": "写真でその場所をクリックしてください。",
- "Saved what's marked on the photo.": "写真の印を保存しました。"
+ "Saved what's marked on the photo.": "写真の印を保存しました。",
+ "This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.": "このセットは他の人のリンクから追加したものです。写真は{0}にあります。見ることを選んだときに、Hoardがそこから取得します。",
+ "Show the photo": "写真を表示",
+ "Show the photos": "写真を表示",
+ "Projects is still saving a change: what you asked for is done once it's finished.": "プロジェクトはまだ変更を保存しています。終わったら、頼んだことを行います。"
 }

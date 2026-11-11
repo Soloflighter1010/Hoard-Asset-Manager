@@ -122,7 +122,9 @@ function renderProductDetail(a, model, sections, focus = true) {
   by.append(sentence[0], creator, sentence.slice(1).join("\u0001"), model.extra ? tr(", {0}", model.extra) : "");
   const store = productElement("p", { class: "d-store" }, productElement("span", { class: `dot ${model.store}` }), model.storeName);
   if (model.storeUrl) store.append(" ", productElement("a", { href: model.storeUrl, target: "_blank", rel: "noopener noreferrer", title: model.storeUrl }, tr("Open on {0}", model.storeName)));
-  const page = model.storeUrl || model.copyUrl;   // (the Library has its own buttons to open the store's pages)
+  // Copy store link: its public page, as Hoard checked it, never the link Open on the store opens (a Gumroad purchase's is
+  // its download page, which opens its files for whoever has it); none when there's no public page to copy
+  const page = model.copyUrl;
   if (page) store.append(" ", productElement("button", { class: "linkish", type: "button", "data-store-link": page }, tr("Copy store link")));
   const facts = productElement("div", { class: "d-stats" });
   for (const [name, value] of model.facts) facts.append(productElement("span", {}, productElement("small", {}, tr(name)), productElement("b", {}, value)));

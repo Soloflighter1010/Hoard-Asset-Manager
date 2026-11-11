@@ -577,6 +577,28 @@ class Apply(Case):
         self.assertIn("packages weren't all changed: com.anatawa12.package: its folder in Packages has 1.0.0, not 1.1.0",
                       str(caught.exception))
 
+    def test_products_put_in_are_noted_when_what_they_need_isnt_all_made(self):
+        """Put in a project: when the packages the products need weren't all made (_apply's ProjectsError), the
+        products put in are still noted, for Hoard and Hoard for Unity, and the task says what wasn't."""
+        from hoard.vpm import api
+        projects = api.Service.__new__(api.Service)
+        projects.collection = lambda: None
+        asset = {"tag_key": "booth/product", "name": "Product"}
+        entry = {"kind": "unitypackage", "file": "Product.unitypackage", "member": None, "label": "Product"}
+        done = {"placed": 1, "already_there": 0, "in_the_way": 0, "packages": [], "failed": [], "each": [{"added": ["Assets/P"]}]}
+        noted = []
+        with mock.patch.object(api, "contents", lambda a: [entry]), mock.patch.object(api, "put_in", lambda *a, **k: done), \
+                mock.patch.object(api.UnityProject, "load", lambda path: type("P", (), {"locked": {}})()), \
+                mock.patch.object(resolve, "needs_repair", lambda p: True), mock.patch.object(resolve, "repair", lambda p, c: None), \
+                mock.patch.object(api.Service, "_apply", side_effect=api.ProjectsError("Rusk's packages weren't all changed")), \
+                mock.patch.object(api.listing, "add_preloaded", lambda path, items: noted.append(("listing", items))), \
+                mock.patch.object(api.imports, "note", lambda path, each, log=None: noted.append(("imports", each))), \
+                mock.patch.object(api, "log", lambda *a: None):
+            said = projects._preload("/p/Rusk", [{"key": "booth/product", "kind": "unitypackage", "file": "Product.unitypackage"}],
+                                     lambda key: asset, False)
+        self.assertEqual([what for what, _ in noted], ["listing", "imports"])
+        self.assertIn("Not put in: the packages they need (Rusk's packages weren't all changed)", said)
+
 
 if __name__ == "__main__":
     unittest.main()

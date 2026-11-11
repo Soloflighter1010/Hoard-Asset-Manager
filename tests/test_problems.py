@@ -92,6 +92,13 @@ class DownloadsThatDidntFinish(IsolatedTestCase):
         self.store.after_download({RUSK}, [], {(RUSK, "f2")}, {})
         self.assertEqual(self.store.load()["failed"], {}, "downloaded with nothing failing: fine")
 
+    def test_forgotten_once_its_files_are_deleted(self):
+        """Delete downloaded files (a removed product's): what didn't finish of its download isn't wrong any more."""
+        self.store.after_download(set(), ["x"], set(), {RUSK: {"store": "booth", "why": "rusk.zip: timed out"},
+                                                         ANKO: {"store": "booth", "why": "anko.zip: gone"}})
+        self.store.forget_failed({RUSK, "booth:not-there"})
+        self.assertEqual(list(self.store.load()["failed"]), [ANKO])
+
     def test_whats_kept_is_checked(self):
         self.store.path.write_text(json.dumps({"failed": {
             RUSK: {"store": "booth", "why": "x" * 900, "at": "2026"}, "nope": {"store": "nowhere"}, "": {"store": "booth"},

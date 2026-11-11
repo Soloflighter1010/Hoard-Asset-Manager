@@ -1211,6 +1211,8 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     if done["files"] or done["products"]:
         log(f"Deleted {done['files']} downloaded files of {done['products']} removed products.")
         build_catalog(cfg, root)
+    from .asset_updates import AssetUpdates
+    AssetUpdates().forget_failed(keys)   # (a download of theirs that didn't finish is no longer wrong: #334)
     return done
 
 

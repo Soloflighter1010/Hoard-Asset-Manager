@@ -686,6 +686,7 @@ function showDetail(a, focus = true) {
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   saveHash();   // (first: the step left behind keeps the page's place as it was, for Back to return to, issue #329)
   renderProductDetail(a, { store: a.store.toLowerCase(), storeName: storeName(a.store), storeUrl: storeUrl(a.store, a.url),
+    copyUrl: a.public,   // (its public page: never the purchase's own link Open on the store opens)
     extra: a.variants, src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0],
     facts: [["Files", a.files.length], ["Size", fmtSize(a.size)], ["Added", shortDay(a.added) || "—"], ["Projects", (a.used_in || []).length]],
   }, sections, focus);

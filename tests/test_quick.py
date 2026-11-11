@@ -192,6 +192,36 @@ class Wishlists(IsolatedTestCase):
         self.assertTrue(wishlists.wanted({"_only_list": "Winter"}, " Winter\u200b"), "as the wishlist keeps it")
         self.assertFalse(wishlists.wanted({"_only_list": "Winter"}, "Summer"))
 
+    def test_one_jinxxy_list_past_the_start_of_the_index(self):
+        """A quick refresh of one Jinxxy list of yours reads the index of your lists to its end to find it (it may be
+        past a quick refresh's 2 pages), and reads only that list."""
+        from hoard.stores import jinxxy
+        index, pages, seen = wishlists.JX_LISTS, {}, []
+        for n in range(1, 5):
+            pages[index if n == 1 else f"{index}?page={n}"] = {
+                "cards": [], "lists": [{"url": f"https://jinxxy.com/my/lists/{n}", "name": f"List {n}"}],
+                "next": f"{index}?page={n + 1}" if n < 4 else None}
+            pages[f"https://jinxxy.com/my/lists/{n}"] = {"cards": [], "lists": [], "next": None}
+
+        class Page:
+            url = ""
+
+            def evaluate(self, js, url):
+                return pages[self.url]
+
+            def close(self):
+                pass
+
+        def goto(page, url):
+            seen.append(url)
+            page.url = url
+        ctx = type("Ctx", (), {"new_page": lambda self: Page()})()
+        with mock.patch.object(wishlists, "goto", goto), mock.patch.object(wishlists, "settle", lambda *a: None), \
+                mock.patch.object(wishlists, "_signed_in", lambda *a: None), mock.patch.object(wishlists.time, "sleep", lambda s: None):
+            got = jinxxy.wish_read_jinxxy(ctx, {"_quick": True, "_only_list": "List 4", "request_delay": 0}, lambda m: None)
+        self.assertEqual([x["list"] for x in got], ["List 4"])
+        self.assertEqual(seen[-1], "https://jinxxy.com/my/lists/4", "only that list read")
+
     def test_payhips_lists_cut_at_fifty(self):
         cards = [{"id": f"c{i}", "name": f"Item {i}", "url": f"https://payhip.com/b/c{i}", "list": "Wishlist"} for i in range(70)]
         with mock.patch.object(wishlists, "payhip_products", lambda cs: list(cs)):

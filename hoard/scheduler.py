@@ -148,7 +148,8 @@ class Scheduler:
                 "status": "waiting", "sequence": self._sequence, "error": "", "cancel": cancel,
             }
             self._condition.notify_all()
-        self._save()
+        if durable:   # (a transient call is never kept: nothing new for scheduler.json)
+            self._save()
         self.start()
         return key
 
@@ -180,8 +181,10 @@ class Scheduler:
             if task is None:
                 return
             task.update(due=time.time(), finished=False, rerun=task["running"])
+            durable = task["durable"]
             self._condition.notify_all()
-        self._save()
+        if durable:
+            self._save()
 
     def action(self, key: str, action: str) -> None:
         """Apply Tasks' Pause, Resume or Stop without discarding a completed-work checkpoint."""
@@ -286,11 +289,13 @@ class Scheduler:
                     task.update(due=time.time() + (max(60, delay or 0) if failed else max(0, delay or 0)), status="waiting")
                 else:
                     task.update(finished=True, status="complete")
-                if not task["durable"] and task["finished"]:
+                durable = task["durable"]
+                if not durable and task["finished"]:
                     del self._tasks[key]
                 self._condition.notify_all()
             try:
-                self._save()
+                if durable:   # (a transient call's end changes nothing kept in scheduler.json)
+                    self._save()
             finally:
                 with self._condition:
                     self._workers.discard(threading.current_thread())

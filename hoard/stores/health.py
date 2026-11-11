@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from .. import storage
 from ..common import now_iso
 from ..paths import data_dir
+from ..safety import DataFileError
 
 PROBLEMS = {
     "signin": "Sign in again, then retry.",
@@ -31,6 +32,20 @@ def classify(error: Exception) -> str:
     return "network" if is_network_error(error) else "layout"
 
 
+def _load() -> dict:
+    """store-health.json as {store: {operation: {...}}}, each part checked; a file that's damaged or of another shape
+    (edited, or cut short by a crash) is read as no record, never an error for the Library or a store's read."""
+    path = data_dir() / "store-health.json"
+    try:
+        data = storage.read_document(path) if storage.exists(path) else {}
+    except (DataFileError, OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {store: {op: info for op, info in ops.items() if op in OPERATIONS and isinstance(info, dict)}
+            for store, ops in data.items() if isinstance(store, str) and isinstance(ops, dict)}
+
+
 def record(store: str, operation: str, problem: str = "") -> None:
     """Save only a known store, operation, timestamp and fixed failure category."""
     from . import adapters
@@ -38,7 +53,7 @@ def record(store: str, operation: str, problem: str = "") -> None:
         raise ValueError("unknown store health category")
     path = data_dir() / "store-health.json"
     with storage.metadata_lock:
-        data = storage.read_document(path) if storage.exists(path) else {}
+        data = _load()
         item = data.setdefault(store, {})
         previous = item.get(operation, {})
         item[operation] = {"last_attempt": now_iso(), "last_success": previous.get("last_success", ""), "problem": problem}
@@ -51,8 +66,7 @@ def snapshot() -> dict:
     """Health shown in Stores, including an account-free, prefilled issue link on failure."""
     from . import adapters
     from .. import __version__
-    path = data_dir() / "store-health.json"
-    data = storage.read_document(path) if storage.exists(path) else {}
+    data = _load()
     result = {}
     for store, adapter in adapters().items():
         operations = {}
@@ -61,7 +75,7 @@ def snapshot() -> dict:
             if not isinstance(info, dict):
                 continue
             problem = info.get("problem") if info.get("problem") in PROBLEMS else ""
-            clean = {k: info.get(k, "") for k in ("last_attempt", "last_success")}
+            clean = {k: info[k][:40] if isinstance(info.get(k), str) else "" for k in ("last_attempt", "last_success")}
             clean.update(problem=problem, message=PROBLEMS.get(problem, ""))
             if problem:
                 body = f"Hoard: {__version__}\nStore: {adapter.label}\nOperation: {operation}\nFailure: {problem}\n\nWhat happened:\n"

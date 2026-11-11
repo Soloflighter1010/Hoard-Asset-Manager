@@ -222,6 +222,12 @@ FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped an
 WATCH_INTERVAL = 15.0  # scheduler cadence; one cheap progress check, never a polling thread
 STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
 WATCHED = ("download", "check-updates", "sync", "refresh", "quick-refresh", "verify", "routine")   # jobs that never wait on you (sign-ins do)
+# What's still waiting when Hoard closed is started again when it opens: what reads, downloads or adds. What deletes or
+# takes out (files, Local's products, a project), signs in or out, moves your library or changes a project (its
+# packages, Git's pull and push) was confirmed then, not now: it isn't started again, and Tasks says so.
+RESUMED = {"refresh", "quick-refresh", "sync", "download", "check-updates", "verify", "routine", "wishlists",
+           "quick-wishlist", "list-files", "add-local", "rescan-local"}
+RESUMED_PROJECT = {"backup", "refresh", "git-fetch"}   # (a Projects task's "op")
 
 
 # How a finished job went, in the Tasks tab. Partly done: it finished, but a store couldn't be read or a file
@@ -348,6 +354,7 @@ class Jobs:
         entries = raw.get(self.lane, []) if isinstance(raw, dict) else []
         if not isinstance(entries, list):
             return
+        left: list[dict] = []   # what isn't started again (RESUMED)
         for entry in entries[:MAX_QUEUE]:
             if not isinstance(entry, dict) or not isinstance(entry.get("task"), str) or entry["task"] not in TASK_NAMES:
                 continue
@@ -358,13 +365,30 @@ class Jobs:
                 continue
             if any(entry.get(k) is not None and not isinstance(entry[k], dict) for k in ("local", "move", "files", "chosen", "project")):
                 continue
+            if entry.get("only") is not None and not isinstance(entry["only"], str):
+                continue
             self._ids += 1
             spec = {k: entry.get(k) for k in ("task", "stores", "skip_imported", "only", "scheduled", "keys", "items",
                                              "local", "move", "files", "chosen", "project")}
-            self._queue.append({**spec, "id": f"{self._prefix}q{self._ids}", "lane": self.lane,
-                                "queued": entry.get("queued") or now_iso(),
-                                "label": describe_job(spec["task"], stores, spec.get("only"), spec.get("keys"),
-                                                      spec.get("scheduled"), spec.get("project"))})
+            spec["skip_imported"] = spec.get("skip_imported") is True
+            job = {**spec, "id": f"{self._prefix}q{self._ids}", "lane": self.lane, "queued": entry.get("queued") or now_iso(),
+                   "label": describe_job(spec["task"], stores, spec.get("only"), spec.get("keys"),
+                                         spec.get("scheduled"), spec.get("project"))}
+            if spec["task"] in RESUMED or (spec["task"] == "project" and (spec.get("project") or {}).get("op") in RESUMED_PROJECT):
+                self._queue.append(job)
+            else:
+                left.append(job)
+        if left:   # (in Tasks, so it's asked for again, not done unasked)
+            for job in left:
+                self.history.append({"id": job["id"], "task": job["task"], "label": job["label"], "stores": job["stores"],
+                                     "started": "", "ended": now_iso(), "outcome": "stopped", "report": None, "log": [],
+                                     "message": "Not started again when Hoard opened: it changes or takes things away, "
+                                                "so it's done only when you ask for it again."})
+            del self.history[:-MAX_HISTORY]
+            try:
+                write_file_safely(self._history_file(), json.dumps({"history": self.history}, ensure_ascii=False))
+            except OSError as e:
+                print(f"Couldn't save the task log: {e}", flush=True)
         self._publish_queue()
 
     def _history_file(self):
@@ -1231,7 +1255,8 @@ class Jobs:
                         else:
                             # a Payhip shop that couldn't be read keeps what Hoard had from it, as a quick refresh
                             # keeps all it didn't reach
-                            had = {i["key"] for i in self.lib.snapshot()[0] if i.get("store") == store}
+                            with self.lib.lock:   # (its own keys, read where they are: never a copy of the whole library)
+                                had = {i["key"] for i in self.lib.data["items"] if i.get("store") == store}
                             self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick)
                             read += len(items)
                             found_new += len({i["key"] for i in items} - had)

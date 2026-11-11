@@ -82,6 +82,29 @@ class Contract(IsolatedTestCase):
         state = health.snapshot()["booth"]["operations"]["library"]
         self.assertEqual((state["last_success"], state["problem"]), ("", "empty"))
 
+    def test_a_damaged_record_is_no_record(self):
+        """store-health.json edited, or cut short by a crash: read as no record, so the Library still opens (its
+        /api/library carries the record) and a store's next read keeps a new one."""
+        path = data_dir() / "store-health.json"
+        for damaged in ("[]", '{"booth": []}', '{"booth": {"library": "x"}}', '{"booth": {"library": {"last_success": [1]}}}',
+                        '{"booth": {"libr'):
+            with self.subTest(damaged=damaged):
+                storage.write_document(path, damaged)
+                self.assertEqual(health.snapshot()["booth"]["operations"].get("library", {}).get("last_success", ""), "")
+                with mock.patch.object(library, "fetch_booth", return_value=[{"id": "sample"}]):
+                    adapters()["booth"].read_library(None, {}, lambda message: None)
+                self.assertTrue(health.snapshot()["booth"]["operations"]["library"]["last_success"])
+
+    def test_a_note_that_cant_be_kept_never_costs_the_read(self):
+        """The record is only a note: when it can't be written (a full disk, say), the read keeps its result, and a
+        failed read its own error."""
+        with mock.patch.object(health, "record", side_effect=OSError("No space left on device")):
+            with mock.patch.object(library, "fetch_booth", return_value=[{"id": "sample"}]):
+                self.assertEqual(adapters()["booth"].read_library(None, {}, lambda message: None), [{"id": "sample"}])
+            with mock.patch.object(library, "fetch_booth", side_effect=NotLoggedIn("sign in")):
+                with self.assertRaises(NotLoggedIn):
+                    adapters()["booth"].read_library(None, {}, lambda message: None)
+
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium")
 class Recordings(IsolatedTestCase):

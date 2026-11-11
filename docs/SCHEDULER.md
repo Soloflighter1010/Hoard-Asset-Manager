@@ -46,7 +46,9 @@ index. Tasks shows completed/total packages and Resume, Pause and Stop controls.
 
 `job-queue.json` retains waiting user intents separately for the main and
 Projects lanes. They are restored in order and started only after the server's
-services are ready. A foreground operation already running at process death is
+services are ready. Only intents that read, download or add are restored (`jobs.RESUMED`, and the Projects ops in
+`RESUMED_PROJECT`): one that deletes or takes out, signs in or out, moves the library or changes a project was
+confirmed in the earlier run, so it is recorded in Tasks as stopped ("Not started again...") instead of run. A foreground operation already running at process death is
 not blindly replayed: its existing download records or project recovery files
 remain authoritative, and the user can retry it. Background cursors and queued
 intents do not bypass the normal request validation or file safety boundaries.

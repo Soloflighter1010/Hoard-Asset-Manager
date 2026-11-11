@@ -145,8 +145,11 @@ class DeletingRemovedDownloads(IsolatedTestCase):
     def test_only_its_downloaded_files_go(self):
         mine = self.folder / "Textures" / "body-edited.png"   # something of your own, in the same folder
         mine.write_bytes(b"mine")
+        from hoard.asset_updates import AssetUpdates
+        AssetUpdates().after_download(set(), ["x"], set(), {self.key: {"store": "booth", "why": "rusk.zip: timed out"}})
         done = downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
         self.assertEqual((done["products"], done["files"], done["bytes"]), (1, 3, 8))
+        self.assertEqual(AssetUpdates().load()["failed"], {}, "a download of it that didn't finish isn't wrong any more (#334)")
         self.assertTrue(mine.exists(), "your own files stay")
         self.assertFalse((self.folder / "rusk.unitypackage").exists())
         self.assertEqual(done["kept"], ["Booth/Kitsu Studio/Rusk"])

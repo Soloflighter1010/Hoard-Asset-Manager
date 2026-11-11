@@ -63,6 +63,16 @@ class Kept(IsolatedTestCase):
         self.store.change({"action": "marks", "id": self.sid, "photo": OTHER, "marks": []})
         self.assertEqual(self.marks(), {}, "none left: nothing kept")
 
+    def test_a_hidden_products_mark_stays_while_its_locked(self):
+        """While the hidden library is locked, the page never has a hidden product's marks: saving the photo's marks
+        from it keeps that product's as they were (one it sends for it anyway changes nothing)."""
+        self.store.change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": [[HAT, 120, 80], [HAIR, 500, 500]]})
+        self.store.change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": [[HAT, 200, 90], [HAIR, 1, 1]]},
+                          kept={HAIR})
+        self.assertEqual(self.marks(), {PHOTO: [[HAIR, 500, 500], [HAT, 200, 90]]})
+        self.store.change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": []}, kept={HAIR})
+        self.assertEqual(self.marks(), {PHOTO: [[HAIR, 500, 500]]}, "taking every mark off leaves the hidden one")
+
     def test_shared_by_place_and_read_back(self):
         self.store.change({"action": "marks", "id": self.sid, "photo": OTHER, "marks": [[HAIR, 900, 100], [MINE, 10, 10], [HAT, 0, 0]]})
         s = next(s for s in self.store.load()["sets"] if s["id"] == self.sid)
@@ -121,18 +131,49 @@ class InHoard(IsolatedTestCase):
 
     def test_a_sets_own_photo_and_only_that(self):
         asked = []
-        fetch = lambda url, referer: asked.append((url, referer)) or (PNG, "image/png")   # noqa: E731
+        fetch = lambda url, referer, hosts=None: asked.append((url, referer, hosts)) or (PNG, "image/png")   # noqa: E731
         with mock.patch.object(server, "fetch_picture", fetch):
             self.assertEqual(self.get(f"/setphoto/{self.sid}/0?p={server.pic_for(PHOTO)}"), (200, PNG))
             self.assertEqual(self.get(f"/setphoto/{self.sid}/0?p=000000000000")[0], 404, "the address of another photo")
             self.assertEqual(self.get(f"/setphoto/{self.sid}/1?p={server.pic_for(PHOTO)}")[0], 404)
             self.assertEqual(self.get(f"/setphoto/nope/0?p={server.pic_for(PHOTO)}")[0], 404)
-        self.assertEqual(asked, [(PHOTO, "https://i.imgur.com/")], "fetched from its photo site only")
+        self.assertEqual(asked, [(PHOTO, "https://i.imgur.com/", sets.PHOTO_HOSTS)],
+                         "fetched from its photo site only, and a redirect only to a photo site")
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_someone_elses_sets_photos_only_when_asked(self):
+        """A set added from someone else's link: its photos are on sites that person chose, so Hoard asks them for the
+        photos only once you choose Show the photo (asking tells the site someone's looking)."""
+        code, _ = sets.share_code(next(s for s in sets.SetStore().load()["sets"] if s["id"] == self.sid), PRODUCTS.get)
+        theirs = sets.SetStore().change({"action": "import", "code": code})["made"]
+        asked = []
+        fetch = lambda url, referer, hosts=None: asked.append(url) or (PNG, "image/png")   # noqa: E731
+        with mock.patch.object(server, "fetch_picture", fetch), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator(f'#setView .settile[data-setopen="{theirs}"]').click()
+            held = page.locator(".setphotos-held")
+            held.wait_for()
+            self.assertIn("i.imgur.com", held.inner_text())
+            self.assertEqual(page.locator(".setphoto img").count(), 0)
+            page.wait_for_timeout(300)
+            self.assertNotIn(PHOTO, asked, "nothing asked of the photo site yet")
+            held.locator("[data-setx=showphotos]").click()
+            page.locator(".setphoto-pic > img").wait_for()
+            page.wait_for_function("() => document.querySelector('.setphoto-pic > img').complete")
+            self.assertIn(PHOTO, asked)
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator(f'#setView .settile[data-setopen="{self.sid}"]').click()
+            page.locator(".setphoto-pic > img").wait_for()   # (your own set's: shown as it opens)
+            browser.close()
 
     @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
     def test_marked_shown_and_changed_by_keyboard(self):
         sets.SetStore().change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": [[HAIR, 250, 750]]})
-        with mock.patch.object(server, "fetch_picture", lambda url, referer: (PNG, "image/png")), sync_playwright() as pw:
+        with mock.patch.object(server, "fetch_picture", lambda url, referer, hosts=None: (PNG, "image/png")), sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1400, "height": 900})
             errors = []
@@ -176,6 +217,33 @@ class InHoard(IsolatedTestCase):
         self.assertAlmostEqual(marks[1][1], 900, delta=8)
         self.assertAlmostEqual(marks[1][2], 200, delta=8)
         self.assertEqual(errors, [])
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_a_mark_with_no_link_and_the_tile_it_opens(self):
+        """A product of your own has no store page: its mark is still reached by keyboard (Enter opens it, as a click
+        does). A mark opens its product's tile on this page: a Library product's, else its download's (a product in
+        both is found on either page)."""
+        sid = sets.SetStore().change({"action": "create", "name": "Mine", "items": [HAT, MINE], "photos": [PHOTO]},
+                                     PRODUCTS.get)["made"]
+        sets.SetStore().change({"action": "marks", "id": sid, "photo": PHOTO, "marks": [[MINE, 500, 500]]})
+        with mock.patch.object(server, "fetch_picture", lambda url, referer, hosts=None: (PNG, "image/png")), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator(f'#setView .settile[data-setopen="{sid}"]').click()
+            mark = page.locator(f'.setphoto .pmark[data-pmark="{MINE}"]')
+            mark.wait_for()
+            self.assertEqual((mark.get_attribute("tabindex"), mark.get_attribute("role"), mark.get_attribute("href")), ("0", "button", None))
+            page.evaluate("""key => { const s = SETS.sets.find(x => x.id === state.set), row = s.items.find(i => i.key === key);
+              row.lib = 'not-on-this-page'; row.download = 99;   // (as on Downloads: in the library too, its tile a download's)
+              const t = document.createElement('div'); t.className = 'slot'; t.dataset.id = '99';
+              t.addEventListener('click', () => { window.__opened = true; }); document.querySelector('#grid').appendChild(t); }""", MINE)
+            mark.focus()
+            page.keyboard.press("Enter")
+            page.wait_for_function("() => window.__opened === true")
+            browser.close()
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")

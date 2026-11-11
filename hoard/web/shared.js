@@ -3483,9 +3483,13 @@ async function pjLoadAbout(path) {
   panel.querySelector(".pj-facts").outerHTML = pjFacts(p);
   panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
 }
-// Run something once Projects isn't busy with a change (at most 10 seconds' wait): what's asked meanwhile isn't lost.
+// Run something once Projects isn't busy with a change: what's asked meanwhile isn't lost, however long that takes (a
+// slow drive, a big project); after 10 seconds it says it's waiting.
 async function pjWhenFree(run) {
-  for (let n = 0; PJ.busy && n < 200; n++) await new Promise(ok => setTimeout(ok, 50));
+  for (let n = 0; PJ.busy; n++) {
+    if (n === 200) toast(tr("Projects is still saving a change: what you asked for is done once it's finished."));
+    await new Promise(ok => setTimeout(ok, 50));
+  }
   run();
 }
 // A project's folder or tags, changed in its details: saved, and the list drawn again.
@@ -5379,15 +5383,25 @@ function photoMarks(s, url) {
   const rows = new Map(s.items.map(i => [i.key, i]));
   return ((s.marks || {})[url] || []).filter(m => rows.has(m[0])).map((m, i) => ({ n: i + 1, row: rows.get(m[0]), x: m[1], y: m[2] }));
 }
-// A mark on a photo: its number, where it is, and what it is when pointed at or focused.
+// A mark on a photo: its number, where it is, and what it is when pointed at or focused. One with no link (a product
+// of your own) is still reached by keyboard, as the set viewer's are: Tab shows what it is, and Enter opens its tile.
 function photoMarkHTML(m, tag = "a", extra = "") {
   const where = `left:${m.x / 10}%;top:${m.y / 10}%`, label = tr("{0}: {1}, on {2}", m.n, m.row.name, STORE_NAMES[m.row.store] || m.row.store);
+  const linked = tag === "a" && m.row.url;
   return `<${tag} class="pmark" style="${where}" data-pmark="${esc(m.row.key)}" aria-label="${esc(label)}"` +
-    (tag === "a" && m.row.url ? ` href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer"` : "") + `${extra}>${m.n}` +
+    (linked ? ` href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer"` : tag === "a" ? ` tabindex="0" role="button"` : "") + `${extra}>${m.n}` +
     `<span class="pcard" aria-hidden="true">${m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="">` : ""}<b translate="no">${esc(m.row.name)}</b></span></${tag}>`;
 }
+// Sets added from someone else's link whose photos you chose to see, on this page: their photos are on sites that
+// person chose, so Hoard asks those sites for them only when you say so (it tells them you're looking).
+const PHOTOS_SHOWN = new Set();
 // A set's photos, each with what's marked on it and a numbered list of those, and Mark products on it...
 function setPhotosHTML(s) {
+  if (s.from_link && !PHOTOS_SHOWN.has(s.id)) {
+    const sites = [...new Set(s.photos.map(u => { try { return new URL(u).hostname; } catch (e) { return ""; } }).filter(Boolean))];
+    return `<div class="setphotos-held"><p class="hint">${esc(tr("This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.", sites.join(", ")))}</p>` +
+      `<div class="row"><button class="ghost sm" data-setx="showphotos">${esc(tr(s.photos.length === 1 ? "Show the photo" : "Show the photos"))}</button></div></div>`;
+  }
   return `<div class="setphotos-shown">` + s.photos.map((u, n) => {
     const marks = photoMarks(s, u);
     return `<figure class="setphoto"><div class="setphoto-pic"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}" loading="lazy">` +
@@ -5407,9 +5421,15 @@ document.addEventListener("click", e => {
   const m = e.target.closest ? e.target.closest(".setphoto [data-pmark]") : null;
   const s = m && SETS && SETS.sets.find(x => x.id === state.set);
   const row = s && s.items.find(i => i.key === m.dataset.pmark);
-  const tile = row && (row.lib != null ? document.querySelector(`#grid .slot[data-key="${CSS.escape(String(row.lib))}"]`)
-    : row.download != null ? document.querySelector(`#grid .slot[data-id="${CSS.escape(String(row.download))}"]`) : null);
+  // (the Library's tiles go by library key, Downloads' by download: a product in both has each, and either page's)
+  const tile = row && ((row.lib != null && document.querySelector(`#grid .slot[data-key="${CSS.escape(String(row.lib))}"]`)) ||
+    (row.download != null && document.querySelector(`#grid .slot[data-id="${CSS.escape(String(row.download))}"]`)) || null);
   if (tile) { e.preventDefault(); tile.click(); }
+});
+// Enter or Space on a mark with no link (role="button"): what a click on it does.
+document.addEventListener("keydown", e => {
+  const m = (e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".setphoto .pmark[role=button]") ? e.target : null;
+  if (m) { e.preventDefault(); m.click(); }
 });
 /* Mark products on a set's photo (issue #346): choose a product, then click where it is on the photo (or, by
    keyboard, Place puts it in the middle); a chosen mark moves with the arrow keys (Shift for bigger steps) and comes
@@ -5876,6 +5896,7 @@ async function setAct(e) {
   }
   if (act === "addlinks") return addByLinks(s);
   if (act === "markphoto") return markPhoto(s, +b.dataset.n);
+  if (act === "showphotos") { PHOTOS_SHOWN.add(s.id); return showSet(s.id); }   // (someone else's set's photos: asked for)
   if (act === "project") return newProjectWithSet(s);
   if (act === "share") shareSet(s);
   else if (act === "download") { const keys = notDownloaded([s]); if (keys.length) T.download(keys); }

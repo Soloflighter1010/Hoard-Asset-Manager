@@ -277,6 +277,12 @@ def product_link(store, value) -> str | None:
     return f"https://{host}{path}" if ok else None
 
 
+def public_page(store, *links) -> str | None:
+    """The first of links that's a public page on the store (product_link), or None: what's shared or copied for a
+    product (its public page, else its store link when that's a public one), never a page of the buyer's own."""
+    return next((u for u in (product_link(store, x) for x in links) if u), None)
+
+
 def clean_price(value) -> dict | None:
     """A price as a wishlist keeps it (wishlists.parse_price's shape): {"text", "amount", "currency"}, checked."""
     if not isinstance(value, dict):
@@ -426,7 +432,7 @@ class SetStore:
         """Write your sets."""
         write_file_safely(self.path, json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1))
 
-    def change(self, body: dict, details=None) -> dict:
+    def change(self, body: dict, details=None, kept: set | frozenset = frozenset()) -> dict:
         """One change, from the page: {"action": "create", "name", "items"?, "note"?, "photos"?},
         {"action": "rename", "id", "name"}, {"action": "delete", "id"}, {"action": "add" or "remove", "id", "items"},
         {"action": "note", "id", "note"}, {"action": "photos", "id", "photos"},
@@ -434,8 +440,9 @@ class SetStore:
         photos, issue #346: all of that photo's, replaced), {"action": "picture", "id", "image"}
         (a picture for its tile, as safety.chosen_picture takes it, or null to go back to its products' pictures),
         {"action": "import", "code"} (a set someone shared). details(key) gives what Hoard knows of a product added (clean_product's shape, or None), to
-        keep with it. Returns the sets after it, and the new set's id for "create" and "import". Raises ValueError
-        for one that can't be made."""
+        keep with it. kept: products whose marks on a photo stay as they are whatever "marks" says (the hidden ones,
+        while the hidden library is locked: the page never had them). Returns the sets after it, and the new set's id
+        for "create" and "import". Raises ValueError for one that can't be made."""
         action = body.get("action")
         details = details or (lambda key: None)
         with _lock:
@@ -508,6 +515,9 @@ class SetStore:
                     if photo not in (s.get("photos") or []):
                         raise ValueError("That photo isn't in this set anymore.")
                     given = body.get("marks") if isinstance(body.get("marks"), list) else []
+                    if kept:   # (what the page never had stays: never taken off by a page that couldn't see it)
+                        given = [m for m in (s.get("marks") or {}).get(photo) or [] if m[0] in kept] + \
+                                [m for m in given if not (isinstance(m, list) and m and m[0] in kept)]
                     if len(given) > MAX_MARKS:
                         raise ValueError(f"A photo has up to {MAX_MARKS} products marked on it.")
                     marks = {**(s.get("marks") or {}), photo: given}
@@ -741,12 +751,15 @@ def _b64(data: bytes) -> str:
 def share_rows(s: dict, details=None) -> list[list | None]:
     """Each of a set's products as its share code holds it ([store, id, name, creator, store page, picture]), in the
     set's order, or None for one that isn't shared: one of your own (Local), or one Hoard knows nothing about.
-    details(key) fills in what the set doesn't remember of a product."""
+    details(key) fills in what the set doesn't remember of a product; its "not_adult" (you said It isn't for adults)
+    wins over the set's own word that it is."""
     details = details or (lambda key: None)
     known = s.get("products") or {}
     rows = []
     for k in s.get("items", []):
-        remembered, now = clean_product(known.get(k)), clean_product(details(k))
+        given = details(k)   # (what Hoard knows of it now)
+        remembered, now = clean_product(known.get(k)), clean_product(given)
+        said_not = isinstance(given, dict) and given.get("not_adult") is True
         p = {**(now or {}), **(remembered or {})} if remembered or now else None   # (a link remembered from 4.2.0
         if not p or p["store"] not in STORES:                                        # was dropped: Hoard's, now)
             rows.append(None)
@@ -754,7 +767,7 @@ def share_rows(s: dict, details=None) -> list[list | None]:
         if now and now.get("url"):   # its page as Hoard knows it now: its own, once a refresh has found it, not
             p["url"] = now["url"]    # the creator's page remembered before then
         row = [p["store"], p.get("id", ""), p["name"], p.get("creator", ""), p.get("url", ""), p.get("thumbnail", ""),
-               1 if (now or {}).get("adult") or (remembered or {}).get("adult") else ""]   # (1: for adults, issue #337)
+               1 if not said_not and ((now or {}).get("adult") or (remembered or {}).get("adult")) else ""]   # (1: for adults, #337)
         while row and row[-1] == "":   # (what's left out at the end costs nothing)
             row.pop()
         rows.append(row)

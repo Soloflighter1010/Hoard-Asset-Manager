@@ -42,7 +42,7 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `window-place.json` | The window's size and place when you last closed it, and whether it was maximized, so it opens there again. Delete it to open at the usual size, centred |
 | `tasks.json` | The Tasks window's list of finished jobs (the last 60): what each did, how it went, and its progress. Delete it, or **Clear** in Tasks, to empty the list |
 | `sync.json` | When the last sync started |
-| `job-queue.json` | The tasks waiting their turn in Tasks (5.2), so they still start after Hoard is closed and opened again |
+| `job-queue.json` | The tasks waiting their turn in Tasks (5.2), so they still start after Hoard is closed and opened again. One that deletes or takes out, signs in or out, moves your library or changes a project isn't started again: Tasks says so, and you ask for it again |
 | `scheduler.json` | Hoard's background work that carries on across a restart (5.2): what was paused, how far it got, and when it runs next |
 | `store-health.json` | How each store last went (5.2): when it was last read or downloaded from, whether that worked, and if not, what kind of trouble it was (never a message, product or address). **Stores** shows it, with **Report a problem**. See [Stores](Stores#when-a-store-cant-be-reached) |
 | `routine.json` | When the routine check last ran, so it knows when the next is due, and how much it found that you haven't looked at yet |

@@ -164,7 +164,10 @@ so for a set you'll share for long, use another site.
 Once a set's note and photos are saved (5.2), its page shows each photo, with a numbered mark where each product
 marked on it is, and the same numbers listed beside it with each product's picture, name and store. Point at a mark
 (or move to it with the keyboard) to see its product; choose it to open the product's details, or its store page
-when it isn't on the page. The viewer shows them the same way to whoever opens the set.
+when it isn't on the page. The viewer shows them the same way to whoever opens the set. A set you added from
+someone else's link shows its photos once you choose **Show the photos**: they're on sites that person chose, and
+Hoard asks those sites for them only when you say so. While your hidden products are locked, saving what's marked
+on a photo keeps their marks as they were.
 
 **Mark products on it...** (or **Change what's marked...**) opens the photo with the set's products beside it.
 Choose a product's **Place**, then click where it is on the photo; **Move** puts it somewhere else, and **Take off**

@@ -887,7 +887,10 @@ class AccessKey(IsolatedTestCase):
             link = page.locator("#detail [data-store-link]")
             if not path:   # (this library's Rusk has no store page to its name: nothing to copy; one with a page has it)
                 self.assertEqual(link.count(), 0)
-                page.evaluate("""() => { const a = DATA.items.find(i => i.name === 'Rusk'); a.url = 'https://booth.pm/ja/items/111'; showDetail(a); }""")
+                # a purchase's own link (a Gumroad one is its download page, which opens its files) is never copied
+                page.evaluate("""() => { const a = DATA.items.find(i => i.name === 'Rusk'); a.url = 'https://app.gumroad.com/d/0123abcd'; showDetail(a); }""")
+                self.assertEqual(link.count(), 0, "only its public page, as Hoard checked it")
+                page.evaluate("""() => { const a = DATA.items.find(i => i.name === 'Rusk'); a.url = a.public = 'https://booth.pm/ja/items/111'; showDetail(a); }""")
             link.wait_for()
             self.assertEqual(link.inner_text(), "Copy store link")
             self.assertEqual(link.get_attribute("data-store-link"), "https://booth.pm/ja/items/111")

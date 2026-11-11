@@ -259,7 +259,8 @@ def get_setphoto(self, path, body, query):
     url = app.sets.photo_url(photos[int(n)]) if n.isdigit() and int(n) < len(photos) else None
     if url and app.parse_qs(u.query).get("p", [""])[0] != app.pic_for(url):
         url = None   # an address from before the photos changed: that place is another photo's now
-    got = app.fetch_picture(url, f"https://{app.urlparse(url).hostname}/") if url else None
+    # (only from the photo sites a set may use, a redirect too: never wherever a site sends it)
+    got = app.fetch_picture(url, f"https://{app.urlparse(url).hostname}/", hosts=app.sets.PHOTO_HOSTS) if url else None
     if not got:
         return self._send(404, b"Not found", "text/plain")
     return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
@@ -314,7 +315,9 @@ def post_api_sets(self, path, body, query):
     if body.get("action") == "delete":   # its short link goes with it, once the set has
         gone = next((x for x in app.sets.SetStore().load()["sets"] if x["id"] == body.get("id")), None)
     try:
-        data = app.sets.SetStore().change(body, self._product_details())
+        # a hidden product's mark on a photo stays while the hidden library is locked: the page never had it (#346)
+        kept = app.MarkStore().keys("hidden") if body.get("action") == "marks" and not self._unlocked() else frozenset()
+        data = app.sets.SetStore().change(body, self._product_details(), kept=set(kept))
     except ValueError as e:
         return self._json({"error": str(e)}, 400)
     except OSError as e:   # (a set's picture that couldn't be saved)

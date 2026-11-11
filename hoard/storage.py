@@ -442,9 +442,10 @@ def read_document(path: Path, max_bytes: int = 64 * 1024 * 1024):
     """Read private metadata from SQLite, or an external JSON file through its existing checks."""
     if managed(path):
         return database().read(path.name, max_bytes)
-    from .safety import read_json_file as read_file
-    with metadata_lock:
-        return read_file(path, max_bytes)
+    from .safety import parse_json_data, read_data_bytes
+    with metadata_lock:   # (only while its bytes are read: never a whole file half written, nor one being replaced,
+        raw = read_data_bytes(path, max_bytes)   # as Windows refuses; parsing a large one holds up no one's write)
+    return parse_json_data(path, raw)
 
 
 def write_document(path: Path, data, root: Path | None = None):

@@ -93,11 +93,21 @@ def chosen_picture(value, limit: int = MAX_CHOSEN_PICTURE) -> tuple[bytes, str]:
 
 def read_json_file(path: Path, max_bytes: int = MAX_DATA_FILE):
     """Read a JSON data file defensively, raising DataFileError when it's too big or damaged."""
+    return parse_json_data(path, read_data_bytes(path, max_bytes))
+
+
+def read_data_bytes(path: Path, max_bytes: int = MAX_DATA_FILE) -> bytes:
+    """A data file's bytes, raising DataFileError when it's too big (read_json_file's first half)."""
     size = path.stat().st_size
     if size > max_bytes:
         raise DataFileError(f"{path.name} is unexpectedly large ({size // 1048576} MB)")
+    return path.read_bytes()
+
+
+def parse_json_data(path: Path, raw: bytes):
+    """A data file's bytes as JSON, raising DataFileError when they're damaged (read_json_file's second half)."""
     try:
-        return json.loads(path.read_text("utf-8"))
+        return json.loads(raw.decode("utf-8"))
     except (ValueError, RecursionError, UnicodeDecodeError) as e:
         raise DataFileError(f"{path.name} is damaged ({e.__class__.__name__})") from None
 
