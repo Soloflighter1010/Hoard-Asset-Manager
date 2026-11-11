@@ -2,6 +2,7 @@
 browser download that did this held up its job for ever (and every job queued after it), and Stop couldn't reach it."""
 from __future__ import annotations
 
+import re
 import http.server
 import os
 import sys
@@ -364,7 +365,10 @@ class StoppingAJob(IsolatedTestCase):
                 mock.patch.object(jobs, "tasks_file", lambda: where):
             self.assertEqual(job.start("download", ["booth"]), "started")
             self.assertTrue(ticking.wait(10))
-            time.sleep(0.2)
+            for _ in range(500):   # (another test's thread still logging is heard too: wait for this file's own line)
+                if re.search(r"downloading Big\.zip: \d+ MB", job.state["message"]):
+                    break
+                time.sleep(0.01)
             self.assertRegex(job.state["message"], r"downloading Big\.zip: \d+ MB")
             self.assertTrue(job.cancel())
             self.assertTrue(done.wait(10), "stopped part way through the file")
