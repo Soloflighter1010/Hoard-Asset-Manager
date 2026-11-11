@@ -679,20 +679,22 @@ function showDetail(a, focus = true) {
     setsSection(a) +
     previousSection(a) +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
+  saveHash();   // (first: the step left behind keeps the page's place as it was, for Back to return to, issue #329)
   renderProductDetail(a, { store: a.store.toLowerCase(), storeName: storeName(a.store), storeUrl: storeUrl(a.store, a.url),
     extra: a.variants, src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0],
     facts: [["Files", a.files.length], ["Size", fmtSize(a.size)], ["Added", shortDay(a.added) || "—"], ["Projects", (a.used_in || []).length]],
   }, sections, focus);
-  saveHash();
 }
 // Close the details, focusing the tile they were for.
 function closeDetail() {
   if (openId == null) return;
-  detail.classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = grid.querySelector(`[data-id="${openId}"]`) || lastFocus;
+  keepTileInPlace(back && back.closest("#grid") ? back : null, () => {   // (its tile stays where it is on screen: #329)
+    detail.classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
+  });
   openId = null;
   markCurrent(null);
-  if (back) back.focus();
+  if (back) back.focus({ preventScroll: true });
   saveHash();
 }
 // Show a downloaded file or folder in the system's file manager.

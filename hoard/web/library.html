@@ -428,6 +428,8 @@ body.less-motion .slot:hover .art { transform: none; }
 .sidehead .linkish { font: 700 12px var(--body); margin: 0; }
 .chip.sugg { color: var(--dust); font-weight: 500; }
 .chip.sugg:hover { color: var(--gold-text); }
+/* (chosen, it reads as any chosen tag does: its own faint colour on the gold was too pale to read, issue #341) */
+.chip.sugg[aria-pressed="true"], .chip.sugg[aria-pressed="true"]:hover { color: var(--gold-ink); font-weight: 700; }
 .chip.add { color: var(--dust); font-weight: 500; border: 1px dashed var(--seam); padding: 1px 8px; }
 .chip.add::before { content: "+ #"; }
 .chip.add:hover { color: var(--gold-text); border-color: var(--gold); }
@@ -1718,6 +1720,11 @@ body.less-motion .tour-try::before { animation: none; }
     <input type="file" id="backupFile" accept=".json,application/json" hidden></div>
   <p class="hint" id="backupNote">Your settings, tags, sets, choices and library list in one file, in Documents ›
     Hoard backups: to keep, or to move to another computer. Never your sign-ins, keys or downloads.</p>
+  <h3>Bring in from another tool</h3>
+  <p class="hint">Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and
+    the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder
+    is changed.</p>
+  <div class="field"><button class="ghost sm" data-konoasset>Bring in from KonoAsset...</button></div>
   <h3 id="part-help">Troubleshooting</h3>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>

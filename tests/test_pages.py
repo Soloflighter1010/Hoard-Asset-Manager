@@ -846,6 +846,48 @@ class AccessKey(IsolatedTestCase):
                     self.assertEqual(said, ["none", True, True, True, True, True, True], f"{where}, {scheme}: {html}")
         page.close()
 
+    def test_the_store_link_the_web_views_menu_and_konoasset_in_settings(self):
+        """Issue #345: a product's details, on both pages, open its store page and copy its link. Issue #344: in
+        Hoard's own window a right-click that isn't Hoard's own does nothing (the web view's Back, Save as and Print
+        had come up), but in a box you type in; in your browser, its menu is yours. Issue #340: Bring in from
+        KonoAsset... is in Settings as well as the Menu. Issue #341: a suggested tag, chosen, reads as a chosen one."""
+        page, refused = self.open(self.srv.entry_url())
+        page.get_by_text("Rusk").first.wait_for()
+        asked = """sel => { const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+          document.querySelector(sel).dispatchEvent(e); return e.defaultPrevented; }"""
+        self.assertFalse(page.evaluate(asked, "body"), "in a browser, the browser's own menu")
+        page.evaluate("DATA.can_quit = true")
+        self.assertTrue(page.evaluate(asked, "body"), "in Hoard's window, nothing")
+        self.assertTrue(page.evaluate(asked, "#grid"), "nor between the tiles")
+        self.assertFalse(page.evaluate(asked, "#q"), "a box you type in keeps cut, copy and paste")
+        page.evaluate("DATA.can_quit = false")
+        colours = page.evaluate("""() => { const box = document.querySelector('#filters') || document.body, made = [];
+          for (const cls of ['chip', 'chip sugg']) { const b = document.createElement('button'); b.className = cls;
+            b.setAttribute('aria-pressed', 'true'); b.textContent = 'x'; box.appendChild(b); made.push(b); }
+          const got = made.map(b => getComputedStyle(b).color); made.forEach(b => b.remove()); return got; }""")
+        self.assertEqual(colours[0], colours[1], "a suggested tag that's chosen, in a chosen tag's ink")
+        for path in ("", "downloads"):
+            if path:
+                page.click("nav.apptabs a[href='/downloads']")
+                page.wait_for_url("**/downloads**")
+            page.locator("#grid .slot", has_text="Rusk").first.click()
+            page.locator("#detail.open .d-store").wait_for()
+            link = page.locator("#detail [data-store-link]")
+            if not path:   # (this library's Rusk has no store page to its name: nothing to copy; one with a page has it)
+                self.assertEqual(link.count(), 0)
+                page.evaluate("""() => { const a = DATA.items.find(i => i.name === 'Rusk'); a.url = 'https://booth.pm/ja/items/111'; showDetail(a); }""")
+            link.wait_for()
+            self.assertEqual(link.inner_text(), "Copy store link")
+            self.assertEqual(link.get_attribute("data-store-link"), "https://booth.pm/ja/items/111")
+            if path:   # (the Library's own buttons open the store's pages)
+                self.assertEqual(page.locator("#detail .d-store a").get_attribute("href"), "https://booth.pm/ja/items/111")
+            page.keyboard.press("Escape")
+        menu(page, "#settingsBtn")
+        page.locator("#settingsPanel [data-konoasset]").click()
+        page.locator("dialog[open]", has_text="KonoAsset's data folder").wait_for()
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_add_a_folder_leaves_room_beside_it(self):
         """In Hoard's window (a folder picker), Add a folder... sits beside the path box and Add, all in the panel:
         a gold button in a row of fields isn't the full width of the panel."""
@@ -1502,6 +1544,38 @@ class LargeLibrary(IsolatedTestCase):
         self.assertLessEqual(self.drawn(page), 240, "a batch or two, not all 1,000")
         self.scroll_until(page, 1000)
         self.assertEqual(self.drawn(page), 1000, "scrolling draws them all")
+        page.close()
+
+    def test_a_tile_stays_where_it_was_clicked(self):
+        """Issue #329: a product's details opening leaves fewer tiles to a row, and its tile went rows away, out of
+        sight. It stays where it was on screen: opened, closed, and by Back and Forward."""
+        page = self.open()
+        page.evaluate("window.scrollTo(0, 2600)")
+        page.wait_for_timeout(500)
+        where = """() => { const t = window.probe ? document.querySelector('#grid .slot[data-key="' + probe + '"]')
+            : [...document.querySelectorAll('#grid .slot')].filter(s => { const r = s.getBoundingClientRect(); return r.top > 150 && r.top < 500; }).pop();
+          window.probe = t.dataset.key; return Math.round(t.getBoundingClientRect().top); }"""
+        top = page.evaluate(where)
+        press = "() => document.querySelector('#grid .slot[data-key=\"' + probe + '\"]').click()"   # (not Playwright's click, which scrolls)
+        page.evaluate(press)
+        page.locator("#detail.open").wait_for()
+        page.wait_for_timeout(300)
+        self.assertLess(page.evaluate("getComputedStyle(document.querySelector('#grid')).gridTemplateColumns.split(' ').length"), 5,
+                        "fewer to a row beside the details")
+        self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="opened: where it was")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+        self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="closed: where it was")
+        page.evaluate(press)
+        page.locator("#detail.open").wait_for()
+        page.go_back()
+        page.wait_for_timeout(400)
+        self.assertFalse(page.locator("#detail.open").count())
+        self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="Back: where it was")
+        page.go_forward()
+        page.locator("#detail.open").wait_for()
+        page.wait_for_timeout(300)
+        self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="Forward: where it was")
         page.close()
 
     def test_search_and_a_redraw(self):
@@ -2345,9 +2419,7 @@ class SetupAssistant(IsolatedTestCase):
             ready["value"] = True
             page.evaluate("setupStatus()")
             page.click("#setupNext")   # browser, now ready
-            page.locator("#setupTitle", has_text="Used Hoard before?").wait_for()
-            page.click("#setupNext")
-            page.locator("#setupTitle", has_text="Which stores").wait_for()
+            page.locator("#setupTitle", has_text="Which stores").wait_for()   # (no step for Hoard 1.x any more: #339)
             boxes = page.locator("#setupBody [data-pick]").all()
             self.assertFalse(any(b.is_checked() for b in boxes), "the first time, nothing you haven't used is ticked")
             page.check('#setupBody [data-pick="payhip"]')   # a choice made, then changed

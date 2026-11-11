@@ -1205,6 +1205,15 @@ function wireSelection() {
       menuFor(slot, { x: r.left + 12, y: r.top + 12 });
     });
   }
+  // In Hoard's own window the web view's menu (Back, Refresh, Save as, Print...) has no place (issue #344): a
+  // right-click that isn't Hoard's own does nothing, but in a box you type in, which keeps its cut, copy and paste.
+  // In your browser, the browser's menu is yours.
+  document.addEventListener("contextmenu", e => {
+    if (e.defaultPrevented || !inOwnWindow()) return;
+    const el = e.target.closest ? e.target : e.target.parentElement;
+    if (el && el.closest('textarea, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=file])')) return;
+    e.preventDefault();
+  });
   document.addEventListener("pointerdown", e => { if (selMenu && !selMenu.el.contains(e.target) && e.target !== selMenu.from) closeSelMenu(); }, true);
   window.addEventListener("resize", () => closeSelMenu());
   // scrolling closes the menu, but not the page settling as it opens: the bar appearing for a right-clicked tile can
@@ -2185,6 +2194,9 @@ async function openSettings(open) {
 }
 // Whether Hoard can show its own file picker (in Hoard's window).
 const canPick = () => !!(typeof DATA === "object" && DATA && DATA.can_pick);
+// Whether this is Hoard's own window (it can be quit, kept running in the background or asked for a folder from here),
+// not a tab in your browser.
+const inOwnWindow = () => !!(typeof DATA === "object" && DATA && (DATA.can_quit || DATA.can_background || DATA.can_pick));
 // Show the Browse buttons only where Hoard can show its own picker.
 function syncBrowse() { for (const b of document.querySelectorAll("[data-browse]")) b.hidden = !canPick(); }
 // Pick a folder (or file) in Hoard's window, and put its path in input. False when none was picked.

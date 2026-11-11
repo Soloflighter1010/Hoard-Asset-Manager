@@ -418,18 +418,21 @@ function showDetail(a, focus = true) {
     noteSection(a) + tagSection(a) + setsSection(a) +
     (a.files.length ? `<h3>Files</h3><ul class="files">${a.files.filter(f => storeUrl(a.store, f.url)).map(f =>
       `<li><span class="fn">${esc(f.name)}</span><a class="ghost sm" href="${esc(storeUrl(a.store, f.url))}" target="_blank" rel="noopener noreferrer">Download</a></li>`).join("")}</ul>` : "");
+  saveHash();   // (first: the step left behind keeps the page's place as it was, for Back to return to, issue #329)
   renderProductDetail(a, { store: a.store, storeName: store, creatorUrl: storeUrl(a.store, a.creator_url), extra,
+    copyUrl: storeUrl(a.store, a.url),
     src: a.thumbnail ? keyed("/thumb/" + encodeURIComponent(a.key)) : "",
     facts: [["Store", store], ["Files", a.files.length || "—"], ["Added", shortDay(a.added) || "—"], ["Tags", a.tags.length]],
   }, sections, focus);
-  saveHash();
 }
 // Close the details, focusing the tile they were for.
 function closeDetail() {
   if (!openKey) return;
-  $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   const back = document.querySelector(`.slot[data-key="${CSS.escape(openKey)}"]`) || lastFocus;
-  openKey = null; markCurrent(null); if (back) back.focus();
+  keepTileInPlace(back && back.closest("#grid") ? back : null, () => {   // (its tile stays where it is on screen: #329)
+    $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
+  });
+  openKey = null; markCurrent(null); if (back) back.focus({ preventScroll: true });
   saveHash();
 }
 // Close the details and empty them, so nothing of the item stays in the page (it's only out of view once closed).
@@ -852,7 +855,7 @@ function setupPicked(st, s) {
   return !!((DATA.stores || {})[s] || {}).count;
 }
 // The setup assistant's steps (Payhip's, notifications and closing only when they apply).
-const setupSteps = () => ["language", "access", "look", "welcome", "browser", "older", "stores",
+const setupSteps = () => ["language", "access", "look", "welcome", "browser", "stores",
   ...(SETUP.st && SETUP.st.stores.payhip.enabled ? ["payhip"] : []), "signin", "folder",
   ...(SETUP.st && (SETUP.st.apprise || {}).available ? ["notifications"] : []),   // (issue #288: Apprise, where it's installed)
   ...(DATA.can_background ? ["closing"] : []), "done"];   // (Hoard's own window: in a browser, closing is the browser's)
@@ -1005,12 +1008,6 @@ const SETUP_VIEWS = {
         asks first.</span></span></label>
     </div>
     <p class="muted">You can change this later in Settings, under Closing Hoard.</p>`,
-  older: () => `<h2 id="setupTitle">Used Hoard before?</h2>
-    <p>If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.</p>
-    <div class="field"><input id="oldFolder" spellcheck="false" aria-label="Folder you ran Hoard 1.x from" placeholder="The folder you ran Hoard 1.x from, such as D:\\Tools\\Hoard-Bundle">
-      <button class="ghost" id="bringOver">Bring it over</button></div>
-    <p class="progress" id="bringResult" aria-live="polite"></p>
-    <p class="muted">New to Hoard? Skip this step.</p>`,
   done: () => `<h2 id="setupTitle">Hoard's ready</h2>
     <p>When you choose Finish, Hoard reads what you own from your stores. After that, choose <strong>Download everything new</strong> in Stores, or <strong>Download new</strong> in Downloads, whenever you want local copies.</p>
     <p>Once Hoard has read your library, a short tour can show you what else it does.</p>
@@ -1136,13 +1133,6 @@ const SETUP_WIRES = {
       $("#setupKonoResult").textContent = r.ok
         ? tr("{0} in KonoAsset. They're brought in after Hoard reads your stores.", tr(r.data.total === 1 ? "1 product" : "{0} products", r.data.total))
         : (r.data.error || tr("That folder couldn't be read."));
-    });
-  },
-  older: () => {
-    viewListen("library", $("#bringOver"), "click", async () => {
-      const r = await apiPost("/api/setup/migrate", { folder: $("#oldFolder").value.trim() });
-      $("#bringResult").textContent = r.ok ? r.data.message : (r.data.error || "That didn't work.");
-      if (r.ok) { load(); await setupStatus(); }   // the next steps show what came across
     });
   },
 };

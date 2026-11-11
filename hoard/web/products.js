@@ -67,6 +67,20 @@ function productTile(a, model) {
       productElement("span", { class: "rm-when" }, model.added)));
   return button;
 }
+// Make a change that lays the grid out again (the details opening or closing changes how many tiles fit a row), then
+// scroll so this tile is where it was on screen. Before, a product's tile could end up rows away from where it was
+// clicked, out of sight (issue #329).
+function keepTileInPlace(tile, change) {
+  const before = tile && tile.isConnected ? tile.getBoundingClientRect().top : null;
+  const root = document.documentElement, anchoring = root.style.overflowAnchor;
+  root.style.overflowAnchor = "none";   // (the browser's own guess at keeping the page still would be added to this)
+  try {
+    change();
+    if (before == null || !tile.isConnected) return;
+    const moved = tile.getBoundingClientRect().top - before;
+    if (Math.abs(moved) > 1) window.scrollTo({ top: window.scrollY + moved, behavior: "instant" });
+  } finally { requestAnimationFrame(() => { root.style.overflowAnchor = anchoring; }); }
+}
 // One details frame and common product fields. Older view-specific actions/files are supplied as escaped sections.
 function renderProductDetail(a, model, sections, focus = true) {
   const detail = $("#detail"), by = productElement("p", { class: "d-by", translate: "no" });
@@ -76,12 +90,23 @@ function renderProductDetail(a, model, sections, focus = true) {
   by.append(sentence[0], creator, sentence.slice(1).join("\u0001"), model.extra ? tr(", {0}", model.extra) : "");
   const store = productElement("p", { class: "d-store" }, productElement("span", { class: `dot ${model.store}` }), model.storeName);
   if (model.storeUrl) store.append(" ", productElement("a", { href: model.storeUrl, target: "_blank", rel: "noopener noreferrer", title: model.storeUrl }, tr("Open on {0}", model.storeName)));
+  const page = model.storeUrl || model.copyUrl;   // (the Library has its own buttons to open the store's pages)
+  if (page) store.append(" ", productElement("button", { class: "linkish", type: "button", "data-store-link": page }, tr("Copy store link")));
   const facts = productElement("div", { class: "d-stats" });
   for (const [name, value] of model.facts) facts.append(productElement("span", {}, productElement("small", {}, tr(name)), productElement("b", {}, value)));
-  detail.replaceChildren(productElement("button", { class: "x", "data-act": "close", "aria-label": tr("Close details") }, "×"),
-    productElement("div", { class: `d-art ${model.store}` }, productPicture(a, model.src, model.type, false)),
-    productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, facts, legacyFragment(sections));
-  detail.classList.add("open"); document.body.classList.add("panel-open");
-  $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
-  if (focus) detail.querySelector(".x").focus();
+  keepTileInPlace(document.querySelector('#grid .slot[aria-current="true"]'), () => {
+    detail.replaceChildren(productElement("button", { class: "x", "data-act": "close", "aria-label": tr("Close details") }, "×"),
+      productElement("div", { class: `d-art ${model.store}` }, productPicture(a, model.src, model.type, false)),
+      productElement("h2", { class: "d-name", translate: "no" }, a.name), by, store, facts, legacyFragment(sections));
+    detail.classList.add("open"); document.body.classList.add("panel-open");
+    $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
+    if (focus) detail.querySelector(".x").focus({ preventScroll: true });
+  });
 }
+// Copy store link, in a product's details on either page (issue #345).
+document.addEventListener("click", async e => {
+  const b = e.target.closest ? e.target.closest("[data-store-link]") : null;
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.storeLink); toast("Copied the store link."); }
+  catch (x) { toast("That couldn't be copied here: choose Open on the store, and copy its address there."); }
+});

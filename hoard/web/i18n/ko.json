@@ -683,10 +683,6 @@
  "Quit Hoard": "Hoard 종료",
  "Closing the window quits it. While something's running, Hoard asks first.": "창을 닫으면 종료돼요. 무언가 실행 중이면 먼저 물어봐요.",
  "You can change this later in Settings, under Closing Hoard.": "나중에 설정의 'Hoard를 닫을 때'에서 바꿀 수 있어요.",
- "Used Hoard before?": "전에 Hoard를 썼나요?",
- "If you used Hoard 1.x, bring over your library list and downloads folder. Your sign-ins and tags carry over by themselves.": "Hoard 1.x를 썼다면 라이브러리 목록과 다운로드 폴더를 가져올 수 있어요. 로그인과 태그는 저절로 이어져요.",
- "Bring it over": "가져오기",
- "New to Hoard? Skip this step.": "Hoard가 처음인가요? 이 단계는 건너뛰세요.",
  "Hoard's ready": "Hoard 준비 완료",
  "When you choose Finish, Hoard reads what you own from your stores. After that, choose <0>Download everything new</0> in Stores, or <1>Download new</1> in Downloads, whenever you want local copies.": "끝내기를 고르면 Hoard가 스토어에서 가진 것을 읽어요. 그다음 사본이 필요할 때마다 스토어의 <0>새로운 것 모두 다운로드</0>나 다운로드의 <1>새것 다운로드</1>를 고르세요.",
  "Run this again any time from Settings.": "설정에서 언제든 다시 할 수 있어요.",
@@ -948,8 +944,6 @@
  "Choose your language": "언어를 선택하세요",
  "You can change it later in Settings, under Appearance.": "나중에 설정의 모양에서 바꿀 수 있어요.",
  "Start": "시작",
- "The folder you ran Hoard 1.x from, such as D:\\Tools\\Hoard-Bundle": "Hoard 1.x를 실행하던 폴더(예: D:\\Tools\\Hoard-Bundle)",
- "Folder you ran Hoard 1.x from": "Hoard 1.x를 실행하던 폴더",
  "Couldn't read {0}. Each store's row in Stores says why.": "{0}을(를) 읽지 못했어요. 이유는 스토어의 각 줄에 있어요.",
  "Refresh: {0}": "새로고침: {0}",
  "Opening your hoard": "컬렉션을 여는 중",
@@ -2484,5 +2478,10 @@
  "Checking Unity catalog": "Unity 카탈로그 확인 중",
  "Updating Unity catalog": "Unity 카탈로그 업데이트 중",
  "Caching store pictures": "스토어 사진 저장 중",
- "Forgetting old share links": "이전 공유 링크 삭제 중"
+ "Forgetting old share links": "이전 공유 링크 삭제 중",
+ "Copy store link": "스토어 링크 복사",
+ "Copied the store link.": "스토어 링크를 복사했어요.",
+ "That couldn't be copied here: choose Open on the store, and copy its address there.": "여기서는 복사하지 못했어요. 스토어에서 열어서 주소를 복사하세요.",
+ "Bring in from another tool": "다른 도구에서 가져오기",
+ "Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder is changed.": "KonoAsset에서 옮겨 오시나요? Hoard는 KonoAsset의 라이브러리를 가져올 수 있어요. 가지고 있는 상품은 BOOTH 아이템으로 맞추고, 나머지는 로컬 상품으로, 파일은 있던 자리에 그대로 두고 가져와요. 태그와 메모도 함께 와요. KonoAsset의 폴더는 아무것도 바꾸지 않아요."
 }
