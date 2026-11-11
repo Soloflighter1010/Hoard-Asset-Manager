@@ -2496,5 +2496,6 @@
  "Marked as not for adults.": "成人向けではないと設定しました。",
  "Blur the pictures of products for adults (18+)": "成人向け(18+)の商品の画像をぼかす",
  "Adult: it has products for adults in it.": "成人向け:成人向けの商品が入っています。",
- "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "成人向け:成人向けの商品が入っています。共有すると、見る人にまず年齢を確認します。"
+ "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "成人向け:成人向けの商品が入っています。共有すると、見る人にまず年齢を確認します。",
+ "The copy is listed in Local, where it is, and opened there.": "コピーはその場所のままローカルに登録され、そこで開きます。"
 }

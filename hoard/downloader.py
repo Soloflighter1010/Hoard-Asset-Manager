@@ -1402,7 +1402,8 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     recorded are copied, and only while they're still the size they were downloaded at; one that isn't is left out
     and named, so a file changed behind Hoard's back isn't passed on as the store's. Nothing is read through a
     link. The copy goes in a new folder each time ("Name (2)" beside an earlier copy), and a note in it says what
-    it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)]}. Raises ValueError when there's nothing to copy."""
+    it is. Returns {"folder", "files", "bytes", "skipped": [(path, why)], "name", "creator", "store"}. Raises
+    ValueError when there's nothing to copy."""
     dest_root = edits_root(cfg, root)
     for _base, store, sdir in library_store_dirs(cfg, root):
         for rec in Manifest(sdir).assets.values():
@@ -1442,7 +1443,8 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
             (dest / "_EDITABLE COPY - read me.txt").write_text(note, "utf-8")
             log(f"Made an editable copy of {store}/{rec['folder']} in {dest}: {copied} files"
                 + (f", {len(skipped)} left out" if skipped else ""))
-            return {"folder": str(dest), "files": copied, "bytes": size, "skipped": skipped}
+            return {"folder": str(dest), "files": copied, "bytes": size, "skipped": skipped,
+                    "name": rec.get("name") or dest.name, "creator": rec.get("creator") or "", "store": store}
     raise ValueError("That download isn't on disk any more.")
 
 

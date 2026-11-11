@@ -303,6 +303,26 @@ class EditableCopies(IsolatedTestCase):
             r = c.getresponse(); data = json.loads(r.read()); c.close()
             self.assertEqual((r.status, data["files"], data["skipped"]), (200, 2, []))
             self.assertTrue(Path(data["folder"]).is_dir())
+            # issue #328: the copy is listed in Local, where it is, so it's found in Hoard afterwards
+            self.assertTrue(data["local"])
+            for _ in range(200):
+                if not srv.jobs.state["running"] and srv.jobs.history:
+                    break
+                time.sleep(0.05)
+            from hoard import local
+            (rec,) = downloader.Manifest(local.local_dir(self.root)).assets.values()
+            self.assertEqual((rec["name"], rec["creator"], rec["location"]), ("Rusk (editable copy)", "Kitsu Studio", data["folder"]))
+            self.assertIn("editable copy of your download from Booth", rec["note"])
+            self.assertEqual(len(rec["files"]), 3, "its two files and the read-me, listed where they are")
+            self.assertEqual([p.name for p in local.local_dir(self.root).rglob("*") if p.is_file() and not p.name.startswith("_") and p.name != "asset.json"], [],
+                             "nothing copied again: only Hoard's own records are in Local's folder")
+            (shown,) = [a for a in srv.index(rescan=True)["assets"] if a["store"] == "Local"]
+            self.assertEqual(shown["abs_folder"], data["folder"], "the page finds its tile by its folder")
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/edit-copy", body=json.dumps({"key": self.key, "local": False}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); again = json.loads(r.read()); c.close()
+            self.assertEqual((again["local"], len(downloader.Manifest(local.local_dir(self.root)).assets)), (False, 1), "only when asked")
         finally:
             srv.shutdown()
             srv.server_close()

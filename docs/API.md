@@ -33,7 +33,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/download` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
 | GET | `/api/download-choices` | key | no | — | object |
 | POST | `/api/download-skip` | key | yes | `keys: array`, `skip: boolean` | object |
-| POST | `/api/edit-copy` | key | yes | `key: string`, `open: boolean` | object |
+| POST | `/api/edit-copy` | key | yes | `key: string`, `local: boolean`, `open: boolean` | object |
 | POST | `/api/enter` | entry | no | `token: string` | object |
 | GET | `/api/folders` | key | no | — | object |
 | POST | `/api/folders/open` | key | yes | `id: string` | object |

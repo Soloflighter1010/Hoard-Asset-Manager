@@ -416,8 +416,23 @@ def post_api_edit_copy(self, path, body, query):
             opened = app.reveal(app.Path(done["folder"]))
         except OSError:
             pass
+    # Issue #328: the copy is listed in Local, where it is (never copied again), so it's found in Hoard afterwards,
+    # with its own tile, tags and note. It's a task, as adding to Local is: the page opens its tile once it's there.
+    listed = queued = False
+    if body.get("local") is not False and done["files"]:
+        from .. import local
+        label = app.STORES.get(str(done["store"]).lower(), {}).get("label") or done["store"]
+        what = {"path": done["folder"], "name": f"{done['name']} (editable copy)"[:300], "creator": done["creator"][:200],
+                "note": f"An editable copy of your download from {label}. Hoard never checks or replaces it."[:300],
+                "copy": False, "depth": 0}
+        try:
+            local.check_source(app.root_dir(srv.cfg), what["path"], False)
+            started = srv.jobs.start("add-local", [], local=what)
+            listed, queued = bool(started), started == "queued"
+        except ValueError as e:   # (a copy all the same: it's in its folder, and can be added to Local by hand)
+            print(f"Couldn't list the editable copy in Local: {e}", flush=True)
     return self._json({"ok": True, **done, "skipped": [{"path": p, "why": w} for p, w in done["skipped"]],
-                       "opened_in": opened})
+                       "opened_in": opened, "local": listed, "queued": queued})
 
 
 def post_api_integrity_resolve(self, path, body, query):
@@ -457,7 +472,7 @@ ROUTES = [
     Route('POST', '/api/open-logs', post_api_open_logs, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/move', post_api_move, changes=True, auth='key', image_key=False, max_body=1048576, request=(('key', 'string'), ('to', 'string')), response='object'),
     Route('POST', '/api/verify', post_api_verify, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
-    Route('POST', '/api/edit-copy', post_api_edit_copy, changes=True, auth='key', image_key=False, max_body=1048576, request=(('key', 'string'), ('open', 'boolean')), response='object'),
+    Route('POST', '/api/edit-copy', post_api_edit_copy, changes=True, auth='key', image_key=False, max_body=1048576, request=(('key', 'string'), ('local', 'boolean'), ('open', 'boolean')), response='object'),
     Route('POST', '/api/integrity/resolve', post_api_integrity_resolve, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('problems', 'any')), response='object'),
     Route('POST', '/api/product-files', post_api_product_files, changes=False, auth='key', image_key=False, max_body=1048576, request=(('keys', 'array'), ('names', 'any'), ('read', 'any')), response='object'),
     Route('POST', '/api/delete-files', post_api_delete_files, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('keys', 'array')), response='object'),

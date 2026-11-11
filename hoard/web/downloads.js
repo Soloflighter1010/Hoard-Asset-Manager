@@ -1216,15 +1216,28 @@ async function editableCopy(a, button) {
   if (!await ask(tr("Copy {0} into a folder of its own for you to change?", a.name) + "\n\n" +
                tr("Hoard never checks, updates or replaces that copy. Only files that still match what Hoard downloaded " +
                   "are copied. Anything you add to the copy later hasn't been checked by Hoard, so be as careful with it as " +
-                  "with any download."), "Make the copy")) return;
+                  "with any download.") + "\n\n" + tr("The copy is listed in Local, where it is, and opened there."), "Make the copy")) return;
   button.disabled = true;
-  const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: true });
+  const r = await apiPost("/api/edit-copy", { key: a.tag_key, open: false });
   button.disabled = false;
   if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
   const left = r.data.skipped.length;
-  toast([tr(r.data.files === 1 ? "Copied 1 file to {1}." : "Copied {0} files to {1}.", r.data.files, r.data.folder),
+  const said = [tr(r.data.files === 1 ? "Copied 1 file to {1}." : "Copied {0} files to {1}.", r.data.files, r.data.folder),
          left && tr(left === 1 ? "Left out 1 that has changed or gone since Hoard downloaded it (listed in the read-me there)."
-                               : "Left out {0} that have changed or gone since Hoard downloaded them (listed in the read-me there).", left)].filter(Boolean).join(" "));
+                               : "Left out {0} that have changed or gone since Hoard downloaded them (listed in the read-me there).", left)].filter(Boolean).join(" ");
+  if (!r.data.local) { toast(said); return; }
+  // issue #328: the copy is in Local once its task is done: its tile is opened there, with what was copied said
+  await afterQueuedJob(r, "add-local", async () => {
+    await load(true);
+    const copy = DATA.assets.find(x => isLocal(x) && x.abs_folder === r.data.folder);
+    if (!copy) return;
+    closeDetail();
+    Object.assign(state, { view: "downloads", store: "Local", lib: "", q: "", creator: "", ptype: "", set: "" });
+    state.tags.clear(); state.types.clear();
+    render();
+    showDetail(copy);
+  });
+  toast(said);
 }
 // Library folders (Settings): a product kept in one of them can be moved to another
 const libLabel = l => `${libText(l)} (${l.path})`;
