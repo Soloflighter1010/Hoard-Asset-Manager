@@ -18,8 +18,16 @@ from unittest import mock
 _bootstrap = tempfile.TemporaryDirectory(prefix="hoard-test-imports-")
 atexit.register(_bootstrap.cleanup)
 os.environ["HOARD_DATA_DIR"] = str(Path(_bootstrap.name) / "data")
-_protected = {Path(_bootstrap.name).resolve()}
-_active: Path | None = None
+
+
+def _forms(path) -> frozenset:
+    """A folder as it's written and as it resolves: on Windows a temporary folder comes by its short name
+    (RUNNER~1) and resolves to the long one, and a write may name it either way."""
+    return frozenset({Path(os.path.abspath(path)), Path(path).resolve()})
+
+
+_protected = set(_forms(_bootstrap.name))
+_active: frozenset | None = None
 _violations: list[str] = []
 
 
@@ -47,8 +55,8 @@ def _audit(event, args) -> None:
         if not isinstance(name, (str, bytes, os.PathLike)):
             continue
         path = Path(os.path.abspath(os.fsdecode(name)))
-        if any(_inside(path, root) for root in _protected) and not _inside(path, _active):
-            message = f"Test wrote outside its own app-data folder: {path} (active: {_active})"
+        if any(_inside(path, root) for root in _protected) and not any(_inside(path, root) for root in _active):
+            message = f"Test wrote outside its own app-data folder: {path} (active: {sorted(map(str, _active))})"
             _violations.append(message)
             raise AssertionError(message)
 
@@ -86,8 +94,8 @@ class TestHome(contextlib.ExitStack):
         self.enter_context(mock.patch.object(safety, "_integrity_key", None))
         self.enter_context(mock.patch.object(safety, "_sealed_ids", None))
         self.enter_context(mock.patch.dict(safety._EXTRA_SITES, {}, clear=True))
-        _protected.add(self.root.resolve())
-        self._previous, _active = _active, self.root.resolve()
+        _protected.update(_forms(self.root))
+        self._previous, _active = _active, _forms(self.root)
         start = len(_violations)
         self.callback(self._check_guard, start)
         self.callback(self._restore_new_aliases, old, data, original_default, current_default)
