@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import threading
 import unittest
@@ -311,10 +312,26 @@ class Packaging(IsolatedTestCase):
             (Path(d) / "update-windows.tsv").write_text(
                 f"windows-x86_64\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n"
                 f"windows-x86_64-nsis\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n")
-            (Path(d) / "update-linux.tsv").write_text(f"linux-x86_64-deb\tHoard-Tauri-5.2.0-beta.6-linux-amd64.deb\t{sig}\n")
+            # (each system's files as the workflow's "Name the files" names them: the AppImage's has x86_64 in it)
+            (Path(d) / "update-linux.tsv").write_text(
+                f"linux-x86_64\tHoard-Tauri-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
+                f"linux-x86_64-appimage\tHoard-Tauri-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
+                f"linux-x86_64-deb\tHoard-Tauri-5.2.0-beta.6-linux-amd64.deb\t{sig}\n")
+            for name, keys in (("macos-apple-silicon", ("darwin-aarch64", "darwin-aarch64-app")),
+                               ("macos-intel", ("darwin-x86_64", "darwin-x86_64-app"))):
+                (Path(d) / f"update-{name}.tsv").write_text(
+                    "".join(f"{k}\tHoard-Tauri-5.2.0-beta.6-{name}.app.tar.gz\t{sig}\n" for k in keys))
             m = update_manifest.manifest(Path(d), "v5.2.0-beta.6", datetime(2026, 11, 20, tzinfo=timezone.utc))
             self.assertEqual(m["pub_date"], "2026-11-20T00:00:00Z")
-            self.assertEqual(sorted(m["platforms"]), ["linux-x86_64-deb", "windows-x86_64", "windows-x86_64-nsis"])
+            self.assertEqual(sorted(m["platforms"]), ["darwin-aarch64", "darwin-aarch64-app", "darwin-x86_64", "darwin-x86_64-app",
+                                                      "linux-x86_64", "linux-x86_64-appimage", "linux-x86_64-deb",
+                                                      "windows-x86_64", "windows-x86_64-nsis"])
+            # the names the workflow gives the files are the names the manifest takes
+            flow = (self.ROOT / ".github" / "workflows" / "tauri-nuitka.yml").read_text("utf-8")
+            for made in re.findall(r'"dist/(Hoard-Tauri-[^"]+)"', flow):
+                example = made.replace("$version", "5.2.0-beta.6").replace("${{ matrix.name }}", "macos-apple-silicon")
+                if example.endswith((".exe", ".app.tar.gz", ".AppImage", ".deb")):
+                    self.assertTrue(update_manifest.FILE.fullmatch(example), example)
             self.assertEqual(m["platforms"]["linux-x86_64-deb"], {"signature": sig, "url":
                 "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.6/Hoard-Tauri-5.2.0-beta.6-linux-amd64.deb"})
             for bad in (f"macos-x86_64\tHoard-a.dmg\t{sig}", f"linux-x86_64\t../evil.AppImage\t{sig}",

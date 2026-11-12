@@ -19,7 +19,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 DOWNLOADS = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/"
 SYSTEM = re.compile(r"(windows|darwin|linux)-(x86_64|aarch64)(-(nsis|app|appimage|deb))?")
-FILE = re.compile(r"Hoard-[A-Za-z0-9.+-]+\.(exe|app\.tar\.gz|AppImage|deb)")
+FILE = re.compile(r"Hoard-[A-Za-z0-9_.+-]+\.(exe|app\.tar\.gz|AppImage|deb)")   # (x86_64: the AppImage's)
 TAG = re.compile(r"[A-Za-z0-9._-]+")
 
 
