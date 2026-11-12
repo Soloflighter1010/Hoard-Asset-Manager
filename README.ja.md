@@ -99,21 +99,23 @@ Hoardなら、タブを4つも開かずに答えが分かります。
 <a id="install-windows"></a>
 ## インストール(Windows)
 
-1. [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)から **`Hoard-Setup-<バージョン>.exe`** をダウンロードして実行します。自分のアカウントだけにインストールされ、管理者の確認は出ません。スタートメニューにHoardが追加されます。
-2. リリース直後はしばらく **「WindowsによってPCが保護されました」** と表示されることがあります。Hoardはコード署名されています(**詳細情報**を選ぶと、発行元としてHoardのメンテナーが表示されます)が、新しい発行元はまずMicrosoftの信頼を得る必要があります。[CODE_SIGNING.md](CODE_SIGNING.md)(英語)をご覧ください。**実行**を選んでください。ダウンロードがこのプロジェクトのGitHubビルドから来たものか確かめるには:`gh attestation verify Hoard-Setup-<バージョン>.exe -R Soloflighter1010/Hoard-Asset-Manager`
+5.2.0 beta 6から、Hoardは新しい作り方(ウィンドウはTauri、サーバーはNuitkaでコンパイル)で作られていて、新しいアプリとしてインストールされます。先に今のHoardをアンインストールしてください。方法は[Hoardのインストール](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoardのインストール#新しいhoardに移る)にあります。ライブラリ、設定、サインインはそのまま残ります。
+
+1. [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)から **`Hoard-<バージョン>-windows-setup.exe`** をダウンロードして実行します。自分のアカウントだけにインストールされ、管理者の確認は出ません。スタートメニューにHoardが追加されます。(Hoard 5.1、[最新リリース](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)は `Hoard-Setup-<バージョン>.exe` です。)
+2. リリース直後はしばらく **「WindowsによってPCが保護されました」** と表示されることがあります。Hoardはコード署名されています(**詳細情報**を選ぶと、発行元としてHoardのメンテナーが表示されます)が、新しい発行元はまずMicrosoftの信頼を得る必要があります。[CODE_SIGNING.md](CODE_SIGNING.md)(英語)をご覧ください。**実行**を選んでください。ダウンロードがこのプロジェクトのGitHubビルドから来たものか確かめるには:`gh attestation verify Hoard-<バージョン>-windows-setup.exe -R Soloflighter1010/Hoard-Asset-Manager`
 3. スタートメニューから **Hoard** を開きます。専用のウィンドウで開きます。短いセットアップアシスタントが、言語、使いやすさ(文字の大きさ、ディスレクシア向けフォント、間隔、色、動き)、使うストア、各ストアへのサインイン、Payhipのショップ、ダウンロードの保存先を順番に案内します。**設定** の **Hoardをもう一度セットアップ** からいつでもやり直せます。ライブラリを読み込んだあとは、短いツアーがあなた自身のものを使ってほかにできることを紹介します(**設定** の **ツアーを見る** からいつでも)。
 
-**アップデート:** **設定** の **アップデート** で **今すぐ確認** を選び、新しいバージョンへの **アップデート** を選びます。Hoardがダウンロードし、リリースのチェックサムと照合してから終了し、インストールしてもう一度開きます(**アップデートを自動で確認** をオンにすると、新しいバージョンが出たときに知らせます。オンにしない限りオフです)。新しいセットアップを自分で実行してもかまいません。先にアンインストールする必要はありません。設定、ライブラリ、サインイン、タグはHoardのアプリデータフォルダー(`%LOCALAPPDATA%\Hoard`)に、ダウンロードはダウンロードフォルダーにあるので、インストール・アップデート・アンインストールで消えることはありません。
+**アップデート:** **設定** の **Hoardのアップデート** で **今すぐ確認** を選び、新しいバージョンへの **アップデート** を選びます。Hoardが閉じ、ウィンドウが新しいバージョンをダウンロードして、Hoard自身の鍵の署名があるときだけ残し、インストールしてHoardをもう一度開きます(**アップデートを自動で確認** で、新しいバージョンが出たときに知らせます)。新しいセットアップを自分で上書きで実行してもかまいません。設定、ライブラリ、サインイン、タグは `%LOCALAPPDATA%\Hoard` に、ダウンロードはダウンロードフォルダーにあります。インストール・アップデート・アンインストールで触れるのは、プログラム自身のファイルだけです。
 
-HoardのウィンドウはMicrosoft Edge WebView2を使います(Windows 11には含まれ、Windows 10でも自動で最新に保たれます)。WebView2がない場合は、代わりにWebブラウザーで開きます(終了は **設定** から)。
+HoardのウィンドウはMicrosoft Edge WebView2を使います(Windows 11には含まれ、Windows 10でも自動で最新に保たれます)。
 
 <a id="install-macos-linux"></a>
 ## インストール(macOS・Linux)
 
-- **macOS 11以降:** [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)から `Hoard-<バージョン>-macos-apple-silicon.pkg`(MシリーズのMac)または `Hoard-<バージョン>-macos-intel.pkg` をダウンロードして開きます。まだAppleの署名がないため、最初は開けません。**完了** を選び、**システム設定 › プライバシーとセキュリティ › このまま開く** を選んでください。Hoardは **アプリケーション** に入ります。
-- **Linux(x86_64):** `Hoard-<バージョン>-linux-x86_64.flatpak` をダウンロードしてソフトウェアセンターで開くか、`flatpak install --user Hoard-<バージョン>-linux-x86_64.flatpak` を実行します。[Flathub](https://flathub.org/setup)のGNOMEランタイムを使います。
+- **macOS 11以降:** [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)から `Hoard-<バージョン>-macos-apple-silicon.dmg`(MシリーズのMac)または `Hoard-<バージョン>-macos-intel.dmg` をダウンロードして開き、Hoardを **アプリケーション** にドラッグします。まだAppleの署名がないため、最初は開けません。**完了** を選び、**システム設定 › プライバシーとセキュリティ › このまま開く** を選んでください。(Hoard 5.1は代わりに `.pkg` です。)
+- **Linux(x86_64):** AppImage(`Hoard-<バージョン>-linux-x86_64.AppImage`。実行できるようにして開きます)、DebianとUbuntu向けの `.deb`(`Hoard-<バージョン>-linux-amd64.deb`)、またはFlatpak(`Hoard-<バージョン>-linux-x86_64.flatpak`。ソフトウェアセンターで開くか、`flatpak install --user Hoard-<バージョン>-linux-x86_64.flatpak` を実行します。[Flathub](https://flathub.org/setup)のGNOMEランタイムを使い、以前のHoardのFlatpakに上書きでインストールされます)。
 
-どちらもHoard専用のウィンドウで開きます。アップデートするには、新しいファイルを同じ方法でインストールします(どれを使うかは **設定 › アップデート** に表示されます)。詳しくは[Hoardのインストール](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoardのインストール)をご覧ください。
+どれもHoard専用のウィンドウで開きます。Mac版、AppImage、.debはWindowsと同じように自分でアップデートします。Flatpakは、新しい `.flatpak` を同じ方法でインストールしてアップデートします(どれを使うかは **設定 › Hoardのアップデート** に表示されます)。詳しくは[Hoardのインストール](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoardのインストール)をご覧ください。
 
 **ソースから(どのOSでも):** [Python 3.10以降](https://www.python.org/downloads/)をインストールし、`Hoard-<バージョン>.zip` をダウンロード・展開して、`Hoard.bat`(Windows)または `./run.sh` を実行します。専用のPython環境を用意し(すべてのパッケージを記録済みのフィンガープリントと照合します)、Hoardを開きます。
 

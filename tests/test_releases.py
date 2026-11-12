@@ -55,7 +55,7 @@ class Kinds(IsolatedTestCase):
         self.assertIn('scripts/release_info.py --github-env "$TAG" >> "$GITHUB_ENV"', app)
         self.assertIn('--title "$TITLE" --prerelease="$PRERELEASE"', app)
         self.assertIn('--draft=false --latest="$latest"', app)
-        self.assertIn('"/DFileVersion=$numbers"', app, "Windows' file version is numbers only")
+        self.assertIn('--config "{\\"version\\": \\"$numbers\\"}"', app, "Windows' file version is numbers only")
         unity = (REPO / ".github/workflows/unity-release.yml").read_text("utf-8")
         self.assertIn("--latest=false", unity, "a Unity release never takes Latest from the app")
         tidy = (REPO / ".github/workflows/tidy-releases.yml").read_text("utf-8")
@@ -157,7 +157,7 @@ class FlatpakMetainfo(IsolatedTestCase):
         wf = (REPO / ".github/workflows/release.yml").read_text("utf-8")
         self.assertLess(wf.index("scripts/flatpak_metainfo.py --check"), wf.index("scripts/build_release.py"))
         job = wf[wf.index("  clean-up:"):wf.index("  virustotal:")]
-        self.assertIn("needs: [release, windows, macos, flatpak, flatpak-release]", job, "not VirusTotal's draft")
+        self.assertIn("needs: [release, build, flatpak, flatpak-release, update-manifest]", job, "not VirusTotal's draft")
         self.assertIn("failure() && !inputs.keep_draft", job)
         self.assertIn('if [ "$draft" = "false" ]', job, "a published release is never touched")
         self.assertIn('if [ "$MADE_TAG" = "true" ]', job, "only a tag this run made is deleted")

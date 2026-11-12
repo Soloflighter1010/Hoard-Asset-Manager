@@ -35,7 +35,7 @@ from pathlib import Path
 
 BASE = "https://www.virustotal.com/api/v3"
 SCANNED = (".zip", ".exe", ".pkg", ".flatpak", ".unitypackage",   # what people download; not checksums or package.json
-           ".dmg", ".appimage", ".deb")                          # (the Tauri and Nuitka build's: .github/workflows/tauri-nuitka.yml)
+           ".dmg", ".appimage", ".deb")                          # (Hoard's own, built with Tauri and Nuitka: release.yml)
 SPACING = 16                                     # seconds between requests: the public API allows 4 a minute
 MAX_UPLOAD = 650 * 1024 * 1024                   # VirusTotal's limit
 DIRECT_UPLOAD = 32 * 1024 * 1024                 # bigger files go to an upload address VirusTotal gives out

@@ -2,7 +2,7 @@
 
     python scripts/update_manifest.py FOLDER TAG > Hoard-update.json
 
-FOLDER holds each system's part, as .github/workflows/tauri-nuitka.yml's "Sign the updates" writes it: one line for
+FOLDER holds each system's part, as .github/workflows/release.yml's "Sign the updates" writes it: one line for
 each name Tauri's updater looks a system up by (windows-x86_64, darwin-aarch64, linux-x86_64-deb, ...), with the
 release's file for it and that file's signature, tab-separated. The manifest gives each its address on the release
 TAG, and the version from hoard/__init__.py. Hoard (hoard/updater.py) chooses the release; its window

@@ -1,4 +1,4 @@
-# The experimental Tauri and Nuitka build's compiler (scripts/build_nuitka.py), pinned with its hash. Installed with
+# Nuitka, which compiles Hoard's server for its apps (scripts/build_nuitka.py), pinned with its hash. Installed with
 # Hoard's own: pip install --require-hashes -r requirements.txt -r requirements-nuitka.txt
 nuitka==4.3.1 \
     --hash=sha256:b9c87a694acc424cfffa06abf149fddbdfa85f6daac998df67411b5f4269df0f

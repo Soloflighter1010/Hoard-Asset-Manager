@@ -1,4 +1,4 @@
-"""Hoard's window from its Tauri shell (shell/, the experimental Tauri and Nuitka build): the shell starts this Hoard
+"""Hoard's window from its Tauri shell (shell/, Hoard's apps from 5.2.0 beta 6): the shell starts this Hoard
 (hoard-server, compiled by Nuitka) with --shell, and the two talk over its standard input and output, one JSON
 message to a line. Hoard is the same as in its own pywebview window; only the window is the shell's.
 

@@ -229,7 +229,7 @@ class Updates(IsolatedTestCase):
         r = _release("5.2.0-beta.6", ["Hoard-update.json"])
         self.assertEqual(updater.describe(r)["update_url"], r["assets"][0]["browser_download_url"])
         self.assertEqual(updater.describe(_release("5.2.0-beta.6", ["https://example.com/Hoard-update.json"]))["update_url"], "")
-        self.assertEqual(updater.describe(_release("5.2.0-beta.6", ["Hoard-Tauri-Setup-5.2.0-beta.6.exe"]))["update_url"], "")
+        self.assertEqual(updater.describe(_release("5.2.0-beta.6", ["Hoard-5.2.0-beta.6-windows-setup.exe"]))["update_url"], "")
 
     def test_the_window_installs_it(self):
         """Hoard picks the release; its window downloads it, checks its signature and installs it once Hoard has
@@ -297,7 +297,7 @@ class Updates(IsolatedTestCase):
 
 
 class Packaging(IsolatedTestCase):
-    """How the Tauri and Nuitka build is made into releases (.github/workflows/tauri-nuitka.yml)."""
+    """How Hoard is made into releases (.github/workflows/release.yml), built with Tauri and Nuitka."""
     ROOT = Path(__file__).resolve().parent.parent
 
     def test_hoard_update_json(self):
@@ -310,30 +310,32 @@ class Packaging(IsolatedTestCase):
         sig = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXk="
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "update-windows.tsv").write_text(
-                f"windows-x86_64\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n"
-                f"windows-x86_64-nsis\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n")
+                f"windows-x86_64\tHoard-5.2.0-beta.6-windows-setup.exe\t{sig}\n"
+                f"windows-x86_64-nsis\tHoard-5.2.0-beta.6-windows-setup.exe\t{sig}\n")
             # (each system's files as the workflow's "Name the files" names them: the AppImage's has x86_64 in it)
             (Path(d) / "update-linux.tsv").write_text(
-                f"linux-x86_64\tHoard-Tauri-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
-                f"linux-x86_64-appimage\tHoard-Tauri-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
-                f"linux-x86_64-deb\tHoard-Tauri-5.2.0-beta.6-linux-amd64.deb\t{sig}\n")
+                f"linux-x86_64\tHoard-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
+                f"linux-x86_64-appimage\tHoard-5.2.0-beta.6-linux-x86_64.AppImage\t{sig}\n"
+                f"linux-x86_64-deb\tHoard-5.2.0-beta.6-linux-amd64.deb\t{sig}\n")
             for name, keys in (("macos-apple-silicon", ("darwin-aarch64", "darwin-aarch64-app")),
                                ("macos-intel", ("darwin-x86_64", "darwin-x86_64-app"))):
                 (Path(d) / f"update-{name}.tsv").write_text(
-                    "".join(f"{k}\tHoard-Tauri-5.2.0-beta.6-{name}.app.tar.gz\t{sig}\n" for k in keys))
+                    "".join(f"{k}\tHoard-5.2.0-beta.6-{name}.app.tar.gz\t{sig}\n" for k in keys))
             m = update_manifest.manifest(Path(d), "v5.2.0-beta.6", datetime(2026, 11, 20, tzinfo=timezone.utc))
             self.assertEqual(m["pub_date"], "2026-11-20T00:00:00Z")
             self.assertEqual(sorted(m["platforms"]), ["darwin-aarch64", "darwin-aarch64-app", "darwin-x86_64", "darwin-x86_64-app",
                                                       "linux-x86_64", "linux-x86_64-appimage", "linux-x86_64-deb",
                                                       "windows-x86_64", "windows-x86_64-nsis"])
             # the names the workflow gives the files are the names the manifest takes
-            flow = (self.ROOT / ".github" / "workflows" / "tauri-nuitka.yml").read_text("utf-8")
-            for made in re.findall(r'"dist/(Hoard-Tauri-[^"]+)"', flow):
+            flow = (self.ROOT / ".github" / "workflows" / "release.yml").read_text("utf-8")
+            names = re.findall(r'"dist/(Hoard-[^"]+)"', flow)
+            self.assertEqual(len(names), 5, "the setup, a Mac's .dmg and .app.tar.gz, the AppImage and the .deb")
+            for made in names:
                 example = made.replace("$version", "5.2.0-beta.6").replace("${{ matrix.name }}", "macos-apple-silicon")
                 if example.endswith((".exe", ".app.tar.gz", ".AppImage", ".deb")):
                     self.assertTrue(update_manifest.FILE.fullmatch(example), example)
             self.assertEqual(m["platforms"]["linux-x86_64-deb"], {"signature": sig, "url":
-                "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.6/Hoard-Tauri-5.2.0-beta.6-linux-amd64.deb"})
+                "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.6/Hoard-5.2.0-beta.6-linux-amd64.deb"})
             for bad in (f"macos-x86_64\tHoard-a.dmg\t{sig}", f"linux-x86_64\t../evil.AppImage\t{sig}",
                         "linux-x86_64\tHoard-a.AppImage\tnot a signature"):
                 (Path(d) / "update-zz.tsv").write_text(bad + "\n")
@@ -345,7 +347,7 @@ class Packaging(IsolatedTestCase):
     def test_never_the_names_older_hoards_install(self):
         """Hoard 5.1.3 and earlier install a release's Hoard-Setup-<version>.exe by itself when SHA256SUMS-windows.txt
         is beside it: the Tauri and Nuitka build's files are named otherwise, so none of them ever runs its setup."""
-        flow = (self.ROOT / ".github" / "workflows" / "tauri-nuitka.yml").read_text("utf-8")
+        flow = "".join((self.ROOT / ".github" / "workflows" / f).read_text("utf-8") for f in ("release.yml", "check.yml"))
         self.assertNotIn("Hoard-Setup-", flow)
         self.assertNotIn("SHA256SUMS-windows.txt", flow)
 

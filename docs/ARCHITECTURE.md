@@ -59,13 +59,15 @@ Hoard.bat, Setup.bat   Windows launchers (run.sh, setup.sh on Linux and macOS)
 requirements.in/.txt   dependencies, and the hash-locked list Setup installs
 brand/                 logo files, from hoard/heap.py (the wordmark is outlined, so no font is needed)
 scripts/build_release.py   builds the release zip
-packaging/             the apps: hoard.spec (PyInstaller: Hoard.exe and hoard-cli.exe on Windows; Hoard.app on
-                       macOS), hoard.iss (Inno Setup installer), the icons; flatpak/ (the Linux Flatpak's
-                       manifest, python3-deps.json, launcher, .desktop and metainfo); built by release.yml,
-                       checked by check.yml
-requirements-app/-mac/-flatpak.in/.txt   each app's hash-locked dependencies, pinned to requirements.txt's
-scripts/build_macos_pkg.sh   wraps dist/Hoard.app in Hoard-<version>-macos-<chip>.pkg (pkgbuild, /Applications)
-scripts/flatpak_deps.py   writes packaging/flatpak/python3-deps.json from requirements-flatpak.txt
+shell/                 the apps, from 5.2.0 beta 6: Hoard's window, a Tauri app (src/main.rs) that runs the
+                       server and installs signed updates (updater.pub), Windows' installer pictures, and
+                       flatpak/ (the Flatpak, built from the .deb); README.md says how it's built and updated
+scripts/build_nuitka.py   compiles the server (packaging/hoard_shell.py) into build/nuitka/server/ for the window
+scripts/update_manifest.py   makes Hoard-update.json, what the window updates from
+packaging/             the icons, the Flatpak's .desktop and metainfo; and how Hoard 5.1 was built: hoard.spec
+                       (PyInstaller), hoard.iss (Inno Setup), flatpak/'s old manifest. release.yml builds the apps;
+                       check.yml builds them for every change
+requirements-nuitka.txt   Nuitka, hash-locked (requirements-app/-mac/-flatpak.in/.txt: Hoard 5.1's apps)
 scripts/build_vpm.py   builds Hoard for Unity's release files: the .zip, a .unitypackage and package.json
 Packages/soloflighter.hoard/  Hoard for Unity (a VPM package, editor-only). Editor/Core is plain C# with no
                        Unity references (catalog, seal, .unitypackage GUIDs), tested by tests/test_unity.py

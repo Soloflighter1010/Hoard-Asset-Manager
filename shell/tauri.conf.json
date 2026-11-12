@@ -26,7 +26,7 @@
     "copyright": "MIT licensed. Not affiliated with VRChat or any store.",
     "category": "Utility",
     "shortDescription": "Your VRChat assets and Unity projects, in one place",
-    "longDescription": "Hoard lists everything you've bought for VRChat on Booth, Gumroad, Jinxxy, Payhip and itch.io, downloads it and keeps it up to date, and manages the Unity projects you make with it. This is the experimental build with a Tauri window and a Nuitka-compiled server.",
+    "longDescription": "Hoard lists everything you've bought for VRChat on Booth, Gumroad, Jinxxy, Payhip and itch.io, downloads it and keeps it up to date, and manages the Unity projects you make with it.",
     "homepage": "https://hoard.furryup.link",
     "license": "MIT",
     "icon": [

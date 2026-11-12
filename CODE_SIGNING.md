@@ -1,13 +1,14 @@
 # Code signing policy
 
-Hoard's Windows programs (`Hoard.exe`, `hoard-cli.exe` and the installer, `Hoard-Setup-<version>.exe`) are
+Hoard's Windows programs (from 5.2.0 beta 6: `Hoard.exe`, `hoard-server.exe` and every library beside it, and the
+installer, `Hoard-<version>-windows-setup.exe`; before: `Hoard.exe`, `hoard-cli.exe` and `Hoard-Setup-<version>.exe`) are
 code-signed from 2.11.1 on, with Microsoft's Azure Artifact Signing (Trusted Signing), by the release workflow on
 GitHub (see the wiki's [Releasing](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Releasing) page).
 Windows shows the publisher as the maintainer's verified name. A new publisher still has to
 earn Microsoft's reputation, so Windows may say it "protected your PC" for a while after a release: choose **More
 info** to see the publisher, then **Run anyway**. Every release file also carries GitHub's signed build
 provenance (`gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`) and a SHA-256 in the
-release's checksum files, and is scanned by VirusTotal before the release is published. The Mac packages aren't
+release's checksum files, and is scanned by VirusTotal before the release is published. The Mac app isn't
 signed by Apple yet, and the installer's own uninstaller isn't signed.
 
 ## What is signed

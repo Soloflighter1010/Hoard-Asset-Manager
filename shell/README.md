@@ -1,8 +1,8 @@
-# Hoard's Tauri window (the Tauri and Nuitka build)
+# Hoard's window (Tauri), and how Hoard is built
 
-An experiment beside Hoard's own releases: the same Hoard, with its window from this Tauri app instead of
-pywebview, and its server compiled by Nuitka instead of packed by PyInstaller. It's here to compare with the usual
-build: how big it is, how quickly it starts, and what antivirus makes of it.
+Hoard's releases, from 5.2.0 beta 6: its window is this Tauri app, and its server is compiled by Nuitka. (Before,
+PyInstaller packed Hoard, with pywebview's window; the experiments that compared the two, tauri-nuitka-beta.1 to 5,
+are on the Releases page.) Run from source, Hoard still opens in pywebview's window.
 
 | Part | What it is |
 |---|---|
@@ -33,12 +33,14 @@ to run it from there.
 
 ## Releasing it
 
-`.github/workflows/tauri-nuitka.yml` builds it for Windows, macOS (Apple silicon and Intel) and Linux on every push
-to its branch. `RELEASE` holds the experiment's number, n: while `tauri-nuitka-beta.<n>` isn't published, a push
-releases it (a draft, VirusTotal's scan, then a pre-release, never Latest, tagged on that push's commit). After that,
-pushes only build, with the files kept with the run; put the next number in `RELEASE` for the next one. Hoard's
-updates only look at version tags (`v...`), so nobody is offered this build; it says so in Hoard's updates
-(`hoard/updater.py`).
+`.github/workflows/release.yml` builds Hoard for Windows, macOS (Apple silicon and Intel) and Linux when a version
+tag is released (see the wiki's Releasing page): Windows' installer, a .dmg for each kind of Mac (and the
+`.app.tar.gz` a Mac updates from), and for Linux an AppImage, a .deb and the Flatpak. Windows' programs and libraries
+are signed first, then the installer; then each file the window updates from is signed for the updater. Every push
+and pull request builds the same, unsigned (`.github/workflows/check.yml`).
+
+Hoard's commands (`sync`, `verify`, `import`, ...) are `hoard-server`'s, in the app's `server` folder; in the Flatpak,
+`hoard <command>`. There's no `hoard-cli` any more.
 
 ## Updates
 

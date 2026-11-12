@@ -18,7 +18,7 @@ import site_chrome  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 PAGE = REPO / "site" / "acknowledgements.html"
-WHERE = {"all": "Every copy of Hoard", "windows": "The Windows app", "mac": "The Mac app", "linux": "The Flatpak",
+WHERE = {"all": "Every copy of Hoard", "windows": "The Windows app", "mac": "The Mac app", "linux": "The Linux apps",
          "build": "Only to build the apps"}
 DESCRIPTION = "Everything Hoard uses or ships, from the browser it drives to the fonts it shows, with each one's license."
 

@@ -275,41 +275,58 @@ class Workflows(IsolatedTestCase):
                 self.assertRegex(image, r"@sha256:[0-9a-f]{64}$", image)
 
     def test_the_release_builds_every_package(self):
+        """From 5.2.0 beta 6: Windows' installer, a .dmg for each kind of Mac, and an AppImage, a .deb and a Flatpak,
+        each from the server Nuitka compiled (checked with its self-test) and the window Tauri built."""
         r = self.release
-        self.assertIn("runner: [macos-15, macos-15-intel]", r, "Apple Silicon and Intel")
-        self.assertIn("--require-hashes -r requirements-mac.txt", r)
-        self.assertIn("dist/Hoard.app/Contents/MacOS/hoard-cli self-test", r)
-        self.assertIn("scripts/build_macos_pkg.sh", r)
-        self.assertIn(f"manifest-path: packaging/flatpak/{APP_ID}.yml", r)
+        for system in ("windows-x86_64, bundles: nsis", "macos-apple-silicon, bundles: \"app,dmg\"",
+                       "macos-intel, bundles: \"app,dmg\"", "linux-x86_64, bundles: \"appimage,deb\""):
+            self.assertIn(system, r)
+        self.assertIn("--require-hashes -r requirements.txt -r requirements-nuitka.txt", r)
+        self.assertIn("build/nuitka/server/hoard-server self-test", r)
+        self.assertIn("npx tauri bundle", r)
+        self.assertIn("manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml", r)
         self.assertIn("Hoard-${TAG#v}-linux-x86_64.flatpak", r)
-        self.assertIn("needs: [release, windows, macos, flatpak-release]", r, "published once every file is on it")
+        self.assertIn("scripts/update_manifest.py update", r, "Hoard-update.json")
+        self.assertIn("needs: [release, build, flatpak-release, update-manifest]", r, "scanned once every file is on it")
 
     def test_windows_programs_are_signed_where_signing_is_set_up(self):
-        """Hoard.exe and hoard-cli.exe are signed before the installer is made from them, the installer
-        before its checksum and provenance, all only where Azure signing is set up (a fork builds unsigned), with
-        no key or password stored: Azure is signed in to with GitHub's OIDC token, in the release-signing
-        environment."""
-        job = self.release.split("\n  windows:\n", 1)[1].split("\n  macos:\n", 1)[0]
-        self.assertIn("environment: release-signing", job)
+        """The server's programs and libraries are signed before the window is built around them (issue #327),
+        Hoard.exe before the installer is made from it, the installer before its checksum, the updates' signature and
+        provenance, all only where Azure signing is set up (a fork builds unsigned), with no key or password stored:
+        Azure is signed in to with GitHub's OIDC token, in the release-signing environment, by Windows' build only."""
+        job = self.release.split("\n  build:\n", 1)[1].split("\n  # The Flatpak", 1)[0]
+        self.assertIn("environment: ${{ matrix.name == 'windows-x86_64' && 'release-signing' || '' }}", job)
+        self.assertIn("SIGN_WINDOWS: ${{ matrix.name == 'windows-x86_64' && vars.AZURE_SIGNING_ACCOUNT != '' }}", job)
         self.assertIn("id-token: write", job)
         steps = re.findall(r"- name: ([^\n]+)", job)
-        order = ["Sign in to Azure, to sign the programs", "Sign Hoard.exe and hoard-cli.exe",
-                 "Check the signed build still runs", "Build the installer (Inno Setup, pinned version)",
-                 "Sign the installer", "Check every signature, as Windows sees it",
-                 "List the installer's checksum", "Sign build provenance", "Add it to the release"]
+        order = ["Sign in to Azure, to sign the programs", "List the server's programs and libraries that aren't signed yet",
+                 "Sign hoard-server.exe and its libraries", "Build the window (Hoard, with the server in its resources)",
+                 "Sign Hoard.exe", "Make the installer", "Sign the installer",
+                 "Check every signature, as Windows sees it, and the setup's checksum after signing", "Sign the updates",
+                 "Sign build provenance", "Add them to the release"]
         self.assertEqual([s for s in steps if s in order], order)
-        for name in order[:3] + order[4:6]:
+        for name in ("Sign in to Azure, to sign the programs", "List the server's programs and libraries that aren't signed yet",
+                     "Sign hoard-server.exe and its libraries", "Sign Hoard.exe", "Sign the installer",
+                     "Check every signature, as Windows sees it, and the setup's checksum after signing"):
             step = job.split(f"- name: {name}", 1)[1].split("- name:", 1)[0]
-            self.assertIn("if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}", step, name)
-        self.assertNotRegex(job, r"client-secret|AZURE_CLIENT_SECRET|password", "OIDC only, no stored secret")
-        self.assertEqual(job.count("exclude-azure-cli-credential: false"), 2, "both signings use the Azure sign-in")
+            self.assertIn("if: env.SIGN_WINDOWS == 'true'", step, name)
+        self.assertNotRegex(job, r"client-secret|AZURE_CLIENT_SECRET|password:", "OIDC only, no stored secret")
+        self.assertEqual(job.count("exclude-azure-cli-credential: false"), 3, "every signing uses the Azure sign-in")
         self.assertIn('if ($sig.Status -ne "Valid")', job)
+        self.assertIn('if ($sig.Status -eq "NotSigned")', job, "none of the server's libraries left unsigned")
 
     def test_every_pull_request_builds_them(self):
+        """Every push and pull request builds Hoard for each system as the release does, unsigned (nothing in it can
+        ask Azure, or sign an update), and the Flatpak from its .deb."""
         c = self.check
-        for job in ("app-windows:", "app-macos:", "flatpak:"):
+        for job in ("\n  app:\n", "\n  flatpak:\n"):
             self.assertIn(job, c)
-        self.assertIn("scripts/build_macos_pkg.sh", c)
+        for system in ("windows-x86_64", "macos-apple-silicon", "macos-intel", "linux-x86_64"):
+            self.assertIn(f"name: {system}, bundles:", c)
+        self.assertIn("build/nuitka/server/hoard-server self-test", c)
+        self.assertIn("npx tauri bundle", c)
+        self.assertIn("manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml", c)
+        self.assertNotRegex(c, r"azure|AZURE|TAURI_SIGNING|secrets\.", "nothing signed, no secret")
 
 
 if __name__ == "__main__":

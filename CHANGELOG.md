@@ -1,7 +1,24 @@
 # Changelog
 
-## Unreleased
+## 5.2.0-beta.6
 
+- **Hoard is built a new way, and installs as a new app.** Its window is a [Tauri](https://tauri.app) app instead of
+  pywebview, and its server is compiled by [Nuitka](https://nuitka.net) instead of packed by PyInstaller: the same
+  Hoard, from new files. Uninstall the Hoard you have first (5.2.0 beta 5 and 5.1 say how, under the bar), then
+  install this one; on Linux, the Flatpak installs over the old one, with nothing to uninstall. Your library,
+  settings, sign-ins and downloads stay. [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#moving-to-the-new-hoard)
+  has the steps.
+- **The files:** for Windows, `Hoard-5.2.0-beta.6-windows-setup.exe` (it installs for you alone, with no
+  administrator prompt); for a Mac, a `.dmg` for Apple silicon or for Intel (drag Hoard to Applications); for Linux,
+  an AppImage, a `.deb` for Debian and Ubuntu, or the Flatpak. Every program and library in Windows' build is signed,
+  not only Hoard's own ([#327](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/327)).
+- **Hoard updates itself on Windows, macOS, and Linux's AppImage and .deb.** When you update from Settings (or the
+  bar), the new version is downloaded, kept only if it carries the signature of Hoard's own key, and installed once
+  Hoard has closed, then Hoard opens again. The .deb asks for your password to install it. The Flatpak is updated
+  by installing the next one's `.flatpak`, as before.
+- **Hoard's commands** (`sync`, `verify`, `import` and the rest) are `hoard-server`'s now, in the `server` folder
+  beside Hoard's window (`hoard-cli` is no more): see [Command line](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Command-Line).
+  In the Flatpak, `flatpak run io.github.soloflighter1010.Hoard <command>`, as before.
 - **Products for adults are known, and blurred, without waiting for refreshes** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311)). Booth and
   Jinxxy say a product is for adults only on its own page, which Hoard read 40 at a time with each refresh: after
   updating to beta 5, most of a large library wasn't blurred yet (often only the first of a set's), and a set shared

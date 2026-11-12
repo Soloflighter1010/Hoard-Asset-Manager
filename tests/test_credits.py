@@ -14,7 +14,8 @@ sys.path.insert(0, str(REPO))
 
 from hoard import credits  # noqa: E402
 
-LOCKS = ("requirements.txt", "requirements-app.txt", "requirements-mac.txt", "requirements-flatpak.txt")
+LOCKS = ("requirements.txt", "requirements-app.txt", "requirements-mac.txt", "requirements-flatpak.txt",
+         "requirements-nuitka.txt")
 norm = lambda name: re.sub(r"[-_.]+", "-", name).lower()  # noqa: E731
 
 

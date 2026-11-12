@@ -1,4 +1,4 @@
-"""The experimental Tauri and Nuitka build's server: Hoard compiled by Nuitka into a folder of its own, with what
+"""Hoard's server for its apps (from 5.2.0 beta 6): Hoard compiled by Nuitka into a folder of its own, with what
 packaging/hoard.spec ships for PyInstaller (the pages, words, templates, changelog, Playwright's driver, Apprise's
 services and each library's license), to go inside the Tauri shell (shell/) as its resources.
 

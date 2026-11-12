@@ -66,9 +66,9 @@ class UpdateRefused(Exception):
     """A download that isn't the file the release says it is, or a release Hoard can't use."""
 
 
-def newer(candidate: str, than: str = __version__) -> bool:
-    """Is candidate a newer version than than (this copy's, unless given)?"""
-    a, b = version_of(candidate), version_of(than)
+def newer(candidate: str, than: str | None = None) -> bool:
+    """Is candidate a newer version than than (this copy's, unless given: read when asked, not when Hoard started)?"""
+    a, b = version_of(candidate), version_of(than if than is not None else __version__)
     return bool(a and b and a > b)
 
 
