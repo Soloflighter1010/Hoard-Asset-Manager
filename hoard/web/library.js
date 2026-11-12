@@ -434,7 +434,7 @@ function closeDetail() {
   keepTileInPlace(back && back.closest("#grid") ? back : null, () => {   // (its tile stays where it is on screen: #329)
     $("#detail").classList.remove("open"); document.body.classList.remove("panel-open"); $("#scrim").hidden = true;
   });
-  openKey = null; markCurrent(null); if (back) back.focus({ preventScroll: true });
+  openKey = null; markCurrent(null); glowBack(back); if (back) back.focus({ preventScroll: true });
   saveHash();
 }
 // Close the details and empty them, so nothing of the item stays in the page (it's only out of view once closed).
@@ -795,7 +795,7 @@ const T = {
   download: keys => startDownload(storesOf(keys), null, null, keys),   // (the Sets tab)
   actions: () => ({   // what the selection bar and right-click offer here
     main: [{ label: "Download", primary: true, run: downloadSelected }],
-    groups: [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS(), { name: "More", items: [...markActions(state.view),
+    groups: [TAG_ACTIONS, SET_ACTIONS(), PROJECT_ACTIONS(), { name: "More", items: [...markActions(state.view), ...ADULT_ACTIONS(),
       ...(state.view === "removed" ? [{ label: "Delete for good", danger: true, run: list => purgeItems(list) }] : []),
       { label: "Delete downloaded files", danger: true, run: list => deleteFiles(list) }] }],
   }),

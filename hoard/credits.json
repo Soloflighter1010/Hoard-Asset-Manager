@@ -153,6 +153,12 @@
    "title": "Hoard's window",
    "items": [
     {
+     "name": "Tauri",
+     "license": "MIT OR Apache-2.0",
+     "url": "https://github.com/tauri-apps/tauri",
+     "in": "windows mac linux"
+    },
+    {
      "name": "pywebview",
      "package": "pywebview",
      "license": "BSD-3-Clause",
@@ -328,6 +334,19 @@
   {
    "title": "Building the apps",
    "items": [
+    {
+     "name": "Nuitka",
+     "package": "nuitka",
+     "license": "Apache-2.0",
+     "url": "https://github.com/Nuitka/Nuitka",
+     "in": "build"
+    },
+    {
+     "name": "NSIS (the Windows installer)",
+     "license": "Zlib",
+     "url": "https://nsis.sourceforge.io",
+     "in": "build"
+    },
     {
      "name": "PyInstaller",
      "package": "pyinstaller",

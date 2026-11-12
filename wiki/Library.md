@@ -106,9 +106,11 @@ From 5.2, a product that's for adults has an **18+** mark on its tile (and says 
 picture is blurred, on its tile and in its details, where clicking the picture shows it (and clicking again blurs
 it). Hoard knows a product is for adults when:
 
-- **you say so:** **Mark as 18+** in its details. **It isn't for adults** says otherwise. Your word wins over
-  everything below, and is how a product of your own in **Local** gets the mark;
-- **its store says so,** when Hoard reads it: Booth's adult flag, Jinxxy's, or an R-18 badge on a wishlist;
+- **you say so:** **Mark as 18+** in its details, or on a right-click (and in the selection bar's **More**) for all
+  the products you've chosen. **It isn't for adults** says otherwise. Your word wins over everything below, and is
+  how a product of your own in **Local** gets the mark;
+- **its store says so,** when Hoard reads it: Booth's adult flag, Jinxxy's rating (**Suggestive** or **Explicit**;
+  **General Mature Themes** alone isn't), or an R-18 or NSFW badge on a wishlist;
 - **its tags or its name say so:** R-18, NSFW, 18+, 成人向け, 19금 and the like, your own tags or its creator's.
 
 Its details say which. To see the pictures unblurred everywhere, turn off **Blur the pictures of products for adults

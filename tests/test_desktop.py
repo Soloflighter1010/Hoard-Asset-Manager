@@ -569,8 +569,8 @@ class Packaging(IsolatedTestCase):
         check = (REPO / ".github" / "workflows" / "check.yml").read_text()
         self.assertIn("needs: release", release)
         for wf in (release, check):
-            self.assertIn("hoard-cli.exe self-test", wf)
-            self.assertIn("--require-hashes -r requirements-app.txt", wf)
+            self.assertIn("build/nuitka/server/hoard-server self-test", wf)
+            self.assertIn("--require-hashes -r requirements.txt -r requirements-nuitka.txt", wf)
 
     def test_launcher_leaves_no_console(self):
         bat = (REPO / "Hoard.bat").read_text()

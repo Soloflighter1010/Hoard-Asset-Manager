@@ -109,12 +109,18 @@ Guides for everything, from installing to fixing a problem, are in the
 
 ## Install (Windows)
 
-1. Download **`Hoard-Setup-<version>.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
-   and run it. It installs for you only, with no administrator prompt, and adds Hoard to the Start menu.
+From 5.2.0 beta 6, Hoard is built a new way (its window with Tauri, its server compiled by Nuitka) and installs as a
+new app: uninstall the Hoard you have first. [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#moving-to-the-new-hoard)
+says how; your library, settings and sign-ins stay.
+
+1. Download **`Hoard-<version>-windows-setup.exe`** from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)
+   and run it. It installs for you only, with no administrator prompt, and adds Hoard to the Start menu. (Hoard 5.1,
+   the [latest release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest), is
+   `Hoard-Setup-<version>.exe`.)
 2. Windows may say **"Windows protected your PC"** for a while after a release. Hoard is code-signed (choose
    **More info** and it names the publisher, Hoard's maintainer), but a new publisher has to earn Microsoft's trust first:
    see [CODE_SIGNING.md](CODE_SIGNING.md). Choose **Run anyway**. To check the download really came from
-   this project's GitHub build: `gh attestation verify Hoard-Setup-<version>.exe -R Soloflighter1010/Hoard-Asset-Manager`.
+   this project's GitHub build: `gh attestation verify Hoard-<version>-windows-setup.exe -R Soloflighter1010/Hoard-Asset-Manager`.
 3. Open **Hoard** from the Start menu. It opens in its own window. A short
    setup assistant walks you through the rest: your language, what makes Hoard easier to use (text size, a
    dyslexia-friendly font, spacing, colours, motion), which stores you use, signing in to each one, your Payhip
@@ -122,28 +128,29 @@ Guides for everything, from installing to fixing a problem, are in the
    library is read, a short tour shows what else Hoard does, on your own things (again any time: **Settings**, **Take
    the tour**).
 
-**Updating:** in **Settings**, **Updates**, choose **Check now**, then **Update to** the new version: Hoard
-downloads it, checks it against the release's checksums, closes, installs it and opens again. (Turn on **Check
-for updates automatically** to be told when there's one; it's off unless you do.) Or run the newer setup
-yourself; there's no need to uninstall first. Your settings, library, sign-ins and
-tags live in Hoard's app-data folder (`%LOCALAPPDATA%\Hoard`), and your downloads in your downloads folder, so
-installing, updating and uninstalling never touch them.
+**Updating:** in **Settings**, **Hoard updates**, choose **Check now**, then **Update to** the new version: Hoard
+closes, and its window downloads the new version, keeps it only if it carries the signature of Hoard's own key,
+installs it and opens Hoard again. (**Check for updates automatically** tells you when there's one.) Or run the newer
+setup yourself, over this one. Your settings, library, sign-ins and tags live in `%LOCALAPPDATA%\Hoard`, and your
+downloads in your downloads folder: installing, updating and uninstalling only ever touch the program's own files.
 
-Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10; without it,
-Hoard opens in your web browser instead (quit it from **Settings**).
+Hoard's window uses Microsoft Edge WebView2, part of Windows 11 and kept up to date on Windows 10.
 
 ## Install (macOS and Linux)
 
-- **macOS 11 or newer:** download `Hoard-<version>-macos-apple-silicon.pkg` (M-series Macs) or
-  `Hoard-<version>-macos-intel.pkg` from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)
-  and open it. It isn't signed by Apple yet, so macOS won't open it at first: choose **Done**, then **System
-  Settings › Privacy & Security › Open Anyway**. Hoard goes in **Applications**.
-- **Linux (x86_64):** download `Hoard-<version>-linux-x86_64.flatpak` and open it with your software centre, or
-  run `flatpak install --user Hoard-<version>-linux-x86_64.flatpak`. It uses the GNOME runtime from
-  [Flathub](https://flathub.org/setup).
+- **macOS 11 or newer:** download `Hoard-<version>-macos-apple-silicon.dmg` (M-series Macs) or
+  `Hoard-<version>-macos-intel.dmg` from [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases),
+  open it and drag Hoard to **Applications**. It isn't signed by Apple yet, so macOS won't open it at first: choose
+  **Done**, then **System Settings › Privacy & Security › Open Anyway**. (Hoard 5.1 is a `.pkg` instead.)
+- **Linux (x86_64):** the AppImage (`Hoard-<version>-linux-x86_64.AppImage`: make it executable and open it), the
+  `.deb` for Debian and Ubuntu (`Hoard-<version>-linux-amd64.deb`), or the Flatpak
+  (`Hoard-<version>-linux-x86_64.flatpak`: open it with your software centre, or
+  `flatpak install --user Hoard-<version>-linux-x86_64.flatpak`; it uses the GNOME runtime from
+  [Flathub](https://flathub.org/setup), and installs over an earlier Hoard's Flatpak).
 
-Both open in Hoard's own window. To update, install the newer file the same way (**Settings › Updates** says
-which). Details: [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard).
+All open in Hoard's own window. The Mac app, the AppImage and the .deb update themselves as on Windows; the Flatpak
+by installing the newer `.flatpak` the same way (**Settings › Hoard updates** says which). Details:
+[Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard).
 
 **From source (any system):** install [Python 3.10 or newer](https://www.python.org/downloads/),
 download `Hoard-<version>.zip`, extract it, and run `Hoard.bat` (Windows) or `./run.sh`. It sets up a private

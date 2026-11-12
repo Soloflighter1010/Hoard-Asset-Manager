@@ -385,13 +385,19 @@ def lib__jx_note(out: dict, id_, listing, product, gift) -> None:
     for k, v in note.items():
         if v and not old.get(k):
             old[k] = v
+    # whether it's for adults, where the data has its content warnings (hoard/adult.py): known without its page
+    from ..adult import jinxxy_rated
+    rated = [r for r in (jinxxy_rated(listing.get("restrictions")), jinxxy_rated(product.get("restrictions"))) if r is not None]
+    if rated:
+        old["adult"] = old.get("adult") is True or any(rated)
 
 
 def lib_jinxxy_data(values) -> dict:
     """What Jinxxy's own data (jinxxy_ssr, jinxxy_listener) says about inventory items, by item id: "name",
-    "creator", "creator_url", "page" (its product's public page, when it has one), "thumbnail", and "gift" with
-    "gift_from" (who sent it). Inventory items (getInventoryItems: an item's listing, and its gift) and received gifts
-    (getGiftsReceived: the gift's product, sender and inventory item) are read; anything else is passed by."""
+    "creator", "creator_url", "page" (its product's public page, when it has one), "thumbnail", "gift" with
+    "gift_from" (who sent it), and "adult" where it has the product's content warnings. Inventory items
+    (getInventoryItems: an item's listing, and its gift) and received gifts (getGiftsReceived: the gift's product,
+    sender and inventory item) are read; anything else is passed by."""
     out: dict[str, dict] = {}
     stack, looked = [values], 0
     while stack and looked < 2_000_000:
@@ -472,6 +478,8 @@ def lib_jinxxy_merge(found: dict, gifts: dict, known: dict) -> None:
             c["creator"], c["creator_url"] = k.get("creator") or "", k.get("creator_url")
         for f in ("page", "creator", "creator_url", "name"):
             c[f] = c.get(f) or k.get(f)
+        if isinstance(k.get("adult"), bool) and not isinstance(c.get("adult"), bool):
+            c["adult"] = k["adult"]
         if not c.get("thumbnail") or (c.get("video") and lib.is_video_address(c["thumbnail"])):
             c["thumbnail"] = k.get("thumbnail") or c.get("thumbnail")
         c["creator"] = c.get("creator") or ""
@@ -488,7 +496,8 @@ def lib_jinxxy_item(c: dict) -> dict:
     return lib.item("jinxxy", c["key"].rsplit("/", 1)[-1], name=c["name"], creator=c["creator"],
                 creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"],
                 page=page if isinstance(page, str) and lib.jinxxy_product_page([page], c.get("creator_url")) else None,
-                gift=c.get("gift") is True, gift_from=c.get("gift_from"))
+                gift=c.get("gift") is True, gift_from=c.get("gift_from"),
+                **({"adult": c["adult"]} if isinstance(c.get("adult"), bool) else {}))   # (its content warnings: #311)
 
 
 def lib_jinxxy_inventory_pages(hrefs) -> list[str]:

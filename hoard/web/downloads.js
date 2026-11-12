@@ -701,6 +701,7 @@ function closeDetail() {
   });
   openId = null;
   markCurrent(null);
+  glowBack(back);
   if (back) back.focus({ preventScroll: true });
   saveHash();
 }
@@ -1352,7 +1353,7 @@ const T = {
     const libs = (DATA.libraries || []).filter(l => l.available);
     if ((DATA.libraries || []).length > 1 && libs.length)
       groups.push({ name: "Move", items: libs.map(l => ({ label: tr("Move to {0}", libText(l)), raw: true, run: () => bulkMove(l.n) })) });
-    groups.push({ name: "More", items: [{ label: "Archive", run: bulkArchive },
+    groups.push({ name: "More", items: [{ label: "Archive", run: bulkArchive }, ...ADULT_ACTIONS(),
                                         { label: "Delete downloaded files", run: bulkDelete, danger: true }] });
     return { main: [], groups };
   },

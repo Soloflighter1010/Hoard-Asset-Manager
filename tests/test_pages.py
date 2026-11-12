@@ -1578,9 +1578,19 @@ class LargeLibrary(IsolatedTestCase):
         self.assertLess(page.evaluate("getComputedStyle(document.querySelector('#grid')).gridTemplateColumns.split(' ').length"), 5,
                         "fewer to a row beside the details")
         self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="opened: where it was")
+        # ...and it glows, so it's found again at once though the grid moved (a pulse as they open)
+        art = "() => getComputedStyle(document.querySelector('#grid .slot[data-key=\"' + probe + '\"] .art'))"
+        self.assertIn("found-pulse", page.evaluate(art + ".animationName"))
+        gold = page.evaluate("() => { const e = document.createElement('i'); e.style.color = 'var(--gold)'; document.body.append(e); "
+                             "const c = getComputedStyle(e).color; e.remove(); return c; }")
+        self.assertIn(gold, page.evaluate(art + ".boxShadow"), "in gold")
         page.keyboard.press("Escape")
         page.wait_for_timeout(400)
         self.assertAlmostEqual(page.evaluate(where), top, delta=2, msg="closed: where it was")
+        self.assertEqual(page.evaluate("[...document.querySelectorAll('#grid .slot.glow-back')].map(s => s.dataset.key)"),
+                         [page.evaluate("probe")], "closed: it pulses once more where it is again (Back draws the grid anew)")
+        page.wait_for_timeout(1800)
+        self.assertFalse(page.locator("#grid .slot.glow-back").count(), "and then it's done")
         page.evaluate(press)
         page.locator("#detail.open").wait_for()
         page.go_back()

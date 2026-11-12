@@ -13,22 +13,32 @@ For maintainers. Every release is built by GitHub Actions from this repository.
 
 The **Release** workflow then:
 
-1. builds the source zip and its checksums, signs its build provenance, and makes the release **as a draft**;
-2. builds the Windows app (PyInstaller), runs its self-test, builds the installer (Inno Setup), and attaches the
-   installer, the Windows zip and their checksums;
-3. builds the Mac app twice, on an Apple Silicon and an Intel runner (PyInstaller, then `Hoard.app` in a `.pkg`
-   by `scripts/build_macos_pkg.sh`), runs its self-test, and attaches
-   `Hoard-<version>-macos-apple-silicon.pkg` and `Hoard-<version>-macos-intel.pkg` with their checksums;
-4. builds the Flatpak (flatpak-builder, in Flathub's GNOME 51 container; its build checks Hoard's window support
-   and runs the self-test in the sandbox), and attaches `Hoard-<version>-linux-x86_64.flatpak` and
-   `SHA256SUMS-linux.txt`;
+1. checks the updates' key and `shell/updater.pub` agree (see **Updates' key** below), builds the source zip and its
+   checksums, signs its build provenance, and makes the release **as a draft**;
+2. builds Hoard for each system, from 5.2.0 beta 6 with Tauri and Nuitka (`shell/README.md`): the server compiled
+   by Nuitka (`scripts/build_nuitka.py`) and checked with its self-test, then the window, then its installer.
+   Windows: every program and library signed, then `Hoard-<version>-windows-setup.exe`, signed too. The Macs, on an
+   Apple silicon and an Intel runner: `Hoard-<version>-macos-apple-silicon.dmg` and `...-macos-intel.dmg`, with the
+   `.app.tar.gz` each updates from. Linux: `Hoard-<version>-linux-x86_64.AppImage` and
+   `Hoard-<version>-linux-amd64.deb`. Each system's files have their checksums (`SHA256SUMS-<system>.txt`), and each
+   file the window updates from is signed with the updates' key;
+3. builds the Flatpak from the .deb (`shell/flatpak`; flatpak-builder, in Flathub's GNOME 51 container; its build
+   checks every library the window needs is in the runtime and runs the self-test in the sandbox), and attaches
+   `Hoard-<version>-linux-x86_64.flatpak` and `SHA256SUMS-flatpak.txt`;
+4. makes `Hoard-update.json` from each system's signed files (`scripts/update_manifest.py`): what Hoard's window
+   updates from;
 5. has VirusTotal scan every file people download (`scripts/scan_release_virustotal.py`), and adds each file's
    result and report link to the release notes;
 6. publishes the release, once every file is on it and none was flagged.
 
-Every file has signed build provenance (`gh attestation verify`). The Windows programs and installer are
-code-signed (see **Code signing (Windows)** below); the Mac packages aren't signed or notarized by Apple: see
-[Installing Hoard](Installing-Hoard) for what users see.
+Every file has signed build provenance (`gh attestation verify`). The Windows programs, libraries and installer are
+code-signed (see **Code signing (Windows)** below); the Mac app isn't signed or notarized by Apple: see
+[Installing Hoard](Installing-Hoard) for what users see. Never name a file `Hoard-Setup-<version>.exe` with a
+`SHA256SUMS-windows.txt` beside it: Hoard 5.1.3 and earlier install that pair by themselves, and the new Hoard is a
+new app (the old one is uninstalled first). A test holds the workflows to that.
+
+Every push and pull request builds the same, unsigned (**Check**), so a build that breaks is found before a
+release.
 
 ### Betas
 
@@ -42,7 +52,7 @@ A beta is a release of the next version before it's finished, for testers, from 
    as a **pre-release**, which never becomes Latest, so the website's download buttons, and everyone else's update
    checks, stay on the last release.
 3. Testers turn on **Get beta updates** (Settings, under Updates). Hoard then offers each newer beta, and the
-   finished `3.1.0` when it's out. The Windows app installs a beta itself, as it does a release.
+   finished `3.1.0` when it's out. Hoard installs a beta itself, as it does a release (but the Flatpak).
 
 When `3.1.0` is ready, fold the beta sections of `CHANGELOG.md` into one `## 3.1.0` and release it as usual.
 
@@ -81,7 +91,7 @@ the release stays a draft until every file is attached.
   failed jobs instead, tick **If a build fails, keep its draft and tag** when you start the run. The workflow
   also checks the Flatpak's metainfo before building anything, so a broken one stops it at once.
 - **VirusTotal flagged a file?** The release stays a draft, and its notes list each file's result with a link to
-  VirusTotal's report. Unsigned apps built with PyInstaller are sometimes flagged by one or two engines by
+  VirusTotal's report. A new program, or one Apple hasn't signed, is sometimes flagged by one or two engines by
   mistake. Open the report: if it's a false positive (a generic or heuristic name, from an engine or two), run the
   workflow again for the tag with **Publish even if VirusTotal flags a file** ticked. That builds nothing: it
   publishes the draft as it is, the files whose reports you checked (a build is never the same file twice, so a
@@ -113,10 +123,11 @@ they're the same files the release makes public.
 
 ### Code signing (Windows)
 
-`Hoard.exe`, `hoard-cli.exe` and the setup are signed with **Azure Artifact Signing** (Microsoft's Trusted
-Signing), so Windows and Defender know they're Hoard's. Signing happens in the release's Windows job, only where
-it's set up: a fork, or this repository before it's set up, builds unsigned, as before. The setup's uninstaller
-isn't signed yet.
+`Hoard.exe`, `hoard-server.exe` with every library beside it, and the setup are signed with **Azure Artifact
+Signing** (Microsoft's Trusted Signing), so Windows and Defender know they're Hoard's (issue #327: Defender took an
+early build, whose libraries weren't signed, for a trojan). Signing happens in the release's Windows build, only
+where it's set up: a fork, or this repository before it's set up, builds unsigned. The setup's uninstaller isn't
+signed yet.
 
 Once, when setting it up (an Azure subscription with a payment method; the Basic plan is about $10 a month):
 
@@ -144,20 +155,28 @@ Once, when setting it up (an Azure subscription with a payment method; the Basic
 The next release is signed. Its Windows job checks each signature as Windows sees it, and fails if one isn't
 valid. Reputation with SmartScreen and Defender builds over the first few signed releases.
 
-### The Mac's and the Flatpak's dependencies
+### Updates' key
 
-Like `requirements-app.txt` for Windows, `requirements-mac.txt` and `requirements-flatpak.txt` are locked with
-hashes, and made from their `.in` files by the `uv pip compile` command at the top of each. They're constrained
-to `requirements.txt` and `requirements-app.txt`, so every Hoard runs the same versions (a test checks). The
-Flatpak builds offline, so after regenerating `requirements-flatpak.txt`, run `python scripts/flatpak_deps.py`
-to rewrite `packaging/flatpak/python3-deps.json` (each file's address and hash).
+From 5.2.0 beta 6, Hoard's window installs updates itself, only when the file carries the signature of Hoard's own
+key (`shell/README.md`, **Updates**). The key's private half and its password are the repository's Actions secrets
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, made once on your own computer and never put
+anywhere else; its public half is `shell/updater.pub`. The release refuses to build with one and not the other.
+Lose the key, and the copies out there can't update themselves any more: everyone downloads the next one by hand,
+once.
+
+### Dependencies
+
+`requirements.txt` (what Hoard runs on) is locked with hashes, made from `requirements.in` by the `uv pip compile`
+command at its top; `requirements-nuitka.txt` pins Nuitka, which compiles the server, by its hash. The window's Rust crates
+are locked by `shell/Cargo.lock`, and the Tauri command line by `shell/package-lock.json`. (`requirements-app.txt`,
+`requirements-mac.txt` and `requirements-flatpak.txt`, with `packaging/hoard.spec` and `packaging/hoard.iss`, built
+Hoard 5.1 and the 5.2.0 betas before beta 6.)
 
 ### Flathub
 
-`packaging/flatpak/io.github.soloflighter1010.Hoard.yml` is written to Flathub's rules (a stable runtime, every
-source pinned by hash, a narrow sandbox, AppStream metainfo), so it can be submitted there. A Flathub submission
-lives in its own repository, with the manifest's `hoard` source changed from this folder to a `git` source at
-the release's tag and commit.
+`shell/flatpak/io.github.soloflighter1010.Hoard.yml` builds the Flatpak from the release's .deb. Before Flathub
+would take it, it needs to build from source (Flathub builds offline, from pinned sources), as
+`packaging/flatpak/io.github.soloflighter1010.Hoard.yml` did for the Hoard before.
 
 ## Hoard for Unity
 
@@ -225,5 +244,6 @@ The docs site builds them into `docs/ja/` and `docs/ko/`, each page at its Engli
 ## Checks on every change
 
 **Check** runs for every pull request and every push to `main`: the tests on Ubuntu and Windows (browser tests
-included, and the Unity core on Ubuntu), the release zips, the Unity package, the Windows app with its
-self-test, the Mac app (Apple Silicon) with its self-test and `.pkg`, and the Flatpak. See [Development](Development#tests).
+included, and the Unity core on Ubuntu), the release zips, the Unity package, and Hoard for each system as the
+release builds it (Windows, both Macs and Linux, each server with its self-test, unsigned), and the Flatpak. See
+[Development](Development#tests).

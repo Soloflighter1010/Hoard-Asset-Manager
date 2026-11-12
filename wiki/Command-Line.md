@@ -3,16 +3,25 @@ without a desktop (a NAS, say).
 
 ## Running a command
 
-- **The installed app:** `hoard-cli.exe` in Hoard's folder, `%LOCALAPPDATA%\Programs\Hoard`. It isn't on your
+From 5.2.0 beta 6, Hoard's commands are `hoard-server`'s, in the `server` folder that comes with Hoard's window:
+
+- **Windows:** `hoard-server.exe` in the `server` folder of Hoard's folder, `%LOCALAPPDATA%\Hoard`. It isn't on your
   `PATH`, so give its full path:
 
   ```
-  "%LOCALAPPDATA%\Programs\Hoard\hoard-cli.exe" sync
+  "%LOCALAPPDATA%\Hoard\server\hoard-server.exe" sync
   ```
 
-- **The Mac app:** `/Applications/Hoard.app/Contents/MacOS/hoard-cli <command>`.
+- **macOS:** `/Applications/Hoard.app/Contents/Resources/server/hoard-server <command>`.
+- **Linux, the .deb:** `/usr/lib/Hoard/server/hoard-server <command>`.
+- **Linux, the AppImage:** take its files out once, with
+  `./Hoard-<version>-linux-x86_64.AppImage --appimage-extract`, then run
+  `squashfs-root/usr/lib/Hoard/server/hoard-server <command>`.
 - **The Flatpak:** `flatpak run io.github.soloflighter1010.Hoard <command>`.
 - **From source:** `Hoard.bat <command>` on Windows, `./run.sh <command>` on macOS and Linux.
+
+Hoard 5.1 has `hoard-cli` instead: `hoard-cli.exe` in `%LOCALAPPDATA%\Programs\Hoard` on Windows, and
+`/Applications/Hoard.app/Contents/MacOS/hoard-cli` on a Mac.
 
 The examples below say `hoard-cli`; use whichever of these fits. Without a command, Hoard opens in its window
 (`--browser`: in your web browser instead).
@@ -73,8 +82,9 @@ hoard-cli verify
 ## Syncing on a schedule
 
 - **Windows:** in **Task Scheduler**, create a task that runs
-  `%LOCALAPPDATA%\Programs\Hoard\hoard-cli.exe` with the argument `sync`, as your own account.
-- **macOS and Linux:** a cron job or systemd timer running `sync` with the Mac app's `hoard-cli`,
+  `%LOCALAPPDATA%\Hoard\server\hoard-server.exe` (Hoard 5.1: `%LOCALAPPDATA%\Programs\Hoard\hoard-cli.exe`) with
+  the argument `sync`, as your own account.
+- **macOS and Linux:** a cron job or systemd timer running `sync` with Hoard's `hoard-server` (as above),
   `flatpak run io.github.soloflighter1010.Hoard sync`, or `./run.sh sync` in Hoard's folder.
 
 Sign in to your stores first, in the app or with `login`. `sync` never opens Payhip (Hoard only lists what you

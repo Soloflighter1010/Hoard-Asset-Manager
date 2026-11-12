@@ -126,7 +126,10 @@ class ThePages(IsolatedTestCase):
             self.assertIsNotNone(style, page)
             self.assertIn("--cave: #F1EDF6", style.group(1))
             self.assertLess(html.index('<style id="theme">'), html.index("</head>"))
-            self.assertGreater(html.index('<style id="theme">'), html.index("--cave: #211C18"), "after the page's own colours")
+            self.assertGreater(html.index('<style id="theme">'), html.rindex("--cave: #211C18"),
+                               "after each view's own colours: Downloads' came after it, and the theme was gone there")
+            for own in ('<style id="libraryStyles"', '<style id="downloadsStyles"'):   # (one page for both views)
+                self.assertLess(html.index(own), html.index('<style id="looks">'), own)
 
     def test_settings(self):
         d = server.display_settings({"display": {"theme": "sakura", "mode": "dark"}})

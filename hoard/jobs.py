@@ -402,6 +402,66 @@ class Jobs:
         kept = {k: v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool) and v >= 0}
         self.state["report"] = {**report, "counts": {**(report.get("counts") or {}), **kept}}
 
+    STORE_PAGES_A_STEP = 8   # products' pages read in each step of the background reader, at each store's own pace
+    # tasks that read no store (nor sign in to one): the background reader reads every store's pages beside them
+    NO_STORE_TASKS = frozenset({"install-browser", "verify", "add-local", "konoasset", "move", "project", "rescan-local",
+                                "remove-local", "delete-files"})
+
+    def read_store_pages_later(self) -> None:
+        """Issue #311: the products' own pages a refresh didn't reach (their creators' tags, and whether they're for
+        adults, which Booth and Jinxxy say only there), read in the background after it: a few at a time at the
+        store's own pace, each store beside the others, until each has been read once. A refresh reads at most
+        STORE_TAG_PAGES of each store's, so a library of hundreds took as many refreshes again, and until then most of
+        its products for adults weren't blurred, nor did their sets' links ask a viewer's age. It carries on while a
+        task of yours runs, but not with the stores it uses (they wait for it: _stores_in_use). In Tasks, with Pause
+        and Stop; off with the creators' tags (Settings)."""
+        from .scheduler import MAINTENANCE
+        if not self.cfg.get("store_tags", True):
+            return
+        self.scheduler.add("store-pages", "Reading products' pages", self._store_pages_step, priority=MAINTENANCE,
+                           delay=5, durable=False, beside=True)
+        self.scheduler.wake("store-pages")   # (one that had finished, after an earlier refresh)
+
+    def _stores_in_use(self) -> set:
+        """The stores the task running now reads from or signs in to (all of them, for one that says none, or all),
+        whose pages the background reader leaves until it's done."""
+        job = self._current if self.state.get("running") else None
+        if not job or job.get("task") in self.NO_STORE_TASKS:
+            return set()
+        stores = [s for s in (job.get("stores") or []) if isinstance(s, str)]
+        return set(STORES) if not stores or "all" in stores else set(stores)
+
+    def _store_pages_step(self, context):
+        """A few of each store's products' pages, the stores side by side (each at its own pace: they're different
+        sites), then the next step; done once none is waiting (one whose page couldn't be read is tried again with the
+        store's next refresh, so a page gone for good never keeps this going)."""
+        from concurrent.futures import ThreadPoolExecutor
+        from .library import store_pages_waiting, store_tags_from_pages
+        from .scheduler import Again
+        from .wishlists import TAGGED_STORES, read_store_page, store_pages
+        if not self.cfg.get("store_tags", True):
+            return None
+        waiting = [s for s in TAGGED_STORES if store_pages_waiting(self.lib, s)]
+        if not waiting:
+            return None
+        free = [s for s in waiting if s not in self._stores_in_use()]
+        if not free:
+            return Again(15)   # (your task is reading those stores: they carry on once it's done)
+        delay = float(self.cfg.get("request_delay", 0.8))
+
+        def one(store: str) -> None:
+            """This step's pages of one store, over one connection to it."""
+            with store_pages():
+                store_tags_from_pages(self.lib, store, read_store_page, lambda m: context.checkpoint(), delay=delay,
+                                      limit=self.STORE_PAGES_A_STEP, enough=lambda: store in self._stores_in_use())
+        if len(free) == 1:
+            one(free[0])
+        else:
+            with ThreadPoolExecutor(max_workers=len(free), thread_name_prefix="hoard-store-pages") as pool:
+                for done in [pool.submit(one, s) for s in free]:
+                    done.result()   # (Stop, from Tasks: each stops before its next page, and so does this step)
+        return Again(0)
+
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
         message = kw.get("message")
@@ -1295,14 +1355,17 @@ class Jobs:
             cache_images(self.lib, keys, lambda m: self._set(message=m), stop=lambda: self._forced)
         if refreshed and self.cfg.get("store_tags", True) and not self._forced and not quick:   # creators' tags (#206)
             from .library import store_tags_from_pages
-            from .wishlists import read_store_page
+            from .wishlists import read_store_page, store_pages
             for store in refreshed:
                 try:
-                    store_tags_from_pages(self.lib, store, read_store_page,
-                                          lambda m, l=STORES[store]["label"]: self._set(message=f"{l}: {m}"),
-                                          float(self.cfg.get("request_delay", 0.8)))
+                    with store_pages():   # (one connection to the store for all of them)
+                        store_tags_from_pages(self.lib, store, read_store_page,
+                                              lambda m, l=STORES[store]["label"]: self._set(message=f"{l}: {m}"),
+                                              float(self.cfg.get("request_delay", 0.8)))
                 except Exception as e:   # (never fails the refresh)
                     print(f"Couldn't read {store}'s product tags: {e}", flush=True)
+        if refreshed and self.cfg.get("store_tags", True) and not self._forced and self.lane != PROJECTS:
+            self.read_store_pages_later()   # (the rest of them, in the background once this is done: #311)
         if refreshed:   # the public pages a refresh finds (Jinxxy's) reach catalog.json, for Hoard for Unity's credits
             from .config import root_dir
             from .downloader import build_catalog
@@ -1329,7 +1392,7 @@ class Jobs:
         each list (issue #300), the rest kept. only: the one list read, by its name (issue #331); the others are
         left as they are."""
         from .sets import SetStore
-        from .wishlists import READERS, pictures_from_pages, read_store_page
+        from .wishlists import READERS, pictures_from_pages, read_store_page, store_pages
         stores = [s for s in stores if s in READERS]
         self._set(task="wishlists", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
@@ -1354,9 +1417,10 @@ class Jobs:
                     said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
                     lists = READERS[store](ctx, {**self.cfg, **({"_quick": True} if quick else {}),
                                                  **({"_only_list": only} if only else {})}, said)
-                    for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
-                        pictures_from_pages(one.get("products") or [], read_store_page, said,
-                                            float(self.cfg.get("request_delay", 0.8)))
+                    with store_pages():   # a product with no picture on the list (a video first): its page's (issue #212)
+                        for one in lists:
+                            pictures_from_pages(one.get("products") or [], read_store_page, said,
+                                                float(self.cfg.get("request_delay", 0.8)))
                     got += lists
                 except Cancelled as e:
                     stopped = e

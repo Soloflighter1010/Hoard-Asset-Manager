@@ -101,13 +101,16 @@ It can't fully protect against:
   Windows, by checking where the opened file really is), and what's served is exactly what was opened.
 - Two products or files whose names clean up alike never share a folder or overwrite each other.
 
-**The apps (Windows, macOS, and the Linux Flatpak)**
-- Built by GitHub Actions from this repository for each release, from hash-locked dependencies
-  (`requirements-app.txt`, `requirements-mac.txt`, `requirements-flatpak.txt`, all pinned to the same versions),
-  checked with `hoard-cli self-test`, with signed build provenance: verify a download
-  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. The Windows programs are
-  code-signed (see `CODE_SIGNING.md`); SmartScreen may still warn while the publisher earns its reputation, and
-  macOS won't open the package until you allow it, as it isn't signed by Apple yet.
+**The apps (Windows, macOS, and Linux's AppImage, .deb and Flatpak)**
+- Built by GitHub Actions from this repository for each release, from hash-locked dependencies (`requirements.txt`
+  and `requirements-nuitka.txt`, the window's Rust crates by `shell/Cargo.lock`), each server checked with
+  `hoard-server self-test`, with signed build provenance: verify a download
+  with `gh attestation verify <file> -R Soloflighter1010/Hoard-Asset-Manager`. The Windows programs and libraries
+  are code-signed (see `CODE_SIGNING.md`); SmartScreen may still warn while the publisher earns its reputation, and
+  macOS won't open the app until you allow it, as it isn't signed by Apple yet.
+- From 5.2.0 beta 6 the apps update themselves (but the Flatpak): Hoard's window installs an update only when it
+  carries the signature of Hoard's own updates key, whose public half is built into the window
+  (`shell/updater.pub`); the private half is only ever in the release workflow's secrets.
 - Every file is scanned by VirusTotal before a release is published, and its report is linked in the release
   notes. A file an engine flags keeps the release a draft until a person has checked it.
 - The Flatpak is built offline from files pinned by SHA-256, and its sandbox allows only the network, its

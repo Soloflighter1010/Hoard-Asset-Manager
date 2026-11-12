@@ -1,6 +1,8 @@
 name: Release
 
-# Builds the release zip and publishes it as a GitHub release.
+# Builds Hoard's release and publishes it as a GitHub release: Hoard for Windows, macOS and Linux, its window a Tauri
+# app (shell/) and its server compiled by Nuitka (scripts/build_nuitka.py), as every release is from 5.2.0 beta 6
+# (before it, PyInstaller built Hoard, with pywebview's window).
 # Runs by itself when a version tag (v1.2.0, ...) is pushed. To build the release for a tag that
 # already exists (say an earlier build failed), or to release the branch you pick without making the tag
 # yourself, open Actions > Release > Run workflow and enter the tag with its "v" (v1.2.0, not 1.2.0). A tag
@@ -14,8 +16,27 @@ name: Release
 # is, the files whose reports a person checked (a build is never the same file twice, so one built again would be
 # a file nobody checked).
 #
+# What's built: Windows' installer (NSIS, for you alone, no administrator), a .dmg for each kind of Mac, and for Linux
+# an AppImage, a .deb and a Flatpak (shell/flatpak: the .deb's files on the GNOME runtime, with the app ID the earlier
+# Flatpak had, so it installs over that one). Never a file named as Hoard 5.1.3 and earlier's own setup beside that
+# setup's checksum file: those Hoards install that pair by themselves, and this Hoard is a new app (hoard/updater.py).
+#
+# Updates: with the repository secret TAURI_SIGNING_PRIVATE_KEY (and its _PASSWORD), the files Tauri's updater
+# installs (Windows' installer, the Macs' .app.tar.gz, the AppImage and the .deb) are signed with it, each once it's
+# final, and listed with their signatures in Hoard-update.json, the file Hoard's window updates from (hoard/updater.py
+# chooses the release; shell/src/main.rs checks the file against shell/updater.pub, the key's public half, and installs
+# it). The key and shell/updater.pub must agree: a release with one and not the other stops before anything is built.
+#
+# Windows' programs, libraries and setup are signed with Azure Artifact Signing (Trusted Signing) when the repository
+# has it set up (the AZURE_SIGNING_* variables and the AZURE_* secrets of the release-signing environment; see the
+# wiki's Releasing page); elsewhere, such as a fork, the build is unsigned. Azure is signed in to with GitHub's OIDC
+# token, so no password or key is stored here, and only the Windows build, in the release-signing environment, can
+# ask Azure to sign. The Macs' aren't signed (see the wiki).
+#
 # Every action is pinned to an exact commit (the version tag is in the comment), so a changed or
-# compromised tag upstream can't alter what runs here. Update them deliberately.
+# compromised tag upstream can't alter what runs here. Update them deliberately. Python's packages and Nuitka are
+# pinned by their hashes (requirements*.txt), the Tauri CLI by its lockfile (shell/package-lock.json) and the Rust
+# crates by shell/Cargo.lock.
 
 on:
   push:
@@ -77,6 +98,19 @@ jobs:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
 
+      - name: The updates' key and the window's public half agree
+        env:
+          HAS_UPDATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ -s shell/updater.pub ] && [ "$HAS_UPDATE_KEY" != "true" ]; then
+            echo "::error::shell/updater.pub has the updates' public key, but the TAURI_SIGNING_PRIVATE_KEY secret isn't set: the window would wait for signed updates that are never made."
+            exit 1
+          fi
+          if [ ! -s shell/updater.pub ] && [ "$HAS_UPDATE_KEY" = "true" ]; then
+            echo "::error::The TAURI_SIGNING_PRIVATE_KEY secret is set, but shell/updater.pub is empty: put the key's public half there."
+            exit 1
+          fi
+
       # The Flatpak's metainfo, checked before anything is built (the Flatpak's build lists this version in it)
       - name: Check the Flatpak's metainfo
         run: python3 scripts/flatpak_metainfo.py --check
@@ -110,23 +144,33 @@ jobs:
               --title "$TITLE" --prerelease="$PRERELEASE" --notes-file dist/RELEASE_NOTES.md --verify-tag --draft
           fi
 
-  # The Windows app: Hoard.exe (its own window, no console) and hoard-cli.exe, as an installer, added to the same
-  # release. (Not as a portable zip too, from 4.3.6: antivirus engines kept flagging the zip, never the installer.) Built from requirements-app.txt (every file hash-checked).
-  # Code signing (Windows): Hoard.exe, hoard-cli.exe and the setup are signed with Azure Artifact Signing (Trusted
-  # Signing) when the repository has it set up (the AZURE_SIGNING_* variables and the AZURE_* secrets of the
-  # release-signing environment; see the wiki's Releasing page). Elsewhere, such as a fork, the build is unsigned,
-  # as before. Azure is signed in to with GitHub's OIDC token, so no password or key is stored here, and only this
-  # job, in the release-signing environment, can ask Azure to sign.
-  windows:
+  # Hoard for each system: the server compiled by Nuitka and checked with its self-test, the window built by Tauri with
+  # the server in its resources, then its installer; on Windows each program and library signed first (and the
+  # installer after), then each file the updater installs signed for it, and everything added to the release.
+  build:
     needs: release
-    runs-on: windows-latest
-    environment: release-signing
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x86_64, bundles: nsis }
+          - { os: macos-15, name: macos-apple-silicon, bundles: "app,dmg" }
+          - { os: macos-15-intel, name: macos-intel, bundles: "app,dmg" }
+          - { os: ubuntu-22.04, name: linux-x86_64, bundles: "appimage,deb" }   # (22.04: the AppImage runs on older systems too)
+    runs-on: ${{ matrix.os }}
+    environment: ${{ matrix.name == 'windows-x86_64' && 'release-signing' || '' }}
     permissions:
-      contents: write        # add the installer to the release
+      contents: write        # add the files to the release
       id-token: write        # sign the build provenance, and sign in to Azure to sign the programs
       attestations: write   # store the provenance with the repository
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+      # (not SIGN: linuxdeploy's AppImage plugin reads that, and signs the AppImage with GPG if it's set to anything)
+      SIGN_WINDOWS: ${{ matrix.name == 'windows-x86_64' && vars.AZURE_SIGNING_ACCOUNT != '' }}
+      SIGN_UPDATES: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,35 +180,53 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install the locked dependencies (every file hash-checked)
-        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-app.txt
-
-      - name: Build Hoard.exe and hoard-cli.exe
+      - name: What Tauri and Nuitka need on Linux
+        if: runner.os == 'Linux'
         run: |
-          python packaging/version_info.py
-          python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
-      - name: Check the build has everything it needs
-        run: dist\Hoard\hoard-cli.exe self-test
+      - name: Install the locked dependencies and Nuitka (every file hash-checked)
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt -r requirements-nuitka.txt
+
+      - name: Compile Hoard's server with Nuitka
+        run: python scripts/build_nuitka.py
+
+      - name: Check the server has everything it needs
+        run: build/nuitka/server/hoard-server self-test
 
       - name: Sign in to Azure, to sign the programs
-        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        if: env.SIGN_WINDOWS == 'true'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Sign Hoard.exe and hoard-cli.exe
-        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+      # Issue #327: Windows Defender took experiment 2 for a trojan. Its server folder held hoard-server.exe, signed,
+      # beside a great many libraries Nuitka compiled (.dll, .pyd) that weren't: every one of those is signed now too.
+      # Libraries already signed by whoever made them (Python's, Microsoft's) are left as they are.
+      - name: List the server's programs and libraries that aren't signed yet
+        if: env.SIGN_WINDOWS == 'true'
+        id: unsigned
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem build\nuitka\server -Recurse -File -Include *.exe, *.dll, *.pyd |
+            Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -eq "NotSigned" }
+          "{0} of the server's files to sign" -f @($files).Count
+          $end = "END_" + [guid]::NewGuid().ToString("N")
+          Add-Content $env:GITHUB_OUTPUT "files<<$end"
+          $files | ForEach-Object { Add-Content $env:GITHUB_OUTPUT $_.FullName }
+          Add-Content $env:GITHUB_OUTPUT $end
+
+      - name: Sign hoard-server.exe and its libraries
+        if: env.SIGN_WINDOWS == 'true'
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
-          files: |
-            ${{ github.workspace }}\dist\Hoard\Hoard.exe
-            ${{ github.workspace }}\dist\Hoard\hoard-cli.exe
+          files: ${{ steps.unsigned.outputs.files }}
           description: Hoard
           description-url: https://github.com/${{ github.repository }}
           exclude-environment-credential: true
@@ -178,29 +240,74 @@ jobs:
           exclude-azure-developer-cli-credential: true
           exclude-interactive-browser-credential: true
 
-      - name: Check the signed build still runs
-        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
-        run: dist\Hoard\hoard-cli.exe self-test
+      - name: The Tauri CLI (its lockfile's, every file hash-checked)
+        working-directory: shell
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Build the installer (Inno Setup, pinned version)
-        shell: pwsh
+      - name: Build the window (Hoard, with the server in its resources)
+        working-directory: shell
         run: |
-          $version = python -c "import hoard; print(hoard.__version__)"
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup --version 6.4.3 -y --no-progress }
-          $numbers = python -c "import re, hoard; print('.'.join(re.findall(r'\d+', hoard.__version__)[:3]))"
-          & $iscc "/DAppVersion=$version" "/DFileVersion=$numbers" packaging\hoard.iss
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup toolchain install stable --profile minimal --no-self-update
+          numbers=$(python -c "import re; v=open('../hoard/__init__.py').read(); print('.'.join(re.findall(r'\d+', re.search(r'__version__ = \"([^\"]+)\"', v).group(1))[:3]))")
+          echo "NUMBERS=$numbers" >> "$GITHUB_ENV"
+          npx tauri build --no-bundle --config "{\"version\": \"$numbers\"}"
+
+      - name: Sign Hoard.exe
+        if: env.SIGN_WINDOWS == 'true'
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\shell\target\release\Hoard.exe
+          description: Hoard
+          description-url: https://github.com/${{ github.repository }}
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: false
+          exclude-azure-powershell-credential: true
+          exclude-azure-developer-cli-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Make the installer
+        working-directory: shell
+        env:   # (Linux: linuxdeploy's strip can't read newer libraries, and its tools run unpacked, without FUSE)
+          NO_STRIP: "true"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          npx tauri bundle --verbose --bundles ${{ matrix.bundles }} --config "{\"version\": \"$NUMBERS\"}"
+
+      - name: Name the files, and list their checksums
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' hoard/__init__.py)
+          mkdir -p dist
+          b=shell/target/release/bundle
+          case "${{ matrix.name }}" in
+            windows-x86_64) cp $b/nsis/*-setup.exe "dist/Hoard-$version-windows-setup.exe" ;;
+            macos-*)        cp $b/dmg/*.dmg "dist/Hoard-$version-${{ matrix.name }}.dmg"
+                            # (what the updater installs on a Mac: the app itself, replaced where it is)
+                            tar -C $b/macos -czf "dist/Hoard-$version-${{ matrix.name }}.app.tar.gz" Hoard.app ;;
+            linux-x86_64)   cp $b/appimage/*.AppImage "dist/Hoard-$version-linux-x86_64.AppImage"
+                            cp $b/deb/*.deb "dist/Hoard-$version-linux-amd64.deb" ;;
+          esac
+          cd dist
+          python -c "import hashlib, pathlib; print(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in sorted(pathlib.Path('.').iterdir()) if p.is_file()), end='')" > "SHA256SUMS-${{ matrix.name }}.txt"
+          cat "SHA256SUMS-${{ matrix.name }}.txt"
+          ls -la
 
       - name: Sign the installer
-        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+        if: env.SIGN_WINDOWS == 'true'
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
           files-folder: ${{ github.workspace }}\dist
-          files-folder-filter: exe                     # dist\Hoard-Setup-<version>.exe (not the folders inside)
+          files-folder-filter: exe
           description: Hoard setup
           description-url: https://github.com/${{ github.repository }}
           exclude-environment-credential: true
@@ -214,95 +321,105 @@ jobs:
           exclude-azure-developer-cli-credential: true
           exclude-interactive-browser-credential: true
 
-      - name: Check every signature, as Windows sees it
-        if: ${{ vars.AZURE_SIGNING_ACCOUNT != '' }}
+      - name: Check every signature, as Windows sees it, and the setup's checksum after signing
+        if: env.SIGN_WINDOWS == 'true'
         shell: pwsh
         run: |
-          $files = @(Get-Item dist\Hoard\Hoard.exe, dist\Hoard\hoard-cli.exe) + @(Get-ChildItem dist\Hoard-Setup-*.exe)
+          $files = @(Get-Item build\nuitka\server\hoard-server.exe, shell\target\release\Hoard.exe) + @(Get-ChildItem dist\*.exe)
           foreach ($f in $files) {
             $sig = Get-AuthenticodeSignature $f.FullName
             "{0}: {1}, {2}" -f $f.Name, $sig.Status, $sig.SignerCertificate.Subject
             if ($sig.Status -ne "Valid") { Write-Output "::error::$($f.Name) isn't validly signed ($($sig.Status))"; exit 1 }
           }
+          # the server's libraries (issue #327): none left unsigned; one its maker signed that Windows can't check is said
+          $libraries = Get-ChildItem build\nuitka\server -Recurse -File -Include *.dll, *.pyd
+          "{0} libraries in the server's folder" -f @($libraries).Count
+          foreach ($f in $libraries) {
+            $sig = Get-AuthenticodeSignature $f.FullName
+            if ($sig.Status -eq "NotSigned") { Write-Output "::error::$($f.Name) isn't signed"; exit 1 }
+            if ($sig.Status -ne "Valid") { Write-Output "::warning::$($f.Name): $($sig.Status), $($sig.SignerCertificate.Subject)" }
+          }
+          Get-ChildItem dist\*.exe | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-windows-x86_64.txt
 
-      - name: List the installer's checksum
-        shell: pwsh
+      # Each file the updater installs, signed once it's final (Windows' after Authenticode, which changes it), and
+      # its part of Hoard-update.json: what Tauri's updater looks up for this system, the file's address and signature
+      - name: Sign the updates
+        if: env.SIGN_UPDATES == 'true'
+        working-directory: shell
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          Get-ChildItem dist\Hoard-Setup-*.exe | ForEach-Object {
-            "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content dist\SHA256SUMS-windows.txt
+          case "${{ matrix.name }}" in
+            windows-x86_64)      files=(../dist/Hoard-*-windows-setup.exe); keys=("windows-x86_64 windows-x86_64-nsis") ;;
+            macos-apple-silicon) files=(../dist/*.app.tar.gz); keys=("darwin-aarch64 darwin-aarch64-app") ;;
+            macos-intel)         files=(../dist/*.app.tar.gz); keys=("darwin-x86_64 darwin-x86_64-app") ;;
+            linux-x86_64)        files=(../dist/*.AppImage ../dist/*.deb)
+                                 keys=("linux-x86_64 linux-x86_64-appimage" "linux-x86_64-deb") ;;
+          esac
+          mkdir -p ../update
+          for i in "${!files[@]}"; do
+            npx tauri signer sign "${files[$i]}"
+            for key in ${keys[$i]}; do
+              printf '%s\t%s\t%s\n' "$key" "$(basename "${files[$i]}")" "$(cat "${files[$i]}.sig")" >> "../update/update-${{ matrix.name }}.tsv"
+            done
+            rm "${files[$i]}.sig"
+          done
+          cut -f1,2 "../update/update-${{ matrix.name }}.tsv"
+
+      - name: Keep this system's part of Hoard-update.json
+        if: env.SIGN_UPDATES == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: update-${{ matrix.name }}
+          path: update/
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Keep the .deb, for the Flatpak
+        if: matrix.name == 'linux-x86_64'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hoard-deb
+          path: dist/*.deb
+          retention-days: 3
+          if-no-files-found: error
 
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/Hoard-Setup-*.exe
+          subject-path: dist/Hoard-*
 
-      - name: Add it to the release
-        shell: pwsh
+      - name: Add them to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $files = @(Get-ChildItem dist\Hoard-Setup-*.exe, dist\SHA256SUMS-windows.txt | ForEach-Object FullName)
-          gh release upload $env:TAG @files --repo $env:GITHUB_REPOSITORY --clobber
+        run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
-  # The Mac app, as an installer package for each kind of Mac, built natively on each: Hoard.app, installed in
-  # /Applications. Built from requirements-mac.txt (every file hash-checked). Not signed (see the wiki).
-  macos:
-    needs: release
-    strategy:
-      matrix:
-        runner: [macos-15, macos-15-intel]   # Apple Silicon, Intel
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: write        # add the package to the release
-      id-token: write        # sign the build provenance
-      attestations: write   # store the provenance with the repository
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-      - name: Install the locked dependencies (every file hash-checked)
-        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-mac.txt
-      - name: Build Hoard.app
-        run: python -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller packaging/hoard.spec
-      - name: Check the build has everything it needs
-        run: dist/Hoard.app/Contents/MacOS/hoard-cli self-test
-      - name: Build the installer package
-        run: scripts/build_macos_pkg.sh
-      - name: Sign build provenance
-        if: ${{ !github.event.repository.private }}
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
-        with:
-          subject-path: dist/Hoard-*-macos-*.pkg
-      - name: Add it to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/Hoard-*-macos-*.pkg dist/SHA256SUMS-macos-*.txt --repo "$GITHUB_REPOSITORY" --clobber
 
-  # The Linux Flatpak (packaging/flatpak), as a bundle: flatpak install Hoard-<version>-linux-x86_64.flatpak.
-  # Its build checks Hoard's window support and runs its self-test inside the sandbox.
+  # The Flatpak (shell/flatpak): the .deb's files on the GNOME runtime, as a bundle. Its build checks every library the
+  # window needs is in the runtime, and runs the server's self-test inside the sandbox.
   flatpak:
-    needs: release
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
       options: --privileged
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: hoard-deb
+          path: deb
+      - name: The .deb, where the manifest takes it from
+        run: mv deb/*.deb shell/flatpak/hoard.deb && rm -r deb
       - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
-          manifest-path: packaging/flatpak/io.github.soloflighter1010.Hoard.yml
+          manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml
           bundle: Hoard.flatpak
           artifact-name: flatpak
           cache: false
@@ -326,7 +443,8 @@ jobs:
         run: |
           cd dist
           for f in *.flatpak; do [ "$f" = "Hoard-${TAG#v}-linux-x86_64.flatpak" ] || mv "$f" "Hoard-${TAG#v}-linux-x86_64.flatpak"; done
-          sha256sum Hoard-*-linux-x86_64.flatpak > SHA256SUMS-linux.txt
+          sha256sum Hoard-*-linux-x86_64.flatpak > SHA256SUMS-flatpak.txt
+          cat SHA256SUMS-flatpak.txt
       - name: Sign build provenance
         if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -335,13 +453,47 @@ jobs:
       - name: Add it to the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" dist/Hoard-*-linux-x86_64.flatpak dist/SHA256SUMS-linux.txt --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$TAG" dist/Hoard-*-linux-x86_64.flatpak dist/SHA256SUMS-flatpak.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+  # Hoard-update.json, from each system's part: what Hoard's window updates from (Tauri's updater's own format).
+  # Only when the updates' key is there; without it, the window doesn't update itself, and Hoard says where to go.
+  update-manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # add it to the release
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      HAS_UPDATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_UPDATE_KEY == 'true'
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: env.HAS_UPDATE_KEY == 'true'
+        with:
+          pattern: update-*
+          path: update
+          merge-multiple: true
+      - name: Make Hoard-update.json, and add it to the release
+        if: env.HAS_UPDATE_KEY == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/update_manifest.py update "$TAG" > Hoard-update.json
+          cat Hoard-update.json
+          gh release upload "$TAG" Hoard-update.json --repo "$GITHUB_REPOSITORY" --clobber
+      - name: No key, no Hoard-update.json
+        if: env.HAS_UPDATE_KEY != 'true'
+        run: echo "::notice::No TAURI_SIGNING_PRIVATE_KEY secret, so this release has no Hoard-update.json, and its window doesn't update itself."
 
   # A build that fails leaves nothing behind: its draft (never published) is deleted, and its tag too when this run
   # made it, so the fix can be released with the same tag by running the workflow again. Not when VirusTotal is what
   # stopped it (that draft waits for a person to check the report, below), nor with "keep its draft" ticked.
   clean-up:
-    needs: [release, windows, macos, flatpak, flatpak-release]
+    needs: [release, build, flatpak, flatpak-release, update-manifest]
     if: ${{ failure() && !inputs.keep_draft }}
     runs-on: ubuntu-latest
     permissions:
@@ -375,7 +527,7 @@ jobs:
   # has checked the reports, and only with the flags its notes showed them. Needs the VT_API_KEY repository secret
   # (a free VirusTotal account's API key).
   virustotal:
-    needs: [release, windows, macos, flatpak-release]
+    needs: [release, build, flatpak-release, update-manifest]
     if: ${{ !failure() && !cancelled() }}   # after the builds, or with none (publishing anyway)
     runs-on: ubuntu-latest
     timeout-minutes: 60      # the scans are waited for up to 40 minutes (VT_WAIT_MINUTES); never GitHub's 6 hours
@@ -443,7 +595,7 @@ jobs:
 
   # Last: publishing makes the release immutable, so it waits until every file is attached and scanned.
   publish:
-    needs: [release, windows, macos, flatpak-release, virustotal]
+    needs: [release, build, flatpak-release, update-manifest, virustotal]
     if: ${{ !failure() && !cancelled() }}   # the builds and the scan passed (or, publishing anyway, the scan)
     runs-on: ubuntu-latest
     permissions:

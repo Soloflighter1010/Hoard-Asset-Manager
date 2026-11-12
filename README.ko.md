@@ -99,21 +99,23 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 <a id="install-windows"></a>
 ## 설치 (Windows)
 
-1. [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)에서 **`Hoard-Setup-<버전>.exe`**를 다운로드해서 실행하세요. 내 계정에만 설치되고, 관리자 확인 창은 뜨지 않아요. 시작 메뉴에 Hoard가 추가돼요.
-2. 릴리스 직후에는 한동안 **"Windows의 PC 보호"** 창이 뜰 수 있어요. Hoard는 코드 서명이 되어 있지만(**추가 정보**를 고르면 게시자로 Hoard 관리자가 나와요), 새 게시자는 먼저 Microsoft의 신뢰를 쌓아야 해요. [CODE_SIGNING.md](CODE_SIGNING.md)(영어)를 보세요. **실행**을 고르세요. 다운로드한 파일이 이 프로젝트의 GitHub 빌드에서 왔는지 확인하려면: `gh attestation verify Hoard-Setup-<버전>.exe -R Soloflighter1010/Hoard-Asset-Manager`
+5.2.0 beta 6부터 Hoard는 새로운 방식(창은 Tauri, 서버는 Nuitka로 컴파일)으로 만들어지고, 새 앱으로 설치돼요. 먼저 지금 쓰는 Hoard를 제거하세요. 방법은 [Hoard 설치](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoard-설치#새-hoard로-옮기기)에 있어요. 라이브러리, 설정, 로그인은 그대로 남아요.
+
+1. [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)에서 **`Hoard-<버전>-windows-setup.exe`**를 다운로드해서 실행하세요. 내 계정에만 설치되고, 관리자 확인 창은 뜨지 않아요. 시작 메뉴에 Hoard가 추가돼요. (Hoard 5.1, [최신 릴리스](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)는 `Hoard-Setup-<버전>.exe`예요.)
+2. 릴리스 직후에는 한동안 **"Windows의 PC 보호"** 창이 뜰 수 있어요. Hoard는 코드 서명이 되어 있지만(**추가 정보**를 고르면 게시자로 Hoard 관리자가 나와요), 새 게시자는 먼저 Microsoft의 신뢰를 쌓아야 해요. [CODE_SIGNING.md](CODE_SIGNING.md)(영어)를 보세요. **실행**을 고르세요. 다운로드한 파일이 이 프로젝트의 GitHub 빌드에서 왔는지 확인하려면: `gh attestation verify Hoard-<버전>-windows-setup.exe -R Soloflighter1010/Hoard-Asset-Manager`
 3. 시작 메뉴에서 **Hoard**를 여세요. 전용 창에서 열려요. 짧은 설정 도우미가 언어, 쓰기 쉽게 하는 설정(글자 크기, 난독증용 글꼴, 간격, 색, 움직임), 쓰는 스토어, 각 스토어 로그인, Payhip 상점, 다운로드 저장 위치를 차례로 안내해요. **설정**의 **Hoard 다시 설정**에서 언제든 다시 할 수 있어요. 라이브러리를 읽고 나면 짧은 둘러보기가 내 것으로 그 밖에 할 수 있는 것을 보여 줘요(**설정**의 **둘러보기**에서 언제든).
 
-**업데이트:** **설정**의 **업데이트**에서 **지금 확인**을 고르고, 새 버전으로 **업데이트**를 고르세요. Hoard가 다운로드해서 릴리스의 체크섬과 맞춰 본 뒤, 닫고 설치하고 다시 열어요. (**업데이트 자동 확인**을 켜면 새 버전이 나왔을 때 알려줘요. 켜지 않으면 꺼져 있어요.) 새 설치 파일을 직접 실행해도 돼요. 먼저 제거할 필요는 없어요. 설정, 라이브러리, 로그인, 태그는 Hoard의 앱 데이터 폴더(`%LOCALAPPDATA%\Hoard`)에, 다운로드는 다운로드 폴더에 있어서 설치, 업데이트, 제거로 지워지지 않아요.
+**업데이트:** **설정**의 **Hoard 업데이트**에서 **지금 확인**을 고르고, 새 버전으로 **업데이트**를 고르세요. Hoard가 닫히고, 창이 새 버전을 다운로드해서 Hoard 자신의 키로 서명된 경우에만 남기고, 설치한 뒤 Hoard를 다시 열어요. (**업데이트 자동 확인**으로 새 버전이 나왔을 때 알려줘요.) 새 설치 파일을 직접 지금의 Hoard 위에 실행해도 돼요. 설정, 라이브러리, 로그인, 태그는 `%LOCALAPPDATA%\Hoard`에, 다운로드는 다운로드 폴더에 있어요. 설치, 업데이트, 제거는 프로그램 자신의 파일만 건드려요.
 
-Hoard 창은 Microsoft Edge WebView2를 써요(Windows 11에 포함되어 있고, Windows 10에서도 자동으로 최신으로 유지돼요). WebView2가 없으면 대신 웹 브라우저에서 열려요(종료는 **설정**에서).
+Hoard 창은 Microsoft Edge WebView2를 써요(Windows 11에 포함되어 있고, Windows 10에서도 자동으로 최신으로 유지돼요).
 
 <a id="install-macos-linux"></a>
 ## 설치 (macOS, Linux)
 
-- **macOS 11 이상:** [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/latest)에서 `Hoard-<버전>-macos-apple-silicon.pkg`(M 시리즈 Mac) 또는 `Hoard-<버전>-macos-intel.pkg`를 다운로드해서 여세요. 아직 Apple 서명이 없어서 처음에는 열리지 않아요. **완료**를 고른 뒤 **시스템 설정 › 개인정보 보호 및 보안 › 그래도 열기**를 고르세요. Hoard는 **응용 프로그램**에 들어가요.
-- **Linux (x86_64):** `Hoard-<버전>-linux-x86_64.flatpak`을 다운로드해서 소프트웨어 센터로 열거나, `flatpak install --user Hoard-<버전>-linux-x86_64.flatpak`을 실행하세요. [Flathub](https://flathub.org/setup)의 GNOME 런타임을 써요.
+- **macOS 11 이상:** [Releases](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)에서 `Hoard-<버전>-macos-apple-silicon.dmg`(M 시리즈 Mac) 또는 `Hoard-<버전>-macos-intel.dmg`를 다운로드해서 열고, Hoard를 **응용 프로그램**으로 끌어다 놓으세요. 아직 Apple 서명이 없어서 처음에는 열리지 않아요. **완료**를 고른 뒤 **시스템 설정 › 개인정보 보호 및 보안 › 그래도 열기**를 고르세요. (Hoard 5.1은 대신 `.pkg`예요.)
+- **Linux (x86_64):** AppImage(`Hoard-<버전>-linux-x86_64.AppImage`: 실행할 수 있게 만든 뒤 여세요), Debian과 Ubuntu용 `.deb`(`Hoard-<버전>-linux-amd64.deb`), 또는 Flatpak(`Hoard-<버전>-linux-x86_64.flatpak`: 소프트웨어 센터로 열거나 `flatpak install --user Hoard-<버전>-linux-x86_64.flatpak`을 실행하세요. [Flathub](https://flathub.org/setup)의 GNOME 런타임을 쓰고, 예전 Hoard의 Flatpak 위에 덮어 설치돼요).
 
-둘 다 Hoard 전용 창에서 열려요. 업데이트하려면 새 파일을 같은 방법으로 설치하세요(어떤 파일인지는 **설정 › 업데이트**에 나와요). 자세한 내용: [Hoard 설치](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoard-설치)
+모두 Hoard 전용 창에서 열려요. Mac 앱, AppImage, .deb는 Windows처럼 스스로 업데이트해요. Flatpak은 새 `.flatpak`을 같은 방법으로 설치해서 업데이트해요(어떤 파일인지는 **설정 › Hoard 업데이트**에 나와요). 자세한 내용: [Hoard 설치](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoard-설치)
 
 **소스에서 (어떤 OS든):** [Python 3.10 이상](https://www.python.org/downloads/)을 설치하고, `Hoard-<버전>.zip`을 다운로드해서 압축을 푼 뒤 `Hoard.bat`(Windows) 또는 `./run.sh`를 실행하세요. 전용 Python 환경을 만들고(모든 패키지를 미리 기록된 지문과 맞춰 봐요) Hoard를 열어요.
 

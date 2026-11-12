@@ -223,6 +223,36 @@ class Scheduling(IsolatedTestCase):
         release.set()
         self.assertTrue(resumed.wait(5))
 
+    def test_a_reader_beside_your_tasks_carries_on(self):
+        """One registered beside=True (Reading products' pages: it keeps off the stores your task uses itself) starts
+        and carries on while your task runs; it's still one maintenance at a time, and Pause still pauses it."""
+        scheduler = self.scheduler(persistent=False)
+        foreground, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        steps, other = [], threading.Event()
+
+        def user_job():
+            foreground.set()
+            release.wait(10)
+
+        def pages(context):
+            context.checkpoint()
+            steps.append(1)
+            return Again(0.01) if len(steps) < 3 else None
+
+        scheduler.call("Download", user_job)
+        self.assertTrue(foreground.wait(5))
+        scheduler.add("store-pages", "Reading products' pages", pages, durable=False, beside=True)
+        scheduler.add("packages", "Reading packages", lambda context: other.set(), durable=False)
+        for _ in range(200):
+            if len(steps) == 3:
+                break
+            threading.Event().wait(0.02)
+        self.assertEqual(len(steps), 3, "all its steps while the download runs")
+        self.assertFalse(other.is_set(), "other maintenance still waits for your task")
+        release.set()
+        self.assertTrue(other.wait(5))
+
     def test_restart_retains_pause_and_completed_work(self):
         scheduler = self.scheduler(path=self.test_home / "schedule.json")
         saved = threading.Event()

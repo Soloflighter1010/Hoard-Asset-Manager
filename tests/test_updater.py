@@ -384,6 +384,11 @@ class WhenHoardAsks(IsolatedTestCase):
                     mock.patch("hoard.paths.in_flatpak", lambda: flatpak), mock.patch.object(updater, "installed_copy", lambda: installed):
                 kinds.append(updater.moving_kind())
         self.assertEqual(kinds, ["windows", "portable", "mac", "flatpak", "", ""], "pip or source: nothing to uninstall")
+        # the Tauri and Nuitka build is built that way already: a newer one isn't "another way", nothing to uninstall
+        from hoard import shell
+        with mock.patch.object(shell, "BUILD", True), mock.patch.object(updater, "__version__", "5.2.0-beta.5"):
+            self.assertFalse(updater.built_another_way("5.2.0-beta.6"))
+            self.assertFalse(u.view(False)["moving"])
 
     def test_only_the_installed_app_installs(self):
         self.assertFalse(updater.installed_copy(), "running from source")

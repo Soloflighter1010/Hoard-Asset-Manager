@@ -1,0 +1,12 @@
+{
+  "name": "hoard-shell",
+  "private": true,
+  "description": "The Tauri CLI that builds Hoard's Tauri window, pinned (package-lock.json has each file's hash)",
+  "license": "MIT",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}
