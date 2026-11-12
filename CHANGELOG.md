@@ -373,6 +373,15 @@
   product as in the project, and **Take it out of this project...** removes what a product's packages put in
   `Assets` (to the trash), but never a file another product in the project uses. It lists what goes and asks first.
 
+## 5.1.4
+
+- **The last Hoard built this way.** From the next version, Hoard is built with Tauri and Nuitka, and installs as a
+  new app: this one can't update itself to it. When it's out, uninstall this Hoard first, then install the new one;
+  your library, settings, sign-ins and downloads stay. Hoard says so under its bar, with how for your computer, and
+  [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#moving-to-the-new-hoard)
+  has the steps. Nothing else changes from 5.1.3.
+- With beta updates on, Hoard can still update itself to 5.2.0 beta 5, the last beta built this way.
+
 ## 5.1.3
 
 - **Projects opens with Hoard's splash,** the logo and "Opening your projects", while it reads your projects, as
