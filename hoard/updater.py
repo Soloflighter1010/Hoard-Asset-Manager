@@ -11,6 +11,12 @@ release's SHA256SUMS-windows.txt. Hoard then quits cleanly (a download in progre
 and the installer opens the new Hoard when it's done. Your settings, library, sign-ins and downloads aren't
 touched: an update replaces only the program files.
 
+The Tauri and Nuitka build (hoard/shell.py) is updated by its window instead, with Tauri's updater: Hoard picks the
+release as above, and the window downloads the file for this computer that the release's Hoard-update.json lists, keeps
+it only when it matches its signature (made with a key only the release workflow holds; its public half is built into
+the window), and installs it once Hoard has quit cleanly, then opens the new Hoard. Not in the Flatpak, which Flatpak
+itself updates.
+
 Everything else is told there's a newer version, with a link to it and which file to get (how_to_update): the
 Mac app its .pkg for this Mac's chip, the Flatpak its .flatpak bundle, a copy from the portable zip (no longer
 published from 4.3.6: antivirus engines kept flagging it) the installer, and pip or source the releases page.
@@ -40,6 +46,11 @@ API = "https://api.github.com"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases"
 SETUP_NAME = "Hoard-Setup-{}.exe"
 SUMS_NAME = "SHA256SUMS-windows.txt"
+# The Tauri and Nuitka build updates through its window (shell/src/main.rs: Tauri's updater): a release's manifest of
+# its files for each system and their signatures, checked against the key built into the window. Hoard chooses the
+# release (its channel, what's new); the window downloads, checks and installs it.
+UPDATE_NAME = "Hoard-update.json"
+DOWNLOADS = f"https://github.com/{REPO}/releases/download/"
 MAX_SETUP = 400 * 1024 * 1024
 MAX_SUMS = 64 * 1024
 DAY = 24 * 60 * 60
@@ -79,6 +90,15 @@ def installed_copy() -> bool:
     return any(Path(sys.executable).parent.glob("unins*.exe"))
 
 
+def can_update_itself() -> bool:
+    """Can this copy install an update itself? The Windows app Hoard-Setup installed; or the Tauri and Nuitka build,
+    when its window says it can (with the updates' key, and not the Flatpak, which Flatpak updates)."""
+    from . import shell
+    if shell.BUILD:
+        return bool(shell.SHELL and shell.SHELL.can_update)
+    return installed_copy()
+
+
 def built_another_way(version: str) -> bool:
     """Is version one of the Tauri and Nuitka builds after this one (any version after LAST_BUILT_THIS_WAY)? Never
     in the Tauri and Nuitka build itself: it's built that way already, and has nothing to uninstall to move."""
@@ -106,10 +126,12 @@ def how_to_update(version: str) -> str:
     """What to download to update a copy of Hoard that can't update itself, for this kind of copy."""
     from .paths import in_flatpak
     from . import shell
-    if shell.BUILD:   # (the Tauri and Nuitka build: an experiment, with releases of its own)
-        return (f"This is the Tauri and Nuitka build. Install the usual Hoard {version} from the releases page (its "
-                "installer, or the package for your system), or the next Tauri and Nuitka build when there is one. "
-                "Your settings, library and downloads carry over.")
+    if shell.BUILD:   # (the Tauri and Nuitka build, when it can't update itself: no version in these, to translate)
+        if in_flatpak():
+            return ("Download the new Hoard's .flatpak from its release and open it, or run flatpak install with it. "
+                    "It replaces this one, and your library, settings, sign-ins and downloads stay.")
+        return ("Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or "
+                "the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.")
     if in_flatpak():
         return (f"Download Hoard-{version}-linux-x86_64.flatpak from the releases page and open it, or run "
                 f"flatpak install Hoard-{version}-linux-x86_64.flatpak. It replaces this one.")
@@ -162,7 +184,15 @@ def describe(release: dict) -> dict:
             "published": str(release.get("published_at") or "")[:40],
             # (one built another way is never installed by this one: it's another app, uninstall this one first)
             "has_installer": bool(_asset(release, SETUP_NAME.format(version)) and _asset(release, SUMS_NAME))
-                             and not built_another_way(version)}
+                             and not built_another_way(version),
+            # the Tauri and Nuitka build's update: its manifest, from Hoard's own releases only
+            "update_url": _update_url(release)}
+
+
+def _update_url(release: dict) -> str:
+    """The address of a release's Hoard-update.json, if it has one on Hoard's own releases."""
+    url = str((_asset(release, UPDATE_NAME) or {}).get("browser_download_url") or "")
+    return url if url.startswith(DOWNLOADS) and url.endswith("/" + UPDATE_NAME) else ""
 
 
 def fetch_latest(betas: bool = False) -> dict | None:
@@ -316,8 +346,10 @@ class Updates:
         if latest and is_beta(latest.get("version")) and not self.cfg.get("beta_updates"):
             latest = None   # found while beta updates were on, and they've been turned off since
         available = bool(latest and newer(latest.get("version", "")))
+        from . import shell
+        installable = latest and (latest.get("update_url") if shell.BUILD else latest.get("has_installer"))
         return {**self.state, "latest": latest, "available": available, "can_install": bool(can_install and available
-                and latest.get("has_installer") and not built_another_way(latest.get("version", ""))),
+                and installable and not built_another_way(latest.get("version", ""))),
                 "auto": bool(self.cfg.get("check_for_updates")),
                 # the last Hoard built this way: which copy (what to uninstall), and whether the newer one is the new way
                 "moving_kind": moving_kind(), "moving": bool(available and built_another_way(latest.get("version", ""))),
@@ -378,6 +410,13 @@ class Updates:
                 if built_another_way(describe(release)["version"]):   # (another app: uninstall this one first)
                     raise UpdateRefused("Hoard is built a new way from this version: uninstall this one, then install it.")
                 self.state["latest"] = describe(release)
+                from . import shell
+                if shell.BUILD:   # (the window gets it, checks its signature and installs it once Hoard has quit)
+                    self._through_shell(shell.SHELL, self.state["latest"])
+                    self.state.update(message="Closing Hoard to update")
+                    shell.SHELL.send(do="install")
+                    on_ready()
+                    return
                 path = download_installer(release, lambda m: self.state.update(message=m))
                 self.pending = path
                 self.state.update(message="Closing Hoard to update")
@@ -391,6 +430,23 @@ class Updates:
             self.scheduler = Scheduler(persistent=False)
         self.scheduler.call("Installing Hoard update", run)
         return None
+
+
+    def _through_shell(self, window, latest: dict) -> None:
+        """The Tauri and Nuitka build's update, by its window: downloaded and checked against its signature, with how
+        far it's got said as the installer's download is. Raises if it can't be had."""
+        if window is None or not window.can_update:
+            raise UpdateRefused("this copy of Hoard can't update itself: download the new one from its release")
+        if not latest.get("update_url"):
+            raise UpdateRefused("the release has no update for this build: download it from its release")
+        version = latest["version"]
+
+        def progress(got: int, total: int | None):
+            """How far the window has got, said in Settings as the installer's download is."""
+            mb = lambda n: f"{n / (1024 * 1024):.0f} MB"
+            self.state.update(message=f"Downloading Hoard {version}" + (f" ({mb(got)} of {mb(total)})" if total else ""))
+        progress(0, None)
+        window.get_update(latest["update_url"], version, progress)
 
 
 def finish(updates: "Updates | None") -> bool:

@@ -2551,5 +2551,7 @@
  "Download the new Hoard's installer from its release and run it, then delete this folder.": "새 Hoard의 설치 프로그램을 릴리스에서 다운로드해 실행한 다음, 이 폴더를 삭제하세요.",
  "Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.": "Hoard {0}이(가) 나왔어요. 새로운 방식(Tauri와 Nuitka)으로 만들어져 새 앱으로 설치되기 때문에, 이 Hoard에서는 업데이트할 수 없어요.",
  "This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app.": "이 방식으로 만든 Hoard는 이것이 마지막이에요. 다음 버전부터는 Tauri와 Nuitka로 만들어지고, 새 앱으로 설치돼요.",
- "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "라이브러리, 설정, 로그인, 다운로드는 그대로 남아요. 제거해도 지워지지 않아요."
+ "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "라이브러리, 설정, 로그인, 다운로드는 그대로 남아요. 제거해도 지워지지 않아요.",
+ "Download the new Hoard's .flatpak from its release and open it, or run flatpak install with it. It replaces this one, and your library, settings, sign-ins and downloads stay.": "새 Hoard의 .flatpak을 릴리스에서 다운로드해서 열거나, flatpak install로 설치하세요. 지금 버전을 대신하고, 라이브러리, 설정, 로그인, 다운로드는 그대로 남아요.",
+ "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "사용하는 시스템에 맞는 새 Hoard(설치 프로그램, .dmg, AppImage, .deb)를 릴리스에서 다운로드해서 지금 버전 위에 설치하세요. 라이브러리, 설정, 로그인, 다운로드는 그대로 남아요."
 }

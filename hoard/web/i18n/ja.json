@@ -2551,5 +2551,7 @@
  "Download the new Hoard's installer from its release and run it, then delete this folder.": "新しいHoardのインストーラーをリリースからダウンロードして実行し、それからこのフォルダーを削除してください。",
  "Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.": "Hoard {0}が出ました。新しい方法(TauriとNuitka)で作られていて、新しいアプリとしてインストールされるため、このHoardからは更新できません。",
  "This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app.": "この作り方のHoardはこれが最後です。次のバージョンからはTauriとNuitkaで作られ、新しいアプリとしてインストールされます。",
- "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。アンインストールしても消えません。"
+ "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。アンインストールしても消えません。",
+ "Download the new Hoard's .flatpak from its release and open it, or run flatpak install with it. It replaces this one, and your library, settings, sign-ins and downloads stay.": "新しいHoardの.flatpakをリリースからダウンロードして開くか、flatpak installでインストールしてください。このバージョンと置き換わり、ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。",
+ "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "お使いのシステム用の新しいHoard（インストーラー、.dmg、AppImage、.deb）をリリースからダウンロードして、このバージョンに上書きでインストールしてください。ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。"
 }

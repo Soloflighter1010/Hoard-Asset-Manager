@@ -15,7 +15,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "app", "dmg", "appimage", "deb"],
+    "targets": [
+      "nsis",
+      "app",
+      "dmg",
+      "appimage",
+      "deb"
+    ],
     "publisher": "SoloFlighter",
     "copyright": "MIT licensed. Not affiliated with VRChat or any store.",
     "category": "Utility",
@@ -40,13 +46,25 @@
         "uninstallerIcon": "../packaging/hoard.ico",
         "headerImage": "installer/header.bmp",
         "sidebarImage": "installer/sidebar.bmp",
-        "languages": ["English", "Japanese", "Korean"],
+        "languages": [
+          "English",
+          "Japanese",
+          "Korean"
+        ],
         "displayLanguageSelector": false
       }
     },
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

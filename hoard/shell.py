@@ -9,10 +9,17 @@ From Hoard to the shell, each line starting with MARK (anything else the shell o
     {"do": "hide"}                        Hoard is quitting: the window goes now, the shell ends when Hoard has
     {"do": "js", "code": ...}             run a page script (the page asks what to do about a running task)
     {"do": "pick", "id": n, "kind": "folder" or "file", "start": ...}   the system's picker, over the window
+    {"do": "update", "url": ..., "version": ...}   get this update (its release's Hoard-update.json), checked against
+                                          its signature, while Hoard carries on (hoard/updater.py chose it)
+    {"do": "install"}                     Hoard is quitting for it: install it once Hoard has stopped, then open again
 
 From the shell to Hoard:
+    {"event": "hello", "updates": bool}   what the shell can do: update this copy itself (not without the updates' key,
+                                          and never in the Flatpak)
     {"event": "closing", "quitting": bool}   the window's close button (quitting: Command-Q on a Mac)
     {"event": "picked", "id": n, "path": ... or null}
+    {"event": "update", "state": "downloading", "got": bytes, "total": bytes or null}, then "ready", or "failed"
+    with "why"
 and the end of its input: the shell has gone, so Hoard quits.
 
 Standard input and output are kept for this alone: claim_pipes() takes them before anything prints, and gives
@@ -39,7 +46,9 @@ class Shell:
         self._n = 0
         self.on_closing = lambda quitting: None
         self.on_gone = lambda: None
+        self.on_update = lambda event: None
         self.gone = threading.Event()
+        self.can_update = False   # (the shell's hello says: this copy can update itself)
 
     def send(self, **message) -> None:
         """One message to the shell (dropped once it's gone)."""
@@ -73,7 +82,11 @@ class Shell:
     def _event(self, event: dict) -> None:
         """One event from the shell: the close button, or a picker's answer."""
         kind = event.get("event")
-        if kind == "closing":
+        if kind == "hello":
+            self.can_update = event.get("updates") is True
+        elif kind == "update":
+            self.on_update(event)
+        elif kind == "closing":
             self.on_closing(bool(event.get("quitting")))
         elif kind == "picked":
             waiting = self._picks.get(event.get("id"))
@@ -90,6 +103,33 @@ class Shell:
         for waiting in list(self._picks.values()):   # (a picker that was open: nothing was chosen)
             waiting[0].set()
         self.on_gone()
+
+    def get_update(self, url: str, version: str, progress, timeout: float = 60 * 60) -> None:
+        """Have the shell download this update and check it against its signature, saying how far it's got
+        (progress(got, total)); raises if it can't. Once it returns, Hoard can quit for it (send(do="install"))."""
+        done, result = threading.Event(), {}
+
+        def on_update(event: dict):
+            """The shell's word on the update: how far it's got, then that it's here (or why not)."""
+            state = event.get("state")
+            if state == "downloading":
+                got, total = event.get("got"), event.get("total")
+                progress(got if isinstance(got, int) else 0, total if isinstance(total, int) else None)
+            elif state in ("ready", "failed"):
+                result.update(event)
+                done.set()
+        self.on_update = on_update
+        self.send(do="update", url=url, version=version)
+        waited = 0.0
+        while not done.wait(1):
+            waited += 1
+            if self.gone.is_set():
+                raise RuntimeError("Hoard's window has closed")
+            if waited > timeout:
+                raise RuntimeError("the download took more than an hour")
+        if result.get("state") != "ready":
+            why = result.get("why")
+            raise RuntimeError(why[:300] if isinstance(why, str) and why else "the update didn't download")
 
     def pick(self, kind: str, start: str = "") -> str | None:
         """The system's own folder (or file) picker, over the window: the chosen path, or None if cancelled."""

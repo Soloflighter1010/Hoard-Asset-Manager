@@ -1,0 +1,49 @@
+# Hoard as a Flatpak, built with Tauri and Nuitka: its window (the Tauri shell, shell/) and its server (compiled by
+# Nuitka), the same files the .deb has, on the GNOME runtime, which has the WebKitGTK the window needs. Built by
+# .github/workflows/tauri-nuitka.yml from the .deb its Linux job has just made, put here as hoard.deb:
+#   flatpak-builder --user --install --force-clean build shell/flatpak/io.github.soloflighter1010.Hoard.yml
+# Its app ID is the one the Flatpak of Hoard 5.1 and 5.2.0 beta 5 has, so installing it replaces that one, and your
+# library, settings and sign-ins (in ~/.var/app/io.github.soloflighter1010.Hoard) carry over. It doesn't update
+# itself: Flatpak does that, from a repository, and Hoard says where the next one is.
+app-id: io.github.soloflighter1010.Hoard
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: hoard
+finish-args:
+  - --share=network                        # the stores (and downloading Hoard's own browser)
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --talk-name=org.freedesktop.secrets    # store sign-ins are encrypted with your keyring (GNOME Keyring,
+  - --talk-name=org.kde.kwalletd5          #   KeePassXC, KWallet); without one, Hoard won't keep them
+  - --talk-name=org.kde.kwalletd6
+  - --talk-name=org.freedesktop.Notifications   # what the routine check found, as a notification (Settings)
+  - --filesystem=home                      # the downloads folder you choose (Documents/Hoard unless you pick one)
+  - --filesystem=/media                    #   and on other drives
+  - --filesystem=/run/media
+  - --filesystem=/mnt
+modules:
+  - name: hoard
+    buildsystem: simple
+    build-commands:
+      # the .deb's files: the window in bin, its server where the window looks for it (bin/../lib/Hoard)
+      - ar x shell/flatpak/hoard.deb data.tar.gz
+      - mkdir deb && tar -xzf data.tar.gz -C deb
+      - install -Dm755 deb/usr/bin/Hoard ${FLATPAK_DEST}/bin/Hoard
+      - mkdir -p ${FLATPAK_DEST}/lib && cp -a deb/usr/lib/Hoard ${FLATPAK_DEST}/lib/Hoard
+      - install -Dm755 shell/flatpak/hoard.sh ${FLATPAK_DEST}/bin/hoard
+      - install -Dm644 packaging/flatpak/io.github.soloflighter1010.Hoard.desktop ${FLATPAK_DEST}/share/applications/io.github.soloflighter1010.Hoard.desktop
+      # the metainfo, checked, with this version listed first (as software centres show it): no edit by hand
+      - python3 scripts/flatpak_metainfo.py --out ${FLATPAK_DEST}/share/metainfo/io.github.soloflighter1010.Hoard.metainfo.xml
+      - install -Dm644 packaging/icons/hoard-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/io.github.soloflighter1010.Hoard.png
+      - install -Dm644 packaging/icons/hoard-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/io.github.soloflighter1010.Hoard.png
+      - install -Dm644 packaging/icons/hoard-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/io.github.soloflighter1010.Hoard.png
+      # the window finds every library it needs in the runtime: fail the build, not the first start, without one
+      - "! ldd ${FLATPAK_DEST}/bin/Hoard | grep 'not found'"
+      # everything Hoard needs is in place: its pages, fonts and words, Playwright's driver, the store readers
+      - HOARD_DATA_DIR=$(mktemp -d) ${FLATPAK_DEST}/bin/hoard self-test
+    sources:
+      - type: dir
+        path: ../..

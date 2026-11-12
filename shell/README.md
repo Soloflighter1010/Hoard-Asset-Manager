@@ -10,6 +10,8 @@ build: how big it is, how quickly it starts, and what antivirus makes of it.
 | `../hoard/shell.py` | Hoard's side: the messages to and from the window, one JSON message a line on the server's standard input and output (the file says what each means). Hoard decides everything as in its own window |
 | `../scripts/build_nuitka.py` | Compiles `../packaging/hoard_shell.py` into `../build/nuitka/server/` (hoard-server, and what it needs) |
 | `tauri.conf.json` | The app: its name, icons, installers, and the server folder as its resources |
+| `flatpak/` | The Flatpak: the .deb's files on the GNOME runtime, with the app ID the earlier Flatpak had (so it installs over it), and `hoard`, which opens the window or runs one of Hoard's commands |
+| `updater.pub` | The public half of the key Hoard's updates are signed with. Empty: the window doesn't update itself (see Updates) |
 | `installer/` | The Windows installer's sidebar (its first and last pages) and header (the others), made by `../scripts/make_installer_art.py` from the Heap and the website's fonts: run it again after the logo changes |
 | `package.json` | The Tauri CLI, pinned (`package-lock.json` has each file's hash) |
 
@@ -37,3 +39,27 @@ releases it (a draft, VirusTotal's scan, then a pre-release, never Latest, tagge
 pushes only build, with the files kept with the run; put the next number in `RELEASE` for the next one. Hoard's
 updates only look at version tags (`v...`), so nobody is offered this build; it says so in Hoard's updates
 (`hoard/updater.py`).
+
+## Updates
+
+Hoard chooses the update, as it always has (`hoard/updater.py`: its beta channel, what's new, checking only when you
+ask or once a day if you've said so). The window installs it, with Tauri's updater: Hoard sends it the release's
+`Hoard-update.json` and the version, and the window downloads the file for this computer, keeps it only if it matches
+its signature (checked against `updater.pub`, built into the window), and installs it once Hoard has quit cleanly,
+then opens the new Hoard. Windows' setup reopens Hoard itself; a Mac's app and Linux's AppImage are replaced where they
+are, and the .deb is installed with `dpkg` (it asks for your password). The Flatpak never updates itself: Flatpak
+does that.
+
+The key is made once, on your own computer, and never put in the repository or pasted anywhere:
+
+```
+cd shell && npm ci --ignore-scripts
+npx tauri signer generate -w ~/.tauri/hoard-updates.key   # asks for a password; keep the key and the password safe
+```
+
+Then put the private key (the whole of `hoard-updates.key`) and its password in the repository's Actions secrets,
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and the public half (`hoard-updates.key.pub`, one
+line) in `updater.pub`. The workflow then signs each release's files and makes `Hoard-update.json`
+(`scripts/update_manifest.py`); with only one of the two, it stops before building anything. Lose the key, and the
+copies out there can't be updated by the window any more: everyone downloads the next one by hand, once.
+

@@ -13,10 +13,17 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 /// What starts each of Hoard's lines to the shell (anything else it prints is not for the shell).
 const MARK: &str = "\u{1e}hoard:";
+/// The public key Hoard's updates are signed with (shell/updater.pub, made once with `tauri signer generate`; its
+/// private half is a secret of the release workflow's, never in the repository). Empty: this build can't update
+/// itself, and Hoard says where to download the next one instead.
+const UPDATE_KEY: &str = include_str!("../updater.pub");
+/// Where an update and its manifest may come from: Hoard's own releases.
+const RELEASES: &str = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/";
 /// A link the page opens in a new window (or a target=_blank link), sent here by LINKS to open in your browser.
 const OPEN_HOST: &str = "hoard-open.invalid";
 /// The page's links that would open a new window open in your browser instead, as in Hoard's pywebview window.
@@ -35,6 +42,62 @@ struct Server {
     origin: Mutex<Option<String>>, // its page's address (http://127.0.0.1:port): the window stays on it
     opened: AtomicBool,            // its page has been shown
     leaving: AtomicBool,           // Hoard is quitting (or has stopped): the window may close, the app end
+    update: Mutex<Option<(Update, Vec<u8>)>>, // an update downloaded and checked against its signature
+    updating: AtomicBool,          // one is being downloaded
+    install: AtomicBool,           // Hoard is quitting for it: install it once Hoard has stopped, then open again
+}
+
+/// Can this copy update itself? Not without the updates' key, and never in the Flatpak, which Flatpak updates (its
+/// files are the .deb's, so Tauri's updater would take it for one).
+fn updates_here() -> bool {
+    !UPDATE_KEY.trim().is_empty()
+        && std::env::var_os("FLATPAK_ID").is_none()
+        && !std::path::Path::new("/.flatpak-info").exists()
+}
+
+/// Download the update Hoard chose (that version, from that release's manifest) and check it against its signature,
+/// while Hoard carries on. Hoard is told how far it's got; once it's here, Hoard quits, and it's installed.
+async fn get_update(app: &AppHandle, server: &Server, manifest: &str, version: &str) -> Result<(), String> {
+    if !updates_here() {
+        return Err("this copy of Hoard doesn't update itself".into());
+    }
+    if !manifest.starts_with(RELEASES) {
+        return Err("that isn't one of Hoard's releases".into());
+    }
+    let endpoint = Url::parse(manifest).map_err(|e| e.to_string())?;
+    let wanted = version.to_string();
+    // Hoard has decided this is the one (its channel, a beta or not): Tauri's own numbers can't tell betas apart
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![endpoint])
+        .map_err(|e| e.to_string())?
+        .version_comparator(move |_, remote| remote.version.to_string() == wanted)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("the release has no Hoard {version} for this computer"))?;
+    if !update.download_url.as_str().starts_with(RELEASES) {
+        return Err("the update isn't one of Hoard's releases".into());
+    }
+    let (mut got, mut said) = (0u64, 0u64);
+    let bytes = update
+        .download(
+            |chunk, total| {
+                got += chunk as u64;
+                if got - said >= 1 << 20 || Some(got) == total {   // (a megabyte at a time)
+                    said = got;
+                    server.tell(json!({"event": "update", "state": "downloading", "got": got, "total": total}));
+                }
+            },
+            || {},
+        )
+        .await   // (checked against its signature as it ends: one that doesn't match is refused)
+        .map_err(|e| e.to_string())?;
+    *server.update.lock().unwrap() = Some((update, bytes));
+    Ok(())
 }
 
 impl Server {
@@ -120,7 +183,47 @@ fn handle(app: &AppHandle, server: &Arc<Server>, message: Value) {
                 server.tell(json!({"event": "picked", "id": id, "path": path}));
             });
         }
+        Some("update") => {   // get the update Hoard chose, and say when it's here (or why not)
+            if server.updating.swap(true, Ordering::SeqCst) {
+                return;   // (Hoard asks for one at a time)
+            }
+            let (app, server) = (app.clone(), server.clone());
+            let manifest = message["url"].as_str().unwrap_or("").to_string();
+            let version = message["version"].as_str().unwrap_or("").to_string();
+            tauri::async_runtime::spawn(async move {
+                let event = match get_update(&app, &server, &manifest, &version).await {
+                    Ok(()) => json!({"event": "update", "state": "ready"}),
+                    Err(why) => json!({"event": "update", "state": "failed", "why": why}),
+                };
+                server.updating.store(false, Ordering::SeqCst);
+                server.tell(event);
+            });
+        }
+        Some("install") => {   // Hoard is quitting for the update: install it once Hoard has stopped
+            server.install.store(true, Ordering::SeqCst);
+        }
         _ => {}
+    }
+}
+
+/// Install the update Hoard quit for, then open the new Hoard. On Windows its setup takes over (and opens Hoard
+/// when it's done), so this ends here; elsewhere the app is replaced where it is, and started again.
+fn install_update(app: &AppHandle, server: &Server) -> bool {
+    if !server.install.load(Ordering::SeqCst) {
+        return false;
+    }
+    let Some((update, bytes)) = server.update.lock().unwrap().take() else { return false };
+    match update.install(&bytes) {
+        Ok(()) => app.restart(),
+        Err(why) => {
+            app.dialog()
+                .message(format!("Hoard's update couldn't be installed ({why}). Open Hoard again to carry on with \
+                                  this version, or download the new one from its release."))
+                .title("Hoard")
+                .kind(MessageDialogKind::Error)
+                .blocking_show();
+            false
+        }
     }
 }
 
@@ -137,6 +240,7 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
     }
     let mut child = command.spawn().map_err(|e| format!("{}: {e}", program.display()))?;
     *server.stdin.lock().unwrap() = child.stdin.take();
+    server.tell(json!({"event": "hello", "updates": updates_here()}));   // (what this shell can do for Hoard)
     let stdout = child.stdout.take().ok_or("no output from Hoard's server")?;
     {
         let (app, server) = (app.clone(), server.clone());
@@ -153,6 +257,9 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
     std::thread::spawn(move || {
         let status = child.wait();
         server.leaving.store(true, Ordering::SeqCst);
+        if install_update(&app, &server) {
+            return;
+        }
         let failed = !matches!(&status, Ok(s) if s.success());
         if failed && !server.opened.load(Ordering::SeqCst) {   // (one that ended well never opened: a second start)
             app.dialog()
@@ -172,8 +279,15 @@ fn main() {
         origin: Mutex::new(None),
         opened: AtomicBool::new(false),
         leaving: AtomicBool::new(false),
+        update: Mutex::new(None),
+        updating: AtomicBool::new(false),
+        install: AtomicBool::new(false),
     });
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    if updates_here() {   // (only where this copy can update itself: with the updates' key, and not the Flatpak)
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().pubkey(UPDATE_KEY.trim()).build());
+    }
+    let app = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(

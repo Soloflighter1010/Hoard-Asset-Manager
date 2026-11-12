@@ -87,3 +87,4 @@ Assets/PackageMakerWindowData.asset*
 .vscode
 node_modules/
 test-results/
+shell/flatpak/hoard.deb

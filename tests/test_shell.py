@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from hoard import shell  # noqa: E402
+from tests.isolation import IsolatedTestCase  # noqa: E402
 
 
 class _Jobs:
@@ -28,7 +29,7 @@ class _Server:
         return "http://127.0.0.1:8765/?once=abc"
 
 
-class Protocol(unittest.TestCase):
+class Protocol(IsolatedTestCase):
     def setUp(self):
         self.to_hoard_r, self.to_hoard_w = os.pipe()   # the shell writes events here
         self.from_hoard_r, self.from_hoard_w = os.pipe()   # and reads Hoard's messages here
@@ -130,16 +131,223 @@ class Protocol(unittest.TestCase):
         t.join(5)
         self.assertFalse(t.is_alive())
 
+    def test_the_shell_says_whether_it_updates_this_copy(self):
+        self.shell.listen()
+        self.assertFalse(self.shell.can_update, "not until it says so")
+        self.event(event="hello", updates=True)
+        for _ in range(50):
+            if self.shell.can_update:
+                break
+            threading.Event().wait(0.05)
+        self.assertTrue(self.shell.can_update)
+        self.event(event="hello", updates="yes")   # (only true itself)
+        threading.Event().wait(0.2)
+        self.assertFalse(self.shell.can_update)
 
-class Updates(unittest.TestCase):
-    def test_the_shell_build_says_where_its_updates_are(self):
-        """It isn't the app Hoard-Setup installed, nor the portable zip: it says what to get instead."""
-        from hoard import updater
+    def test_an_update_through_the_shell(self):
+        """Hoard asks for the update it chose; the shell says how far it's got, then that it's here (checked against
+        its signature), or why not; a shell that's gone ends the wait."""
+        self.shell.listen()
+        url = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.6/Hoard-update.json"
+        seen, outcome = [], []
+
+        def get():
+            try:
+                self.shell.get_update(url, "5.2.0-beta.6", lambda got, total: seen.append((got, total)))
+                outcome.append("ready")
+            except RuntimeError as e:
+                outcome.append(str(e))
+        t = threading.Thread(target=get)
+        t.start()
+        self.assertEqual(self.message(), {"do": "update", "url": url, "version": "5.2.0-beta.6"})
+        self.event(event="update", state="downloading", got=1048576, total=52428800)
+        self.event(event="update", state="downloading", got=52428800, total=None)
+        self.event(event="update", state="ready")
+        t.join(5)
+        self.assertEqual((seen, outcome), ([(1048576, 52428800), (52428800, None)], ["ready"]))
+        t = threading.Thread(target=get)
+        t.start()
+        self.message()
+        self.event(event="update", state="failed", why="signature mismatch")
+        t.join(5)
+        self.assertEqual(outcome[-1], "signature mismatch")
+        t = threading.Thread(target=get)
+        t.start()
+        self.message()
+        os.close(self.to_hoard_w)   # (the shell ended)
+        t.join(5)
+        self.assertEqual(outcome[-1], "Hoard's window has closed")
+
+
+class _Window:
+    """The shell, as hoard/updater.py sees it."""
+    def __init__(self, can_update=True, fails=""):
+        self.can_update, self.fails, self.asked, self.sent = can_update, fails, [], []
+
+    def get_update(self, url, version, progress):
+        self.asked.append((url, version))
+        progress(10 * 1024 * 1024, 50 * 1024 * 1024)
+        if self.fails:
+            raise RuntimeError(self.fails)
+
+    def send(self, **message):
+        self.sent.append(message)
+
+
+def _release(version, assets):
+    base = f"https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v{version}/"
+    return {"tag_name": f"v{version}", "prerelease": "beta" in version, "draft": False,
+            "html_url": f"https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/v{version}",
+            "assets": [{"name": a, "browser_download_url": a if a.startswith("https://") else base + a} for a in assets]}
+
+
+class Updates(IsolatedTestCase):
+    def setUp(self):
+        from unittest import mock
         self.addCleanup(setattr, shell, "BUILD", shell.BUILD)
+        self.addCleanup(setattr, shell, "SHELL", shell.SHELL)
         shell.BUILD = True
-        said = updater.how_to_update("5.2.0")
-        self.assertIn("Tauri and Nuitka build", said)
+        self.mock = mock
+
+    def test_the_shell_build_says_where_its_updates_are(self):
+        """When it can't update itself: what to get instead, never the old installer or the portable zip, and no
+        version in it, so the page can translate it."""
+        from hoard import updater
+        with self.mock.patch("hoard.paths.in_flatpak", lambda: False):
+            said = updater.how_to_update("5.2.0")
+        self.assertIn("AppImage", said)
         self.assertNotIn("portable zip", said)
+        self.assertNotIn("Hoard-Setup", said)
+        with self.mock.patch("hoard.paths.in_flatpak", lambda: True):
+            said = updater.how_to_update("5.2.0")
+        self.assertIn(".flatpak", said)
+        self.assertNotIn("5.2.0", said)
+
+    def test_only_hoards_own_manifest(self):
+        from hoard import updater
+        r = _release("5.2.0-beta.6", ["Hoard-update.json"])
+        self.assertEqual(updater.describe(r)["update_url"], r["assets"][0]["browser_download_url"])
+        self.assertEqual(updater.describe(_release("5.2.0-beta.6", ["https://example.com/Hoard-update.json"]))["update_url"], "")
+        self.assertEqual(updater.describe(_release("5.2.0-beta.6", ["Hoard-Tauri-Setup-5.2.0-beta.6.exe"]))["update_url"], "")
+
+    def test_the_window_installs_it(self):
+        """Hoard picks the release; its window downloads it, checks its signature and installs it once Hoard has
+        quit: only where the window says it can (not the Flatpak, nor without the updates' key)."""
+        from hoard import updater
+        shell.SHELL = None
+        self.assertFalse(updater.can_update_itself(), "no window")
+        shell.SHELL = _Window(can_update=False)
+        self.assertFalse(updater.can_update_itself(), "the window can't")
+        window = shell.SHELL = _Window()
+        self.assertTrue(updater.can_update_itself())
+        r = _release("5.2.0-beta.6", ["Hoard-update.json"])
+        u = updater.Updates({"beta_updates": True})
+        u.state["latest"] = updater.describe(r)
+        with self.mock.patch.object(updater, "__version__", "5.2.0-beta.5"):
+            self.assertTrue(u.view(True)["can_install"])
+            u.state["latest"] = updater.describe(_release("5.2.0-beta.6", ["Hoard-Setup-5.2.0-beta.6.exe", updater.SUMS_NAME]))
+            self.assertFalse(u.view(True)["can_install"], "the old installer is never this build's")
+        quit_ = threading.Event()
+        with self.mock.patch.object(updater, "__version__", "5.2.0-beta.5"), \
+                self.mock.patch.object(updater, "fetch_latest", lambda betas: r):
+            self.assertIsNone(u.start_install(quit_.set))
+            self.assertTrue(quit_.wait(5))
+        self.assertEqual(window.asked, [(r["assets"][0]["browser_download_url"], "5.2.0-beta.6")])
+        self.assertEqual(window.sent, [{"do": "install"}], "told to install it once Hoard has quit")
+        self.assertIsNone(u.pending, "nothing for Hoard itself to run")
+        # a download that fails: said, and Hoard doesn't quit
+        window = shell.SHELL = _Window(fails="the signature doesn't match")
+        u = updater.Updates({"beta_updates": True})
+        quit_.clear()
+        with self.mock.patch.object(updater, "__version__", "5.2.0-beta.5"), \
+                self.mock.patch.object(updater, "fetch_latest", lambda betas: r):
+            u.start_install(quit_.set)
+            for _ in range(100):
+                if u.state["error"]:
+                    break
+                threading.Event().wait(0.05)
+        self.assertIn("the signature doesn't match", u.state["error"])
+        self.assertFalse(quit_.is_set())
+        self.assertEqual(window.sent, [])
+
+    def test_the_window_installs_only_what_hoard_chose(self):
+        """The shell's side (shell/src/main.rs): the updater only with the updates' key and never in the Flatpak; the
+        version Hoard chose (its numbers can't tell betas apart), from Hoard's own releases; installed only once
+        Hoard has quit for it."""
+        root = Path(__file__).resolve().parent.parent / "shell"
+        rust = (root / "src" / "main.rs").read_text("utf-8")
+        for needed in ('include_str!("../updater.pub")', 'var_os("FLATPAK_ID")', '"/.flatpak-info"',
+                       "remote.version.to_string() == wanted", "manifest.starts_with(RELEASES)",
+                       "update.download_url.as_str().starts_with(RELEASES)", 'Some("install")',
+                       "if !server.install.load(Ordering::SeqCst)", "if updates_here() {"):
+            self.assertIn(needed, rust)
+        conf = json.loads((root / "tauri.conf.json").read_text("utf-8"))
+        self.assertEqual(conf["plugins"]["updater"]["pubkey"], "", "the key is the shell's own, from updater.pub")
+        self.assertIn('tauri-plugin-updater = "=', (root / "Cargo.toml").read_text("utf-8"))
+        key = (root / "updater.pub").read_text("utf-8").strip()
+        self.assertNotIn("PRIVATE", key.upper(), "only ever the public half")
+
+
+class Packaging(IsolatedTestCase):
+    """How the Tauri and Nuitka build is made into releases (.github/workflows/tauri-nuitka.yml)."""
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def test_hoard_update_json(self):
+        """Each system's part becomes Tauri's manifest, with each file's address on the release; anything else is
+        refused."""
+        import tempfile
+        from datetime import datetime, timezone
+        sys.path.insert(0, str(self.ROOT / "scripts"))
+        import update_manifest
+        sig = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXk="
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "update-windows.tsv").write_text(
+                f"windows-x86_64\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n"
+                f"windows-x86_64-nsis\tHoard-Tauri-Setup-5.2.0-beta.6.exe\t{sig}\n")
+            (Path(d) / "update-linux.tsv").write_text(f"linux-x86_64-deb\tHoard-Tauri-5.2.0-beta.6-linux-amd64.deb\t{sig}\n")
+            m = update_manifest.manifest(Path(d), "v5.2.0-beta.6", datetime(2026, 11, 20, tzinfo=timezone.utc))
+            self.assertEqual(m["pub_date"], "2026-11-20T00:00:00Z")
+            self.assertEqual(sorted(m["platforms"]), ["linux-x86_64-deb", "windows-x86_64", "windows-x86_64-nsis"])
+            self.assertEqual(m["platforms"]["linux-x86_64-deb"], {"signature": sig, "url":
+                "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.6/Hoard-Tauri-5.2.0-beta.6-linux-amd64.deb"})
+            for bad in (f"macos-x86_64\tHoard-a.dmg\t{sig}", f"linux-x86_64\t../evil.AppImage\t{sig}",
+                        "linux-x86_64\tHoard-a.AppImage\tnot a signature"):
+                (Path(d) / "update-zz.tsv").write_text(bad + "\n")
+                with self.assertRaises(ValueError, msg=bad):
+                    update_manifest.manifest(Path(d), "v5.2.0-beta.6")
+            with self.assertRaises(ValueError):
+                update_manifest.manifest(Path(d), "../v5")
+
+    def test_never_the_names_older_hoards_install(self):
+        """Hoard 5.1.3 and earlier install a release's Hoard-Setup-<version>.exe by itself when SHA256SUMS-windows.txt
+        is beside it: the Tauri and Nuitka build's files are named otherwise, so none of them ever runs its setup."""
+        flow = (self.ROOT / ".github" / "workflows" / "tauri-nuitka.yml").read_text("utf-8")
+        self.assertNotIn("Hoard-Setup-", flow)
+        self.assertNotIn("SHA256SUMS-windows.txt", flow)
+
+    def test_the_flatpak_replaces_the_old_one(self):
+        """The same app ID as the earlier Flatpak, so it installs over it (its data where it was), with the same
+        permissions; its window from the .deb, where the window looks for its server; hoard opens the window, and
+        hoard <command> runs one."""
+        import re
+
+        def read(path):   # (the manifest's top-level values and its finish-args, without a YAML library)
+            text = (self.ROOT / path).read_text("utf-8")
+            top = dict(re.findall(r"^([a-z-]+): '?([^'\n]+?)'?$", text, re.M))
+            args = re.findall(r"^  - (--\S+)", text.split("finish-args:", 1)[1].split("modules:", 1)[0], re.M)
+            return top, args, text
+        old, old_args, _ = read("packaging/flatpak/io.github.soloflighter1010.Hoard.yml")
+        new, new_args, text = read("shell/flatpak/io.github.soloflighter1010.Hoard.yml")
+        self.assertEqual((new["app-id"], new["runtime"], new["runtime-version"], new["command"]),
+                         (old["app-id"], old["runtime"], old["runtime-version"], "hoard"))
+        self.assertEqual(new_args, [a for a in old_args if not a.startswith("--env=PYWEBVIEW")])
+        commands = text.split("build-commands:", 1)[1]
+        self.assertIn("${FLATPAK_DEST}/bin/Hoard", commands)
+        self.assertIn("${FLATPAK_DEST}/lib/Hoard", commands, "bin/../lib/Hoard: where the window finds its server")
+        self.assertIn("self-test", commands)
+        launcher = (self.ROOT / "shell" / "flatpak" / "hoard.sh").read_text("utf-8")
+        self.assertIn("exec /app/bin/Hoard", launcher)
+        self.assertIn('exec /app/lib/Hoard/server/hoard-server "$@"', launcher)
 
 
 if __name__ == "__main__":
