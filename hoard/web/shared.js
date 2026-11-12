@@ -652,39 +652,14 @@ document.addEventListener("click", e => {   // a tab: a store's, a view's, the p
 }, true);
 
 let toastTimer;
-/* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
-   out of place). Resolves true for the main button, false for Cancel, Escape or a click outside it. */
+/* A question before something that can't be undone, in Hoard's own pop-up (ui/Dialog.svelte; the browser's plain
+   confirm box looked out of place). Its question is its title, and what follows says more under it (dialogs.heading).
+   Resolves true for the main button, false for Cancel, Escape, the close button or a click outside it. */
 function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
-  return new Promise(resolve => {
-    let d = document.getElementById("askDialog");
-    if (!d) {
-      d = document.createElement("dialog");
-      d.id = "askDialog"; d.className = "ask";
-      d.setAttribute("aria-labelledby", "askText");
-      d.innerHTML = '<div id="askText"></div><div class="ask-row"><button class="ghost" value="no"></button>' +
-                    '<button class="primary" value="yes"></button></div>';
-      d.addEventListener("click", e => {
-        const b = e.target.closest("button");
-        if (b) d.close(b.value);
-        else if (e.target === d) d.close("no");   // the dimmed page around it
-      });
-      document.body.appendChild(d);
-    }
-    const body = d.querySelector("#askText");
-    body.replaceChildren(...String(text).split(/\n\n+/).map(par => {
-      const p = document.createElement("p");
-      p.append(...par.split("\n").flatMap((line, i) => i ? [document.createElement("br"), line] : [line]));
-      return p;
-    }));
-    const [no, yes] = d.querySelectorAll("button");
-    no.textContent = cancel; yes.textContent = ok;
-    no.hidden = !cancel;   // (an empty cancel: something to read, with only the one button)
-    yes.classList.toggle("danger", !!danger);
-    d.returnValue = "no";
-    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
-    d.showModal();
-    (danger ? no : yes).focus();   // Enter doesn't delete anything by accident
-  });
+  const { title, detail, more } = HoardUI.dialogs.heading(text);
+  return HoardUI.dialogs.open({ kind: "confirm", id: "askDialog", textId: "askText", title, detail, paras: more,
+    ok: tr(ok), cancel: cancel && tr(cancel), danger: !!danger, icon: danger ? "alert" : cancel ? "help" : "info",
+    tone: danger ? "warn" : "gold", tr });
 }
 
 // Only the cards near the screen are drawn (review finding P-02): a batch now, and the next whenever the last one
@@ -1338,8 +1313,13 @@ function wireBar() {
 async function bulkTag(mode) {   // a tag to add to, or take off, what's selected
   const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
+  const on = new Map();   // (taking one off: the tags they have, and how many of them have each)
+  for (const a of chosen) for (const x of a.tags || []) on.set(x, (on.get(x) || 0) + 1);
+  const suggest = mode === "add" ? ((DATA.tagset || {}).tags || []).map(x => ({ name: x.name, count: x.count }))
+    : [...on].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count || coll.compare(x.name, y.name));
   const t = (await askName(mode === "add" ? "Add a tag to the selected" : "Take a tag off the selected", "",
-                           { list: "tagList", max: 40 })).trim();
+                           { max: 40, icon: "tag", prefix: "#", suggest, create: mode === "add",
+                             hint: tr("{0} selected", chosen.length) })).trim();
   if (!t) return;
   const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
   await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
@@ -3205,47 +3185,22 @@ function taskCount(n) {
   const b = $("#tasksCount");
   if (b) { b.hidden = !n; b.textContent = n || ""; }
 }
-// A name for something new (a set): Hoard's own dialog, the name chosen, or "" when it's cancelled
-function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's id, max: longest}
-  return new Promise(resolve => {
-    const d = document.createElement("dialog");
-    d.className = "ask";
-    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
-      `<p><input id="askName" maxlength="${opts.max || 60}"${opts.list ? ` list="${opts.list}"` : ""} style="width:100%;box-sizing:border-box"></p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
-    document.body.appendChild(d);
-    const input = d.querySelector("input");
-    input.value = value;
-    // Enter is OK (a form's Enter goes to its first button, which is Cancel), but not while an input method is
-    // still putting a word together (Japanese, Korean)
-    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
-    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
-    d.showModal();
-    input.select();
-  });
+// A name for something new (a set), or a tag: Hoard's own pop-up, the name chosen, or "" when it's cancelled. opts:
+// {max: longest, hint: a line under the title, icon, ok: its button; suggest: [{name, count}] to choose from as you
+// type (your tags), create: whether a name that isn't one of them can be given, prefix: shown before each ("#")}.
+function askName(title, value = "", opts = {}) {
+  const head = HoardUI.dialogs.heading(tr(title), true);
+  return HoardUI.dialogs.open({ kind: "text", inputId: "askName", title: head.title, detail: opts.hint ? tr(opts.hint) : head.detail,
+    paras: head.more, value, max: opts.max || 60, icon: opts.icon || "pencil", ok: tr(opts.ok || "OK"),
+    suggest: opts.suggest || null, create: opts.create !== false, prefix: opts.prefix || "", norm, tr });
 }
 /* ---------- Bring in a KonoAsset library (issue #305): its data folder, what bringing it in would do, then Bring in
    or Cancel. Hoard only reads KonoAsset's folder; what it brings in is a task (Tasks), and bringing in again adds only
    what's new. */
 // Ask for a folder: a box for its path, and Browse in Hoard's window. Its path, or "" when cancelled.
 function askFolder(title, hint, value = "") {
-  return new Promise(resolve => {
-    const d = document.createElement("dialog");
-    d.className = "ask ask-folder";
-    d.innerHTML = `<form method="dialog"><p><label for="askFolder">${esc(tr(title))}</label></p>` +
-      (hint ? `<p class="muted">${esc(tr(hint))}</p>` : "") +
-      `<p class="ask-field"><input id="askFolder" maxlength="1000" spellcheck="false">` +
-      `<button class="ghost" type="button" data-browse${canPick() ? "" : " hidden"}>${esc(tr("Browse…"))}</button></p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Next"))}</button></div></form>`;
-    document.body.appendChild(d);
-    const input = d.querySelector("input");
-    input.value = value;
-    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
-    d.querySelector("[data-browse]").addEventListener("click", () => browseInto(input));
-    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
-    d.showModal();
-    input.focus();
-  });
+  return HoardUI.dialogs.open({ kind: "folder", inputId: "askFolder", title: tr(title), detail: hint ? tr(hint) : "",
+    value, max: 1000, icon: "folder", ok: tr("Next"), browse: canPick() ? input => browseInto(input) : null, norm, tr });
 }
 // What bringing in a KonoAsset library would do (/api/konoasset/preview), in words.
 function konoSummary(s) {
@@ -5135,26 +5090,14 @@ async function addToAnotherSet(list) {
     const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
     sets = r && r.ok ? (await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
   }
-  // A set's tile to choose (its picture, name and counts), and a group of them under a heading.
-  const tile = s => `<button class="slot settile" value="${esc(s.id)}" data-name="${esc(norm(s.name))}"><span class="art">${setArt(s)}</span>` +
-    `<span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(setCounts(s).text)}</span></button>`;
-  // (a group with none in it isn't shown)
-  const group = (title, some) => some.length ? `<h4>${esc(tr(title))}</h4><div class="setpick-grid">${some.map(tile).join("")}</div>` : "";
-  const shown = pjDialog(`<p><b>${esc(tr("Add to which set?"))}</b></p>` +
-    `<p><input type="search" class="setpick-find" placeholder="${esc(tr("Find a set"))}" aria-label="${esc(tr("Find a set"))}"></p>` +
-    `<div class="setpick">${group("Your sets", sets.filter(s => !isWish(s) && !s.from_link))}` +
-    group("Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)) + group("Wishlists", sets.filter(isWish)) + `</div>` +
-    `<div class="ask-row"><button class="ghost" value="no">${esc(tr("Cancel"))}</button></div>`, "wide setpick-dlg");
-  const dlg = [...document.querySelectorAll(".setpick-dlg")].pop();
-  const find = dlg.querySelector(".setpick-find");
-  find.addEventListener("input", () => {   // (by its name, as you type: a group with none left is put away)
-    const words = norm(find.value).split(/\s+/).filter(Boolean);
-    for (const b of dlg.querySelectorAll(".settile")) b.hidden = !words.every(w => b.dataset.name.includes(w));
-    for (const g of dlg.querySelectorAll(".setpick-grid")) g.previousElementSibling.hidden = g.hidden = !g.querySelector(".settile:not([hidden])");
-  });
-  find.addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // (not the form's first button)
-  find.focus();
-  const { value } = await shown;
+  // A set to choose: its name, its counts, and its picture (the one you chose, else its first product's), or its
+  // letters on its colour
+  const row = s => { const pic = s.cover || ((s.items || []).find(i => i.pic) || {}).pic;
+    return { value: s.id, name: s.name, sub: setCounts(s).text, pic: pic ? keyed(pic) : "", letters: initials(s.name), hue: hue(s.name) }; };
+  const value = await HoardUI.dialogs.open({ kind: "pick", title: tr("Add to which set?"), icon: "sets",
+    detail: tr(items.length === 1 ? "1 product" : "{0} products", items.length), find: tr("Find a set"), cancel: tr("Cancel"), norm, tr,
+    groups: [["Your sets", sets.filter(s => !isWish(s) && !s.from_link)], ["Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)],
+             ["Wishlists", sets.filter(isWish)]].map(([title, some]) => ({ title: tr(title), items: some.map(row) })) });
   const s = sets.find(x => x.id === value);
   if (!s) return;
   if (!await ask(tr(items.length === 1 ? "Add it to {0}?" : "Add {1} products to {0}?", s.name, items.length), tr("Add"))) return;

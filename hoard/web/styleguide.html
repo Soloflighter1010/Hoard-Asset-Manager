@@ -38,12 +38,11 @@
 .sg-val { font: 12px ui-monospace, Menlo, Consolas, monospace; }
 /* the pages' floating parts (windows, the details, menus, the toast...) shown in place, not over the page */
 .sg-ex .bar, .sg-ex .shelf, .sg-ex .win, .sg-ex .detail, .sg-ex .stores, .sg-ex .toast, .sg-ex .selmenu, .sg-ex .tour-card,
-.sg-ex .bulk, .sg-ex dialog.ask { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto;
+.sg-ex .bulk { position: relative; inset: auto; left: auto; right: auto; top: auto; bottom: auto;
   transform: none; z-index: auto; max-height: none; }
 .sg-ex .win, .sg-ex .stores, .sg-ex .detail { width: min(470px, 100%); }
 .sg-ex .detail { visibility: visible; display: block; }
 .sg-ex .toast { display: inline-block; opacity: 1; }
-.sg-ex dialog.ask { display: block; margin: 0; max-width: 100%; box-sizing: border-box; }
 .sg-ex .bulk { width: auto; max-width: 100%; }
 .sg-ex .setup { position: relative; inset: auto; z-index: auto; display: block; padding: 0; background: none; }
 .sg-ex .setup-card { width: auto; max-height: none; }
@@ -213,10 +212,14 @@
 </div>
 
 <h2 class="sg-h" id="dialogs">Questions, menus and messages</h2>
-<p>Ask before what can't be undone, in Hoard's own dialog (ask() in shared.js), never the browser's. A menu
-  (openSelMenu) holds a group's actions; a toast says what just happened.</p>
-<div class="sg-ex"><dialog class="ask" open aria-labelledby="sgAsk"><div id="sgAsk"><p>Delete 2 backups (1.3 GB)? They can't be restored.</p></div>
-    <div class="ask-row"><button class="ghost" value="no">Cancel</button><button class="primary danger" value="yes">Delete</button></div></dialog></div>
+<p>Ask before what can't be undone, and for a name, a tag, a folder or a set, in Hoard's own pop-up (ui/Dialog.svelte,
+  through ask(), askName(), askFolder() and the set picker in shared.js), never the browser's: a card like the details
+  panel's, its question as its title and what follows under it. A menu (openSelMenu) holds a group's actions; a toast
+  says what just happened.</p>
+<div class="sg-cols">
+  <div class="sg-ex" data-dialog="confirm"></div>
+  <div class="sg-ex" data-dialog="tag"></div>
+</div>
 <div class="sg-cols" style="margin-top: 16px">
   <div class="sg-ex"><div class="selmenu" role="menu"><p class="selmenu-h" role="presentation">Sets</p><button role="menuitem">New set from these...</button><button role="menuitem" translate="no">Add to Rusk, winter</button><hr role="separator"><button role="menuitem" class="danger">Remove</button></div></div>
   <div class="sg-ex"><div class="toast show" role="status">Made the set Rusk, winter, with 2 products in it.</div></div>
@@ -290,7 +293,18 @@
     <div class="tour-go"><button class="linkish">End the tour</button><span><button class="ghost sm">Back</button> <button class="primary sm">Next</button></span></div></div></div>
 </div>
 </div>
+<!--@ui-->
 <script>
+// The pop-ups, drawn by the pages' own component (ui/Dialog.svelte) in place, as examples
+const EXAMPLES = {
+  confirm: { kind: "confirm", ...HoardUI.dialogs.heading("Delete 2 backups (1.3 GB)? They can't be restored."), ok: "Delete",
+             cancel: "Cancel", danger: true, icon: "alert", tone: "warn" },
+  tag: { kind: "text", title: "Add a tag to the selected", detail: "3 selected", value: "w", icon: "tag", ok: "OK", cancel: "Cancel", prefix: "#",
+         suggest: [{ name: "winter", count: 3 }, { name: "wings", count: 1 }, { name: "wip", count: 5 }], create: true },
+};
+// The examples' words, with their {0}s filled in (the pages translate theirs; the guide is in English)
+const say = (s, ...a) => s.replace(/\{(\d)\}/g, (m, i) => a[i]);
+for (const el of document.querySelectorAll("[data-dialog]")) HoardUI.dialogs.example(el, { tr: say, ...EXAMPLES[el.dataset.dialog] });
 // The bar: each choice is in the address, so a link shows the guide as it was chosen
 const bar = document.getElementById("sgBar");
 bar.addEventListener("change", () => {

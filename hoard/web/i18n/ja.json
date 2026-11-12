@@ -2556,5 +2556,7 @@
  "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。アンインストールしても消えません。",
  "Reading products' pages": "商品ページを読み取り中",
  "Download the new Hoard's .flatpak from its release and open it, or run flatpak install with it. It replaces this one, and your library, settings, sign-ins and downloads stay.": "新しいHoardの.flatpakをリリースからダウンロードして開くか、flatpak installでインストールしてください。このバージョンと置き換わり、ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。",
- "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "お使いのシステム用の新しいHoard（インストーラー、.dmg、AppImage、.deb）をリリースからダウンロードして、このバージョンに上書きでインストールしてください。ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。"
+ "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "お使いのシステム用の新しいHoard（インストーラー、.dmg、AppImage、.deb）をリリースからダウンロードして、このバージョンに上書きでインストールしてください。ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。",
+ "New tag {0}": "新しいタグ {0}",
+ "Nothing has that name.": "その名前のものはありません。"
 }

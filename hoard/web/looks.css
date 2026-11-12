@@ -31,15 +31,6 @@ html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before
 /* ...above a product for adults' 18+ mark, which has that corner (issues #251, #338): it covered the mark */
 html:not([data-style]) .slot.adult:is(:hover, :focus-visible) .notch[data-all]::before { bottom: 37px; }
 /* Add to another set (issue #242, shared.js): every set's tile to choose from */
-.setpick { max-height: min(60vh, 560px); overflow: auto; padding: 4px 2px; }
-.setpick h4 { margin: 10px 0 8px; font-size: 13px; color: var(--dust); }
-.setpick h4:first-child { margin-top: 0; }
-.setpick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 14px 12px; }
-.setpick-grid .settile { cursor: pointer; }
-.setpick-grid .settile .art { border-radius: 10px; }
-.setpick-grid .settile:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 2px; }
-.setpick-find { width: 100%; box-sizing: border-box; }
-.setpick [hidden] { display: none; }
 /* Projects' list (issues #246, #250, #253): a row or a tile says what's needed at a glance (its kind, Unity, folder,
    and what's new: packages outlined, products filled), and choosing one opens its details beside the list */
 .pj-layout { display: inline-flex; gap: 4px; margin-left: auto; }
@@ -162,8 +153,6 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 .codetag.ed, .codemark { box-shadow: inset 0 0 0 1.5px var(--gold); }
 .codetag.known { opacity: .7; }
 /* a folder to choose (shared.js askFolder: KonoAsset's, issue #305): its path, and Browse in Hoard's window */
-.ask-folder .ask-field { display: flex; gap: 8px; }
-.ask-folder .ask-field input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; }
 .pnote-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
 .note-mark { position: absolute; right: 7px; bottom: 7px; width: 24px; height: 24px; display: grid; place-items: center;
   border-radius: 7px; background: rgb(20 16 12 / .78); color: #F4EDE3; pointer-events: none; }
@@ -365,7 +354,8 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="treasure"] .detail h3 { font: 400 17px var(--display); color: var(--bone); }
 [data-style="treasure"] .x { border-radius: 999px; }
 /* panels, windows and questions: rounder, with more room */
-[data-style="treasure"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card) { border-radius: 24px; }
+[data-style="treasure"] :is(.stores, .win, .setup-card, .tour-card) { border-radius: 24px; }
+[data-style="treasure"] { --dlg-radius: 24px; }   /* every pop-up's corners (ui/Dialog.svelte, and the pages' own) */
 [data-style="treasure"] .win-bar { padding: 12px 14px 12px 22px; }
 [data-style="treasure"] .win-x { border-radius: 999px; }
 [data-style="treasure"] :is(.task, .proj, .pj-row, .librow, .note, .also, .update, .viewbar, .routine-note) { border-radius: 18px; }
@@ -399,7 +389,8 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] :is(.ghost, .btn, .primary).sm { padding: 0 10px; font-size: 12.5px; }
 [data-style="workbench"] :is(.search input, .tools select, .shelf-tools select, .find, .settings .field input, .settings select,
   .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.ask input, dialog.pin input) { border-radius: 6px; }
-[data-style="workbench"] :is(.stores, .win, .setup-card, dialog.ask, dialog.pin, .support-dialog, .tour-card, .bulk, .dlpanel, .selmenu, .barmenu, .qmenu) { border-radius: 10px; }
+[data-style="workbench"] { --dlg-radius: 10px; --dlg-field-radius: 6px; }   /* every pop-up's corners, and its box's */
+[data-style="workbench"] :is(.stores, .win, .setup-card, .tour-card, .bulk, .dlpanel, .selmenu, .barmenu, .qmenu) { border-radius: 10px; }
 [data-style="workbench"] :is(.task, .proj, .librow, .note, .also, .update, .viewbar, .routine-note, .saver, .support-safe, .support-result,
   .setup .status, .setup details, .setup .storepick label, .setup .closepick label, .setup .access-pick label, .theme-choice, .style-choice) { border-radius: 6px; }
 [data-style="workbench"] .selmenu button, [data-style="workbench"] .barmenu button, [data-style="workbench"] .qopt, [data-style="workbench"] .views button, [data-style="workbench"] .creators button { border-radius: 4px; }
