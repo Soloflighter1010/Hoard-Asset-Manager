@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Bring in from KonoAsset... is in Settings only**, under Bring in from another tool (and, the first time, in the
+  setup assistant's last step): the Menu keeps to Tags, Stores, Rescan and Settings.
 - **Every pop-up looks like the rest of Hoard.** A question, a name, a tag, a folder and the set picker are now one
   card like a product's details: an icon, the question as its title in Hoard's own lettering and what follows under
   it, a close button, and the buttons under a line. Adding a tag offers your tags as chips (the counts beside them,

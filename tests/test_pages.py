@@ -862,7 +862,7 @@ class AccessKey(IsolatedTestCase):
         """Issue #345: a product's details, on both pages, open its store page and copy its link. Issue #344: in
         Hoard's own window a right-click that isn't Hoard's own does nothing (the web view's Back, Save as and Print
         had come up), but in a box you type in; in your browser, its menu is yours. Issue #340: Bring in from
-        KonoAsset... is in Settings as well as the Menu. Issue #341: a suggested tag, chosen, reads as a chosen one."""
+        KonoAsset... is in Settings (only there: not in the Menu). Issue #341: a suggested tag, chosen, reads as a chosen one."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         asked = """sel => { const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -925,21 +925,21 @@ class AccessKey(IsolatedTestCase):
 
     def test_each_page_ends_its_header_with_its_one_thing_to_press(self):
         """The gold button is the last in the header, as the one thing to press: Sync in the Library, and Download new
-        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, Settings and Bring in from KonoAsset...
-        (#305) are in the Menu (#219)."""
+        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, and Settings are in the Menu (#219);
+        Bring in from KonoAsset... (#305) is in Settings, not the Menu."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
         self.assertTrue(page.locator("#syncBtn").is_hidden())
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Rescan", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Rescan", "Settings"])
         page.close()
 
     def test_search_prefixes_in_downloads(self):
@@ -3243,8 +3243,8 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         sent = []
         page.route("**/api/konoasset/bring-in", lambda route: (sent.append(json.loads(route.request.post_data)),
                                                                route.fulfill(status=200, json={"ok": True, "queued": False})))
-        page.click("#menuBtn")
-        page.click("#barMenu [data-konoasset]")
+        menu(page, "#settingsBtn")
+        page.click("#settingsPanel [data-konoasset]")
         box = page.locator("dialog.hd-folder input")
         box.fill(str(folder.parent / "nowhere"))
         page.click("dialog.hd-folder button[value=yes]")

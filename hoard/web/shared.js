@@ -3213,7 +3213,7 @@ function konoSummary(s) {
   if (s.left_out) lines.push(tr("Left out, with no files and not in your library: {0} ({1}).", s.left_out, s.left_out_names.join(", ")));
   return lines.join("\n\n");
 }
-// The Menu's Bring in from KonoAsset...: choose its data folder, see what it would do, then bring it in.
+// Settings' Bring in from KonoAsset...: choose its data folder, see what it would do, then bring it in.
 async function konoBringIn(path = "") {
   path = await askFolder("KonoAsset's data folder", "The folder with metadata, data and images in it. KonoAsset's Settings say where it is. Hoard only reads it.", path);
   if (!path) return;
