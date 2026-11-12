@@ -8,6 +8,9 @@
   this; it's information, not a verdict.
 - **Your note on a product.** A note you write in a product's details in Hoard (Hoard 5.2.0: what it's for, which
   avatar it's set up for) shows in its details here.
+- **Hoard 5.2.0's catalog** (`catalog.json` version 4) is read with its lists checked: an entry whose files or tags
+  aren't a list of names is left out, as one that breaks the catalog's other promises is. Older catalogs are read as
+  before.
 
 ## 0.10.1
 

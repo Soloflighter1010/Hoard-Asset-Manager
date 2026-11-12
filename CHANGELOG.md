@@ -1,19 +1,7 @@
 # Changelog
 
-## Unreleased
+## 5.2.0-beta.5
 
-- Library and Downloads share one app shell, product tiles and details. Switching views keeps the loaded data
-  and common windows; Back and Forward keep working. Look inside has a bounded Svelte component trial.
-- Your settings, library, tags and the rest stay the files they were. (A sealed database for them is written but
-  held back until an older Hoard can still open your data and a lost key can be recovered from: docs/STORAGE.md.)
-  The files in your downloads folder keep their formats, now with versioned schemas shared by Python and Unity.
-- Store readers, downloads and wishlist parsing live in one adapter per store. Stores show safe reading-health
-  messages. Background readers and jobs share a priority scheduler with Pause, Stop and restart checkpoints.
-- Product and project dragging can use pointer events when the desktop engine does not start native dragging.
-- HTTP routes have a shared registration and generated reference. Translation keys use JavaScript/Svelte syntax
-  parsing. Tests use isolated homes and balanced CI shards, with two shuffled runs per interpreter.
-- See [the roadmap implementation record](docs/ROADMAP-315.md) for compatibility details and remaining native
-  desktop measurements. macOS signing and notarization remain deferred.
 - **Products for adults** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311), [#337](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/337), [#338](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/338)). A product its store, its tags or its name say is for
   adults (R-18, NSFW, 18+ and the like), or that you mark **Mark as 18+**, has an 18+ mark on its tile and its
   picture blurred until you click it in its details. **It isn't for adults** says otherwise, and your word wins. A
@@ -21,7 +9,7 @@
   for adults (18+)** is in Settings, under Accessibility (on to begin with).
 - **The set viewer asks an Adult set's viewer their age** ([#337](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/337)). Under 18, it shows the set without its
   products for adults or the sharer's photos. The answer is kept in a cookie in the viewer's own browser for a year,
-  and sent nowhere: see [the privacy policy](PRIVACY.md). Hoard never asks anyone for ID.
+  and sent nowhere: see [the privacy policy](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/PRIVACY.md). Hoard never asks anyone for ID.
 - **What's in a set's photo, marked** ([#346](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/346)). On a set's page, each photo is shown with a numbered mark where
   each product is, and the same numbers listed beside it with each product's picture and name; a mark opens its
   product. **Mark products on it...** places them: choose a product, then click where it is (or, by keyboard,
@@ -38,6 +26,9 @@
 - **A package change in Projects says what it does, and checks it was done** ([#335](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/335)): each package's version
   now and the one it gets, in Projects' log and the done message; a change the project doesn't show afterwards
   (Unity putting a package back while it had the project open, say) fails, naming it, rather than ending as done.
+- **What's new, pointed out** ([#244](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/244)): after the update, a short note beside each of this beta's easy-to-miss
+  features (the error marks and Problems, the 18+ mark, marking a photo, Quick refresh for one store), once each;
+  **Got it** puts it away.
 - **Small things** ([#329](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/329), [#339](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/339), [#340](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/340), [#341](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/341), [#344](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/344), [#345](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/345)): a product's tile stays where it
   was when its details open or close; **Copy store link** in a product's details on both pages; in Hoard's window,
   right-clicking empty space no longer opens the web view's own menu; a chosen suggested tag reads as chosen; **Bring
@@ -45,7 +36,7 @@
 - **Drag and drop**: a product is dragged by its tile, never by its picture ([#313](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/313)).
 - **The website**: its videos fit the window ([#312](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/312)); the page for stores says how Hoard works with them now
   ([#336](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/336)); the acknowledgements credit every npm tool the Look inside component is built with ([#343](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/343)).
-- **From a review of this release:**
+- **Fixes:**
   - **Copy store link** copies a product's public page, never the purchase's own link (a Gumroad purchase's is its
     download page, which opens its files for whoever has it); with no public page, there's nothing to copy.
   - Tasks still waiting when Hoard closed start again when it opens only if they read, download or add. One that
@@ -65,6 +56,21 @@
     also in your library opens its tile.
   - Less waiting and writing: reading a large data file no longer holds up other saves, short-lived tasks no longer
     rewrite scheduler.json, and Refresh and the Library read their data once rather than copying it.
+- **Under the hood** (the architecture roadmap, [#315](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/315)):
+  - Library and Downloads share one app shell, product tiles and details. Switching views keeps the loaded data
+    and common windows; Back and Forward keep working. Look inside has a bounded Svelte component trial.
+  - Your settings, library, tags and the rest stay the files they were. (A sealed database for them is written but
+    held back until an older Hoard can still open your data and a lost key can be recovered from: docs/STORAGE.md.)
+    The files in your downloads folder keep their formats, now with versioned schemas shared by Python and Unity.
+  - Store readers, downloads and wishlist parsing live in one adapter per store. Stores show safe reading-health
+    messages. Background readers and jobs share a priority scheduler with Pause, Stop and restart checkpoints.
+  - Product and project dragging can use pointer events when the desktop engine does not start native dragging.
+  - HTTP routes have a shared registration and generated reference. Translation keys use JavaScript/Svelte syntax
+    parsing. Tests use isolated homes and balanced CI shards, with two shuffled runs per interpreter.
+  - See [the roadmap implementation record](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/ROADMAP-315.md) for compatibility details and remaining native
+    desktop measurements. macOS signing and notarization remain deferred.
+  - oauthlib 4.0.1, for a security fix in the part of it that runs a sign-in server (Hoard's notifications use
+    only the other part, so Hoard wasn't affected).
 
 ## 5.2.0-beta.4
 

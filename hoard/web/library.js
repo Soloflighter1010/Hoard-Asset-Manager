@@ -175,6 +175,7 @@ function renderStores() {
   if (DATA.signins_note && !unprotected) $("#signinsNote").textContent = DATA.signins_note;
   $("#warnDot").hidden = !Object.values(DATA.stores).some(s => s.error && !/^Signed out/.test(s.error));
   $("#menuDot").hidden = $("#warnDot").hidden;   // (Stores is in the Menu)
+  showSpots();   // (what's new here, after an update: issue #244)
 }
 // Health is made from bounded server categories. Use text nodes for every displayed value.
 function renderStoreHealth() {

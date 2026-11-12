@@ -145,6 +145,7 @@ function renderProductDetail(a, model, sections, focus = true) {
     $("#scrim").hidden = !matchMedia("(max-width: 860px)").matches;
     if (focus) detail.querySelector(".x").focus({ preventScroll: true });
   });
+  showSpots();   // (what's new in a product's details, after an update: issue #244)
 }
 // Whether adult products' pictures are blurred (Settings, Appearance: on unless you turn it off).
 const blursAdult = () => document.documentElement.dataset.adult !== "show";

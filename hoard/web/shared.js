@@ -5651,6 +5651,7 @@ function drawSets() {
   }
   if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; wishToolsNow(); }
   if (rest !== setMoreShown) { more.innerHTML = rest; setMoreShown = rest; }
+  showSpots();   // (what's new on a set's page, after an update: issue #244)
 }
 // How many sets you have, in words.
 const setsCountText = () => { const n = (DATA.sets || []).filter(s => !isWish(s)).length; return tr(n === 1 ? "1 set" : "{0} sets", n.toLocaleString()); };
@@ -6586,6 +6587,15 @@ function tourTick() {
 const NEW_SPOTS = [
   { id: "product-type", at: '[data-sec="product-type"]',
     text: "New: Product type. Show only avatars, clothing, hair and the rest, as Hoard works out what each thing is. Change one in its details." },
+  // 5.2.0 beta 5: each placed where it is, as that's drawn (showSpots runs there too)
+  { id: "problems", at: "#views",
+    text: "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all." },
+  { id: "adult", at: "#detail .d-adult",
+    text: "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins." },
+  { id: "photo-marks", at: ".setphotos-shown",
+    text: "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it." },
+  { id: "quick-store", at: "#storeRows .store-row",
+    text: "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it." },
 ];
 // What the tour's offer, once answered, saves: every note seen.
 const spotsAllSeen = () => ({ spots_seen: [...new Set([...(UI.spots_seen || []), ...NEW_SPOTS.map(s => s.id)])] });

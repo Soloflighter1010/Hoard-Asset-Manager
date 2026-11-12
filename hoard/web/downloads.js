@@ -91,6 +91,7 @@ function render() {
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
   drawSets();
+  showSpots();   // (what's new, after an update: issue #244)
 }
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */

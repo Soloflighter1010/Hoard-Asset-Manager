@@ -2539,5 +2539,9 @@
  "This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.": "このセットは他の人のリンクから追加したものです。写真は{0}にあります。見ることを選んだときに、Hoardがそこから取得します。",
  "Show the photo": "写真を表示",
  "Show the photos": "写真を表示",
- "Projects is still saving a change: what you asked for is done once it's finished.": "プロジェクトはまだ変更を保存しています。終わったら、頼んだことを行います。"
+ "Projects is still saving a change: what you asked for is done once it's finished.": "プロジェクトはまだ変更を保存しています。終わったら、頼んだことを行います。",
+ "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all.": "新機能:問題のある商品(ディスク上のファイルがない・変わった、ダウンロードが終わらなかった)のタイルに赤い印が付き、詳細にどうすればよいかが表示されます。ダウンロードの「問題」にすべてまとめて表示されます。",
+ "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins.": "新機能:成人向けの商品には18+の印が付き、画像はクリックするまでぼかされます(設定のアクセシビリティでオフにできます)。Hoardの判断が違うときは「18+にする」か「成人向けではない」を選んでください。あなたの選択が優先されます。",
+ "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it.": "新機能:写真の下の「商品に印を付ける...」で、写真のどこに各商品があるかを示せます。印はセットを共有すると一緒に共有されます。",
+ "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "新機能:ストアごとの「クイック更新」は、そのストアのライブラリと、そこから保存しているウィッシュリストの最初の部分だけを読みます。"
 }

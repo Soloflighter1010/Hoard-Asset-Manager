@@ -2539,5 +2539,9 @@
  "This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.": "이 세트는 다른 사람의 링크에서 추가했어요. 사진은 {0}에 있어요. 보기로 선택하면 Hoard가 거기서 가져와요.",
  "Show the photo": "사진 보기",
  "Show the photos": "사진 보기",
- "Projects is still saving a change: what you asked for is done once it's finished.": "프로젝트가 아직 변경 사항을 저장하고 있어요. 끝나면 요청하신 일을 할게요."
+ "Projects is still saving a change: what you asked for is done once it's finished.": "프로젝트가 아직 변경 사항을 저장하고 있어요. 끝나면 요청하신 일을 할게요.",
+ "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all.": "새 기능: 문제가 있는 상품(디스크의 파일이 없거나 바뀜, 다운로드가 끝나지 않음)은 타일에 빨간 표시가 붙고, 상세 정보에 어떻게 하면 되는지 나와요. 다운로드의 '문제'에 모두 모여 있어요.",
+ "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins.": "새 기능: 성인용 상품에는 18+ 표시가 붙고, 이미지는 클릭할 때까지 흐리게 보여요(설정의 접근성에서 끌 수 있어요). Hoard가 잘못 판단하면 '18+로 표시'나 '성인용이 아니에요'를 고르세요. 고르신 것이 우선이에요.",
+ "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it.": "새 기능: 사진 아래의 '상품 표시하기...'로 사진에서 각 상품이 어디 있는지 표시할 수 있어요. 표시는 세트를 공유하면 함께 공유돼요.",
+ "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "새 기능: 스토어별 '빠른 새로고침'은 그 스토어의 라이브러리와 거기서 저장한 위시리스트의 앞부분만 읽어요."
 }
