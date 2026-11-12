@@ -402,6 +402,39 @@ class Jobs:
         kept = {k: v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool) and v >= 0}
         self.state["report"] = {**report, "counts": {**(report.get("counts") or {}), **kept}}
 
+    STORE_PAGES_A_STEP = 8   # products' pages read in each step of the background reader, at the store's own pace
+
+    def read_store_pages_later(self) -> None:
+        """Issue #311: the products' own pages a refresh didn't reach (their creators' tags, and whether they're for
+        adults, which Booth and Jinxxy say only there), read in the background after it: a few at a time at the
+        store's own pace, waiting while a task of yours runs, until each has been read once. A refresh reads at most
+        STORE_TAG_PAGES of each store's, so a library of hundreds took as many refreshes again, and until then most of
+        its products for adults weren't blurred, nor did their sets' links ask a viewer's age. In Tasks, with Pause
+        and Stop; off with the creators' tags (Settings)."""
+        from .scheduler import MAINTENANCE
+        if not self.cfg.get("store_tags", True):
+            return
+        self.scheduler.add("store-pages", "Reading products' pages", self._store_pages_step, priority=MAINTENANCE,
+                           delay=5, durable=False)
+        self.scheduler.wake("store-pages")   # (one that had finished, after an earlier refresh)
+
+    def _store_pages_step(self, context):
+        """A few of one store's products' pages, then the next step; done once none is waiting (one whose page
+        couldn't be read is tried again with the store's next refresh, so a page gone for good never keeps this going)."""
+        from .library import store_pages_waiting, store_tags_from_pages
+        from .scheduler import Again
+        from .wishlists import TAGGED_STORES, read_store_page
+        if not self.cfg.get("store_tags", True):
+            return None
+        if self.state["running"]:
+            return Again(15)   # (a task of yours first: this carries on once it's done)
+        store = next((s for s in TAGGED_STORES if store_pages_waiting(self.lib, s)), None)
+        if store is None:
+            return None
+        delay = float(self.cfg.get("request_delay", 0.8))
+        store_tags_from_pages(self.lib, store, read_store_page, delay=delay, limit=self.STORE_PAGES_A_STEP)
+        return Again(delay)
+
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
         message = kw.get("message")
@@ -1303,6 +1336,8 @@ class Jobs:
                                           float(self.cfg.get("request_delay", 0.8)))
                 except Exception as e:   # (never fails the refresh)
                     print(f"Couldn't read {store}'s product tags: {e}", flush=True)
+        if refreshed and self.cfg.get("store_tags", True) and not self._forced and self.lane != PROJECTS:
+            self.read_store_pages_later()   # (the rest of them, in the background once this is done: #311)
         if refreshed:   # the public pages a refresh finds (Jinxxy's) reach catalog.json, for Hoard for Unity's credits
             from .config import root_dir
             from .downloader import build_catalog

@@ -895,14 +895,20 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     """
     # Both public addresses share the same shell and load their view code once.
     page = (WEB / ("library.html" if name == "downloads.html" else name)).read_bytes()
-    page = page.replace(b"<!-- @include downloads.html -->", (WEB / "downloads.html").read_bytes())
+    # Downloads' own styles go in the head beside the Library's, before looks.css and the theme (below), as each page's
+    # did when they were two pages: in the body, after them, its own colours won, and the theme and style you chose
+    # were gone on Downloads. The rest of downloads.html (its windows and templates) is the body's.
+    downloads = (WEB / "downloads.html").read_bytes()
+    own = re.search(rb'<style id="downloadsStyles"[^>]*>.*?</style>\n?', downloads, re.S)
+    downloads_style = own.group(0) if own else b""
+    page = page.replace(b"<!-- @include downloads.html -->", downloads[:own.start()] + downloads[own.end():] if own else downloads)
     if SHARED_MARK in page:
         page = page.replace(SHARED_MARK, b"\n".join((WEB / part).read_bytes().replace(b"\r\n", b"\n") for part in ("shared.js", "products.js", "inside.generated.js", "view-common.js", "library.js", "downloads.js", "app.js")) + b"\n", 1)
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
     # the styles' layouts (web/looks.css, both pages alike), then the theme's colours
     looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
     style = '<style id="theme">\n' + themes.css(d.get("theme"), d.get("mode")) + "\n</style>\n"
-    page = page.replace(b"</head>", looks.encode() + style.encode() + b"</head>", 1)
+    page = page.replace(b"</head>", downloads_style + looks.encode() + style.encode() + b"</head>", 1)
     # the font, spacing, card outlines (Settings, Accessibility) and style (Appearance) you chose, on the page from its
     # first moment
     marks = (' data-font="dyslexic"' if d.get("font") == "dyslexic" else "") + (' data-spacing="wide"' if d.get("spacing") is True else "")

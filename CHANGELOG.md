@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Products for adults are known, and blurred, without waiting for refreshes** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311)). Booth and
+  Jinxxy say a product is for adults only on its own page, which Hoard read 40 at a time with each refresh: after
+  updating to beta 5, most of a large library wasn't blurred yet (often only the first of a set's), and a set shared
+  with them in it didn't ask its viewer's age. After a refresh, the rest are now read in the background, a few at a
+  time at the store's own pace, waiting while a task of yours runs (**Reading products' pages** in Tasks, with Pause
+  and Stop). A set's link says it's for adults once they're read: update its link (**Share**) for the set viewer to ask.
+- **Downloads keeps your theme and style.** Switching from the Library to Downloads showed Hoard's own colours instead.
+- **A product for adults' store and its 18+ mark** no longer overlap: pointed at, its store's name is shown above the
+  mark.
+
 ## 5.2.0-beta.5
 
 - **The last Hoard built this way.** From the next version, Hoard is built with Tauri and Nuitka, and installs as a

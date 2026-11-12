@@ -92,6 +92,49 @@ class ReadFromTheStores(IsolatedTestCase):
         again = library.Library(lib.path)
         self.assertIs(again.data["items"][0]["adult"], True, "and in the file")
 
+    def test_the_rest_are_read_in_the_background(self):
+        """A refresh reads at most STORE_TAG_PAGES of a store's products' pages; the rest are read in the background
+        after it, a few at a time, until each has been read once: a library of hundreds no longer waits a refresh for
+        every 40 to know which of them are for adults (so only the first few were blurred). It waits while a task of
+        yours runs, and a page that couldn't be read is left for the next refresh."""
+        from unittest import mock
+        from hoard import jobs
+        from hoard.scheduler import Scheduler
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("booth", [library.item("booth", str(n), name=f"Outfit {n}", url=f"https://booth.pm/ja/items/{n}")
+                                    for n in range(1, 31)])
+        with lib.lock:   # (read before Hoard asked whether they're for adults, as every product was before 5.2.0 beta 5)
+            for i in lib.data["items"]:
+                i["store_tags"] = []
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(url)
+            n = int(url.rstrip("/").rsplit("/", 1)[1].split(".")[0])
+            if n == 30:
+                raise wishlists.LinkError("That page couldn't be read.")
+            return json.dumps({"name": "x", "is_adult": n % 2 == 0, "tags": []}), "application/json"
+        scheduler = Scheduler(persistent=False)
+        self.addCleanup(scheduler.close)
+        lane = jobs.Jobs({**config.load_config(), "request_delay": 0}, lib, scheduler=scheduler)
+        lane.state["running"] = True   # a task of yours: the reader waits for it
+        with mock.patch.object(wishlists, "read_store_page", fetch), mock.patch.object(jobs.Jobs, "STORE_PAGES_A_STEP", 4):
+            lane.read_store_pages_later()
+            threading.Event().wait(1.5)
+            self.assertEqual(asked, [], "nothing while your task runs")
+            lane.state["running"] = False
+            scheduler.wake("store-pages")
+            for _ in range(200):
+                if library.store_pages_waiting(lib, "booth") == 0 and not any(
+                        t["id"] == "store-pages" and t["status"] == "running" for t in scheduler.snapshot()):
+                    break
+                threading.Event().wait(0.05)
+        by = {i["id"]: i for i in lib.data["items"]}
+        self.assertEqual({n for n in range(1, 30) if by[str(n)].get("adult")}, set(range(2, 30, 2)), "each one read, once")
+        self.assertNotIn("adult", by["30"], "the page that couldn't be read: left for the next refresh")
+        self.assertEqual(len(asked), len(set(asked)), "none read twice")
+        self.assertEqual(library.store_pages_waiting(lib, "booth"), 0)
+
     def test_a_wishlists_cards(self):
         from hoard.stores import booth, jinxxy
         got = booth.wish_booth_products([{"id": "5", "name": "Night Body", "url": "https://booth.pm/en/items/5", "adult": True},
@@ -256,6 +299,12 @@ class InHoard(IsolatedTestCase):
             self.assertEqual(tile("Straw Hat").locator(".adult-mark").count(), 0)
             blurred = "() => getComputedStyle(document.querySelector('#grid .slot.adult .art img')).filter"
             self.assertIn("blur", page.evaluate(blurred))
+            # pointed at, its store's name goes above the 18+ mark, which has that corner (it covered the mark)
+            label = "e => getComputedStyle(e.querySelector('.notch'), '::before').bottom"
+            tile("Night Body").hover()
+            self.assertEqual(tile("Night Body").evaluate(label), "37px")
+            tile("Straw Hat").hover()
+            self.assertEqual(tile("Straw Hat").evaluate(label), "11px", "where it is on any other tile")
             tile("Night Body").click()
             page.locator("#detail .d-adult", has_text="its store says so").wait_for()
             art = page.locator("#detail .d-art.adult")

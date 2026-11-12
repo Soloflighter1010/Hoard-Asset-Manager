@@ -28,6 +28,8 @@ select option, select optgroup { background-color: var(--stone); color: var(--bo
 html:not([data-style]) .slot:is(:hover, :focus-visible) .notch[data-all]::before { content: attr(data-all); position: absolute;
   left: 8px; bottom: 11px; max-width: calc(100% - 16px); padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave);
   font: 700 10.5px/1.5 var(--body); letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* ...above a product for adults' 18+ mark, which has that corner (issues #251, #338): it covered the mark */
+html:not([data-style]) .slot.adult:is(:hover, :focus-visible) .notch[data-all]::before { bottom: 37px; }
 /* Add to another set (issue #242, shared.js): every set's tile to choose from */
 .setpick { max-height: min(60vh, 560px); overflow: auto; padding: 4px 2px; }
 .setpick h4 { margin: 10px 0 8px; font-size: 13px; color: var(--dust); }

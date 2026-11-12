@@ -864,6 +864,26 @@ STORE_TAG_PAGES = 40   # products' public pages read for their store's tags, at 
 _TAG_PAGE_FAILS: dict[str, int] = {}   # products whose page couldn't be read, and how often, this run: tried after the rest
 
 
+def _pages_waiting(lib: "Library", store: str) -> list[tuple[str, str, bool]]:
+    """The store's products whose own page is still to be read (key, its page, whether it was read before Hoard asked
+    whether it's for adults): never read, or read before that, where the store says it there (Booth, Jinxxy)."""
+    from .sets import product_link
+    from .wishlists import ADULT_SAID_BY
+    with lib.lock:
+        return [(i["key"], link, "store_tags" in i) for i in lib.data["items"] if i["store"] == store
+                and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
+                and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
+
+
+def store_pages_waiting(lib: "Library", store: str) -> int:
+    """How many of the store's products' pages are still to be read, not counting those that couldn't be read this
+    run (they're tried again with the store's next refresh)."""
+    from .wishlists import TAGGED_STORES
+    if store not in TAGGED_STORES:
+        return 0
+    return sum(1 for key, _, _ in _pages_waiting(lib, store) if not _TAG_PAGE_FAILS.get(key))
+
+
 def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: None, delay: float = 0.0,
                           limit: int = STORE_TAG_PAGES) -> int:
     """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
@@ -873,14 +893,10 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
     (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
     read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
     how many products' pages were read."""
-    from .sets import product_link
     from .wishlists import ADULT_SAID_BY, TAGGED_STORES, LinkError, from_product_page
     if store not in TAGGED_STORES:
         return 0
-    with lib.lock:
-        waiting = [(i["key"], link, "store_tags" in i) for i in lib.data["items"] if i["store"] == store
-                   and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
-                   and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
+    waiting = _pages_waiting(lib, store)
     # (those never read first, then those read before Hoard asked whether they're for adults; otherwise in the library's order)
     todo = [(k, link) for k, link, _ in sorted(waiting, key=lambda w: (w[2], _TAG_PAGE_FAILS.get(w[0], 0)))[:limit]]
     read: dict[str, list] = {}
