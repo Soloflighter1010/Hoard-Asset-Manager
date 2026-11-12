@@ -80,8 +80,10 @@ def installed_copy() -> bool:
 
 
 def built_another_way(version: str) -> bool:
-    """Is version one of the Tauri and Nuitka builds after this one (any version after LAST_BUILT_THIS_WAY)?"""
-    return newer(version, LAST_BUILT_THIS_WAY)
+    """Is version one of the Tauri and Nuitka builds after this one (any version after LAST_BUILT_THIS_WAY)? Never
+    in the Tauri and Nuitka build itself: it's built that way already, and has nothing to uninstall to move."""
+    from . import shell
+    return not shell.BUILD and newer(version, LAST_BUILT_THIS_WAY)
 
 
 def moving_kind() -> str:

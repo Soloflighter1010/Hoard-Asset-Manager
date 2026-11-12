@@ -8,6 +8,7 @@ and what antivirus makes of it. Everything else is the same Hoard.
 - **It isn't offered by Hoard's updates,** and doesn't update itself: a newer one is put up here.
 - **Not in it:** hoard-cli (the server, hoard-server, takes the same commands), the Flatpak (Linux has an AppImage and
   a .deb instead) and the Mac's .pkg (a .dmg instead).
+- **Every program and library in Windows' build is signed,** not only its server ([#327](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/327): Defender quarantined experiment 2 as a trojan). If Defender or another antivirus still stops it, say which, and what it named.
 - **Windows' installer has Hoard's look,** and speaks Japanese and Korean as well as English (it follows Windows'
   language).
 - **The Mac's isn't signed,** as the usual one isn't: open it with right-click, Open, the first time.

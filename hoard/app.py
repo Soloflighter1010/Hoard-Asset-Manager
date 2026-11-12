@@ -593,6 +593,12 @@ def self_test() -> int:
         for tool, use in (("gdbus", "finding the keyring"), ("dbus-send", "finding the keyring"),
                           ("secret-tool", "keeping the itch.io key")):
             print(f"note    {tool} ({use}): {'here' if shutil.which(tool) else 'not here'}")
+    try:   # (each store's reader is found by listing hoard/stores, which a compiled build must still allow)
+        from .stores import adapters
+        found = sorted(adapters())
+        check("store readers", {"booth", "gumroad", "itch", "jinxxy", "payhip"} <= set(found), ", ".join(found))
+    except Exception as e:
+        check("store readers", False, repr(e))
     from .safety import tls_context
     check("trusted certificates", tls_context().cert_store_stats()["x509_ca"] > 0)
     try:
