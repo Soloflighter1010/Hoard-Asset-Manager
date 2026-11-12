@@ -406,9 +406,9 @@ def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> N
 
     Saving a browser download waits for it to finish, with no time limit and no way for Stop to reach it. So a
     download the store stopped sending without hanging up would hold up the whole job (and every job after it)
-    for ever. Here, a download that gets no bigger for stall_s seconds is cancelled and raised as a failure, which
-    is tried again like any other; and Stop cancels it at once. Returns when the file is complete or the browser
-    has given up on it (saving it then says which)."""
+    for ever. Here, a download whose file gets no bigger for stall_s seconds once the browser has started writing
+    it is cancelled and raised as a failure, which is tried again like any other; and Stop cancels it at once.
+    Returns when the file is complete or the browser has given up on it (saving it then says which)."""
     where = browser_download_file(dl)
     if where is None:
         return
@@ -431,7 +431,7 @@ def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> N
                 seen = True
                 if growing != size:
                     size, moved = growing, now
-            if now - moved >= stall_s:
+            if seen and now - moved >= stall_s:   # counted from its file appearing: until then, the 5 s above
                 raise RuntimeError(f"the download stalled: nothing more came in for {stall_s:.0f} s")
             if now - said >= egress.PROGRESS_EVERY:
                 said = now

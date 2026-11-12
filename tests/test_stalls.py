@@ -340,6 +340,55 @@ class BrowserDownloads(IsolatedTestCase):
         self.assertEqual(downloader.disposition_name("inline"), "")
 
 
+class _LateDownload:
+    """A browser download whose file the browser only starts writing after a moment, as a busy computer's browser
+    can: its .crdownload appears after `starts` seconds, then grows, and becomes the file itself after `ends`
+    (never, when None)."""
+
+    def __init__(self, where: Path, starts: float, ends: float | None):
+        self._impl_obj = mock.Mock()
+        self._impl_obj._artifact._initializer = {"absolutePath": str(where)}
+        self.page = mock.Mock()
+        self.page.wait_for_timeout.side_effect = lambda ms: time.sleep(ms / 1000)
+        self.cancelled = False
+        part = where.with_name(where.name + ".crdownload")
+
+        def write():
+            time.sleep(starts)
+            part.write_bytes(b"x" * 1000)
+            if ends is not None:
+                time.sleep(ends - starts)
+                part.replace(where)
+        self.writer = threading.Thread(target=write, daemon=True)
+        self.writer.start()
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class ADownloadSlowToStart(IsolatedTestCase):
+    """A Windows test machine under load took more than the test's second to start writing a download that came in
+    whole, and it was cancelled as stalled: the wait for its file to appear was counted as nothing coming in."""
+
+    def setUp(self):
+        self.folder = Path(tempfile.mkdtemp())
+
+    def test_the_wait_for_its_file_isnt_a_stall(self):
+        dl = _LateDownload(self.folder / "guid", starts=1.5, ends=1.6)
+        downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        dl.writer.join()
+        self.assertFalse(dl.cancelled, "not cancelled as stalled")
+        self.assertTrue((self.folder / "guid").exists())
+
+    def test_once_it_has_started_it_can_still_stall(self):
+        dl = _LateDownload(self.folder / "guid", starts=1.5, ends=None)
+        began = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "stalled"):
+            downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        self.assertGreaterEqual(time.monotonic() - began, 2.5, "a second after its file appeared, not after it began")
+        self.assertTrue(dl.cancelled)
+
+
 class StoppingAJob(IsolatedTestCase):
     """Progress while a file downloads is shown, but not kept (in the job's log or the Tasks tab); and Stop is
     noticed on it, so a job can be stopped part way through a file."""
