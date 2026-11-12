@@ -118,17 +118,20 @@
   }
 
   /* An Adult set asks its viewer's age before it's shown (issue #337). The answer, "adult" or "minor" and nothing
-     more, is kept in a cookie for this page alone, for a year, so the question isn't asked each time. Hoard never
-     asks for ID, and no code of Hoard's reads the answer anywhere but here, in the viewer's browser. */
+     more, is kept in a cookie for this page alone: "adult" for a year, so the question isn't asked each time, and
+     "minor" only until the browser is closed, so a browser that once said under 18 (someone trying the page, say)
+     is asked again next time. Hoard never asks for ID, and no code of Hoard's reads the answer anywhere but here, in
+     the viewer's browser. */
   const AGE_COOKIE = "hoard_age";
   // The answer kept, if there is one.
   function ageKept() {
     const m = document.cookie.match(/(?:^|;\s*)hoard_age=(adult|minor)(?:;|$)/);
     return m ? m[1] : "";
   }
-  // Keep the answer (or, with none, forget it).
+  // Keep the answer (or, with none, forget it): 18 or older for a year, under 18 until the browser is closed.
   function keepAge(answer) {
-    document.cookie = `${AGE_COOKIE}=${answer}; Max-Age=${answer ? 31536000 : 0}; Path=${location.pathname}; SameSite=Lax` +
+    const lasts = answer === "adult" ? "; Max-Age=31536000" : answer ? "" : "; Max-Age=0";
+    document.cookie = `${AGE_COOKIE}=${answer}${lasts}; Path=${location.pathname}; SameSite=Lax` +
       (location.protocol === "https:" ? "; Secure" : "");
   }
   // Ask, unless it's been answered: "adult" or "minor".
@@ -198,10 +201,10 @@
       (stores.length < 3 ? stores.join(" and ") : stores.slice(0, -1).join(", ") + " and " + stores[stores.length - 1]) + ".";
     if (set.note) for (const line of set.note.split("\n")) $("#setNote").append(el("p", {}, line || " "));
     $("#setNote").hidden = !set.note;
-    if (set.said) {   // an Adult set: what was answered, and a way to answer again
-      const again = el("button", { class: "linkish", type: "button", id: "ageAgain" }, "Change your answer");
+    if (set.said) {   // an Adult set: what was answered, in a box that can't be missed, and a way to answer again
+      const again = el("button", { class: "button ghost", type: "button", id: "ageAgain" }, "Change your answer");
       again.addEventListener("click", () => { keepAge(""); location.reload(); });
-      $("#setAgeNote").append(el("span", { class: "adult-chip" }, "18+"), " " + set.said + " ", again);
+      $("#setAgeNote").append(el("span", { class: "adult-chip" }, "18+"), el("span", {}, set.said), again);
       $("#setAgeNote").hidden = false;
     }
     if (set.photos.length) {

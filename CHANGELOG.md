@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The set viewer asks again after "I'm under 18".** That answer is kept only until the browser is closed, so a
+  browser that once gave it (someone trying the page, say) is asked again next time; "I'm 18 or older" is still
+  kept for a year. A set shown without its products for adults says so in a box at the top, with **Change your
+  answer**, where before it was one small line that was easy to miss.
+- **A browser download that's slow to start isn't taken for a stalled one.** The time the browser takes to start
+  writing a file is no longer counted as nothing coming in.
+
 ## 5.2.0-beta.6
 
 - **Hoard is built a new way, and installs as a new app.** Its window is a [Tauri](https://tauri.app) app instead of
