@@ -210,8 +210,9 @@ class DeletingRemovedDownloads(IsolatedTestCase):
             finally:
                 srv.jobs.busy.release()
                 srv.jobs.kick()
-            for _ in range(100):
-                if not srv.jobs.state["running"] and not srv.jobs.state["queue"]:
+            for _ in range(100):   # until the job has ended and freed the runner (its state says so a moment before)
+                if not srv.jobs.state["running"] and not srv.jobs.state["queue"] and srv.jobs.busy.acquire(blocking=False):
+                    srv.jobs.busy.release()
                     break
                 time.sleep(0.05)
             self.assertFalse(self.folder.exists())
