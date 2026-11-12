@@ -541,8 +541,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         super().server_close()
 
     def can_update(self) -> bool:
-        """Can Hoard install an update itself? Only the installed Windows app, which can quit to let it run."""
-        return self.quit_app is not None and updater.installed_copy()
+        """Can Hoard install an update itself? The installed Windows app, which can quit to let it run; or the Tauri and
+        Nuitka build, whose window installs it once Hoard has quit (not the Flatpak)."""
+        return self.quit_app is not None and updater.can_update_itself()
 
     def handle_error(self, request, client_address):
         """A page that closes mid-reply (a closed window, a cancelled image) isn't a problem; anything else is shown."""

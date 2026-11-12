@@ -19,6 +19,10 @@ share/node_modules/
 share/.dev.vars*
 share/.env*
 
+# The Tauri and Nuitka build's (shell/): Cargo's and npm's working folders
+shell/target/
+shell/node_modules/
+
 # ---- The Unity project (VRChat's template-package layout: open this folder in Unity to work on
 # Packages/soloflighter.hoard). From the template's .gitignore:
 /[Ll]ibrary/
@@ -83,3 +87,4 @@ Assets/PackageMakerWindowData.asset*
 .vscode
 node_modules/
 test-results/
+shell/flatpak/hoard.deb

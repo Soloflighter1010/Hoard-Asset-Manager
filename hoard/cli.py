@@ -237,6 +237,7 @@ def main(argv=None) -> None:
                     help="with --host: serve plain HTTP, only when the network is already encrypted (a VPN such as Tailscale)")
     ap.add_argument("--no-open", action="store_true", help="run Hoard as a server only, without opening it")
     ap.add_argument("--browser", action="store_true", help="open Hoard in your web browser instead of its own window")
+    ap.add_argument("--shell", action="store_true", help=argparse.SUPPRESS)   # (its Tauri shell's window: hoard/shell.py)
     sub = ap.add_subparsers(dest="cmd", metavar="command")
     s = sub.add_parser("login", help="sign in to a store in a browser window (itch.io: with an API key)")
     s.add_argument("store", choices=list(STORES))
@@ -274,7 +275,7 @@ def main(argv=None) -> None:
             serve(cfg, args.host, args.port, not args.no_open, args.tls_cert, args.tls_key, args.plain_http,
                   config_path=args.config)
         elif args.cmd is None:
-            sys.exit(run_app(cfg, args.config, browser=args.browser))   # the app, in its own window
+            sys.exit(run_app(cfg, args.config, browser=args.browser, shell=args.shell))   # the app, in its own window
         elif args.cmd == "self-test":
             sys.exit(self_test())
         elif args.cmd == "login":
