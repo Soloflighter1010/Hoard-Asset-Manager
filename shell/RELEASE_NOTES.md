@@ -15,6 +15,9 @@ and what antivirus makes of it. Everything else is the same Hoard.
   language).
 - **The Mac's isn't signed,** as the usual one isn't: open it with right-click, Open, the first time.
 
+`Hoard-update.json` and the Macs' `.app.tar.gz` files are for Hoard's own updates (each signed, and checked against
+that signature before it's installed): there's no need to download them.
+
 Something different from the usual Hoard, or wrong? Say so in Discord or an issue, and say it's this build.
 
 | File | For |

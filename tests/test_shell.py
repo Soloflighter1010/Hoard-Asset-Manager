@@ -286,6 +286,13 @@ class Updates(IsolatedTestCase):
         self.assertIn('tauri-plugin-updater = "=', (root / "Cargo.toml").read_text("utf-8"))
         key = (root / "updater.pub").read_text("utf-8").strip()
         self.assertNotIn("PRIVATE", key.upper(), "only ever the public half")
+        if key:   # (the public half, as tauri signer generate writes it: a minisign public key, base64)
+            import base64
+            comment, line = base64.b64decode(key).decode("utf-8").splitlines()[:2]
+            self.assertTrue(comment.startswith("untrusted comment: minisign public key: "), comment)
+            raw = base64.b64decode(line)
+            self.assertEqual((raw[:2], len(raw)), (b"Ed", 42), "an Ed25519 key: its id and 32 bytes")
+            self.assertEqual(raw[2:10][::-1].hex().upper(), comment.rsplit(" ", 1)[1], "its id is the one it says")
 
 
 class Packaging(IsolatedTestCase):
