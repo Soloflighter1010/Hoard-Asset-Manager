@@ -10,4 +10,4 @@
 *.ttf   binary
 *.unitypackage binary
 # The compiler preserves significant spaces inside multiline JavaScript string literals.
-hoard/web/inside.generated.js whitespace=-blank-at-eol
+hoard/web/ui.generated.js whitespace=-blank-at-eol

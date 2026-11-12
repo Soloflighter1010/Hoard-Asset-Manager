@@ -35,7 +35,7 @@ jobs:
           cache: npm
       - name: Install JavaScript validation tools
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Check the compiled Look inside trial
+      - name: Check the compiled Svelte bundle (Look inside and the pop-ups)
         run: node scripts/build_ui.mjs --check
       - name: Install the locked dependencies
         run: |

@@ -45,14 +45,14 @@ class Acknowledgements(IsolatedTestCase):
                 version = lock["packages"][f"node_modules/{i['npm']}"]
                 self.assertEqual(i["license"], version.get("license"), i["name"])
 
-    def test_what_the_look_inside_component_bundles_is_credited_as_shipped(self):
-        """The npm packages built into hoard/web/inside.generated.js ship with every copy of Hoard: each is credited
+    def test_what_the_svelte_bundle_holds_is_credited_as_shipped(self):
+        """The npm packages built into hoard/web/ui.generated.js ship with every copy of Hoard: each is credited
         as "all", with the license text scripts/build_ui.mjs writes beside it."""
         bundled = set(re.findall(r"['\"]?([\w@/.-]+)['\"]?: '[^']+'", re.search(r"const licenses = \{([^}]*)\}",
                                                                               (REPO / "scripts" / "build_ui.mjs").read_text("utf-8")).group(1)))
-        shipped = {i["npm"]: i for i in credits.items() if i.get("text") == "hoard/web/inside.LICENSE.txt"}
+        shipped = {i["npm"]: i for i in credits.items() if i.get("text") == "hoard/web/ui.LICENSE.txt"}
         self.assertEqual(set(shipped), bundled)
-        text = (REPO / "hoard" / "web" / "inside.LICENSE.txt").read_text("utf-8")
+        text = (REPO / "hoard" / "web" / "ui.LICENSE.txt").read_text("utf-8")
         for name, i in shipped.items():
             self.assertEqual(i["in"], "all", name)
             self.assertIn(f"{name}\n", text, name)

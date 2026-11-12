@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Every pop-up looks like the rest of Hoard.** A question, a name, a tag, a folder and the set picker are now one
+  card like a product's details: an icon, the question as its title in Hoard's own lettering and what follows under
+  it, a close button, and the buttons under a line. Adding a tag offers your tags as chips (the counts beside them,
+  a New tag chip for one you haven't used), where it used to be the browser's own list; Add to which set? lists each
+  set with its picture and counts, found as you type. The pop-ups Projects, Git and backups still build themselves
+  have the same ground, corners and shadow, and move over next. They're built in Svelte, as Look inside is.
 - **The set viewer asks again after "I'm under 18".** That answer is kept only until the browser is closed, so a
   browser that once gave it (someone trying the page, say) is asked again next time; "I'm 18 or older" is still
   kept for a year. A set shown without its products for adults says so in a box at the top, with **Change your

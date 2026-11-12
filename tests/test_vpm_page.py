@@ -148,7 +148,7 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertTrue(page.locator(".pj-row", has_text="Old World").locator("[data-pj=star]").get_attribute("aria-pressed") == "true")
         # taken off the list: off the Creator Companion's too, its other settings kept
         pj_details(page, "Old World").locator("[data-pj=forget]").click()
-        page.locator("dialog.ask .primary").click()
+        page.locator("#askDialog .primary").click()
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 

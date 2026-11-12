@@ -491,7 +491,7 @@ class InHoard(IsolatedTestCase):
             tail = buy.locator(".slot.ext", has_text="Fox Tail")
             self.assertEqual(tail.locator(".ext-out").get_attribute("aria-label"), "Take Fox Tail off this wishlist")
             tail.locator(".ext-out").click()
-            sure = page.locator("dialog.ask[open]")
+            sure = page.locator("#askDialog[open]")
             self.assertIn("Take Fox Tail off this wishlist?", sure.inner_text())
             sure.locator('button[value="no"]').click()
             self.assertEqual(tail.count(), 1, "Cancel: still on it")

@@ -26,7 +26,7 @@ TOP_FILES = ("Hoard.bat", "Setup.bat", "run.sh", "setup.sh", "requirements.txt",
 # The program: every Python module and the data it reads, both pages with their translations, and the bundled fonts
 # with their licenses.
 PACKAGE_PATTERNS = ("hoard/*.py", "hoard/api/*.py", "hoard/stores/*.py", "hoard/recovery_words.txt", "hoard/known_tools.json", "hoard/credits.json", "hoard/web/*.html", "hoard/web/*.js", "hoard/web/*.css",
-                    "hoard/web/inside.LICENSE.txt", "hoard/web/i18n/*.json", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt", "hoard/web/fonts/README.md",
+                    "hoard/web/ui.LICENSE.txt", "hoard/web/i18n/*.json", "hoard/web/fonts/*.woff2", "hoard/web/fonts/*.txt", "hoard/web/fonts/README.md",
                     "hoard/vpm/*.py", "hoard/vpm/templates/*.tar.gz", "hoard/vpm/templates/LICENSE-vrc-get.txt")
 
 

@@ -904,7 +904,7 @@ def page_source(name: str, cfg: dict | None = None, accept_language: str | None 
     downloads_style = own.group(0) if own else b""
     page = page.replace(b"<!-- @include downloads.html -->", downloads[:own.start()] + downloads[own.end():] if own else downloads)
     if SHARED_MARK in page:
-        page = page.replace(SHARED_MARK, b"\n".join((WEB / part).read_bytes().replace(b"\r\n", b"\n") for part in ("shared.js", "products.js", "inside.generated.js", "view-common.js", "library.js", "downloads.js", "app.js")) + b"\n", 1)
+        page = page.replace(SHARED_MARK, b"\n".join((WEB / part).read_bytes().replace(b"\r\n", b"\n") for part in ("shared.js", "products.js", "ui.generated.js", "view-common.js", "library.js", "downloads.js", "app.js")) + b"\n", 1)
     d = (cfg or {}).get("display") if isinstance((cfg or {}).get("display"), dict) else {}
     # the styles' layouts (web/looks.css, both pages alike), then the theme's colours
     looks = '<style id="looks">\n' + (WEB / "looks.css").read_text("utf-8").replace("\r\n", "\n") + "</style>\n"
@@ -980,6 +980,8 @@ def guide_source(query: dict) -> bytes:
     out = (WEB / GUIDE).read_bytes()
     out = out.replace(b"<!--@styles-->", styles, 1).replace(b"<!--@bar-->", bar.encode(), 1)
     out = out.replace(b"<!--@tokens-->", tokens.encode(), 1)
+    # the pages' Svelte parts (ui/), so its pop-ups are the pages' own
+    out = out.replace(b"<!--@ui-->", b"<script>\n" + (WEB / "ui.generated.js").read_bytes().replace(b"\r\n", b"\n") + b"\n</script>", 1)
     return out.replace(b'<html lang="en">', f'<html lang="en"{marks}>'.encode(), 1)
 
 
