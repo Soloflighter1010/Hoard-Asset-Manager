@@ -2900,6 +2900,44 @@ class WindowsTabsAndTasks(IsolatedTestCase):
             page.close()
         self.assertEqual(server.ui_settings({"ui": {"spots_seen": ["product-type", "<b>", 4]}})["spots_seen"], ["product-type"])
 
+    def test_the_last_hoard_built_this_way_says_so(self):
+        """5.2.0 beta 5 is the last Hoard built with PyInstaller: a note under the bar says the next versions install as
+        a new app, and how to uninstall this one first (for this copy: Windows, a Mac, the Flatpak), until Got it; once
+        a newer one is out, it says so for good, with a link to it. Pip or source: nothing to uninstall, no note."""
+        from unittest import mock
+        ui = self.srv.cfg.setdefault("ui", {})
+        self.addCleanup(lambda: ui.pop("moving_seen", None))
+        with mock.patch.object(server, "save_config"):
+            ui.pop("moving_seen", None)
+            page = self.open()
+            note = page.locator("#movingNote")
+            self.assertTrue(note.is_hidden(), "running from source")
+            page.evaluate("showMoving({ moving_kind: 'windows', moving: false })")
+            self.assertIn("This is the last Hoard built this way.", note.inner_text())
+            self.assertIn("Windows Settings, Apps, Installed apps", note.inner_text())
+            self.assertIn("Your library, settings, sign-ins and downloads stay", note.inner_text())
+            self.assertIn("#moving-to-the-new-hoard", page.get_attribute("#movingHow", "href"))
+            page.click("#movingOk")
+            self.assertTrue(note.is_hidden())
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertIs(ui.get("moving_seen"), True)
+            page.evaluate("showMoving({ moving_kind: 'windows', moving: false })")
+            self.assertTrue(note.is_hidden(), "once, until a newer one is out")
+            page.evaluate("""showMoving({ moving_kind: 'flatpak', moving: true,
+              latest: { version: '5.2.0-beta.6', url: 'https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/v5.2.0-beta.6' } })""")
+            self.assertTrue(note.is_visible(), "out: said again, for good")
+            self.assertIn("Hoard 5.2.0 beta 6 is out", note.inner_text())
+            self.assertIn("flatpak uninstall io.github.soloflighter1010.Hoard", note.inner_text())
+            self.assertTrue(page.locator("#movingOk").is_hidden())
+            self.assertTrue(page.get_attribute("#movingHow", "href").endswith("/v5.2.0-beta.6"))
+            page.evaluate("showMoving({ moving_kind: '', moving: true, latest: { version: '5.2.0-beta.6', url: '' } })")
+            self.assertTrue(note.is_hidden(), "pip or source")
+            self.assertEqual(self.errors, [])
+            page.close()
+        self.assertEqual(server.ui_settings({"ui": {"moving_seen": "yes"}}).get("moving_seen"), None)
+
     def test_the_seasonal_sort(self):
         """Issue #261: Seasonal puts the season's products first (by their names and tags: Halloween's in the autumn,
         Christmas's and winter's from November until early January), then the rest as Recently added; its name says

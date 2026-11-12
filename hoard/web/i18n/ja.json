@@ -2543,5 +2543,13 @@
  "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all.": "新機能:問題のある商品(ディスク上のファイルがない・変わった、ダウンロードが終わらなかった)のタイルに赤い印が付き、詳細にどうすればよいかが表示されます。ダウンロードの「問題」にすべてまとめて表示されます。",
  "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins.": "新機能:成人向けの商品には18+の印が付き、画像はクリックするまでぼかされます(設定のアクセシビリティでオフにできます)。Hoardの判断が違うときは「18+にする」か「成人向けではない」を選んでください。あなたの選択が優先されます。",
  "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it.": "新機能:写真の下の「商品に印を付ける...」で、写真のどこに各商品があるかを示せます。印はセットを共有すると一緒に共有されます。",
- "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "新機能:ストアごとの「クイック更新」は、そのストアのライブラリと、そこから保存しているウィッシュリストの最初の部分だけを読みます。"
+ "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "新機能:ストアごとの「クイック更新」は、そのストアのライブラリと、そこから保存しているウィッシュリストの最初の部分だけを読みます。",
+ "How": "方法",
+ "First uninstall this Hoard (Windows Settings, Apps, Installed apps: Hoard, then Uninstall), then download the new Hoard's installer from its release and run it.": "まずこのHoardをアンインストールし(Windowsの設定、アプリ、インストールされているアプリ:Hoard、アンインストール)、新しいHoardのインストーラーをリリースからダウンロードして実行してください。",
+ "First quit Hoard and move it from Applications to the Bin, then download the new Hoard's .dmg for this Mac from its release, open it, and drag Hoard to Applications.": "まずHoardを終了して、アプリケーションからゴミ箱に移動してください。それから、このMac用の新しいHoardの.dmgをリリースからダウンロードして開き、Hoardをアプリケーションにドラッグしてください。",
+ "First uninstall this Hoard (in your software centre, or flatpak uninstall io.github.soloflighter1010.Hoard), then download the new Hoard's AppImage or .deb from its release.": "まずこのHoardをアンインストールし(ソフトウェアセンターで、または flatpak uninstall io.github.soloflighter1010.Hoard)、新しいHoardのAppImageか.debをリリースからダウンロードしてください。",
+ "Download the new Hoard's installer from its release and run it, then delete this folder.": "新しいHoardのインストーラーをリリースからダウンロードして実行し、それからこのフォルダーを削除してください。",
+ "Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.": "Hoard {0}が出ました。新しい方法(TauriとNuitka)で作られていて、新しいアプリとしてインストールされるため、このHoardからは更新できません。",
+ "This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app.": "この作り方のHoardはこれが最後です。次のバージョンからはTauriとNuitkaで作られ、新しいアプリとしてインストールされます。",
+ "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。アンインストールしても消えません。"
 }

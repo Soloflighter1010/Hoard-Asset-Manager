@@ -1,7 +1,20 @@
-<!-- Translated from Installing-Hoard (English a56b05be75e6). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Installing-Hoard (English b5079b2821f4). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Installing-Hoard">English</a> · <a href="Hoardのインストール">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard는 Windows, macOS, Linux(Flatpak)용 앱이에요. 세 가지 모두에서 소스로 실행할 수도 있어요.
+
+## 새 Hoard로 옮기기
+
+Hoard 5.1.4와 5.2.0 beta 5는 지금까지의 방식(PyInstaller)으로 만드는 마지막 Hoard예요. 그 뒤의 버전은 Tauri와 Nuitka로 만들어지고, 새 앱으로 설치돼요. 그래서 Hoard가 스스로 그 버전으로 업데이트할 수 없고, 예전 Hoard를 먼저 제거하지 않으면 Hoard가 두 개가 돼요. 새 버전이 나오면 Hoard가 바 아래에서 알려 줘요.
+
+1. 지금 쓰는 Hoard를 제거하세요:
+   - **Windows:** Windows 설정 › 앱 › 설치된 앱 › Hoard › 제거.
+   - **macOS:** Hoard를 종료하고, 응용 프로그램에서 휴지통으로 옮기세요.
+   - **Linux(Flatpak):** 소프트웨어 센터에서 제거하거나 `flatpak uninstall io.github.soloflighter1010.Hoard`를 실행하세요. Linux용 새 Hoard는 AppImage(Debian과 Ubuntu는 .deb)예요.
+   - **소스에서 실행하는 경우:** 제거할 것이 없어요.
+2. 새 Hoard를 [릴리스](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases)에서 다운로드해 설치하세요.
+
+라이브러리, 설정, 로그인, 다운로드는 그대로 남아요. 제거하면 프로그램만 지워지고, 새 Hoard도 예전 Hoard처럼 찾아요.
 
 ## Windows
 

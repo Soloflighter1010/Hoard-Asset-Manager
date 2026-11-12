@@ -2,6 +2,11 @@
 
 ## 5.2.0-beta.5
 
+- **The last Hoard built this way.** From the next version, Hoard is built with Tauri and Nuitka, and installs as a
+  new app: this one can't update itself to it. When it's out, uninstall this Hoard first, then install the new one;
+  your library, settings, sign-ins and downloads stay. Hoard says so under its bar, with how for your computer, and
+  [Installing Hoard](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#moving-to-the-new-hoard)
+  has the steps.
 - **Products for adults** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311), [#337](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/337), [#338](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/338)). A product its store, its tags or its name say is for
   adults (R-18, NSFW, 18+ and the like), or that you mark **Mark as 18+**, has an 18+ mark on its tile and its
   picture blurred until you click it in its details. **It isn't for adults** says otherwise, and your word wins. A

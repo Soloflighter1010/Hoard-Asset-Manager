@@ -2543,5 +2543,13 @@
  "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all.": "새 기능: 문제가 있는 상품(디스크의 파일이 없거나 바뀜, 다운로드가 끝나지 않음)은 타일에 빨간 표시가 붙고, 상세 정보에 어떻게 하면 되는지 나와요. 다운로드의 '문제'에 모두 모여 있어요.",
  "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins.": "새 기능: 성인용 상품에는 18+ 표시가 붙고, 이미지는 클릭할 때까지 흐리게 보여요(설정의 접근성에서 끌 수 있어요). Hoard가 잘못 판단하면 '18+로 표시'나 '성인용이 아니에요'를 고르세요. 고르신 것이 우선이에요.",
  "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it.": "새 기능: 사진 아래의 '상품 표시하기...'로 사진에서 각 상품이 어디 있는지 표시할 수 있어요. 표시는 세트를 공유하면 함께 공유돼요.",
- "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "새 기능: 스토어별 '빠른 새로고침'은 그 스토어의 라이브러리와 거기서 저장한 위시리스트의 앞부분만 읽어요."
+ "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it.": "새 기능: 스토어별 '빠른 새로고침'은 그 스토어의 라이브러리와 거기서 저장한 위시리스트의 앞부분만 읽어요.",
+ "How": "방법",
+ "First uninstall this Hoard (Windows Settings, Apps, Installed apps: Hoard, then Uninstall), then download the new Hoard's installer from its release and run it.": "먼저 이 Hoard를 제거하고(Windows 설정, 앱, 설치된 앱: Hoard, 제거), 새 Hoard의 설치 프로그램을 릴리스에서 다운로드해 실행하세요.",
+ "First quit Hoard and move it from Applications to the Bin, then download the new Hoard's .dmg for this Mac from its release, open it, and drag Hoard to Applications.": "먼저 Hoard를 종료하고 응용 프로그램에서 휴지통으로 옮기세요. 그다음 이 Mac용 새 Hoard의 .dmg를 릴리스에서 다운로드해 열고, Hoard를 응용 프로그램으로 드래그하세요.",
+ "First uninstall this Hoard (in your software centre, or flatpak uninstall io.github.soloflighter1010.Hoard), then download the new Hoard's AppImage or .deb from its release.": "먼저 이 Hoard를 제거하고(소프트웨어 센터에서, 또는 flatpak uninstall io.github.soloflighter1010.Hoard), 새 Hoard의 AppImage나 .deb를 릴리스에서 다운로드하세요.",
+ "Download the new Hoard's installer from its release and run it, then delete this folder.": "새 Hoard의 설치 프로그램을 릴리스에서 다운로드해 실행한 다음, 이 폴더를 삭제하세요.",
+ "Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.": "Hoard {0}이(가) 나왔어요. 새로운 방식(Tauri와 Nuitka)으로 만들어져 새 앱으로 설치되기 때문에, 이 Hoard에서는 업데이트할 수 없어요.",
+ "This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app.": "이 방식으로 만든 Hoard는 이것이 마지막이에요. 다음 버전부터는 Tauri와 Nuitka로 만들어지고, 새 앱으로 설치돼요.",
+ "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "라이브러리, 설정, 로그인, 다운로드는 그대로 남아요. 제거해도 지워지지 않아요."
 }
