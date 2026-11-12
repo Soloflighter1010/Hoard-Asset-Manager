@@ -12,10 +12,11 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, downloads, libraries, safety, server  # noqa: E402
@@ -41,7 +42,7 @@ def product(base: Path, store: str, key: str, creator: str, name: str, files: di
     return folder
 
 
-class LibraryFolders(unittest.TestCase):
+class LibraryFolders(IsolatedTestCase):
 
     def setUp(self):
         self.base = Path(tempfile.mkdtemp()).resolve()
@@ -50,8 +51,8 @@ class LibraryFolders(unittest.TestCase):
         self.root.mkdir()
         self.drive.mkdir(parents=True)
         self.cfg = {**config.load_config(), "root": str(self.root), "library_folders": [str(self.drive)]}
-        self.addCleanup(lambda: libraries._seen_file().unlink(missing_ok=True))
-        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.addCleanup(lambda: storage.remove(libraries._seen_file(), missing_ok=True))
+        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
         product(self.root, "Booth", "111", "Kitsu Studio", "Rusk", {"rusk.unitypackage": b"pkg"})
         self.anko = product(self.drive, "Booth", "222", "Kitsu Studio", "Anko",
                             {"anko.unitypackage": b"anko", "Textures/body.png": b"png!"})
@@ -185,7 +186,7 @@ class LibraryFolders(unittest.TestCase):
         self.assertNotIn("222", downloader.Manifest(self.root / "Booth").assets)
 
 
-class Server(unittest.TestCase):
+class Server(IsolatedTestCase):
     """Settings add and forget library folders; Downloads moves a product, as a job; pictures are served from every
     library folder, named by its number, never by a path from the request."""
 
@@ -195,7 +196,7 @@ class Server(unittest.TestCase):
         self.root, self.drive = self.base / "Hoard", self.base / "Drive E"
         self.root.mkdir()
         self.drive.mkdir()
-        self.addCleanup(lambda: libraries._seen_file().unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(libraries._seen_file(), missing_ok=True))
         product(self.root, "Booth", "111", "Kitsu Studio", "Rusk", {"rusk.unitypackage": b"pkg"})
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(self.root), "setup_done": True},
                                     lan=False)

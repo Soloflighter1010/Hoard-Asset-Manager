@@ -60,8 +60,10 @@
       <p class="lede">How Hoard works with your store, and how it keeps your customers and your platform safe. Hoard is a free, open-source desktop app that VRChat creators use to keep their purchased avatars,
       outfits and tools in one library on their own computer. This brief explains exactly what it does on your
       store, what it never does, and how it protects accounts and your servers.</p>
-    <p class="meta">Current as of October 2026 (Hoard 4.x) · Source: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">github.com/Soloflighter1010/Hoard-Asset-Manager</a></p>
-    <p class="meta">Each claim links to the code that does it, pinned to commit <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/tree/6f2dd811564ef22bb0f49394bac248119c031a89"><code>6f2dd81</code></a> on the main branch (Hoard 4.3.1), so the line numbers stay put.</p>
+    <p class="meta">Current as of November 2026 (Hoard 5.2) · Source: <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager">github.com/Soloflighter1010/Hoard-Asset-Manager</a></p>
+    <p class="meta">Each claim up to Hoard 4.3.1 links to the code that does it, pinned to commit <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/tree/6f2dd811564ef22bb0f49394bac248119c031a89"><code>6f2dd81</code></a> on the main branch (Hoard 4.3.1), so the line numbers stay put. What's newer than that
+      (quick refresh, wishlists, creators' tags and the record of each store) is described with its code in
+      <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/STORES.md"><code>docs/STORES.md</code></a>.</p>
 
     <div class="glance">
       <div><b>It acts as your customer, on their own computer</b><p>No accounts, no analytics. Everything runs locally and talks only to the stores the person uses (and, for a set they share as a short link, Hoard's share server, which can't read it; for a set's photo added by its page, that photo site).</p></div>
@@ -141,6 +143,27 @@
     <p>Where a customer would rather not sign in at all, or a refresh is blocked, they can save their library pages
       from their usual browser and import them. Hoard reads those saved pages with scripts switched off and nothing
       allowed to load. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/safety.py#L872-L875" title="Saved pages read with scripts off and no network"><code>safety.py</code> L872–875</a></span></p>
+
+    <h3>What else Hoard reads, and how little</h3>
+    <ul>
+      <li><strong>Quick refresh.</strong> Besides a full refresh, a customer can look for what's new by reading only
+        the start of their library and lists: the first 2 pages or the first 50 products, whichever is fewer. They
+        can do it for every store at once, for one store, or for one wishlist. What it doesn't reach is left as it
+        was, so a quick look never takes a purchase off their list, and it reads no product pages.</li>
+      <li><strong>Their wishlists.</strong> On Booth, Gumroad, Jinxxy and Payhip, a customer can have Hoard read the
+        wishlists, likes and lists they keep in their account, in the same signed-in window, with each product's
+        price as the page shows it. Hoard reads them only when asked (or with a quick refresh of a store whose lists
+        they read before), changes nothing on them, and buys nothing: <strong>Buy on</strong> opens your product page
+        in their everyday browser.</li>
+      <li><strong>The tags creators give their products.</strong> On Booth, Jinxxy and itch.io, Hoard reads each owned
+        product's public page once, as anyone sees it, for the tags its creator gave it and, where your page says
+        so, whether it's for adults (so its picture can be blurred and it can carry an 18+ mark). It reads at most 40 of those pages
+        each time a store is refreshed, paced like every other page, until each has been read once. A quick refresh
+        reads none.</li>
+      <li><strong>A record of how each store went.</strong> Hoard keeps, on the customer's computer, when each
+        store was last read or downloaded from, and whether it worked. That's all it is: no extra requests. A store
+        that keeps failing is shown as failing, with a way to report it to us, rather than being tried over and over.</li>
+    </ul>
   </section>
 
   <section id="sets">
@@ -171,6 +194,9 @@
         your image host, as any page that shows it would, and sends no referrer. In Hoard itself, the picture of a
         product the customer doesn't own is fetched once, with your store as the referrer, and kept on their
         computer. If you'd rather your pictures weren't shown this way, <a href="#together">tell us</a>. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/site/set.js#L125-L126" title="No referrer sent with a picture"><code>set.js</code> L125–126</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/library.py#L1252-L1254" title="A picture fetched once and kept"><code>library.py</code> L1252–1254</a></span></li>
+      <li><strong>Products for adults stay behind a question.</strong> A set with a product for adults in it (as your
+        store, its tags or the customer says) carries an 18+ mark, and its viewer is asked their age before it shows
+        anything. The answer is kept only in a cookie in the viewer's own browser; Hoard never asks anyone for ID.</li>
       <li><strong>Buying stays on your store.</strong> Apart from that picture, Hoard reads nothing from your store
         about products a customer doesn't own. <strong>Buy on</strong> opens your product page in their everyday
         browser, where they buy as they always would.</li>
@@ -222,6 +248,8 @@
     <ul class="never yes">
       <li><strong>Paced requests.</strong> One second between page loads by default. People can only set it between
         0.3 and 10 seconds, and Hoard's terms ask them to keep the built-in delays. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/config.py#L21"><code>config.py</code> L21</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/server.py#L329-L330"><code>server.py</code> L329–330</a></span></li>
+      <li><strong>Your own published limit, kept.</strong> Where a store publishes one, Hoard keeps under it, across
+        its browser and its direct requests together: Jinxxy's 120 requests a minute, say.</li>
       <li><strong>One download at a time</strong>, resuming an interrupted file where it stopped rather than starting
         over. A failed file is tried again twice by default, and three times at most, after a short wait. <span class="refs">Code: <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/config.py#L34"><code>config.py</code> L34</a>, <a class="src" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/6f2dd811564ef22bb0f49394bac248119c031a89/hoard/downloader.py#L211"><code>downloader.py</code> L211</a></span></li>
       <li><strong>Nothing fetched twice.</strong> Hoard keeps a record of every file it saved, so routine syncs only

@@ -53,7 +53,7 @@ FILES = {
     "brand/logo-light.svg": lambda: heap.logo(words=DARK),
     "site/img/mark.svg": lambda: heap.mark(label="Hoard"),
 }
-PAGES = ("hoard/web/library.html", "hoard/web/downloads.html")
+PAGES = ("hoard/web/library.html",)
 
 
 def wanted() -> dict[str, str]:

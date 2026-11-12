@@ -14,6 +14,8 @@ contain one, or be (or be inside) Hoard's own app-data folder or the editable co
 """
 from __future__ import annotations
 
+from . import storage
+
 import json
 import threading
 import os
@@ -21,7 +23,8 @@ from pathlib import Path
 
 from .config import edits_dir, root_dir
 from .paths import data_dir
-from .safety import DataFileError, read_json_file, write_file_safely
+from .safety import DataFileError
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 MAX_FOLDERS = 10   # other library folders, besides the downloads folder
 
@@ -164,13 +167,13 @@ def _seen_file() -> Path:
 def _load_seen() -> dict:
     """The library folders Hoard has been given, as last saved; none when unreadable."""
     try:
-        raw = read_json_file(_seen_file()) if _seen_file().is_file() else {}
+        raw = read_json_file(_seen_file()) if storage.is_file(_seen_file()) else {}
     except (DataFileError, OSError):
         return {}
     return raw if isinstance(raw, dict) else {}
 
 
-_SEEN_LOCK = threading.Lock()   # catalog builds in a job and in the server can note folders at the same time
+_SEEN_LOCK = storage.metadata_lock   # catalog builds and imports use the same transaction lock
 
 
 def remember(folder: Path, store_dir: str, keys) -> None:

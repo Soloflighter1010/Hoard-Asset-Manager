@@ -9,11 +9,11 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 import zipfile
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard.vpm import backup, listing, preload, templates, unity, unitypackage
 from hoard.vpm.project import UnityProject
@@ -43,7 +43,7 @@ SAMPLE = {G1: ("Assets/Creator", None), G2: ("Assets/Creator/Hoodie.prefab", b"%
           G3: ("Assets/Creator/Textures/hoodie.png", b"\x89PNGpicture")}
 
 
-class Temp(unittest.TestCase):
+class Temp(IsolatedTestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)

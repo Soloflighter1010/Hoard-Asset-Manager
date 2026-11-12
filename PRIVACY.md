@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 21 October 2026 (version 1.7.0)
+Last updated: 11 November 2026 (version 1.8.0)
 
 **The short version:** Hoard runs entirely on your own computer, and sends nothing to me or to anyone else. There
 are no accounts, no analytics, no tracking and no ads. The one exception is a short link for a set, if you choose to
@@ -103,6 +103,26 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
 has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading,
 checking for updates, short links, Projects' packages and Git's remotes.
+
+## The set viewer's age question
+
+A set with a product for adults in it is an Adult set. When someone opens an Adult set's link on Hoard's website
+(`hoard.furryup.link/set.html`), the page asks whether they are 18 or older before it shows the set. Under 18, it
+shows the set without its products for adults and without the sharer's photos.
+
+- **What is kept:** the answer, as one of two words (`adult` or `minor`), in a cookie named `hoard_age`. Not an
+  age, not a date of birth, not a name, and nothing about the set.
+- **Where:** in the viewer's own browser, for that page only, for one year. **Change your answer** on the page
+  deletes it, and so does clearing the browser's cookies.
+- **Who sees it:** a browser sends a site's cookies back to that site with each request for the page, so the
+  website's host (GitHub Pages) receives the word with requests for `set.html`. Hoard has no code there that reads
+  it, and I never receive it. The page's own script reads it in the browser, to decide what to show.
+- **Hoard never asks for ID.** The question is a question: there is no document, account or third-party check, in
+  the viewer or in the app.
+
+In the app, which products are for adults is worked out on your computer (from what each store, its tags and you
+say) and kept with your library and your choices. A shared set's link carries a mark on each product for adults, so
+the viewer knows to ask.
 
 ## Using Hoard on your network
 

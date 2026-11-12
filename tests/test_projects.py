@@ -9,10 +9,11 @@ import sys
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import config, downloader, projects, server  # noqa: E402
@@ -46,7 +47,7 @@ def write(project_id: str, data) -> Path:
     return path
 
 
-class Reports(unittest.TestCase):
+class Reports(IsolatedTestCase):
 
     def setUp(self):
         shutil.rmtree(projects.projects_dir(), ignore_errors=True)
@@ -98,7 +99,7 @@ class Reports(unittest.TestCase):
         self.assertFalse(path.exists())
 
 
-class ProjectsServer(unittest.TestCase):
+class ProjectsServer(IsolatedTestCase):
 
     def setUp(self):
         shutil.rmtree(projects.projects_dir(), ignore_errors=True)
@@ -147,14 +148,14 @@ class ProjectsServer(unittest.TestCase):
         st = marks.MarkStore()
         st.set_pin("4821")
         st.change("hidden", {tags.tag_key("Booth", "Rusk")}, True)
-        self.addCleanup(lambda: st.path.unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(st.path, missing_ok=True))
         status, data = self.call("GET", "/api/projects")
         self.assertNotIn("Rusk", json.dumps(data), "a hidden product's name never leaves the server while locked")
         self.assertTrue(data["hidden_left_out"])
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ProjectsPage(unittest.TestCase):
+class ProjectsPage(IsolatedTestCase):
     """A project Hoard for Unity reported, in Projects: not on the Creator Companion's list (an empty one of its own
     here, so a real one is never read), it's listed below it, with what it uses and its credits."""
 
@@ -208,7 +209,7 @@ class ProjectsPage(unittest.TestCase):
         from hoard.sets import SetStore
         shutil.rmtree(projects.projects_dir(), ignore_errors=True)
         self.addCleanup(shutil.rmtree, projects.projects_dir(), True)
-        self.addCleanup(lambda: SetStore().path.unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(SetStore().path, missing_ok=True))
         gone = {"store": "Booth", "name": "Old Hat", "creator": "Mia", "folder": "Booth/Mia/Old Hat", "url": None,
                 "status": "imported"}
         write("0123456789abcdef", report(assets=report()["assets"] + [gone]))
@@ -234,7 +235,7 @@ class ProjectsPage(unittest.TestCase):
             name.fill("My Avatar, as worn")
             page.locator("dialog[open] button", has_text="OK").click()
             page.get_by_text("Made the set My Avatar, as worn, with 2 products in it.").wait_for()
-            page.locator('#stores [data-store="Sets"] .n', has_text="1").wait_for()   # Downloads shows it straight away
+            page.locator('#storeSeg [data-store="Sets"] .n', has_text="1").wait_for()   # Downloads shows it straight away
             [made] = SetStore().load()["sets"]
             self.assertEqual(made["items"], [tags_key("Booth", "Rusk"), tags_key("Gumroad", "Mochi")],
                              "what's in it now: not what was imported once and is gone")
@@ -249,7 +250,7 @@ class ProjectsPage(unittest.TestCase):
             browser.close()
 
 
-class PublicPages(unittest.TestCase):
+class PublicPages(IsolatedTestCase):
     """A credits list is for sharing, so each product in it links to its public page: never the link Hoard keeps for
     you as its buyer (Jinxxy's inventory, or a Gumroad download page, which opens its files for whoever has it)."""
 

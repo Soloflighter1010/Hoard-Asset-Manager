@@ -5,12 +5,13 @@ import os
 import tarfile
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 import zipfile
 import zlib
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import packages
 
@@ -70,7 +71,7 @@ SAMPLE = {G1: ("Assets/Creator", None), G2: ("Assets/Creator/Hoodie.prefab", b"%
           G3: ("Assets/Creator/Textures/hoodie.png", b"\x89PNG" + b"y" * 300)}
 
 
-class UnityPackages(unittest.TestCase):
+class UnityPackages(IsolatedTestCase):
     def test_reads_paths_sizes_and_previews(self):
         got = {}
         assets = packages.read_unitypackage(io.BytesIO(unitypackage(SAMPLE, {G2: PNG, G3: b"not a png"})),
@@ -105,7 +106,7 @@ class UnityPackages(unittest.TestCase):
             packages.read_unitypackage(io.BytesIO(unitypackage({G1: ("Assets/big.bin", b"z" * 5000)})))
 
 
-class Zips(unittest.TestCase):
+class Zips(IsolatedTestCase):
     def make_zip(self, members: dict, utf8: bool = True) -> Path:
         path = Path(self.tmp.name) / "download.zip"
         swaps = []
@@ -156,7 +157,7 @@ class Zips(unittest.TestCase):
             packages.read_zip(path)
 
 
-class LookInside(unittest.TestCase):
+class LookInside(IsolatedTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(Path(self.tmp.name) / "data")})
@@ -235,7 +236,7 @@ class LookInside(unittest.TestCase):
         self.assertEqual({p.name for p in packages.cache_dir().iterdir()}, {ids[-1]}, "the newest always stays")
 
 
-class Extract(unittest.TestCase):
+class Extract(IsolatedTestCase):
     """Look inside's Extract: the chosen files, or all of them, taken out of a package or a zip into a folder of
     their own, where their paths say, and never anywhere else, whatever a package's paths claim."""
 
@@ -467,7 +468,7 @@ WITH_CODE = {S1: ("Assets/Kitsu/Editor/Setup.cs", b"class Setup {}"),
 CODE_METAS = {S5: NOT_IN_EDITOR, S6: EDITOR_ONLY}
 
 
-class CodeInPackages(unittest.TestCase):
+class CodeInPackages(IsolatedTestCase):
     """Issue #303: which scripts and plugins a package holds, which of them run in the editor (an Editor folder, an
     editor-only assembly definition, a plugin's import settings), and which are a tool's Hoard knows by GUID."""
 
@@ -556,8 +557,18 @@ class CodeInPackages(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class LookInsidePage(unittest.TestCase):
+class LookInsidePage(IsolatedTestCase):
     """Downloads: Look inside on a product's .unitypackage, and on a .zip with one in it."""
+
+    def setUp(self):
+        # Each extraction test starts with an empty destination. The browser and
+        # read-only packages are shared by the class, but extracted files are not.
+        import shutil
+        shutil.rmtree(Path(self.tmp.name) / "Hoard Edits", ignore_errors=True)
+
+    def tearDown(self):
+        for page in self.browser.contexts:
+            page.close()
 
     @classmethod
     def setUpClass(cls):
@@ -662,6 +673,10 @@ class LookInsidePage(unittest.TestCase):
         win.locator("summary", has_text="Assets").click()   # its one package is open already
         win.locator("summary", has_text="Kitsu").click()
         win.get_by_text("Hoodie v2.prefab").wait_for()
+        # what a folder not drawn yet holds is kept by the page's script, never written on the page and read back from
+        # it to decide what's drawn (CodeQL's js/xss-through-dom)
+        self.assertEqual(page.evaluate("""() => [...document.querySelectorAll('#insideWin [data-node], #insideWin [data-pkg-node]')]
+          .filter(e => e.getAttribute('data-node') || e.getAttribute('data-pkg-node') || !e.hasAttribute('data-held')).length"""), 0)
         win.locator("summary", has_text="Every file in the zip").click()
         win.get_by_text("Hoodie/利用規約.txt").wait_for()
 
@@ -787,7 +802,7 @@ class LookInsidePage(unittest.TestCase):
         st = marks.MarkStore()
         st.set_pin("4821")
         st.change("hidden", {tags.tag_key("Booth", "Hoodie")}, True)
-        self.addCleanup(lambda: st.path.unlink(missing_ok=True))
+        self.addCleanup(lambda: storage.remove(st.path, missing_ok=True))
         with mock.patch.object(server, "reveal", lambda p: None):
             for path in ("Booth/Kitsu Studio/Hoodie/Hoodie.unitypackage", "Booth/Kitsu Studio/./Hoodie//Hoodie.unitypackage"):
                 for action in ("/api/look-inside", "/api/look-inside/extract"):

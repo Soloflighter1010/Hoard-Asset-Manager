@@ -21,6 +21,8 @@ brought in is remembered (konoasset.json in Hoard's app-data folder), so bringin
 """
 from __future__ import annotations
 
+from . import storage
+
 import json
 import os
 import re
@@ -28,7 +30,8 @@ from pathlib import Path
 
 from .common import log
 from .paths import data_dir
-from .safety import MAX_CHOSEN_PICTURE, DataFileError, clean_text, read_json_file, write_file_safely
+from .safety import MAX_CHOSEN_PICTURE, DataFileError, clean_text
+from .storage import read_document as read_json_file, write_document as write_file_safely
 from .tags import TAG_LIMITS, TagStore, clean_note, clean_tag, tag_key
 
 FILES = (("avatars.json", "avatar"), ("avatarWearables.json", "wearable"), ("worldObjects.json", "world"),
@@ -217,6 +220,12 @@ def _picture(cfg: dict, root: Path, folder: Path, asset: dict, key: str) -> None
 
 
 def bring_in(cfg: dict, root: Path, folder: Path, library_items: list[dict], say=None, stop=None) -> dict:
+    """Commit one import together, restoring metadata and companion files on failure."""
+    with storage.import_transaction():
+        return _bring_in(cfg, root, folder, library_items, say, stop)
+
+
+def _bring_in(cfg: dict, root: Path, folder: Path, library_items: list[dict], say=None, stop=None) -> dict:
     """Bring in what plan() says. Returns what was done: {"matched", "local", "tags", "notes", "left_out": [names]}."""
     from . import local
     from .downloader import build_catalog
@@ -229,7 +238,7 @@ def bring_in(cfg: dict, root: Path, folder: Path, library_items: list[dict], say
     todo = [(a, False) for a in p["matched"]] + [(a, True) for a in p["local"]]
     for n, (a, is_local) in enumerate(todo, 1):
         if stop is not None and stop.is_set():
-            break
+            raise InterruptedError("KonoAsset import stopped; no products or tags were changed.")
         say(f"Bringing in {n:,} of {len(todo):,} from KonoAsset: {a['name']}")
         key = a["key"]
         if is_local:

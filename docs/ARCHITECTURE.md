@@ -1,7 +1,9 @@
 # How Hoard is built
 
-A guide for anyone reading or changing the code. Both tools are plain Python with no build step: each
-page is a single HTML file with its styles and script inline, served by the tool itself. For the map first (each
+A guide for anyone reading or changing the code. The Python app serves one shell with styles and script inline.
+Generated schemas and the compiled Look inside component are checked in; running Hoard needs no build step.
+Private metadata is JSON files; the SQLite database for it is held back behind a switch, as [STORAGE.md](STORAGE.md) explains.
+For the map first (each
 part, where its code and files are, and a sync end to end), see [HOW-HOARD-WORKS.md](HOW-HOARD-WORKS.md).
 
 ## Repository layout
@@ -19,8 +21,10 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   pace.py              keeping to a store's rate limit: Jinxxy's 120 requests a minute (issue #262)
   browser.py           store sign-ins and the store browser
   tags.py              your tags
-  library.py           reading what you own from each store; the library list
-  downloader.py        downloading, the records of what's on disk, the catalog files, verify
+  library.py           the library list and shared import orchestration
+  stores/              one store adapter each, capabilities and health (STORES.md)
+  downloader.py        shared transfers, download records, catalog files and verification
+  scheduler.py         owned workers, priority, progress and restart checkpoints (SCHEDULER.md)
   downloads.py         the Downloads view's index of what's on disk
   space.py             Downloads' Disk space: the same file kept more than once, from the integrity check's fingerprints
   packages.py          Look inside: a .unitypackage's assets and previews, and a .zip's files and packages, read in place
@@ -35,6 +39,10 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   setup.py             the onboarding assistant's checks: browser, sign-in status, installing, moving 1.x across
   marks.py             archive, hide and remove choices, and the hidden library's PIN
   server.py            the local server behind both views
+  api/                 registered endpoints, grouped by domain; routing.py enforces their access policy
+  schema.py            structural validation of public exports, alongside semantic safety checks
+  schema_data.py       generated runtime copy of docs/schemas (no runtime schema dependency)
+  storage.py           private metadata: JSON files, or (held back, HOARD_METADATA=sqlite) SQLite with stable identities (STORAGE.md)
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   notify.py            a notification from the system when the routine check finds something to download
@@ -183,6 +191,12 @@ from when that shop isn't in the user's list (it's only added when the user conf
   `/api/assets` adds each asset's `update` files and `updates_checked`; `/api/library` an `update` flag.
   `POST /api/download` and `/api/check-updates` take `keys` (tag keys), which `skip_product()` limits the sync
   to; a download takes a product off the list once a file of its is saved and none of its files failed.
+- Problems (issue #334): `Report.failed_product()` keeps the products a file of which couldn't be downloaded, with
+  why, and `AssetUpdates.after_download()` holds them in `asset-updates.json`'s `"failed"` until a download of them
+  saves a file and fails none. `downloads.problems()` puts those together with files missing on disk, files the last
+  check found changed (`last_integrity()`) and a Local folder that's gone (`build_index()`'s `folder_gone`, kept
+  shown rather than dropped as an all-gone download is), and `/api/assets` and `/api/library` send each product's
+  `problems` for its tile's error mark, its details and Downloads' Problems view.
 - `collect_catalog()` builds the catalog and tags from the manifests; `build_catalog()` writes them to
   `catalog.json`, `tags.json` and each product's `asset.json`. With nothing downloaded, an existing
   `catalog.json` and `tags.json` are rewritten empty, so they never go on listing what's gone; a folder
@@ -201,7 +215,7 @@ from when that shop isn't in the user's list (it's only added when the user conf
 - Store browsers: `browser._track` notes each one Hoard starts, and `browser.end_browsers()` ends them all (and
   Playwright's driver), from any thread, so a job waiting on one that stopped answering fails at once instead of
   waiting for ever. `Jobs.cancel` does that when Stop hasn't taken effect after `FORCE_AFTER` seconds, and
-  `Jobs._watch` notes in the launch's log where a job is after `STUCK_AFTER` seconds without progress. A store tab or
+  the scheduler's `Jobs._watch_step` notes where a job is after `STUCK_AFTER` seconds without progress. A store tab or
   browser that closes by itself is opened again (`downloader.reopen_tab`), up to `REOPENS` times a sync.
 - Closing the desktop window: `app.close_decision` minimizes the window to the taskbar (`close_to_taskbar`, on by
   default), quits, or asks the
@@ -428,7 +442,40 @@ Each Python file carries the same "data files" section (a test checks the copies
 
 `tests/test_security.py` covers each finding from the September 2026 reviews
 ([security-review-2026-09.md](security-review-2026-09.md)) and checks that the code the two tools share
-hasn't drifted apart. It needs no network or browser: `python -m unittest discover -s tests -v`.
+hasn't drifted apart. The full suite uses local HTTP fixtures and Playwright Chromium; install the locked
+Python requirements, run `python -m playwright install chromium`, and run `npm ci` for Acorn. Mono runs the
+shared Python/C# catalog examples on Linux. Run `python scripts/test_suite.py --seed 315 --repeat 2` to check
+order independence and repeated execution in the same interpreter. Ordinary unittest discovery also works.
+
+Every test class inherits `tests.isolation.IsolatedTestCase`. Its class fixture owns app-data, downloads and
+VCC homes, rebinds imported path aliases and restores them at cleanup. An audit hook fails writes through a
+previous class's paths, including worker writes. Servers stop their owned workers at cleanup; see the bounded
+shutdown behavior in [SCHEDULER.md](SCHEDULER.md).
+CI partitions whole modules across six shards per operating system using `tests/timings.json`; each shard
+shuffles class groups and methods with a printed seed, runs twice, and uploads failures and timings. The
+summary job reports missing or failed shards. Update the timings from measured shard summaries when the
+distribution changes.
+
+Translation keys are parsed by Acorn (`scripts/i18n_keys.mjs`), including both branches of a conditional
+argument but never words in its condition. A missing English key reports a similar obsolete key and its
+translation, helping translators update changed sentences. Node and Acorn are development tools only.
+
+The public export contracts live in `docs/schemas/`. Run `python scripts/build_schemas.py` after editing them;
+the checked-in Python bundle is used at runtime. Structural validation supplements the existing URL, path,
+text and trust checks. Python and C# consume the same acceptance examples. Unity keeps reading version 2/3
+catalogs that omitted empty tag lists; version 4 requires correctly typed lists.
+
+## HTTP routes
+
+`hoard/api/` owns the route table and endpoint implementations, grouped by area. `server.py` keeps HTTP,
+host/origin/key checks, body limits, CSP and indexing. A registration states method, path, handler, whether
+it changes data, authentication, and a small request/response description. Changing registrations without
+POST and the key fail at startup. Entry and instance handshakes prove themselves through separate tokens.
+The table derives `ACTIONS`; it is never maintained separately. Domain helpers currently use the server's
+explicit service facade to preserve existing dependency overrides during extraction.
+
+The generated [API reference](API.md) lists every registration. Run `python scripts/build_api_docs.py` when
+changing a contract; tests check that reference, request fields, lookup uniqueness and access policy.
 
 Dependencies are listed in `requirements.in` and locked, with hashes, in `requirements.txt`:
 `pip-compile --generate-hashes --strip-extras --no-emit-index-url requirements.in`. Setup installs with
@@ -559,3 +606,9 @@ when it sees `/RELAUNCH=1`. The next start deletes installers for its own versio
 - Never commit personal files. `.gitignore` covers `config.json`, `library.json`, sign-in folders,
   downloads and troubleshooting output, and the build refuses to package anything not on its list.
 - Windows launchers need CRLF line endings; `.gitattributes` keeps them right.
+
+## One application shell
+
+Library and Downloads now share the document, windows, product components and data owner.
+[APP-SHELL.md](APP-SHELL.md) documents navigation, the compatibility boundary, the Svelte Look inside trial,
+its measured build/bundle costs, and the decision to keep that trial bounded.

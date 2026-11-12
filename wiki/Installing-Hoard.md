@@ -1,5 +1,23 @@
 Hoard is an app for Windows, macOS and Linux (a Flatpak). It also runs from source on all three.
 
+## Moving to the new Hoard
+
+Hoard 5.1.4 and 5.2.0 beta 5 are the last Hoards built the way they have been (with PyInstaller). The versions
+after them are built with Tauri and Nuitka, and install as a new app. So Hoard can't update itself to them, and the old one has to go
+first, or you'd have two Hoards. When one is out, Hoard says so under its bar.
+
+1. Uninstall the Hoard you have:
+   - **Windows:** Windows Settings › Apps › Installed apps › Hoard › Uninstall.
+   - **macOS:** quit Hoard, then move it from Applications to the Bin.
+   - **Linux (Flatpak):** remove it in your software centre, or run `flatpak uninstall io.github.soloflighter1010.Hoard`.
+     The new Hoard for Linux is an AppImage, or a .deb for Debian and Ubuntu.
+   - **From source:** there's nothing to uninstall.
+2. Download the new Hoard for your computer from
+   [its release](https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases), and install it.
+
+Your library, settings, sign-ins and downloads stay where they are: uninstalling removes only the program, and the
+new Hoard finds them as the old one did.
+
 ## Windows
 
 1. Download **`Hoard-Setup-<version>.exe`** from the

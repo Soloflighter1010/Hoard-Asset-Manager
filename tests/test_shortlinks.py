@@ -9,10 +9,10 @@ import subprocess
 import tempfile
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import downloader, egress, sets, shortlinks
 from hoard.tags import tag_key
@@ -46,7 +46,7 @@ def a_code(**extra) -> str:
         RUSK: {"store": "booth", "name": "Rusk", "creator": "Kitsu", "url": "https://booth.pm/ja/items/1"}}, **extra})[0]
 
 
-class Worker(unittest.TestCase):
+class Worker(IsolatedTestCase):
     def test_the_workers_own_tests(self):
         if not NODE:
             self.skipTest("needs Node.js")
@@ -70,7 +70,7 @@ class Worker(unittest.TestCase):
         self.assertNotIn("console.", worker, "nothing is logged")
 
 
-class Client(unittest.TestCase):
+class Client(IsolatedTestCase):
     """hoard/shortlinks.py, against the real Worker."""
 
     @classmethod
@@ -134,7 +134,7 @@ class Client(unittest.TestCase):
         self.assertIn(f"const MAX_BYTES = {shortlinks.MAX_DATA // 1024} * 1024;", (REPO / "share" / "worker.mjs").read_text("utf-8"))
 
 
-class Kept(unittest.TestCase):
+class Kept(IsolatedTestCase):
     """A set's short link in sets.json: checked as it's read, and gone when it has run out."""
 
     def setUp(self):
@@ -167,6 +167,25 @@ class Kept(unittest.TestCase):
         self.store.path.write_text(json.dumps(data), "utf-8")
         self.assertNotIn("short", self.store.load()["sets"][0], "run out: forgotten")
 
+    def test_a_link_that_ran_out_is_remembered_until_theres_a_new_one(self):
+        """Issue #333: a set says how long its link still works, and that it has run out, until it has a new one."""
+        ended = int(time.time()) - 5
+        data = json.loads(self.store.path.read_text("utf-8"))
+        data["sets"][0]["short"] = {**self.rec, "expires": ended}
+        self.store.path.write_text(json.dumps(data), "utf-8")
+        s = self.store.load()["sets"][0]
+        self.assertEqual((s.get("short"), s["short_ended"]), (None, ended))
+        self.store.change({"action": "rename", "id": self.made, "name": "Rusk 2"})
+        self.assertEqual(self.store.load()["sets"][0]["short_ended"], ended, "kept in the file, through other changes")
+        self.assertNotIn("short_ended", sets.share_code(self.store.load()["sets"][0])[0], "never in what's shared")
+        self.store.set_short(self.made, self.rec)
+        self.assertNotIn("short_ended", self.store.load()["sets"][0], "a new link: nothing has run out")
+        data = json.loads(self.store.path.read_text("utf-8"))
+        data["sets"][0].pop("short")
+        data["sets"][0]["short_ended"] = int(time.time()) + 999   # (not a time gone by: not kept)
+        self.store.path.write_text(json.dumps(data), "utf-8")
+        self.assertNotIn("short_ended", self.store.load()["sets"][0])
+
     def test_not_in_a_code_nor_taken_from_one(self):
         self.store.set_short(self.made, self.rec)
         s = self.store.load()["sets"][0]
@@ -185,7 +204,7 @@ class Kept(unittest.TestCase):
         self.assertRegex(sets.code_mark(a_code()), r"^[0-9a-f]{16}$")
 
 
-class Locking(unittest.TestCase):
+class Locking(IsolatedTestCase):
     def test_the_page_and_the_viewer_agree(self):
         """Hoard's page locks a set as the viewer unlocks it, with a new nonce each time, and only its key opens it."""
         if not NODE:
@@ -222,7 +241,7 @@ const key = b64(crypto.getRandomValues(new Uint8Array(16))), other = b64(crypto.
         self.assertEqual(csp.count("connect-src"), 1)
 
 
-class EndToEnd(unittest.TestCase):
+class EndToEnd(IsolatedTestCase):
     """Share, Make a short link, open it in the viewer, update it, add it to Hoard, delete it: the page, Hoard and
     the Worker together."""
 
@@ -233,6 +252,11 @@ class EndToEnd(unittest.TestCase):
     def setUp(self):
         import threading
         from hoard import config, library, server
+        # This test exercises the local share worker, not real store pictures.
+        # A large wishlist would otherwise open hundreds of outbound requests.
+        pictures = mock.patch.object(server, "fetch_picture", return_value=None)
+        pictures.start()
+        self.addCleanup(pictures.stop)
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
         env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data")})

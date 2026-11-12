@@ -9,8 +9,9 @@ propose a change is in
 
 | Folder | What's in it |
 |---|---|
-| `hoard/` | The app, in Python: store readers (`library.py`), downloads (`downloader.py`, `downloads.py`), the local server (`server.py`), sign-ins (`browser.py`), the desktop app (`app.py`), and the safety rules they share (`safety.py`, `egress.py`) |
-| `hoard/web/` | The two pages, Library and Downloads, each one HTML file with one inline script, and their fonts |
+| `hoard/` | The Python app: store adapters (`stores/`), library and downloads, private metadata (`storage.py`: JSON files; SQLite held back behind a switch), background work (`scheduler.py`), HTTP boundary (`server.py`) and routes (`api/`), desktop window (`app.py`), and safety rules (`safety.py`, `egress.py`) |
+| `hoard/web/` | One Library/Downloads shell, shared product components and view modules, served as one inline script; fonts and the compiled Look inside trial |
+| `ui/` | Svelte sources for the bounded Look inside trial; `scripts/build_ui.mjs` compiles the checked-in bundle |
 | `Packages/soloflighter.hoard/` | Hoard for Unity. `Editor/Core` is plain C# with no Unity references, so it can be tested without Unity |
 | `tests/` | Every test (see below) |
 | `scripts/` | `build_release.py` (the source zip) and `build_vpm.py` (the Unity package) |
@@ -33,7 +34,9 @@ hash-checked, then starts Hoard. `Hoard.bat sync`, `./run.sh verify` and so on r
 ## Tests
 
 ```
-python -m unittest discover -s tests -v
+npm ci --ignore-scripts
+node scripts/build_ui.mjs --check
+python scripts/test_suite.py --seed 315 --repeat 2
 ```
 
 - They need the packages in `requirements.txt`, but no network, no store accounts and no real data: stand-in
@@ -41,13 +44,19 @@ python -m unittest discover -s tests -v
 - The browser tests (`test_pages.py`, `test_readers.py`) need Playwright's Chromium:
   `python -m playwright install chromium`.
 - The Unity core tests need Mono (`mono-mcs` and `mono-runtime` on Debian and Ubuntu).
-- The share server's tests (`share/worker.test.mjs`, and `test_shortlinks.py`, which runs Hoard against the real
-  Worker on your computer) need Node.js 20 or newer.
+- JavaScript parsing, the Svelte build check and share server tests need Node.js 22 or newer and the locked
+  development dependencies from `npm ci`. Running the Python app requires neither Node nor npm.
 - Without those, their tests are skipped. GitHub Actions has both, and the **Check** workflow runs everything on
   Ubuntu and Windows for every pull request and every push to `main`, then builds the zips, the Unity package and
   the Windows app, the Mac app and its `.pkg`, and the Flatpak, and runs each app's self-test.
 
 Each security test names the review finding it guards.
+Tests inherit `tests.isolation.IsolatedTestCase`, whose fixture owns and restores its app-data home and path
+aliases. CI balances whole modules across six shards per OS, runs each twice in the same interpreter with
+different shuffle seeds, and collects JSON results. Use `--shard 1/6` to reproduce a shard and `--summary`
+to save timings; ordinary unittest discovery still works. See
+[the roadmap record](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/ROADMAP-315.md)
+for the implementation and desktop measurements still outstanding.
 
 ## Rules that keep Hoard safe
 
@@ -62,11 +71,13 @@ Tests enforce most of these, so a change that breaks one fails its check.
   `keyed()`. Don't call `fetch()` directly.
 - **Pages have one inline script and no inline event handlers.** The Content-Security-Policy allows the script
   by its hash, which is worked out as the page is served.
-- **Store text is escaped** (`esc()`) and store links pass `safeUrl()` and `storeUrl()` in the page, as well as
+- **New UI uses text nodes and DOM attributes.** Older sections escape text with `esc()`; store links pass `safeUrl()` and `storeUrl()` in the page, as well as
   `safe_url()` and `store_link()` in Python.
-- **Files are written with `write_file_safely`**, and records Hoard keeps are sealed.
-- **Shared code stays identical:** the two pages' tags and settings blocks match, and each piece of security
-  code is defined exactly once.
+- **Private documents go through `hoard/storage.py`** (`read_document`, `write_document`): JSON files written with
+  `write_file_safely`, as public files are. Its SQLite database is held back behind `HOARD_METADATA=sqlite`
+  (docs/STORAGE.md).
+- **Shared code has one owner:** the shell mounts common windows once, both views use the same product
+  components, and each piece of security code is defined exactly once.
 - **Dependencies are hash-locked,** and workflows pin every action to a commit.
 - **No invisible formatting characters** anywhere in the project, docs and wiki included.
 

@@ -1,6 +1,6 @@
 """Wishlists (issue #158; hoard/wishlists.py, kept as sets of the kind "wishlist" in hoard/sets.py): read from the
 stores' own lists, or from pages saved from your own browser, each product with its price, and a price that changed
-shown with what it was. The saved pages in tests/data/wishlists are made up, shaped like each store's."""
+shown with what it was. The saved pages in tests/data/stores are made up, shaped like each store's."""
 import contextlib
 import json
 import os
@@ -8,10 +8,10 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import library, sets, wishlists
 from hoard.tags import tag_key
@@ -21,14 +21,14 @@ try:
 except ImportError:
     BROWSER = False
 
-PAGES = Path(__file__).parent / "data" / "wishlists"
+PAGES = Path(__file__).parent / "data" / "stores"
 
 
 def saved(*names):
-    return [(n, (PAGES / n).read_text("utf-8")) for n in names]
+    return [(n, (PAGES / n.split("-")[0].split(".")[0] / ("wishlist" + n[len(n.split("-")[0].split(".")[0]):])).read_text("utf-8")) for n in names]
 
 
-class Prices(unittest.TestCase):
+class Prices(IsolatedTestCase):
     def test_as_the_stores_show_them(self):
         for text, amount, currency in (("1,000 JPY", 1000, "JPY"), ("15.00 - 50.00 USD", 15, "USD"), ("$22.46+", 22.46, "USD"),
                                        ("¥1,200", 1200, "JPY"), ("〜 800円", 800, "JPY"), ("€9.99", 9.99, "EUR"), ("Free", 0, "")):
@@ -50,7 +50,7 @@ def product(name, price, store="booth", **more):
             "price": wishlists.parse_price(price), **more}
 
 
-class Kept(unittest.TestCase):
+class Kept(IsolatedTestCase):
     def setUp(self):
         self.store = sets.SetStore(Path(tempfile.mkdtemp()) / "sets.json")
 
@@ -109,7 +109,7 @@ class Kept(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class JinxxyElsewhere(unittest.TestCase):
+class JinxxyElsewhere(IsolatedTestCase):
     """A Jinxxy list can send you to a product on a site that isn't one of the stores: it keeps that page as its link,
     instead of showing No store link; one on a store Hoard knows is that store's, as before."""
 
@@ -142,7 +142,7 @@ class JinxxyElsewhere(unittest.TestCase):
         self.assertNotIn("ko-fi", json.dumps(sets.from_code(code)))
 
 
-class SavedPages(unittest.TestCase):
+class SavedPages(IsolatedTestCase):
     def test_each_stores_page(self):
         got = {r["filename"]: r for r in wishlists.from_saved_pages(saved("booth.html", "gumroad.html", "jinxxy-likes.html", "payhip.html"))}
         (booth,) = got["booth.html"]["lists"]
@@ -248,7 +248,7 @@ class SavedPages(unittest.TestCase):
         self.assertEqual([p["name"] for p in both["products"]], ["A", "B", "C"])
 
 
-class BoothLinks(unittest.TestCase):
+class BoothLinks(IsolatedTestCase):
     def test_an_items_english_page(self):
         """A Booth item's link that names no language (booth.pm/items/<id>, as 4.4.0 and the 5.0 betas kept a loved
         item's) doesn't open the item for everyone: it's its English page, kept, shared and shown. One that names
@@ -266,7 +266,7 @@ class BoothLinks(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class BoothPages(unittest.TestCase):
+class BoothPages(IsolatedTestCase):
     """Booth's loved items, 20 to a page: its page numbers are drawn by its script (an address with ?page=2 shows the
     first page again, so Hoard read only the first 20), and Hoard turns the pages with Booth's own arrow."""
     PAGE = """<html><body><main>
@@ -320,7 +320,7 @@ draw();
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class InHoard(unittest.TestCase):
+class InHoard(IsolatedTestCase):
     def setUp(self):
         from hoard import config, library, server
         tmp = Path(tempfile.mkdtemp())
@@ -364,7 +364,7 @@ class InHoard(unittest.TestCase):
         boots = next(i for i in wish["items"] if i["name"] == "Mochi Boots")
         self.assertTrue(boots["owned"], "yours already: in your library")
         # read again, cheaper: what it was shows
-        page = (PAGES / "booth.html").read_text("utf-8").replace("1,500 JPY", "1,200 JPY")
+        page = saved("booth.html")[0][1].replace("1,500 JPY", "1,200 JPY")
         self.api("/api/wishlists/import", {"files": [{"filename": "booth.html", "content": page}]})
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
@@ -630,6 +630,74 @@ class InHoard(unittest.TestCase):
         self.assertIn("1 wishlist read, except Booth's", done["message"])
         self.assertIn("Not signed in to Booth", done["message"])
         self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"])
+
+    def test_quick_refresh_of_one_wishlist(self):
+        """Issue #331: Quick refresh on a wishlist's page reads the start of that list alone (the reader is told which,
+        and that it's quick), keeps what it didn't reach, and leaves the store's other lists as they were; a list
+        that isn't on the store any more says so."""
+        from hoard import jobs
+        sets.SetStore().put_wishlists([
+            {"store": "gumroad", "list": "Winter", "url": "u", "products": [product("Snow Cap", "12.50 USD", "gumroad"),
+                                                                         product("Scarf", "8 USD", "gumroad")]},
+            {"store": "gumroad", "list": "Summer", "url": "v", "products": [product("Sun Hat", "9 USD", "gumroad")]}])
+        told = []
+
+        def reader(ctx, cfg, progress):
+            told.append({k: cfg.get(k) for k in ("_quick", "_only_list")})
+            got = [{"store": "gumroad", "list": "Winter", "url": "u", "partial": True,
+                    "products": [product("Snow Boots", "20 USD", "gumroad")]},
+                   {"store": "gumroad", "list": "Summer", "url": "v", "products": []}]
+            return [x for x in got if wishlists.wanted(cfg, x["list"])]
+
+        class Ctx:
+            def close(self):
+                pass
+
+        def run(body):
+            n = len(self.srv.jobs.history)
+            answer = self.api("/api/wishlists/read", body)
+            if answer.get("status", 200) >= 400:
+                return answer
+            for _ in range(200):
+                if not self.srv.jobs.state["running"] and len(self.srv.jobs.history) > n:
+                    break
+                time.sleep(0.05)
+            return self.srv.jobs.history[-1]   # (the newest)
+        self.assertEqual(run({"stores": ["gumroad", "booth"], "list": "Winter"})["status"], 400, "one store's list")
+        self.assertEqual(run({"stores": ["gumroad"], "list": 5})["status"], 400)
+        with mock.patch.object(jobs, "reachable", lambda s: True), mock.patch.object(jobs, "launch", lambda *a: Ctx()), \
+                mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.dict(wishlists.READERS, {"gumroad": reader}):
+            done = run({"stores": ["gumroad"], "list": "Winter"})
+            self.assertEqual((done["task"], done["outcome"]), ("quick-wishlist", "done"))
+            self.assertEqual(done["label"], 'Quick refresh: Gumroad ("Winter")')
+            self.assertEqual(told, [{"_quick": True, "_only_list": "Winter"}])
+            lists = {s["name"]: [s["products"][k]["name"] for k in s["items"]] for s in sets.SetStore().load()["sets"]}
+            self.assertEqual(lists, {"Gumroad: Winter": ["Snow Boots", "Snow Cap", "Scarf"], "Gumroad: Summer": ["Sun Hat"]},
+                             "the start read, the rest kept; the other list as it was")
+            gone = run({"stores": ["gumroad"], "list": "Autumn"})
+            self.assertEqual(gone["outcome"], "failed")
+            self.assertIn("\u201cAutumn\u201d wasn't found among your Gumroad wishlists", gone["message"])
+
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_quick_refresh_on_a_wishlists_page(self):
+        """Issue #331: a wishlist's page offers Quick refresh beside Read it again: that one list, from its store."""
+        sets.SetStore().put_wishlists([{"store": "gumroad", "list": "Winter", "url": "u",
+                                        "products": [product("Snow Cap", "12.50 USD", "gumroad")]}])
+        started = []
+        from playwright.sync_api import sync_playwright
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append((task, stores, kw)) or "started"), \
+                sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")
+            page.locator(".settile", has_text="Gumroad: Winter").click()
+            page.click("[data-setx=quickwish]")
+            page.locator(".toast", has_text="Refreshing the start of this wishlist").wait_for()
+            browser.close()
+        self.assertEqual(started, [("quick-wishlist", ["gumroad"], {"only": "Winter"})])
 
     def test_stopped_part_way_keeps_the_lists_read(self):
         """Stop or Force stop while a store's lists were being read (their pictures, say, which wait between pages)

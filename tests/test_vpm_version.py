@@ -4,6 +4,7 @@ The range cases are node-semver's (Copyright (c) Isaac Z. Schlueter and Contribu
 (MIT) adopted them, with its additions: (prerelease allowed?, range, version).
 """
 import unittest
+from tests.isolation import IsolatedTestCase
 
 from hoard.vpm.version import (ALLOW, DENY, MINIMUM, DependencyRange, UnityVersion, Version, VersionError,
                                VersionRange, partial_unity)
@@ -207,7 +208,7 @@ NO_MATCH = [
 ]
 
 
-class Ranges(unittest.TestCase):
+class Ranges(IsolatedTestCase):
     def check(self, cases, expect):
         for pre, text, version in cases:
             with self.subTest(range=text, version=version):
@@ -246,7 +247,7 @@ class Ranges(unittest.TestCase):
         self.assertFalse(r.matches(Version.parse("3.5.0")))
 
 
-class Versions(unittest.TestCase):
+class Versions(IsolatedTestCase):
     def test_order(self):
         for greater, lesser in [("0.0.0", "0.0.0-foo"), ("0.0.1", "0.0.0"), ("1.0.0", "0.9.9"), ("0.10.0", "0.9.0"),
                                 ("1.2.3", "1.2.3-asdf"), ("1.2.3", "1.2.3-4"), ("1.2.3", "1.2.3-4-foo"),
@@ -279,7 +280,7 @@ class Versions(unittest.TestCase):
         self.assertTrue(DependencyRange.parse("^1.0.0").matches(Version.parse("1.1.0-beta")))
 
 
-class UnityVersions(unittest.TestCase):
+class UnityVersions(IsolatedTestCase):
     def test_parse(self):
         for text, parts in [("5.6.6f1", (5, 6, 6, "f", 1, None)), ("2019.1.0a1", (2019, 1, 0, "a", 1, None)),
                             ("2019.4.31f1", (2019, 4, 31, "f", 1, None)), ("2023.3.6c1", (2023, 3, 6, "c", 1, None)),

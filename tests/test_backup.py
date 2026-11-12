@@ -3,10 +3,11 @@ import json
 import os
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import backup, config, library, server
 from hoard.marks import MarkStore
@@ -17,7 +18,7 @@ from tests.browsing import menu
 RUSK = tag_key("Booth", "Rusk")
 
 
-class RoundTrip(unittest.TestCase):
+class RoundTrip(IsolatedTestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
@@ -75,7 +76,7 @@ class RoundTrip(unittest.TestCase):
     def test_recovery_words_that_are_other_names_too(self):
         """A recovery word can be a theme's name ("midnight", "frost"): the settings name it, the marks don't."""
         from hoard import marks
-        MarkStore().path.unlink()   # as setUp leaves things, with a phrase made of these words
+        storage.remove(MarkStore().path)   # as setUp leaves things, with a phrase made of these words
         words = iter(["midnight", "frost", "abandon", "ability", "able", "about"])
         with mock.patch.object(marks.secrets, "choice", lambda seq: next(words)):
             self.phrase = MarkStore().set_pin("2468")
@@ -233,13 +234,18 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Page(unittest.TestCase):
+class Page(IsolatedTestCase):
     def test_make_and_restore_from_settings(self):
         import threading
         from playwright.sync_api import sync_playwright
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, tmp, True)
-        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data"), "HOME": str(tmp / "home")})
+        # (Playwright looks for its browser under HOME on Linux and the Mac: say where it is before HOME moves)
+        import sys
+        browsers = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or str(
+            Path.home() / ("Library/Caches" if sys.platform == "darwin" else ".cache") / "ms-playwright")
+        env = mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(tmp / "data"), "HOME": str(tmp / "home"),
+                                           **({} if os.name == "nt" else {"PLAYWRIGHT_BROWSERS_PATH": browsers})})
         env.start()
         self.addCleanup(env.stop)
         (tmp / "home" / "Documents").mkdir(parents=True)

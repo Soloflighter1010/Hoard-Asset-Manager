@@ -7,6 +7,8 @@ checked again. Updating a product is an ordinary download of just that product.
 """
 from __future__ import annotations
 
+from . import storage
+
 import json
 import threading
 from pathlib import Path
@@ -14,11 +16,12 @@ from pathlib import Path
 from .common import now_iso
 from .library import DOWNLOADABLE
 from .paths import data_dir
-from .safety import DataFileError, clean_text, read_json_file, write_file_safely
+from .safety import DataFileError, clean_text
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 MAX_PRODUCTS = 20000
 MAX_FILES = 200
-_lock = threading.Lock()
+_lock = storage.metadata_lock
 
 
 def updates_file() -> Path:
@@ -35,12 +38,12 @@ class AssetUpdates:
     @staticmethod
     def empty() -> dict:
         """Nothing checked yet."""
-        return {"checked": {}, "items": {}}
+        return {"checked": {}, "items": {}, "failed": {}}
 
     def load(self) -> dict:
         """What was found, cleaned; empty when there's no file or it can't be read (it's only ever a hint)."""
         try:
-            raw = read_json_file(self.path, 32 * 1024 * 1024) if self.path.exists() else {}
+            raw = read_json_file(self.path, 32 * 1024 * 1024) if storage.exists(self.path) else {}
         except (DataFileError, OSError, ValueError, RecursionError):
             raw = {}
         return self.sanitize(raw)
@@ -62,6 +65,11 @@ class AssetUpdates:
             if files:
                 out["items"][key] = {"store": e["store"], "name": clean_text(e.get("name"), 300) or "",
                                      "creator": clean_text(e.get("creator"), 200) or "", "files": files}
+        failed = raw.get("failed") if isinstance(raw.get("failed"), dict) else {}
+        for key, e in list(failed.items())[:MAX_PRODUCTS]:   # (issue #334: a download of it that didn't finish)
+            if isinstance(key, str) and 0 < len(key) <= 400 and isinstance(e, dict) and e.get("store") in DOWNLOADABLE:
+                out["failed"][key] = {"store": e["store"], "why": clean_text(e.get("why"), 300) or "",
+                                      "at": clean_text(e.get("at"), 40) or ""}
         return out
 
     def save(self, data: dict) -> None:
@@ -87,13 +95,33 @@ class AssetUpdates:
             self.save(data)
             return len(data["items"])
 
-    def after_download(self, got: set, failed: list[str], got_files: set | None = None) -> None:
+    def forget_failed(self, keys) -> None:
+        """Products whose downloaded files you deleted: a download of theirs that didn't finish (issue #334) isn't
+        something wrong with them any more, so their tiles' error mark for it goes."""
+        with _lock:
+            data = self.load()
+            gone = [k for k in keys if k in data["failed"]]
+            for k in gone:
+                del data["failed"][k]
+            if gone:
+                self.save(data)
+
+    def after_download(self, got: set, failed: list[str], got_files: set | None = None,
+                       failed_keys: dict | None = None) -> None:
         """Take what came off the list. With got_files ((tag_key, file) saved), each update's files that came are
         taken off it, and the update once none are left: a file left out when choosing, or not reached because the
-        run stopped, stays an update. Without it (older callers), a product with files saved and none failing is."""
+        run stopped, stays an update. Without it (older callers), a product with files saved and none failing is.
+        failed_keys (downloader.Report's): the products a file of which couldn't be downloaded, kept with why until
+        a download of them saves a file and fails none (issue #334)."""
         with _lock:
             data = self.load()
             changed = False
+            for k in [k for k in data["failed"] if k in got and k not in (failed_keys or {})]:
+                del data["failed"][k]
+                changed = True
+            for k, e in (failed_keys or {}).items():
+                data["failed"][k] = {**e, "at": now_iso()}
+                changed = True
             for k, e in list(data["items"].items()):
                 if k not in got:
                     continue

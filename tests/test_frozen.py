@@ -11,12 +11,12 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import browser, common, config, downloader, jobs, library  # noqa: E402
@@ -57,7 +57,7 @@ def _jinxxy(route):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ABrowserThatCloses(unittest.TestCase):
+class ABrowserThatCloses(IsolatedTestCase):
     """Jinxxy's tab, or its whole browser, closing by itself: the product it was on is tried again in a new one,
     and the rest carry on."""
 
@@ -154,7 +154,7 @@ class StraightToTheItem(ABrowserThatCloses):
     test_one_that_keeps_closing_is_left_for_next_time = None
 
 
-class ChoosingProducts(unittest.TestCase):
+class ChoosingProducts(IsolatedTestCase):
     """Which products a download of chosen ones can go straight to, from the library."""
     LIB = [
         {"key": "jinxxy:1", "store": "jinxxy", "name": "Tail Ball", "creator": "Fr Boi", "url": "https://jinxxy.com/my/inventory/1"},
@@ -227,7 +227,7 @@ class ChoosingProducts(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class ABrowserThatStopsAnswering(unittest.TestCase):
+class ABrowserThatStopsAnswering(IsolatedTestCase):
 
     def test_ending_the_browser_frees_what_waits_on_it(self):
         """A script that never finishes stands in for a browser that stopped answering: the call waiting on it has
@@ -267,7 +267,7 @@ class ABrowserThatStopsAnswering(unittest.TestCase):
         self.assertEqual(browser._driver_pid(ctx), 4321)
 
 
-class StuckJobs(unittest.TestCase):
+class StuckJobs(IsolatedTestCase):
     """What Stop does when a job doesn't stop, and what a job that goes quiet leaves in hoard.log."""
 
     def setUp(self):
@@ -331,9 +331,8 @@ class StuckJobs(unittest.TestCase):
             self.job._set(task="download", message="opening Item 222")
             release.wait(20)
         out = io.StringIO()
-        real_watch = self.job._watch
         with mock.patch.object(self.job, "_download", quiet), mock.patch.object(jobs, "STUCK_AFTER", 0.5), \
-                mock.patch.object(self.job, "_watch", lambda job_id: real_watch(job_id, every=0.1)), \
+                mock.patch.object(jobs, "WATCH_INTERVAL", 0.1), \
                 contextlib.redirect_stdout(out):
             self.job.start("download", ["jinxxy"])
             self.assertTrue(self.run_until(lambda: "No progress" in out.getvalue()))

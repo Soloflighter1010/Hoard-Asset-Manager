@@ -1,5 +1,5 @@
 {
- "_about": "Everything Hoard uses or ships, with its license (issue #227): shown in Settings, Acknowledgements, and on the website (scripts/build_acknowledgements.py). \"in\": all (every copy of Hoard), windows, mac, linux (the Flatpak), build (only to build the apps, not in them). tests/test_credits.py checks every locked package is here.",
+ "_about": "Everything Hoard uses or ships, with its license (issue #227): shown in Settings, Acknowledgements, and on the website (scripts/build_acknowledgements.py). \"in\": all (every copy of Hoard), windows, mac, linux (the Flatpak), build (only to build the apps, not in them). tests/test_credits.py checks every locked package is here: Python's (\"package\", requirements*.txt) and npm's (\"npm\", package-lock.json; esbuild's per-platform builds are esbuild's).",
  "groups": [
   {
    "title": "What Hoard runs on",
@@ -298,6 +298,30 @@
      "license": "MIT",
      "url": "https://github.com/trezor/python-mnemonic",
      "in": "all"
+    },
+    {
+     "name": "Svelte",
+     "license": "MIT",
+     "url": "https://svelte.dev",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt",
+     "npm": "svelte"
+    },
+    {
+     "name": "clsx",
+     "license": "MIT",
+     "url": "https://github.com/lukeed/clsx",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt",
+     "npm": "clsx"
+    },
+    {
+     "name": "esm-env",
+     "license": "MIT",
+     "url": "https://github.com/benmccann/esm-env",
+     "in": "all",
+     "text": "hoard/web/inside.LICENSE.txt",
+     "npm": "esm-env"
     }
    ]
   },
@@ -364,6 +388,125 @@
      "name": "Inno Setup (the Windows installer)",
      "license": "Inno Setup License",
      "url": "https://jrsoftware.org/isinfo.php",
+     "in": "build"
+    },
+    {
+     "name": "Acorn",
+     "license": "MIT",
+     "url": "https://github.com/acornjs/acorn",
+     "in": "build",
+     "npm": "acorn"
+    },
+    {
+     "name": "esbuild",
+     "license": "MIT",
+     "url": "https://esbuild.github.io",
+     "in": "build",
+     "npm": "esbuild"
+    },
+    {
+     "name": "Svelte's compiler: @jridgewell/gen-mapping",
+     "npm": "@jridgewell/gen-mapping",
+     "license": "MIT",
+     "url": "https://github.com/jridgewell/sourcemaps",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @jridgewell/remapping",
+     "npm": "@jridgewell/remapping",
+     "license": "MIT",
+     "url": "https://github.com/jridgewell/sourcemaps",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @jridgewell/resolve-uri",
+     "npm": "@jridgewell/resolve-uri",
+     "license": "MIT",
+     "url": "https://github.com/jridgewell/resolve-uri",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @jridgewell/sourcemap-codec",
+     "npm": "@jridgewell/sourcemap-codec",
+     "license": "MIT",
+     "url": "https://github.com/jridgewell/sourcemaps",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @jridgewell/trace-mapping",
+     "npm": "@jridgewell/trace-mapping",
+     "license": "MIT",
+     "url": "https://github.com/jridgewell/sourcemaps",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @sveltejs/acorn-typescript",
+     "npm": "@sveltejs/acorn-typescript",
+     "license": "MIT",
+     "url": "https://github.com/sveltejs/acorn-typescript",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: @types/estree",
+     "npm": "@types/estree",
+     "license": "MIT",
+     "url": "https://github.com/DefinitelyTyped/DefinitelyTyped",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: aria-query",
+     "npm": "aria-query",
+     "license": "Apache-2.0",
+     "url": "https://github.com/A11yance/aria-query",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: axobject-query",
+     "npm": "axobject-query",
+     "license": "Apache-2.0",
+     "url": "https://github.com/A11yance/axobject-query",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: devalue",
+     "npm": "devalue",
+     "license": "MIT",
+     "url": "https://github.com/sveltejs/devalue",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: esrap",
+     "npm": "esrap",
+     "license": "MIT",
+     "url": "https://github.com/sveltejs/esrap",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: is-reference",
+     "npm": "is-reference",
+     "license": "MIT",
+     "url": "https://github.com/Rich-Harris/is-reference",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: locate-character",
+     "npm": "locate-character",
+     "license": "MIT",
+     "url": "https://gitlab.com/Rich-Harris/locate-character",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: magic-string",
+     "npm": "magic-string",
+     "license": "MIT",
+     "url": "https://github.com/Rich-Harris/magic-string",
+     "in": "build"
+    },
+    {
+     "name": "Svelte's compiler: zimmerframe",
+     "npm": "zimmerframe",
+     "license": "MIT",
+     "url": "https://github.com/sveltejs/zimmerframe",
      "in": "build"
     }
    ]

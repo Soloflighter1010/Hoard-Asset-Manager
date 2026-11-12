@@ -258,7 +258,9 @@ def read_unitypackage(stream, on_preview=None, refs: set | None = None, on_asset
     try:
         gz = gzip.GzipFile(fileobj=stream, mode="rb")
         long_name, unpacked = None, 0
+        from .scheduler import checkpoint
         for count in range(MAX_ENTRIES):
+            checkpoint()   # maintenance yields between archive members to user work and Pause/Stop
             header = gz.read(512)
             if not header:
                 if count == 0:

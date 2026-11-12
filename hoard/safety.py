@@ -93,11 +93,21 @@ def chosen_picture(value, limit: int = MAX_CHOSEN_PICTURE) -> tuple[bytes, str]:
 
 def read_json_file(path: Path, max_bytes: int = MAX_DATA_FILE):
     """Read a JSON data file defensively, raising DataFileError when it's too big or damaged."""
+    return parse_json_data(path, read_data_bytes(path, max_bytes))
+
+
+def read_data_bytes(path: Path, max_bytes: int = MAX_DATA_FILE) -> bytes:
+    """A data file's bytes, raising DataFileError when it's too big (read_json_file's first half)."""
     size = path.stat().st_size
     if size > max_bytes:
         raise DataFileError(f"{path.name} is unexpectedly large ({size // 1048576} MB)")
+    return path.read_bytes()
+
+
+def parse_json_data(path: Path, raw: bytes):
+    """A data file's bytes as JSON, raising DataFileError when they're damaged (read_json_file's second half)."""
     try:
-        return json.loads(path.read_text("utf-8"))
+        return json.loads(raw.decode("utf-8"))
     except (ValueError, RecursionError, UnicodeDecodeError) as e:
         raise DataFileError(f"{path.name} is damaged ({e.__class__.__name__})") from None
 
@@ -190,33 +200,71 @@ def _hoard_folder() -> Path:
     return data_dir()
 
 
+_key_lock = threading.Lock()
+
+
 def integrity_key() -> bytes:
-    """This install's sealing key: 32 random bytes, made on first use, readable only by your account."""
+    """This install's sealing key: 32 random bytes, made on first use, readable only by your account.
+
+    Two of Hoard's threads, or Hoard and its command line, can want it first at the same moment. The key appears
+    whole or not at all (written beside its place, then linked into it), so neither reads the other's half-written
+    one and sets it aside as damaged; where a link can't be made, a file found empty is waited for instead."""
     global _integrity_key
     if _integrity_key:
         return _integrity_key
-    path = _hoard_folder() / "integrity.key"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if os.name == "posix":
-        os.chmod(path.parent, 0o700)
-    for _attempt in range(3):
+    with _key_lock:
+        if _integrity_key:
+            return _integrity_key
+        path = _hoard_folder() / "integrity.key"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            os.chmod(path.parent, 0o700)
+        for _attempt in range(3):
+            try:
+                text = path.read_text("ascii").strip()
+                for _wait in range(20):   # (another Hoard is writing it this moment)
+                    if text:
+                        break
+                    time.sleep(0.05)
+                    text = path.read_text("ascii").strip()
+                key = bytes.fromhex(text)
+                if len(key) == 32:
+                    _integrity_key = key
+                    return key
+                set_aside(path)  # not a key these tools made: keep it, and make a new one
+            except FileNotFoundError:
+                pass
+            except (ValueError, UnicodeDecodeError):
+                set_aside(path)
+            _make_key(path)
+        raise OSError(f"Couldn't read or create {path}")
+
+
+def _make_key(path: Path) -> None:
+    """A new key at path, unless one is there already (another Hoard made it a moment ago: theirs is used)."""
+    draft = path.with_name(f"{path.name}.{os.getpid()}.{secrets.token_hex(4)}.new")
+    try:
+        fd = os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(secrets.token_hex(32))
         try:
-            key = bytes.fromhex(path.read_text("ascii").strip())
-            if len(key) == 32:
-                _integrity_key = key
-                return key
-            set_aside(path)  # not a key these tools made: keep it, and make a new one
-        except FileNotFoundError:
-            pass
-        except (ValueError, UnicodeDecodeError):
-            set_aside(path)
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as fh:
-                fh.write(secrets.token_hex(32))
+            os.link(draft, path)   # there whole, or (FileExistsError) not at all
+            return
         except FileExistsError:
-            pass  # the other tool made one a moment ago: use theirs
-    raise OSError(f"Couldn't read or create {path}")
+            return
+        except OSError:
+            pass   # (a drive that can't link: made in place, below)
+    finally:
+        try:
+            os.unlink(draft)
+        except OSError:
+            pass
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(secrets.token_hex(32))
+    except FileExistsError:
+        pass
 
 
 def _canonical(obj) -> bytes:
@@ -246,6 +294,7 @@ def _path_id(path: Path) -> str:
 def _sealed_file_ids() -> set:
     """Which files this install has sealed (by a hash of their location), so a removed seal is noticed."""
     global _sealed_ids
+    from .storage import read_document as read_json_file
     if _sealed_ids is None:
         try:
             data = read_json_file(_hoard_folder() / "sealed-files.json", 4 * 1024 * 1024)
@@ -259,6 +308,7 @@ def remember_sealed(path: Path) -> None:
     """Note that this install has sealed the file at path. Nothing is ever forgotten: a forgotten file whose seal
     was then removed would pass as one written by an older version. Only files that can't be rebuilt are noted
     (each store's _manifest.json and the library list), a handful per downloads folder, so the list stays small."""
+    from .storage import write_document as write_file_safely
     ids = _sealed_file_ids()
     pid = _path_id(path)
     if pid not in ids:

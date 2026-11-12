@@ -37,7 +37,7 @@ the bottom.
 - **The same, but faster, or on a Mac or Linux?** ALCOM does the Creator Companion's job with the same settings, so
   you can switch back and forth.
 - **Want to sort what you've downloaded by hand, with notes and the avatars it fits?** KonoAsset is made for that.
-- **Switching from KonoAsset to Hoard?** **Bring in from KonoAsset...**, in Hoard's Menu, brings in its library
+- **Switching from KonoAsset to Hoard?** **Bring in from KonoAsset...**, in Hoard's Menu or in Settings, brings in its library
   (5.2.0 beta 5): matched to your Hoard library by the BOOTH item, the rest as Local products left where they are,
   with their tags and memos. See [Your Own Packages](Your-Own-Packages#from-konoasset).
 - **Bought from several stores, and want it all in one place, downloaded and kept up to date?** That's Hoard. It

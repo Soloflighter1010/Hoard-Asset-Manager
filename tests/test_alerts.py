@@ -13,6 +13,7 @@ import threading
 import time
 import types
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
@@ -28,8 +29,11 @@ class FakeService:
     def __init__(self, url):
         self.url, self.service_name = url, url.split("://")[0].title()
 
+    attachment_support = True
+
     def notify(self, body, title, body_format=None, attach=None):
         FakeApprise.sent.append(([self.url], title, body))
+        FakeApprise.files.append((self.url, attach, getattr(getattr(self, "asset", None), "image_url_mask", None)))
         if not FakeApprise.accept:
             logging.getLogger("apprise").warning(f"Failed to send {self.service_name} notification to {self.url}: "
                                                  "Unauthorized - error=401.")
@@ -39,15 +43,17 @@ class FakeService:
 class FakeApprise:
     """A stand-in for the apprise package: what was added and sent, and what it answers."""
     sent: list = []
+    files: list = []   # (each message's address, the file sent with it, and the picture its service shows)
     accept = True
 
     def __init__(self, asset=None):
         self.added, self.asset = [], asset
 
-    def add(self, url):
+    def add(self, url, asset=None):
         ok = "://" in url and not url.startswith("nope://")
         if ok:
             self.added.append(FakeService(url))
+            self.added[-1].asset = asset or self.asset
         return ok
 
     def __iter__(self):
@@ -69,7 +75,7 @@ def fake_apprise() -> types.ModuleType:
     return fake
 
 
-class Alerts(unittest.TestCase):
+class Alerts(IsolatedTestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -185,6 +191,54 @@ class Alerts(unittest.TestCase):
         self.assertEqual(alerts.task_text({"task": "check-updates", "outcome": "done", "report": {"updates": 1}}),
                          "**Check for updates**: done (1 product with updates).")
 
+    def test_every_task_says_how_many(self):
+        """Issue #342: "Add to Local: done." didn't say how many. Each task's news has its counts, and never a name."""
+        said = lambda task, report, outcome="done": alerts.task_text({"task": task, "outcome": outcome, "report": report})  # noqa: E731
+        self.assertEqual(said("add-local", {"counts": {"added": 7, "already": 1, "left_out": 0}}),
+                         "**Add to Local**: done (7 added, 1 already there).")
+        self.assertEqual(said("add-local", {"counts": {"added": 1, "files": 38}}), "**Add to Local**: done (1 added, 38 files).")
+        self.assertEqual(said("remove-local", {"counts": {"taken_out": 1}}), "**Take out of Local**: done (1 taken out).")
+        self.assertEqual(said("delete-files", {"counts": {"deleted": 12}}), "**Delete downloaded files**: done (12 files deleted).")
+        self.assertEqual(said("refresh", {"counts": {"read": 120, "new": 0}}), "**Refresh**: done (120 products read, 0 new).")
+        self.assertEqual(said("wishlists", {"counts": {"lists": 3, "cheaper": 2}}),
+                         "**Read wishlists**: done (3 wishlists read, 2 cheaper than before).")
+        self.assertEqual(said("konoasset", {"counts": {"matched": 4, "local": 9, "notes": 2, "left_out": 1}}),
+                         "**Bring in from KonoAsset**: done (4 matched to your library, 9 Local products, 2 notes, 1 left out).")
+        self.assertEqual(said("download", {"new_assets": 0, "updated": 0, "failed": 0}), "**Download**: done (nothing new).")
+        self.assertEqual(said("sync", {"new_assets": 2, "updated": 0, "failed": 0, "counts": {"read": 50, "new": 2}}),
+                         "**Sync**: done (50 products read, 2 new).", "what a sync read, then what it downloaded: new, once")
+        self.assertEqual(said("add-local", {"counts": {"added": True, "files": "many", "moved": -1}}), "**Add to Local**: done.",
+                         "only numbers")
+        self.assertEqual(said("login", None), "**Sign in**: done.", "nothing to count: as it was")
+
+    def test_a_tasks_counts_are_kept_with_its_report(self):
+        job = jobs.Jobs(self.cfg, library.Library(self.tmp / "library.json"))
+        job._counted(added=7, already=1)
+        job._counted(left_out=2, name="Secret Product")
+        self.assertEqual(job.state["report"], {"counts": {"added": 7, "already": 1, "left_out": 2}})
+
+    def test_a_discord_embed_shows_the_picture_itself(self):
+        """Issue #330: on Discord a product's picture was posted as a file under the embed. The embed shows it itself,
+        from the store, and is sent no file; a service that takes files still gets the file."""
+        FakeApprise.files.clear()
+        fetched = []
+        picture = lambda: (fetched.append(1), (b"png", "image/png"))[1]   # noqa: E731
+        where = "https://booth.pximg.net/c/300x300/fox.jpg"
+        with mock.patch.dict(sys.modules, {"apprise": fake_apprise()}), mock.patch.object(alerts, "log"):
+            alerts.deliver(["discord://1234/token"], "hi", picture=picture, picture_url=where)
+            self.assertEqual(FakeApprise.files, [("discord://1234/token?format=markdown&footer=yes&image=yes", None, where)])
+            self.assertEqual(fetched, [], "not fetched for nothing")
+            FakeApprise.files.clear()
+            alerts.deliver(["discord://1234/token", "tgram://bot/chat"], "hi", picture=picture, picture_url=where)
+            (_, to_discord, shown), (_, to_telegram, icon) = FakeApprise.files
+            self.assertIsNone(to_discord)
+            self.assertEqual(shown, where)
+            self.assertTrue(str(to_telegram).endswith(".png"), "a service that takes a file gets the file")
+            self.assertEqual(icon, alerts.HOARD_ICON)
+            FakeApprise.files.clear()
+            alerts.deliver(["discord://1234/token"], "hi", picture=picture, picture_url="http://example.com/{TYPE}.png")
+            self.assertEqual(FakeApprise.files[0][2], alerts.HOARD_ICON, "only an https address, as it is")
+
     def test_tasks_pass_their_news_on(self):
         job = jobs.Jobs(self.cfg, library.Library(self.tmp / "library.json"))
         news = []
@@ -223,7 +277,7 @@ class Alerts(unittest.TestCase):
         self.assertEqual(news, [("checked", {"changed": 1, "missing": 2}), ("checked", {"changed": 0, "missing": 1})])
 
 
-class AlertsInHoard(unittest.TestCase):
+class AlertsInHoard(IsolatedTestCase):
     """The server's side: the addresses kept through /api/apprise (and never sent back), a test sent to them, what's
     sent chosen in Settings, and the tasks' news turned into what's sent."""
 
@@ -234,7 +288,7 @@ class AlertsInHoard(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         for patch in (mock.patch.dict(os.environ, {"HOARD_DATA_DIR": str(self.tmp / "data")}),
                       mock.patch.object(server, "save_config"), mock.patch.object(alerts, "available", lambda: True),
-                      mock.patch.object(alerts, "_kept", None)):
+                      mock.patch.object(alerts, "_kept", None), mock.patch.object(alerts, "_described", None)):
             patch.start()
             self.addCleanup(patch.stop)
         fake = fake_apprise()
@@ -321,7 +375,7 @@ class AlertsInHoard(unittest.TestCase):
         self.assertEqual(FakeApprise.sent, [], "tasks aren't ticked: nothing sent")
 
 
-class Addresses(unittest.TestCase):
+class Addresses(IsolatedTestCase):
     """Issues #285, #287: what Settings is shown of an address (never a secret), and how one is sent to."""
 
     def test_described_without_secrets(self):
@@ -360,7 +414,7 @@ class Addresses(unittest.TestCase):
 
 
 @unittest.skipUnless(importlib.util.find_spec("apprise"), "Apprise isn't installed here")
-class RealApprise(unittest.TestCase):
+class RealApprise(IsolatedTestCase):
     """Issue #237: Send a test, through Apprise itself, reaches a service (one on this computer, answering as a webhook
     would), and a service that refuses it says why, its address never in what's said."""
 
@@ -428,6 +482,18 @@ class RealApprise(unittest.TestCase):
         self.assertEqual(embed["author"]["name"], "Hoard")
         self.assertIn("hoard-256.png", embed["thumbnail"]["url"])
         self.assertEqual(heard[0]["title"], "Cheaper on your wishlists")
+        # issue #330: with a product's picture, the embed shows it itself, and no file is posted under the embed
+        posted.clear()
+        where = "https://booth.pximg.net/c/300x300/fox.jpg"
+        with mock.patch("requests.post", post), mock.patch.object(alerts, "log"):
+            self.assertIsNone(alerts.deliver(["discord://123456789012345678/WebhookToken_abc"], body, title="Cheaper on your wishlists",
+                                             event="prices", link=link, picture=(b"\x89PNG\r\n", "image/png"), picture_url=where))
+        self.assertEqual(len(posted), 1, "the embed alone: nothing posted beside it")
+        payload = posted[0][1] if isinstance(posted[0][1], dict) else json.loads(posted[0][1])
+        (embed,) = payload["embeds"]
+        self.assertEqual(embed["thumbnail"]["url"], where)
+        self.assertIn("hoard-256.png", embed["footer"]["icon_url"], "Hoard's icon stays in the footer")
+        self.assertIn("Fox Ears", embed["description"])
         self.assertIn("Fox Ears", heard[0]["message"], "a webhook gets it too (as Markdown, which it takes)")
         # a service that shows only plain text gets it as text
         sent = []

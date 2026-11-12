@@ -7,6 +7,7 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -20,7 +21,7 @@ sys.path.insert(0, str(REPO))
 from hoard import config, diagnostics, library, safety, server  # noqa: E402
 
 
-class Sanitizing(unittest.TestCase):
+class Sanitizing(IsolatedTestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "downloads"
@@ -292,7 +293,7 @@ class Sanitizing(unittest.TestCase):
             self.assertNotIn("windows_security", diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg)))
 
 
-class ServerExposure(unittest.TestCase):
+class ServerExposure(IsolatedTestCase):
     def test_default_export_folder_is_user_visible(self):
         expected = diagnostics.documents_dir() / "Hoard" / "Support Reports"
         self.assertEqual(diagnostics.support_report_dir(), expected)

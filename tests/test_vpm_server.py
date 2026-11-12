@@ -13,13 +13,13 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
 import zipfile
 from pathlib import Path
 import urllib.parse
 from urllib.parse import quote
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 import sys  # noqa: E402
 
@@ -52,7 +52,7 @@ def _zip(members: dict) -> bytes:
     return buf.getvalue()
 
 
-class Server(unittest.TestCase):
+class Server(IsolatedTestCase):
     @classmethod
     def setUpClass(cls):
         cls.repo = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Repo)
@@ -731,7 +731,7 @@ class Server(unittest.TestCase):
 
 
 
-class ImportsList(unittest.TestCase):
+class ImportsList(IsolatedTestCase):
     """What Hoard put in a project, written into it (#155): added to Hoard for Unity's own list, never written over."""
 
     def setUp(self):
@@ -780,7 +780,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class Addresses(unittest.TestCase):
+class Addresses(IsolatedTestCase):
     def test_the_same_repository_address(self):
         from hoard.vpm.repos import same_address
         for a, b in (("https://vcc.vrcfury.com", "https://vcc.vrcfury.com/"), ("https://VPM.nadena.dev/vpm.json", "https://vpm.nadena.dev/vpm.json"),
@@ -793,7 +793,7 @@ class Addresses(unittest.TestCase):
             self.assertFalse(same_address(a, b), (a, b))
 
 
-class Logbook(unittest.TestCase):
+class Logbook(IsolatedTestCase):
     """Projects' log on its own (hoard/vpm/logbook.py)."""
 
     def setUp(self):

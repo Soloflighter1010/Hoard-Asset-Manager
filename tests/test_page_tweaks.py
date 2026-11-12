@@ -4,10 +4,10 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, downloader, library, server
 from tests.browsing import menu
@@ -19,7 +19,7 @@ except ImportError:
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class Tweaks(unittest.TestCase):
+class Tweaks(IsolatedTestCase):
     @classmethod
     def setUpClass(cls):
         from playwright.sync_api import sync_playwright
@@ -168,11 +168,12 @@ class Tweaks(unittest.TestCase):
 
     def test_a_long_message_stays_longer(self):
         page = self.downloads()
+        # A short message goes after 2.6 seconds (waited for: a busy runner's timers can fire a little late); one of
+        # 120 characters stays 7.2, so it's still there well after a short one would have gone.
         page.evaluate("toast('A short one.')")
-        page.wait_for_timeout(2600)
-        self.assertNotIn("show", page.locator("#toast").get_attribute("class") or "")
+        page.wait_for_function("() => !document.querySelector('#toast').classList.contains('show')", timeout=6000)
         page.evaluate("toast('x'.repeat(120))")
-        page.wait_for_timeout(2600)
+        page.wait_for_timeout(3600)
         self.assertIn("show", page.locator("#toast").get_attribute("class"))
 
 

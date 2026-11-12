@@ -17,6 +17,8 @@ published from 4.3.6: antivirus engines kept flagging it) the installer, and pip
 """
 from __future__ import annotations
 
+from . import storage
+
 import hashlib
 import json
 import re
@@ -30,7 +32,8 @@ from urllib.parse import urlparse
 from . import __version__, egress
 from .paths import data_dir
 from .versions import TAG, is_beta, version_of  # noqa: F401  (one definition: hoard/versions.py)
-from .safety import DataFileError, read_json_file, write_file_safely
+from .safety import DataFileError
+from .storage import read_document as read_json_file, write_document as write_file_safely
 
 REPO = "Soloflighter1010/Hoard-Asset-Manager"
 API = "https://api.github.com"
@@ -41,6 +44,11 @@ MAX_SETUP = 400 * 1024 * 1024
 MAX_SUMS = 64 * 1024
 DAY = 24 * 60 * 60
 INSTALLER_ARGS = ("/SILENT", "/SP-", "/NORESTART", "/RELAUNCH=1")   # see packaging/hoard.iss: RelaunchAfterUpdate
+# 5.2.0 beta 5 is the last Hoard built with PyInstaller (its window pywebview's). The versions after it are built with
+# Tauri and Nuitka, and install as a new app: their installer isn't this one's, so this Hoard never installs one of
+# them itself. It says to uninstall it first (your library, settings and sign-ins aren't the program's, and stay),
+# then install the new one: Settings' Hoard updates, and a note under the bar (the page: moving_kind).
+LAST_BUILT_THIS_WAY = "5.2.0-beta.5"
 
 
 class UpdateRefused(Exception):
@@ -69,6 +77,27 @@ def installed_copy() -> bool:
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
         return False
     return any(Path(sys.executable).parent.glob("unins*.exe"))
+
+
+def built_another_way(version: str) -> bool:
+    """Is version one of the Tauri and Nuitka builds after this one (any version after LAST_BUILT_THIS_WAY)?"""
+    return newer(version, LAST_BUILT_THIS_WAY)
+
+
+def moving_kind() -> str:
+    """Which copy of the last PyInstaller build this is, for what to uninstall before the new Hoard: "windows"
+    (installed with Hoard-Setup), "mac" (the .pkg's app), "flatpak", "portable" (a copy from the old portable zip);
+    "" for pip or source, which aren't built this way and have nothing to uninstall."""
+    from .paths import in_flatpak
+    if in_flatpak():
+        return "flatpak"
+    if not getattr(sys, "frozen", False):
+        return ""
+    if sys.platform == "darwin":
+        return "mac"
+    if sys.platform == "win32":
+        return "windows" if installed_copy() else "portable"
+    return ""
 
 
 def how_to_update(version: str) -> str:
@@ -124,7 +153,9 @@ def describe(release: dict) -> dict:
     return {"version": version, "notes": str(release.get("body") or "")[:4000],
             "url": url if url.startswith(f"https://github.com/{REPO}/") else RELEASES_PAGE,
             "published": str(release.get("published_at") or "")[:40],
-            "has_installer": bool(_asset(release, SETUP_NAME.format(version)) and _asset(release, SUMS_NAME))}
+            # (one built another way is never installed by this one: it's another app, uninstall this one first)
+            "has_installer": bool(_asset(release, SETUP_NAME.format(version)) and _asset(release, SUMS_NAME))
+                             and not built_another_way(version)}
 
 
 def fetch_latest(betas: bool = False) -> dict | None:
@@ -256,7 +287,7 @@ class Updates:
         self.cfg = cfg
         self._lock = threading.Lock()
         try:
-            saved = read_json_file(_file_path()) if _file_path().is_file() else {}
+            saved = read_json_file(_file_path()) if storage.is_file(_file_path()) else {}
         except (DataFileError, OSError):
             saved = {}
         saved = saved if isinstance(saved, dict) else {}
@@ -269,6 +300,7 @@ class Updates:
         self.pending: Path | None = None   # checked and waiting to run once Hoard has stopped
         self.on_available = None   # (version): a newer Hoard was found (issue #230)
         self._told = ""
+        self.scheduler = None
 
     def view(self, can_install: bool) -> dict:
         """The update state, for the page: whether a newer version is available (a beta only with beta updates on), and
@@ -278,7 +310,10 @@ class Updates:
             latest = None   # found while beta updates were on, and they've been turned off since
         available = bool(latest and newer(latest.get("version", "")))
         return {**self.state, "latest": latest, "available": available, "can_install": bool(can_install and available
-                and latest.get("has_installer")), "auto": bool(self.cfg.get("check_for_updates")),
+                and latest.get("has_installer") and not built_another_way(latest.get("version", ""))),
+                "auto": bool(self.cfg.get("check_for_updates")),
+                # the last Hoard built this way: which copy (what to uninstall), and whether the newer one is the new way
+                "moving_kind": moving_kind(), "moving": bool(available and built_another_way(latest.get("version", ""))),
                 "releases_page": RELEASES_PAGE, "how": how_to_update(latest["version"]) if available else "",
                 "betas": bool(self.cfg.get("beta_updates")), "beta": bool(available and is_beta(latest["version"]))}
 
@@ -313,16 +348,11 @@ class Updates:
         """When Hoard starts, while automatic checks are on: a check, in the background so nothing waits for GitHub,
         then one a day for as long as Hoard stays open (it often does, in the taskbar). A check that fails (offline,
         say) is said in Hoard's log, and tried again next time."""
-        def run():
-            """Check now, then once every so often, while automatic checks are on."""
-            while True:
-                if self.due():
-                    try:
-                        self.check()
-                    except Exception as e:
-                        print(f"Couldn't check for updates ({type(e).__name__}: {e})")
-                time.sleep(every)
-        threading.Thread(target=run, daemon=True, name="update-check").start()
+        from .scheduler import Scheduler
+        if self.scheduler is None:
+            self.scheduler = Scheduler(persistent=False)
+        self.scheduler.add("hoard-update-check", "Checking Hoard updates", lambda context: self.check() if self.due() else None,
+                           every=every)
 
     def start_install(self, on_ready) -> str | None:
         """Download and check the newest release's installer in the background, then call on_ready() (which quits
@@ -338,6 +368,8 @@ class Updates:
                 release = fetch_latest(bool(self.cfg.get("beta_updates")))
                 if not release or not newer(describe(release)["version"]):
                     raise UpdateRefused("Hoard is up to date.")
+                if built_another_way(describe(release)["version"]):   # (another app: uninstall this one first)
+                    raise UpdateRefused("Hoard is built a new way from this version: uninstall this one, then install it.")
                 self.state["latest"] = describe(release)
                 path = download_installer(release, lambda m: self.state.update(message=m))
                 self.pending = path
@@ -347,7 +379,10 @@ class Updates:
                 why = str(e) if isinstance(e, (UpdateRefused, egress.UnsafeRequest)) else f"{type(e).__name__}: {e}"
                 print(f"The update didn't download ({why})")
                 self.state.update(busy=False, message="", error=f"The update didn't download: {why}"[:400])
-        threading.Thread(target=run, daemon=True, name="update").start()
+        from .scheduler import Scheduler
+        if self.scheduler is None:
+            self.scheduler = Scheduler(persistent=False)
+        self.scheduler.call("Installing Hoard update", run)
         return None
 
 

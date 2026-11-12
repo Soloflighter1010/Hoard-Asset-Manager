@@ -1,7 +1,11 @@
 """Everything you own on every store: the store readers, saved-page imports and your library list."""
 from __future__ import annotations
 
+from . import storage
+
 import email
+import contextlib
+import copy
 import hashlib
 import html
 import json
@@ -20,22 +24,15 @@ from .browser import Blocked, PageLoadError, _playwright, goto, goto_past_check,
 from .common import QUICK_ITEMS, NotLoggedIn, log, now_iso, pause, quick_done
 from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
-from .safety import DataFileError, STORE_LINK_SITES, check_seal, clean_text, fetch_public, inert_html, is_video_address, offline_page, read_json_file, remember_sealed, safe_url, seal, set_aside, store_link, write_file_safely
+from .safety import DataFileError, STORE_LINK_SITES, clean_text, fetch_public, inert_html, is_video_address, offline_page, remember_sealed, safe_url, seal, store_link
+from .storage import seal_status as check_seal, read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
 from .tags import TagMatcher, TagStore, clean_tag, product_type, tag_key
 
 
-STORES = {
-    "booth": {"label": "Booth", "login": "https://accounts.booth.pm/library", "referer": "https://booth.pm/"},
-    "gumroad": {"label": "Gumroad", "login": "https://app.gumroad.com/login", "referer": "https://gumroad.com/"},
-    "jinxxy": {"label": "Jinxxy", "login": "https://jinxxy.com/my/inventory", "referer": "https://jinxxy.com/"},
-    "payhip": {"label": "Payhip", "login": "https://payhip.com/auth/login", "referer": "https://payhip.com/"},
-    "itch": {"label": "itch.io", "login": "https://itch.io/user/settings/api-keys", "referer": "https://itch.io/"},
-}
+from .stores import adapters
 
-
-# The stores Hoard downloads from. Payhip is only read: its bot check made downloading unreliable, so Hoard lists
-# what you own there, with each product's download page, and you download from Payhip yourself.
-DOWNLOADABLE = ("booth", "gumroad", "jinxxy", "itch")
+STORES = {key: {"label": a.label, "login": a.login, "referer": a.referer} for key, a in adapters().items()}
+DOWNLOADABLE = tuple(key for key, a in adapters().items() if a.downloads)
 
 
 ADDED_TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
@@ -66,35 +63,17 @@ def item(store: str, id_, **fields) -> dict:
             del d["gift_from"]
     added = d.get("added")
     d["added"] = added if isinstance(added, str) and ADDED_TIME.fullmatch(added) else None
+    if "adult" in d:   # what its store says, once read (hoard/adult.py): for adults, or not
+        d["adult"] = d["adult"] is True
     if "store_tags" in d:   # the tags its creator gave it on its store's page (issue #206): read, even if none
         tags = d["store_tags"] if isinstance(d["store_tags"], list) else []
         d["store_tags"] = list(dict.fromkeys(c for c in (clean_tag(x) for x in tags[:60] if isinstance(x, str)) if c))[:30]
     return d
 
 
-# ----------------------------------------------------------------------------- Gumroad
-
-GR_LIBRARY = "https://app.gumroad.com/library"
-
-
-def extract_page_json(text: str):
-    """The page data Gumroad embeds in its HTML (component and props), or None. (Reading the library and
-    downloading both use this.)"""
-    found = next((inside for attrs, inside in script_tags(text) if re.search(r'\bdata-page="app"', attrs)), None)
-    if found is not None:
-        return json.loads(found)
-    m = re.search(r'\bdata-page="(\{[^"]*)"', text)
-    if m:
-        return json.loads(html.unescape(m.group(1)))
-    # Older react-on-rails markup, kept as a fallback
-    best = None
-    for attrs, inside in script_tags(text):
-        m = re.search(r'data-component-name="([^"]+)"', attrs) if "js-react-on-rails-component" in attrs else None
-        if m and (best is None or len(inside) > len(best[1])):
-            best = (m.group(1), inside)
-    if best:
-        return {"component": best[0], "props": json.loads(best[1])}
-    return None
+# Store code lives in hoard/stores; these aliases preserve the public Python API.
+from .stores import install as _install_stores
+_install_stores('library', globals())
 
 
 def script_tags(text: str):
@@ -112,861 +91,7 @@ def script_tags(text: str):
         start = text.find("<script", close + len("</script>"))
 
 
-def gumroad_cards(read_props, include_archived: bool, delay: float = 0.0, on_page=None, cfg: dict | None = None):
-    """Every purchase card in your Gumroad library, page by page (and the archived ones, when wanted). read_props
-    gets a page's query (page, sort, archived) and returns that page's props; on_page(archived, page, pages) is
-    told as each is read. Listing the library and downloading both read it this way. A quick refresh's cfg (issue
-    #300): only the start of each, the newest purchases."""
-    quick = bool((cfg or {}).get("_quick"))
-    for archived in ([False, True] if include_archived else [False]):
-        page_no, given = 1, 0
-        while True:
-            params = {"page": page_no, "sort": "purchase_date"} | ({"show_archived_only": "true"} if archived else {})
-            props = read_props(params) or {}
-            cards = props.get("results") or []
-            cards = cards[:max(0, QUICK_ITEMS - given)] if quick else cards
-            given += len(cards)
-            yield from cards
-            pages = (props.get("pagination") or {}).get("pages") or 1
-            if on_page:
-                on_page(archived, page_no, pages)
-            if page_no >= pages or quick_done(cfg or {}, page_no, given):
-                break
-            page_no += 1
-            pause(delay)
-
-
-def gumroad_page(profile_url, permalink) -> str | None:
-    """A Gumroad product's public page (<creator>.gumroad.com/l/<permalink>, or gumroad.com/l/<permalink> for a
-    creator on a domain of their own): the purchase's own link is your download page, which is never shared."""
-    if not (isinstance(permalink, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", permalink)):
-        return None
-    own = store_link("gumroad", profile_url.split("?", 1)[0].rstrip("/") + "/l/" + permalink) \
-        if isinstance(profile_url, str) else None
-    return own or store_link("gumroad", "https://gumroad.com/l/" + permalink)
-
-
-def gumroad_permalink(prod: dict):
-    """A Gumroad library card's product permalink, under whichever name the card has it, or from its own page."""
-    for k in ("permalink", "custom_permalink", "unique_permalink"):
-        if isinstance(prod.get(k), str) and prod[k]:
-            return prod[k]
-    for k in ("url", "long_url", "short_url"):
-        m = re.search(r"/l/([A-Za-z0-9_-]{1,80})/?$", prod.get(k) or "") if isinstance(prod.get(k), str) else None
-        if m:
-            return m.group(1)
-    return None
-
-
-def fetch_gumroad(ctx, cfg, progress) -> list[dict]:
-    """Every purchase in your Gumroad library, archived ones included when configured."""
-    items, seen = [], set()
-
-    def read_props(params: dict) -> dict:
-        """One page of Gumroad's library, as the page's own data; raises NotLoggedIn when Gumroad asks you to sign
-        in."""
-        r = ctx.request.get(GR_LIBRARY, params=params, timeout=60000)
-        if "/login" in urlparse(r.url).path:
-            raise NotLoggedIn()
-        if not r.ok:
-            raise RuntimeError(f"the library page answered HTTP {r.status}")
-        data = extract_page_json(r.text())
-        if not data:
-            raise RuntimeError("couldn't find the library data on the page (Gumroad may have changed its site)")
-        return data.get("props") or {}
-
-    def on_page(archived, page_no, pages):
-        """Say which page of the library is being read."""
-        progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
-    for card in gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
-                              float(cfg.get("request_delay", 0.8)), on_page, cfg):
-        prod, pur = card.get("product") or {}, card.get("purchase") or {}
-        creator = prod.get("creator") or {}
-        variants = (pur.get("variants") or "").strip() or None
-        dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
-        if dedupe in seen:  # bought twice
-            continue
-        seen.add(dedupe)
-        items.append(item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
-                          creator=creator.get("name"), creator_url=creator.get("profile_url"),
-                          thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
-                          page=gumroad_page(creator.get("profile_url"), gumroad_permalink(prod)),
-                          download_url=pur.get("download_url"), variants=variants,
-                          archived=bool(pur.get("is_archived"))))
-    return items
-
-
-# ----------------------------------------------------------------------------- Booth
-
-BOOTH_JS = r"""
-() => {
-  const idOf = h => { const m = (h || '').match(/\/items\/(\d+)/); return m ? m[1] : null; };
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const out = new Map();
-  for (const a of document.querySelectorAll('a[href*="/items/"]')) {
-    const id = idOf(a.href);
-    if (!id || out.has(id)) continue;
-    let c = a;
-    while (c.parentElement && c.parentElement !== document.body) {
-      const ids = new Set([...c.parentElement.querySelectorAll('a[href*="/items/"]')].map(x => idOf(x.href)).filter(Boolean));
-      if (ids.size > 1) break;
-      c = c.parentElement;
-    }
-    const name = [...c.querySelectorAll('a[href*="/items/"]')].map(text).sort((x, y) => y.length - x.length)[0]
-      || text(c.querySelector('.font-bold'));
-    let creator = '', creatorUrl = '';
-    for (const s of c.querySelectorAll('a[href]')) {
-      let u; try { u = new URL(s.href); } catch (e) { continue; }
-      if (/\.booth\.pm$/.test(u.hostname) && !['accounts.booth.pm', 'www.booth.pm'].includes(u.hostname)
-          && !/\/items\//.test(u.pathname) && text(s)) { creator = text(s); creatorUrl = u.origin + '/'; break; }
-    }
-    if (!creator) creator = text(c.querySelector('.text-text-gray600'));
-    const img = c.querySelector('a[href*="/items/"] img') || c.querySelector('img');
-    const thumb = img ? (img.getAttribute('data-original') || img.getAttribute('data-src') || img.currentSrc || img.src || '') : '';
-    // Files. Booth now draws each file's buttons from placeholders that carry the address in data-href
-    // (2026); older pages used plain links. "Download" is the file itself; "Open in Browser" (?browse=1) and the
-    // Booth Library Manager links (/deeplink) are other ways to the same file, so they're skipped.
-    const FILE_SEL = '[data-href*="/downloadables/"], a[href*="/downloadables/"]';
-    const addr = el => el.getAttribute('data-href') || el.getAttribute('href') || '';
-    // (however Booth names its buttons, which it has changed before: only the other routes are left out, issue #267)
-    const fileId = el => {
-      const h = addr(el), m = h.match(/\/downloadables\/(\d+)(?:[?#]|$)/), t = (el.getAttribute('data-test') || '').toLowerCase();
-      return m && !/[?&]browse=/.test(h) && !/brows|other|deeplink|manager/.test(t) ? m[1] : null;
-    };
-    const seen = new Set(), files = [];
-    for (const d of c.querySelectorAll(FILE_SEL)) {
-      const fid = fileId(d);
-      if (!fid || seen.has(fid)) continue;
-      seen.add(fid);
-      let r = d;   // the file's row: widen from its button while the row is still about this one file
-      while (r.parentElement && r.parentElement !== c) {
-        const p = r.parentElement;
-        const ids = new Set([...p.querySelectorAll(FILE_SEL)].map(x => (addr(x).match(/\/downloadables\/(\d+)/) || [])[1]).filter(Boolean));
-        if (ids.size > 1 || p.querySelector('a[href*="/items/"], img')) break;
-        r = p;
-      }
-      const row = r.cloneNode(true);
-      row.querySelectorAll('.js-download-button, button, [data-href], a[href*="/downloadables/"]').forEach(x => x.remove());
-      const name = (row.textContent || '').replace(/\s+/g, ' ').replace(/ダウンロード|Download|Open in Browser|Other Downloads/gi, '').trim();
-      files.push({ name: name || 'File', url: new URL(addr(d), location.href).href });
-    }
-    const order = c.querySelector('a[href*="/orders/"]');
-    out.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: thumb, url: a.href,
-                  order_url: order ? order.href : '', files });
-  }
-  return [...out.values()];
-}
-"""
-
-
-def booth_item(b: dict, gift: bool, library_url: str) -> dict:
-    """Turn a card read from Booth's library page into a library item."""
-    return item("booth", b["id"], name=b["name"], creator=b["creator"], creator_url=b["creator_url"],
-                thumbnail=b["thumbnail"], url=b["url"], download_url=b["order_url"] or library_url,
-                files=b["files"], gift=gift)
-
-
-def booth_cards(page, cfg: dict, delay: float, progress=lambda m: None) -> list[tuple[dict, bool, str]]:
-    """Every card in your Booth library, and your gifts and free downloads if you keep those, page by page: each as
-    (the card BOOTH_JS read, whether it's a gift, the library page it's on). Reading the library for the list and
-    for downloading both use this. Raises NotLoggedIn when Booth sends the browser to sign in."""
-    cards: dict[str, tuple[dict, bool, str]] = {}
-    sources = [("", False)] + ([("/gifts", True)] if cfg["booth"].get("include_gifts", True) else []) \
-        + ([("/free_downloads", False)] if cfg["booth"].get("include_free", True) else [])
-    quick = bool(cfg.get("_quick"))   # (a quick refresh, issue #300: the start of each)
-    for path, gift in sources:
-        base, here = f"https://accounts.booth.pm/library{path}", 0
-        for page_no in range(1, 500):
-            goto(page, f"{base}?page={page_no}")
-            page.wait_for_timeout(400)
-            u = urlparse(page.url)   # a sign-in page means the session ended, whatever its status code
-            if u.hostname != "accounts.booth.pm" or "sign_in" in u.path or has_password_field(page):
-                raise NotLoggedIn("Not signed in to Booth")
-            if not u.path.startswith("/library"):
-                break
-            new = 0
-            for b in page.evaluate(BOOTH_JS):
-                if b["id"] not in cards and not (quick and here >= QUICK_ITEMS):
-                    cards[b["id"]] = (b, gift, base)
-                    new += 1
-                    here += 1
-            progress(f"{'Gifts' if gift else 'Library'} page {page_no}, {len(cards)} items")
-            if not new or quick_done(cfg, page_no, here):   # past the last page (or, quickly, far enough)
-                break
-            pause(delay)
-    return list(cards.values())
-
-
-def fetch_booth(ctx, cfg, progress) -> list[dict]:
-    """Every item in your Booth library and gifts, page by page."""
-    page = ctx.new_page()
-    try:
-        return [booth_item(b, gift, base) for b, gift, base in booth_cards(page, cfg, float(cfg.get("request_delay", 0.8)), progress)]
-    finally:
-        page.close()
-
-
-# ----------------------------------------------------------------------------- Jinxxy
-#
-# Jinxxy has no buyer API; this reads the inventory page like you would. If it misses
-# things, run `python library.py debug jinxxy` and adjust jinxxy.item_link_pattern.
-
-JX_INVENTORY = "https://jinxxy.com/my/inventory"
-
-
-JX_CARDS_JS = r"""
-(pattern) => {
-  const rx = new RegExp(pattern);
-  const RESERVED = new Set(['my', 'login', 'signin', 'signup', 'register', 'market', 'marketplace', 'search', 'help',
-    'about', 'terms', 'privacy', 'discover', 'cart', 'checkout', 'settings', 'creators', 'categories', 'tags', 'blog',
-    'api', 'dashboard', 'products', 'inventory', 'support', 'faq', 'legal']);
-  // Controls and screen-reader-only labels ("More options" on the card menu) aren't part of the name
-  const SKIP = 'button, [role="button"], [role="menu"], [role="menuitem"], [aria-haspopup], [aria-hidden="true"], svg, script, style';
-  const JUNK = /^(more options|options|menu|download|view|open|details|see more|share|free|new)$/i;
-  // Page furniture, never an item's name
-  const GENERIC = /^(navigation|menu|profile|likes|lists|wishlist|inventory|marketplace|popular|leaderboard|product details|details|support info|my review)$/i;
-  // The site's menus, header, footer and sidebars: an item's card never reaches into them
-  const LANDMARKS = 'nav, aside, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="complementary"]';
-  // You, the signed-in user: the profile your "Profile" link points to is never an item's creator
-  const own = new Set();
-  for (const l of document.querySelectorAll('a[href]')) {
-    const t = (l.innerText || l.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
-    if (!/^(profile|my profile|view profile|account|my account)$/i.test(t)) continue;
-    try { const segs = new URL(l.href).pathname.split('/').filter(Boolean); if (segs.length === 1) own.add(segs[0].toLowerCase()); } catch (e) {}
-  }
-  const keyOf = a => { try { return new URL(a.href).pathname.replace(/\/$/, ''); } catch (e) { return null; } };
-  const onJinxxy = u => /(^|\.)jinxxy\.com$/.test(u.hostname);
-  const anchors = [...document.querySelectorAll('a[href]')].filter(a => {
-    let u; try { u = new URL(a.href); } catch (e) { return false; }
-    return onJinxxy(u) && u.pathname.replace(/\/$/, '') !== '/my/inventory' && rx.test(u.pathname);
-  });
-  const set = new Set(anchors);
-  const invisible = el => {
-    const cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.visibility === 'hidden') return true;
-    const r = el.getBoundingClientRect();
-    return cs.position === 'absolute' && r.width <= 2 && r.height <= 2;  // "sr-only" labels
-  };
-  const blockOf = (el, root) => {
-    while (el !== root && getComputedStyle(el).display.startsWith('inline')) el = el.parentElement;
-    return el;
-  };
-  const linesOf = root => {
-    const lines = []; let block = null;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const t = n.textContent.replace(/\s+/g, ' ').trim();
-      const el = n.parentElement;
-      if (!t || !el) continue;
-      const skip = el.closest(SKIP);
-      if (skip && root.contains(skip)) continue;
-      let hid = false;
-      for (let e = el; e && e !== root.parentElement; e = e.parentElement) if (invisible(e)) { hid = true; break; }
-      if (hid) continue;
-      const b = blockOf(el, root);
-      if (b === block && lines.length) lines[lines.length - 1] += ' ' + t; else lines.push(t);
-      block = b;
-    }
-    return lines.map(s => s.trim()).filter(s => s && !JUNK.test(s) && !/^[$€£¥]\s?\d/.test(s));
-  };
-  const out = [];
-  for (const a of anchors) {
-    let c = a;
-    while (c.parentElement && c.parentElement !== document.body) {
-      const p = c.parentElement;
-      if (p.matches('main, [role="main"]')) break;               // never past the page's content
-      if ([...p.querySelectorAll(LANDMARKS)].some(l => !c.contains(l))) break;  // never into menus or sidebars
-      const keys = new Set([...p.querySelectorAll('a[href]')].filter(x => set.has(x)).map(keyOf));
-      if (keys.size > 1) break;                                    // never into a second item
-      c = p;
-    }
-    // Creator: a link to their store page (jinxxy.com/<name>), else a "by ..." line
-    let creator = '', creatorUrl = '';
-    for (const s of c.querySelectorAll('a[href]')) {
-      if (set.has(s)) continue;
-      let u; try { u = new URL(s.href); } catch (e) { continue; }
-      const segs = u.pathname.split('/').filter(Boolean);
-      if (onJinxxy(u) && (segs.length === 1 || (segs.length === 2 && segs[1] === 'products'))
-          && !RESERVED.has(segs[0].toLowerCase()) && !own.has(segs[0].toLowerCase()) && !s.closest(LANDMARKS)) {
-        creator = linesOf(s)[0] || segs[0]; creatorUrl = u.origin + '/' + segs[0]; break;
-      }
-    }
-    // The product's own page (jinxxy.com/<creator>/<product>), where the card links it
-    let productUrl = '';
-    for (const s of c.querySelectorAll('a[href]')) {
-      if (set.has(s) || s.closest(LANDMARKS)) continue;
-      let u; try { u = new URL(s.href); } catch (e) { continue; }
-      const segs = u.pathname.split('/').filter(Boolean);
-      if (onJinxxy(u) && segs.length === 2 && !RESERVED.has(segs[0].toLowerCase()) && !own.has(segs[0].toLowerCase())
-          && !['products', 'lists', 'posts'].includes(segs[1].toLowerCase())) { productUrl = u.origin + u.pathname.replace(/\/$/, ''); break; }
-    }
-    const lines = linesOf(c).filter(s => !GENERIC.test(s));
-    const byLine = lines.find(s => /^by\s+/i.test(s));
-    if (!creator && byLine) creator = byLine.replace(/^by\s+/i, '');
-    const heading = [...c.querySelectorAll('h1, h2, h3, h4, h5, h6, [class*="title" i]')]
-      .map(h => linesOf(h)[0]).find(t => t && !GENERIC.test(t));
-    const img = c.querySelector('img'), vid = c.querySelector('video');   // (a product shown by its video: its still)
-    const name = heading || lines.find(s => s !== byLine && s !== creator) || (img && img.alt) || '';
-    if (!creator) creator = lines.find(s => s !== name && s !== byLine) || '';
-    out.push({ key: keyOf(a), url: a.href.split(/[?#]/)[0], name, creator, creator_url: creatorUrl, page: productUrl,
-               thumbnail: img ? (img.currentSrc || img.src || '') : vid ? vid.poster : '', video: !img && !!vid, lines });
-  }
-  return out;
-}
-"""
-
-
-# An inventory item's own page (/my/inventory/<id>): the links on it to a product's page on Jinxxy
-# (jinxxy.com/<creator>/<product>), the one around its title first
-JX_PRODUCT_JS = r"""
-() => {
-  const two = a => { try { const u = new URL(a.href); return /(^|\.)jinxxy\.com$/.test(u.hostname)
-    && u.pathname.split('/').filter(Boolean).length === 2 ? u.origin + u.pathname.replace(/\/$/, '') : ''; } catch (e) { return ''; } };
-  const titled = [...document.querySelectorAll('h1, h2, h3')].map(h => h.closest('a[href]') || h.querySelector('a[href]'));
-  const out = [...titled, ...document.querySelectorAll('main a[href]')].filter(Boolean).map(two).filter(Boolean);
-  return [...new Set(out)];
-}
-"""
-JX_PAGE_VISITS = 150   # items whose own page is read for their product's page, at most, in one refresh
-
-
-def jinxxy_product_page(hrefs, creator_url=None) -> str | None:
-    """The product's public page among an inventory item page's links (JX_PRODUCT_JS): on its creator's shop when
-    Hoard knows the creator, never one of yours."""
-    from .sets import product_link
-    shop = (creator_url or "").rstrip("/").lower()
-    for h in hrefs if isinstance(hrefs, list) else []:
-        u = product_link("jinxxy", h) if isinstance(h, str) else None
-        if u and u.count("/") == 4 and (not shop or u.lower().startswith(shop + "/")):
-            return u
-    return None
-
-
-def scroll_inventory(page, read, settle_ms: int = 500, wait_ms: int = 1100, rounds: int = 300, most: int = 0) -> None:
-    """Show all of a Jinxxy inventory page: read() what's shown (it returns how many it has found in all), then
-    choose "Load more" or scroll down, until three rounds in a row find nothing new (or, given most, once that many
-    are found). Reading the library and downloading both go through an inventory this way."""
-    count, quiet = -1, 0
-    for _ in range(rounds):
-        now = read()
-        if most and now >= most:
-            break
-        more = page.get_by_role("button", name=re.compile(r"load more|show more", re.I))
-        if more.count() and more.first.is_visible() and more.first.is_enabled():
-            more.first.click()
-            settle(page, settle_ms)
-            count, quiet = now, 0
-            continue
-        page.mouse.wheel(0, 20000)
-        page.wait_for_timeout(wait_ms)
-        quiet = quiet + 1 if now == count else 0
-        count = now
-        if quiet >= 3:
-            break
-
-
-def fetch_jinxxy(ctx, cfg, progress) -> list[dict]:
-    """Every item in your Jinxxy inventory, scrolling and following pages until nothing new appears; then its Gifts
-    tab. What the pages loaded about each item as they did (jinxxy_data) says which are gifts, who from, and each
-    product's public page, so few items' own pages need opening (issues #275, #276)."""
-    page = ctx.new_page()
-    pattern = cfg["jinxxy"]["item_link_pattern"]
-    found: dict[str, dict] = {}
-    loaded: list = []   # (what the pages loaded from Jinxxy's API, and the data each page came with)
-    heard = jinxxy_listener(loaded)
-    page.on("response", heard)
-    try:
-        goto(page, JX_INVENTORY)
-        settle(page, 1500)
-        if "login" in urlparse(page.url).path.lower() or has_password_field(page):
-            raise NotLoggedIn()
-        visited, pending = {page.url}, []
-        most = QUICK_ITEMS if cfg.get("_quick") else 0   # (a quick refresh, issue #300: the start of it)
-        for page_no in range(1, 101):  # numbered pages
-            def read() -> int:
-                """Note the products now on the inventory page, and its other pages to visit; returns how many are
-                known."""
-                for c in page.evaluate(JX_CARDS_JS, pattern):
-                    old = found.get(c["key"], {})
-                    found[c["key"]] = {k: old.get(k) or c.get(k)
-                                       for k in ("key", "url", "name", "creator", "creator_url", "thumbnail", "page", "video")}
-                for href in jinxxy_inventory_pages(page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")):
-                    if href not in visited and href not in pending:
-                        pending.append(href)
-                progress(f"Inventory, {len(found)} items")
-                return len(found)
-            scroll_inventory(page, read, most=most)
-            loaded.append(jinxxy_page_data(page))
-            if not pending or quick_done(cfg, page_no, len(found)):
-                break
-            nxt = pending.pop(0)
-            visited.add(nxt)
-            goto(page, nxt)
-            settle(page)
-        if most:
-            found = dict(list(found.items())[:most])
-        gifts = jinxxy_gifts(page, pattern, progress, most)
-        loaded.append(jinxxy_page_data(page))
-        page.remove_listener("response", heard)
-        jinxxy_merge(found, gifts, jinxxy_data(loaded))
-        loaded.clear()
-        if found:
-            jinxxy_product_pages(page, found, cfg, progress)
-    finally:
-        page.close()
-    if not found:
-        raise RuntimeError("found no items on the inventory page. Run the command: debug jinxxy")
-    return [jinxxy_item(c) for c in found.values()]
-
-
-def jinxxy_product_pages(page, found: dict, cfg: dict, progress) -> None:
-    """Each item's public product page (what a set you share links to), where the inventory didn't show it: one a
-    refresh found before (cfg["_known_pages"], from the library), else read from the item's own page, at most
-    JX_PAGE_VISITS in one refresh, with the usual pause between pages. An item whose page can't be read keeps its
-    creator's page."""
-    known = cfg.pop("_known_pages", None) or {}
-    pictures = cfg.pop("_known_pictures", None) or {}   # (each product's picture a refresh found before)
-    stillless = lambda c: c.get("video") and (not c.get("thumbnail") or is_video_address(c["thumbnail"]))  # noqa: E731
-    for c in found.values():
-        c["page"] = c.get("page") or known.get(jinxxy_key(c))
-        if stillless(c) and pictures.get(jinxxy_key(c)):
-            c["thumbnail"] = pictures[jinxxy_key(c)]
-    todo = [c for c in found.values() if not c.get("page") and store_link("jinxxy", c.get("url"))][:JX_PAGE_VISITS]
-    delay = float(cfg.get("request_delay", 0.8))
-    for n, c in enumerate(todo, 1):
-        progress(f"Product pages, {n} of {len(todo)}")
-        try:
-            goto(page, c["url"])
-            settle(page)
-            c["page"] = jinxxy_product_page(page.evaluate(JX_PRODUCT_JS), c.get("creator_url"))
-            if stillless(c):   # (shown by its video: the video's still, while here)
-                c["thumbnail"] = page.evaluate(STILL_JS) or c.get("thumbnail")
-        except Exception as e:   # (one page that won't open never stops the refresh)
-            print(f"Jinxxy: couldn't read the product page of {c.get('name')!r}: {str(e)[:200]}", flush=True)
-        pause(delay)
-    # a product its card showed by a video, with no still: the picture its public page gives (issue #212)
-    from .wishlists import pictures_from_pages, read_store_page
-    pictures_from_pages([c for c in found.values() if stillless(c) and c.get("page")], read_store_page, progress, delay,
-                        page_of=lambda c: c["page"])
-
-
 # An inventory item's video still, when its first picture is a video (issue #212): a still the page gives the video
-STILL_JS = r"""() => {
-  const vid = document.querySelector('video[poster]');
-  return vid ? vid.poster : '';
-}"""
-
-
-# ---- What Jinxxy's pages load about your inventory (issues #275, #276)
-#
-# Jinxxy's inventory page comes with its first items' data in its scripts (Apollo's "SSR data transport"), and asks
-# Jinxxy's API for more as you scroll. Each item there has its product's listing (its creator, and its public page,
-# jinxxy.com/<creator>/<product>) and, for a gift, who sent it. Hoard reads what the page loaded, and asks Jinxxy
-# for nothing more: the data is read as JSON, never run, and only what's checked below is kept.
-
-JX_API_HOST = "api.jinxxy.com"
-JX_DATA_MAX = 16 << 20   # characters of data read from one response, or from one page's scripts, at most
-JX_DATA_JS = r"""() => {
-  let room = 16 << 20;
-  const out = [];
-  for (const s of document.scripts) {
-    const t = s.textContent || '';
-    if (!t.includes('ApolloSSRDataTransport') || t.length > room) continue;
-    out.push(t); room -= t.length;
-  }
-  return out;
-}"""
-JX_NAME = re.compile(r"[A-Za-z0-9_.-]{1,64}")    # a Jinxxy username, as its addresses use it
-JX_SLUG = re.compile(r"[A-Za-z0-9_.~-]{1,200}")  # a product's own part of its address
-JX_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")       # an inventory item's id (/my/inventory/<id>)
-_JS_TOKEN = re.compile(r'[{}\[\]]|undefined\b|[^"{}\[\]u]+|u')   # (and strings: json's own scanner reads them)
-
-
-def js_data(text: str, start: int) -> tuple[object, int]:
-    """The object or array written at text[start:] as a page writes its data for itself (JSON, but for JavaScript's
-    undefined), and where it ends. Read as JSON: nothing in it is run. ValueError when it isn't one."""
-    i = start
-    while i < len(text) and text[i] in " \t\r\n":
-        i += 1
-    if i >= len(text) or text[i] not in "{[":
-        raise ValueError("not an object")
-    parts, depth = [], 0
-    while i < len(text):
-        if text[i] == '"':   # a string, to its closing quote (JSON's escapes: anything else isn't JSON anyway)
-            end = json.decoder.scanstring(text, i + 1, True)[1]   # (ValueError when it doesn't end, or isn't JSON)
-            tok, i = text[i:end], end
-            parts.append(tok)
-            continue
-        m = _JS_TOKEN.match(text, i)
-        if not m:
-            raise ValueError("unreadable")
-        tok, i = m.group(), m.end()
-        if tok in ("{", "["):
-            depth += 1
-        elif tok in ("}", "]"):
-            depth -= 1
-        parts.append("null" if tok == "undefined" else tok)
-        if depth == 0:
-            return json.loads("".join(parts)), i
-    raise ValueError("unfinished")
-
-
-def jinxxy_ssr(texts) -> list:
-    """The data Jinxxy's pages came with: each value its scripts hand to Apollo's SSR data transport (the
-    `...ApolloSSRDataTransport")] ??= []).push({...})` it writes), from a page's scripts or a page saved whole."""
-    out, room = [], JX_DATA_MAX
-    for text in texts if isinstance(texts, list) else []:
-        if not isinstance(text, str) or len(text) > room:
-            continue
-        room -= len(text)
-        at = 0
-        while (at := text.find("ApolloSSRDataTransport", at)) >= 0:
-            push = text.find(".push(", at)
-            at += 22
-            if push < 0 or push - at > 40:
-                continue
-            try:
-                value, end = js_data(text, push + 6)
-            except ValueError:
-                continue
-            out.append(value)
-            at = max(at, end)
-    return out
-
-
-def jinxxy_listener(into: list):
-    """A page's response listener that keeps what Jinxxy's API sent the page (JSON only, JX_DATA_MAX at most each,
-    and eight times that in all) in into, for jinxxy_data. A response it can't read is passed by."""
-    room = [8 * JX_DATA_MAX]
-
-    def heard(r):
-        """Keep one response from Jinxxy's API."""
-        try:
-            if urlparse(r.url).hostname != JX_API_HOST or r.status != 200 or room[0] <= 0:
-                return
-            if "json" not in (r.headers.get("content-type") or "").lower():
-                return
-            body = r.body()
-            if len(body) <= min(JX_DATA_MAX, room[0]):
-                room[0] -= len(body)
-                into.append(json.loads(body))
-        except Exception:   # (a response gone, or not JSON: nothing to keep)
-            pass
-    return heard
-
-
-def jinxxy_page_data(page) -> list:
-    """The data the page now shown came with (jinxxy_ssr), or none."""
-    try:
-        return jinxxy_ssr(page.evaluate(JX_DATA_JS))
-    except Exception:
-        return []
-
-
-def _jx_image(files) -> str | None:
-    """The first picture (not a video) among a listing's thumbnails, or its cover's."""
-    for f in (files if isinstance(files, list) else [files])[:20]:
-        if isinstance(f, dict) and isinstance(f.get("url"), str) and str(f.get("content_type") or "image/").startswith("image/"):
-            u = safe_url(f["url"])
-            if u and not is_video_address(u):
-                return u
-    return None
-
-
-def _jx_note(out: dict, id_, listing, product, gift) -> None:
-    """Note what one inventory item's data says (jinxxy_data)."""
-    if not isinstance(id_, str) or not JX_ID.fullmatch(id_):
-        return
-    listing = listing if isinstance(listing, dict) else {}
-    product = product if isinstance(product, dict) else {}
-    seller = listing.get("user") if isinstance(listing.get("user"), dict) else {}
-    maker = product.get("user") if isinstance(product.get("user"), dict) else {}
-    user = next((u for u in (listing.get("user_username"), seller.get("username"), maker.get("username"))
-                 if isinstance(u, str) and JX_NAME.fullmatch(u)), None)
-    slug = next((u for u in (listing.get("url"), product.get("url")) if isinstance(u, str) and JX_SLUG.fullmatch(u)), None)
-    note = {"name": next((n for n in (listing.get("name"), product.get("name")) if isinstance(n, str) and n.strip()), None),
-            "creator": next((n for n in (seller.get("name"), listing.get("seller_name"), user)
-                             if isinstance(n, str) and n.strip()), None),
-            "creator_url": f"https://jinxxy.com/{user}" if user else None,
-            "page": f"https://jinxxy.com/{user}/{slug}" if user and slug and listing.get("has_public_page") is True else None,
-            "thumbnail": _jx_image(listing.get("thumbnails")) or _jx_image(product.get("cover"))}
-    if isinstance(gift, dict) and gift.get("is_revoked") is not True:
-        sender = gift.get("sender") if isinstance(gift.get("sender"), dict) else {}
-        note["gift"] = True
-        note["gift_from"] = next((n for n in (sender.get("name"), sender.get("username")) if isinstance(n, str) and n.strip()), None)
-    old = out.setdefault(id_, {})
-    for k, v in note.items():
-        if v and not old.get(k):
-            old[k] = v
-
-
-def jinxxy_data(values) -> dict:
-    """What Jinxxy's own data (jinxxy_ssr, jinxxy_listener) says about inventory items, by item id: "name",
-    "creator", "creator_url", "page" (its product's public page, when it has one), "thumbnail", and "gift" with
-    "gift_from" (who sent it). Inventory items (getInventoryItems: an item's listing, and its gift) and received gifts
-    (getGiftsReceived: the gift's product, sender and inventory item) are read; anything else is passed by."""
-    out: dict[str, dict] = {}
-    stack, looked = [values], 0
-    while stack and looked < 2_000_000:
-        o = stack.pop()
-        looked += 1
-        if isinstance(o, list):
-            stack.extend(o[:20000])
-            continue
-        if not isinstance(o, dict):
-            continue
-        kind = o.get("__typename")
-        if kind == "InventoryItem" or (kind is None and "listing" in o and "item" in o):
-            _jx_note(out, o.get("id"), o.get("listing"), o.get("item"), o.get("gift"))
-        elif (kind == "Gift" or (kind is None and "inventory_item" in o and "sender" in o)) \
-                and isinstance(o.get("inventory_item"), dict) and o.get("status") in (None, "ACCEPTED"):
-            _jx_note(out, o["inventory_item"].get("id"), o.get("product"), None, {"sender": o.get("sender")})
-        stack.extend(v for v in o.values() if isinstance(v, (dict, list)))
-    return out
-
-
-def jinxxy_gift_sender(c: dict) -> str | None:
-    """Who a card on the inventory's Gifts tab says sent it ("A gift from <name>"), or None for any other card."""
-    lines = c.get("lines") if isinstance(c.get("lines"), list) else []
-    for n, line in enumerate(lines[:40]):
-        m = re.match(r"(?i)a gift from\b:?\s*(.*)$", line) if isinstance(line, str) else None
-        if m:
-            name = m.group(1).strip() or (lines[n + 1] if n + 1 < len(lines) and isinstance(lines[n + 1], str) else "")
-            return clean_text(name, 120) or ""
-    return None
-
-
-def jinxxy_gifts(page, pattern: str, progress, most: int = 0) -> dict:
-    """The cards on your inventory's Gifts tab (Jinxxy keeps gifts you've accepted there as well as with your
-    products), by their key, each with "gift_from"; none when there's no Gifts tab. most: only the first that many
-    (a quick refresh)."""
-    tab = page.locator('[role="tab"][id$="-trigger-gifts"]')
-    if not tab.count():
-        tab = page.get_by_role("tab", name=re.compile(r"^\s*gifts?\b", re.I))
-    if not tab.count():
-        return {}
-    from . import pace
-    pace.before(JX_INVENTORY, 6)   # (the tab asks Jinxxy's API for its gifts: a few requests)
-    try:
-        tab.first.click()
-        settle(page, 1500)
-    except Exception as e:   # (no Gifts tab to show: the products are read all the same)
-        print(f"Jinxxy: couldn't open the Gifts tab: {str(e)[:200]}", flush=True)
-        return {}
-    gifts: dict[str, dict] = {}
-
-    def read() -> int:
-        """Note the gifts now shown; returns how many are known."""
-        for c in page.evaluate(JX_CARDS_JS, pattern):
-            sender = jinxxy_gift_sender(c)
-            if sender is not None:
-                gifts.setdefault(c["key"], {**c, "gift_from": sender})
-        progress(f"Gifts, {len(gifts)}")
-        return len(gifts)
-    scroll_inventory(page, read, most=most)
-    return dict(list(gifts.items())[:most]) if most else gifts
-
-
-def jinxxy_merge(found: dict, gifts: dict, known: dict) -> None:
-    """Put what Jinxxy's data says (jinxxy_data) into the items read from the inventory's cards: each product's
-    public page, a creator or picture a card didn't show, and which are gifts and who from. A gift found only on the
-    Gifts tab is added. A gift card's profile link is who sent it, never taken for its creator."""
-    for key, c in gifts.items():
-        mine = found.get(key)
-        if mine is None:
-            mine = found[key] = {k: c.get(k) for k in ("key", "url", "name", "thumbnail", "page", "video")}
-            mine["creator"], mine["creator_url"] = "", None
-        mine["gift"], mine["gift_from"] = True, mine.get("gift_from") or c.get("gift_from") or None
-    for key, c in found.items():
-        k = known.get(key.rsplit("/", 1)[-1]) or {}
-        if k.get("gift"):
-            c["gift"], c["gift_from"] = True, c.get("gift_from") or k.get("gift_from")
-        if c.get("gift") and (k.get("creator") or (c.get("gift_from") and c.get("creator") == c["gift_from"])):
-            c["creator"], c["creator_url"] = k.get("creator") or "", k.get("creator_url")
-        for f in ("page", "creator", "creator_url", "name"):
-            c[f] = c.get(f) or k.get(f)
-        if not c.get("thumbnail") or (c.get("video") and is_video_address(c["thumbnail"])):
-            c["thumbnail"] = k.get("thumbnail") or c.get("thumbnail")
-        c["creator"] = c.get("creator") or ""
-
-
-def jinxxy_key(c: dict) -> str:
-    """A Jinxxy product's key in your library (jinxxy:<its id>)."""
-    return "jinxxy:" + c["key"].rsplit("/", 1)[-1]
-
-
-def jinxxy_item(c: dict) -> dict:
-    """Turn a card read from Jinxxy's inventory page into a library item."""
-    page = c.get("page")
-    return item("jinxxy", c["key"].rsplit("/", 1)[-1], name=c["name"], creator=c["creator"],
-                creator_url=c.get("creator_url"), thumbnail=c["thumbnail"], url=c["url"], download_url=c["url"],
-                page=page if isinstance(page, str) and jinxxy_product_page([page], c.get("creator_url")) else None,
-                gift=c.get("gift") is True, gift_from=c.get("gift_from"))
-
-
-# ----------------------------------------------------------------------------- Payhip
-#
-# Payhip keeps your purchases in each shop you bought from, on that shop's own library page (<shop>/b-account),
-# not in one library. Hoard reads Payhip and never downloads from it. PAYHIP_SHOP_JS reads a shop's library page,
-# PAYHIP_CARDS_JS a page saved from Payhip's own site. If either gets things wrong, run: debug payhip
-
-PAYHIP_NO_SHOPS = ("Payhip keeps your purchases in each shop you bought from, not in one library. Import each "
-                   "shop's saved library pages (Import pages, in Stores), or add your shops in Settings to refresh "
-                   "them (a shop's address is in your purchase email).")
-PAYHIP_SIGNED_IN_NO_SHOPS = ("Signed in to Payhip. Payhip keeps your purchases in each shop you bought from, so add "
-                             "those shops in Settings (a shop's address is in your purchase email), then choose Refresh "
-                             "on Payhip's row. Or import each shop's saved library pages (Import pages, in Stores).")
-
-
-PAYHIP_CARDS_JS = r"""
-() => {
-  const reserved = /^\/(auth|account|settings|marketplace|help|blog|pricing|features|login|signup|register|cart|checkout|search|explore|dashboard|users)(\/|$)/i;
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const isItemLink = a => {
-    let u; try { u = new URL(a.href); } catch (e) { return false; }
-    if (!/(^|\.)payhip\.com$/.test(u.hostname) || u.pathname === '/' || reserved.test(u.pathname)) return false;
-    return /^\/(b|d|download|downloads|order|orders|purchase|purchases|library|p)\//i.test(u.pathname)
-      || /download|access|view content/i.test(a.innerText || '');
-  };
-  const cards = new Map();
-  for (const img of document.querySelectorAll('img')) {
-    const w = img.naturalWidth || parseInt(img.getAttribute('width') || '0', 10) || img.width;
-    if (w && w < 40) continue;
-    let c = img;
-    while (c.parentElement && c.parentElement !== document.body && c.parentElement.querySelectorAll('img').length === 1) c = c.parentElement;
-    const links = [...c.querySelectorAll('a[href]')].filter(isItemLink);
-    if (!links.length) continue;
-    const product = links.find(a => /^\/b\//i.test(new URL(a.href).pathname));
-    const dl = links.find(a => /download|access/i.test(a.innerText || ''))
-      || links.find(a => a !== product && !/^\/b\//i.test(new URL(a.href).pathname)) || links[0];
-    const id = (product ? new URL(product.href).pathname : new URL(dl.href).pathname).replace(/\/$/, '');
-    if (cards.has(id)) continue;
-    const heading = c.querySelector('h1,h2,h3,h4,h5,strong');
-    const name = text(heading) || links.map(text).sort((x, y) => y.length - x.length)[0] || img.alt || '';
-    const by = (c.innerText || '').match(/\bby\s+([^\n]+)/i);
-    let creator = by ? by[1].trim() : '';
-    let creatorUrl = '';
-    if (!creator) {
-      for (const s of c.querySelectorAll('a[href]')) {
-        let u; try { u = new URL(s.href); } catch (e) { continue; }
-        const segs = u.pathname.split('/').filter(Boolean);
-        if (/(^|\.)payhip\.com$/.test(u.hostname) && segs.length === 1 && !reserved.test(u.pathname) && text(s) && text(s) !== name) {
-          creator = text(s); creatorUrl = u.href; break;
-        }
-      }
-    }
-    cards.set(id, { id, name, creator, creator_url: creatorUrl, thumbnail: img.currentSrc || img.src || '',
-                    url: product ? product.href : dl.href, download_url: dl.href });
-  }
-  const next = document.querySelector('a[rel="next"]')
-    || [...document.querySelectorAll('a[href]')].find(a => /^(next|›|»)$/i.test(text(a)));
-  return { cards: [...cards.values()], next: next ? next.href : null };
-}
-"""
-
-
-PAYHIP_SHOP_JS = r"""
-() => {
-  // A Payhip shop's own library page (https://<shop>/b-account): one card per product you bought there,
-  // each linking to its download page at /b-account/digital/<code>.
-  const LANDMARKS = 'nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]';
-  const pathOf = a => { try { return new URL(a.href).pathname.replace(/\/$/, ''); } catch (e) { return ''; } };
-  const isProduct = a => /\/b-account\/(digital|products?|downloads?)\/[^/]+$/i.test(pathOf(a));
-  const text = e => ((e && e.innerText) || '').replace(/\s+/g, ' ').trim();
-  const shopName = text(document.querySelector('a.logo-link, .logo-link'))
-    || (document.title.includes(' - ') ? document.title.split(' - ').slice(1).join(' - ').trim() : '');
-  // A Payhip creator's own purchases, from every shop, are listed on their own shop's library page (its menu's
-  // Creator/Customer switch leads there), with nothing on the cards saying who made each one. Those aren't this
-  // shop's products, so they're left without a creator rather than credited to you (issue #25). Shops are compared
-  // by their whole address: every shop at payhip.com/<name> shares payhip.com, so its hostname says nothing.
-  const baseOf = href => href.split(/[?#]/)[0].split('/b-account')[0].replace(/\/$/, '');
-  const ownShops = new Set([...document.querySelectorAll('.account-type-switcher-wrapper a[href], a.account-type-switcher-link')]
-    .filter(a => /\/b-account$/.test(pathOf(a))).map(a => baseOf(a.href)));
-  // A card from another shop (its link is in that shop) is credited to that shop, not to the one whose page it is.
-  const logo = document.querySelector('a.logo-link[href]');
-  const pageShop = logo ? baseOf(logo.href) : '';
-  const shopLabel = base => { const u = new URL(base); return u.hostname.replace(/^www\./, '') === 'payhip.com'
-    ? decodeURIComponent(u.pathname.split('/').filter(Boolean)[0] || u.hostname) : u.hostname; };
-  const cards = new Map();
-  for (const a of document.querySelectorAll('a[href]')) {
-    if (!isProduct(a) || a.closest(LANDMARKS)) continue;
-    const key = pathOf(a);
-    if (cards.has(key)) continue;
-    let c = a;   // the product's card: widen from its link while it's still about this one product
-    while (c.parentElement && c.parentElement !== document.body) {
-      const p = c.parentElement;
-      if (p.matches('main, [role="main"]')) break;
-      if (new Set([...p.querySelectorAll('a[href]')].filter(isProduct).map(pathOf)).size > 1) break;
-      c = p;
-    }
-    const heading = c.querySelector('.product-name, h1, h2, h3, h4, h5');
-    const img = c.querySelector('img');
-    const url = a.href.split(/[?#]/)[0], host = new URL(url).hostname, base = baseOf(url), mine = ownShops.has(base);
-    const elsewhere = pageShop && base !== pageShop;
-    cards.set(key, { id: host + ':' + key.split('/').pop(), name: text(heading) || text(a) || (img && img.alt) || '',
-                     creator: mine ? '' : elsewhere ? shopLabel(base) : shopName || host, creator_url: mine ? '' : base,
-                     thumbnail: img ? (img.currentSrc || img.src || '') : '',
-                     url, download_url: url, bought: text(c.querySelector('.card-meta')) });
-  }
-  const next = [...document.querySelectorAll('a[rel="next"], .pagination a, a.next')]
-    .find(x => /next|›|»/i.test(text(x) + ' ' + (x.getAttribute('rel') || '')));
-  return { cards: [...cards.values()], next: next ? next.href : null, shop: shopName, own: ownShops.size > 0 };
-}
-"""
-
-
-class PayhipSignInLoop(PageLoadError):
-    """A shop's page went back and forth with Payhip's sign-in check (payhip.com/global-identity) until the browser
-    gave up. A shop on its own address, and one on payhip.com that has moved to its own address, asks payhip.com
-    whether you're signed in to Payhip itself on every visit: when that never comes back as yes, the two send the
-    page to each other in a loop."""
-
-
-PAYHIP_SIGN_IN_LOOP = ("Payhip kept sending the page back and forth between the shop and its sign-in check on "
-                       "payhip.com. Sign in to Payhip itself (Payhip's Sign in, in Stores, opens payhip.com's own "
-                       "sign-in page first), then refresh again")
-
-
-def read_payhip_shop(page, shop: str, cfg: dict, progress) -> list[dict]:
-    """Every product you bought from one Payhip shop, from its library page (<shop>/b-account), all its pages."""
-    url, cards = shop + "/b-account", {}
-    wait = float(cfg["payhip"].get("bot_check_wait", 180)) if cfg["payhip"].get("headed", True) else 0
-    for page_no in range(1, 200):   # 15 products a page: 3,000 products
-        try:
-            goto_past_check(page, url, wait, progress)
-        except PageLoadError as e:
-            if e.hops:   # where it went, for a support report (addresses only: no query strings)
-                log(f"{shop.split('://', 1)[1]}: {e.code or 'the page'} after {hops_text(e.hops)}")
-            if any(urlparse(u).path.rstrip("/").endswith("/global-identity") for _status, u in e.hops):
-                raise PayhipSignInLoop(PAYHIP_SIGN_IN_LOOP, e.code, e.hops) from None
-            raise
-        settle(page)
-        if "/b-account" not in urlparse(page.url).path or has_password_field(page):
-            raise NotLoggedIn(f"not signed in to {urlparse(shop).hostname}{urlparse(shop).path}")
-        result = page.evaluate(PAYHIP_SHOP_JS)
-        for c in result["cards"]:
-            if cfg.get("_quick") and len(cards) >= QUICK_ITEMS:   # (a quick refresh, issue #300: the start of it)
-                break
-            cards.setdefault(c["id"], c)
-        progress(f"{result['shop']}: {len(cards)} products" + (" (your own shop: it lists what you bought everywhere "
-                 "on Payhip without saying who made it, so those show as Unknown creator)" if result.get("own") else ""))
-        if not result["next"] or result["next"] == url or quick_done(cfg, page_no, len(cards)):
-            break
-        url = result["next"]
-        pause(float(cfg.get("request_delay", 0.8)))
-    return list(cards.values())
-
-
-def jinxxy_inventory_pages(hrefs) -> list[str]:
-    """The links among these that are more pages of your Jinxxy inventory (/my/inventory?page=N), on Jinxxy itself
-    only: its browser is signed in to Jinxxy, so a page of the same path on another site (a link in someone's
-    product text, say) is never opened in it."""
-    out = []
-    for href in hrefs:
-        u = urlparse(str(href))
-        if u.path.rstrip("/") == "/my/inventory" and re.search(r"(^|&)page=\d+", u.query) and store_link("jinxxy", str(href)):
-            out.append(str(href))
-    return out
 
 
 def sign_in_urls(cfg: dict, store: str) -> list[str]:
@@ -988,200 +113,7 @@ def open_sign_in_pages(ctx, cfg: dict, store: str):
     return first
 
 
-def fetch_payhip(ctx, cfg, progress) -> list[dict]:
-    """Every product you bought on Payhip. Payhip keeps purchases in each shop, so this reads every shop in your
-    settings. A shop that can't be read (you aren't signed in there, or its website fails: a shop on its own address
-    redirected in a loop during an outage at Payhip) is left out, with why, in cfg["_unread_payhip_shops"], and the
-    others still count. Only when nothing could be read does the refresh fail."""
-    shops = payhip_shops(cfg)
-    if not shops:
-        raise RuntimeError(PAYHIP_NO_SHOPS)
-    page = ctx.new_page()
-    cards: dict[str, dict] = {}
-    unread: list[tuple[str, str]] = []   # (shop, why)
-    failed: Exception | None = None
-    try:
-        for shop in shops:
-            name = shop.split("://", 1)[1]
-            try:
-                for c in read_payhip_shop(page, shop, cfg, progress):
-                    cards.setdefault(c["id"], c)
-            except NotLoggedIn:
-                unread.append((name, "you aren't signed in there"))
-            except PayhipSignInLoop as e:
-                failed = failed or e
-                unread.append((name, str(e)))
-                progress(f"Couldn't read {name}: Payhip's sign-in check went round in a loop; reading your other shops")
-            except Blocked:
-                raise   # Payhip's bot check: every shop would wait for it in turn
-            except Exception as e:
-                if page.is_closed():   # Force stop closed the browser: nothing more can be read
-                    raise
-                failed = failed or e
-                unread.append((name, plain_error(e)))
-                progress(f"Couldn't read {name} ({plain_error(e)}); reading your other shops")
-    finally:
-        page.close()
-    if unread and not cards:
-        if failed:
-            raise failed
-        raise NotLoggedIn("not signed in to " + ", ".join(n for n, _why in unread))
-    cfg["_unread_payhip_shops"] = unread
-    # Payhip's library lists purchases from every shop, including shops on their own domains. Those aren't trusted
-    # until you add them (their links are left out till then), so they're offered for you to review.
-    known = set(payhip_shops(cfg)) | {"https://payhip.com"}
-    found = {s for s in (clean_payhip_shop(c.get("creator_url")) for c in cards.values()) if s and s not in known
-             and not s.startswith("https://payhip.com/")}
-    cfg["_found_payhip_shops"] = sorted(found)
-    return [payhip_item(c) for c in cards.values()]
-
-
-def payhip_shop_of(i: dict) -> str | None:
-    """The Payhip shop on its own address that a purchase is from (a shop's library page names its products by the
-    shop's host and a code), or None. Its links count only once the shop is in your settings (store_link), so until
-    then its purchase has no Open on Payhip: the library says so, and offers to add the shop."""
-    host, sep, _code = str(i.get("id", "")).partition(":")
-    shop = clean_payhip_shop(host) if sep and host else None
-    return shop if shop and urlparse(shop).hostname not in ("payhip.com", "www.payhip.com") else None
-
-
-def payhip_unread_note(unread: list[tuple[str, str]]) -> str:
-    """What Payhip's row in Stores says after a refresh that couldn't read every shop."""
-    if len(unread) == 1:
-        name, why = unread[0]
-        return (f"Couldn't read the Payhip shop {name}: {why}. Your other shops were read, and what Hoard had from "
-                f"{name} is kept. Refresh again later.")
-    said = "; ".join(f"{name}: {why}" for name, why in unread[:5]) + ("; and others" if len(unread) > 5 else "")
-    return (f"Couldn't read {len(unread)} of your Payhip shops ({said}). Your other shops were read, and what Hoard "
-            "had from these is kept. Refresh again later.")
-
-
-def payhip_item(c: dict) -> dict:
-    """Turn a card read from Payhip's library page into a library item."""
-    return item("payhip", c["id"].strip("/").replace("/", "-"), name=c["name"], creator=c["creator"],
-                creator_url=c["creator_url"], thumbnail=c["thumbnail"], url=c["url"], download_url=c["download_url"])
-
-
-# ----------------------------------------------------------------------------- itch.io
-#
-# itch.io is read through its API (itch.py), with an API key you create on itch.io: its website shows automated
-# browsers a Cloudflare check they never get past. ITCH_JS reads a library page you saved yourself (itch.io/
-# my-purchases), for importing: a card per project, each with a Download button leading to the project's download
-# page (<creator>.itch.io/<project>/download/<key>). Items are known by itch.io's own project number either way.
-
-ITCH_LIBRARY = "https://itch.io/my-purchases"
-
-
-ITCH_JS = r"""
-() => {
-  const text = e => ((e && (e.innerText || e.textContent)) || '').replace(/\s+/g, ' ').trim();
-  const LANDMARKS = 'nav, header, footer, aside, [role="navigation"], [role="banner"], [role="contentinfo"]';
-  const NOT_CREATORS = new Set(['www', 'static', 'img', 'api', 'itch', 'assets', 'cdn']);
-  // A creator's site (<creator>.itch.io), one of their projects (<creator>.itch.io/<project>), or a project's
-  // download page (<creator>.itch.io/<project>/download/<key>)
-  const parse = href => {
-    let u; try { u = new URL(href, location.href); } catch (e) { return null; }
-    const m = u.hostname.toLowerCase().replace(/\.$/, '').match(/^([a-z0-9][a-z0-9-]*)\.itch\.io$/);
-    if (u.protocol !== 'https:' || !m || NOT_CREATORS.has(m[1])) return null;
-    const segs = u.pathname.split('/').filter(Boolean);
-    if (!segs.length) return { kind: 'creator', creator: m[1], url: u.origin };
-    const id = m[1] + '/' + segs[0].toLowerCase(), url = u.origin + '/' + segs[0];
-    if (segs.length === 1) return { kind: 'project', id, url };
-    if (segs.length === 3 && segs[1] === 'download' && /^[A-Za-z0-9_-]{6,}$/.test(segs[2]))
-      return { kind: 'download', id, url: url + '/download/' + segs[2] };
-    return null;
-  };
-  const links = [];
-  for (const a of document.querySelectorAll('a[href]')) {
-    if (a.closest(LANDMARKS)) continue;
-    const p = parse(a.getAttribute('href'));
-    if (p && p.kind !== 'creator') { a.setAttribute('data-hoard-project', p.id); links.push({ a, ...p }); }
-  }
-  // Yours: every project with a download page here. On a page with no download pages at all (a layout Hoard
-  // doesn't know), the project cards itch.io marks with an id, so the library still lists them.
-  const withDownload = new Set(links.filter(l => l.kind === 'download').map(l => l.id));
-  const owned = withDownload.size ? withDownload
-    : new Set(links.filter(l => l.a.closest('[data-game_id]')).map(l => l.id));
-  const cardOf = (a, id) => {   // the project's card: widen from its link while it's still about this one project
-    let c = a;
-    while (c.parentElement && c.parentElement !== document.body) {
-      const p = c.parentElement;
-      if (p.matches('main, [role="main"]')) break;
-      if ([...p.querySelectorAll('[data-hoard-project]')].some(x => x.getAttribute('data-hoard-project') !== id)) break;
-      c = p;
-    }
-    return c;
-  };
-  const picture = c => {   // itch.io loads pictures as you scroll: the address waits in data-lazy_src until then
-    const img = c.querySelector('a[data-hoard-project] img') || c.querySelector('img');
-    const src = img ? (img.getAttribute('data-lazy_src') || img.getAttribute('data-src') || img.currentSrc || img.getAttribute('src') || '') : '';
-    if (src && !src.startsWith('data:')) return src;
-    const bg = c.querySelector('[data-background_image]');
-    if (bg) return bg.getAttribute('data-background_image');
-    const styled = [c, ...c.querySelectorAll('[style*="background-image"]')]
-      .map(e => (e.getAttribute('style') || '').match(/url\(["']?([^"')]+)/)).find(Boolean);
-    return styled ? styled[1] : '';
-  };
-  const cards = new Map();
-  for (const l of links) {
-    if (!owned.has(l.id)) continue;
-    const old = cards.get(l.id);
-    if (old) { if (l.kind === 'download' && !old.download_url) old.download_url = l.url; continue; }
-    const c = cardOf(l.a, l.id);
-    const mine = links.filter(x => x.id === l.id && c.contains(x.a));
-    const img = c.querySelector('img');
-    const name = mine.filter(x => x.kind === 'project').map(x => text(x.a)).find(Boolean)
-      || text(c.querySelector('.game_title, .title')) || (img && img.alt) || l.id.split('/')[1];
-    const who = l.id.split('/')[0];
-    let creator = '', creatorUrl = 'https://' + who + '.itch.io';
-    for (const a of c.querySelectorAll('a[href]')) {
-      const p = parse(a.getAttribute('href'));
-      if (p && p.kind === 'creator' && p.creator === who && text(a)) { creator = text(a); creatorUrl = p.url; break; }
-    }
-    creator = creator || text(c.querySelector('.game_author')).replace(/^by\s+/i, '') || who;
-    const page = mine.find(x => x.kind === 'project'), dl = mine.find(x => x.kind === 'download');
-    const cell = l.a.closest('[data-game_id]'), number = cell && cell.getAttribute('data-game_id');
-    cards.set(l.id, { id: /^\d{1,20}$/.test(number || '') ? number : l.id, name, creator, creator_url: creatorUrl, thumbnail: picture(c),
-                      url: page ? page.url : l.url.split('/download/')[0], download_url: dl ? dl.url : '' });
-  }
-  const next = [...document.querySelectorAll('a[rel="next"], a.next_page, .pager a, .pagination a')]
-    .find(a => /next|›|»/i.test(text(a) + ' ' + (a.getAttribute('rel') || '') + ' ' + (a.className || '')));
-  let nextUrl = null;
-  if (next) {
-    try { const u = new URL(next.getAttribute('href'), location.href); if (u.protocol === 'https:' && u.hostname === 'itch.io') nextUrl = u.href; } catch (e) {}
-  }
-  return { cards: [...cards.values()], next: nextUrl };
-}
-"""
-
-
-def fetch_itch(ctx, cfg, progress) -> list[dict]:
-    """Everything you own on itch.io, through its API (no browser: ctx is unused)."""
-    key = vault.load_key(cfg, "itch")
-    if not key:
-        raise NotLoggedIn("No itch.io API key yet")
-    sess = itch.session(key)
-    try:
-        keys = itch.owned_keys(sess, float(cfg.get("request_delay", 1.0)), progress, cfg)
-    finally:
-        sess.close()
-    items = []
-    for k in keys:
-        g = itch.game_of(k)
-        if g["id"]:
-            items.append(item("itch", g["id"], name=g["title"], creator=g["creator"], creator_url=g["creator_url"],
-                              thumbnail=g["cover"], url=g["url"]))
-    return items
-
-
-def itch_item(c: dict) -> dict:
-    """Turn a card read from your itch.io library into a library item."""
-    return item("itch", c["id"], name=c["name"], creator=c["creator"], creator_url=c.get("creator_url"),
-                thumbnail=c.get("thumbnail"), url=c.get("url"), download_url=c.get("download_url"))
-
-
-FETCHERS = {"booth": fetch_booth, "gumroad": fetch_gumroad, "jinxxy": fetch_jinxxy, "payhip": fetch_payhip,
-            "itch": fetch_itch}
+FETCHERS = {key: a.read_library for key, a in adapters().items()}
 
 
 # ----------------------------------------------------------------------------- saved pages
@@ -1190,7 +122,7 @@ FETCHERS = {"booth": fetch_booth, "gumroad": fetch_gumroad, "jinxxy": fetch_jinx
 # save the library pages from your own browser and import them. A library often spans several pages (Payhip keeps
 # one per shop), so any number are imported at once, read together in one browser with scripts off and no network.
 
-IMPORTABLE = ("booth", "jinxxy", "payhip", "itch")
+IMPORTABLE = tuple(key for key, a in adapters().items() if a.saved_pages)
 
 
 IMPORT_BASES = {"booth": "https://accounts.booth.pm/library", "jinxxy": JX_INVENTORY, "payhip": "https://payhip.com/",
@@ -1283,23 +215,8 @@ def _read_import(browser, cfg: dict, prep: dict) -> list[dict]:
             page.goto(at, wait_until="domcontentloaded")
         else:
             page.set_content(prep["html"], wait_until="domcontentloaded")
-        if store == "booth":
-            gift = "/gifts" in urlparse(prep["base"]).path
-            items = [booth_item(b, gift, prep["base"].split("?")[0]) for b in page.evaluate(BOOTH_JS)]
-        elif store == "jinxxy":
-            seen, gifts = {}, {}
-            for c in page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"]):
-                sender = jinxxy_gift_sender(c)   # (a page saved from the Gifts tab: its cards are gifts)
-                if sender is not None:
-                    gifts.setdefault(c["key"], {**c, "gift_from": sender})
-                else:
-                    seen.setdefault(c["key"], c)
-            jinxxy_merge(seen, gifts, prep.get("jinxxy_data") or {})
-            items = [jinxxy_item(c) for c in seen.values()]
-        elif store == "itch":
-            items = [itch_item(c) for c in page.evaluate(ITCH_JS)["cards"]]
-        else:
-            items = [payhip_item(c) for c in page.evaluate(PAYHIP_SHOP_JS if prep["shop_page"] else PAYHIP_CARDS_JS)["cards"]]
+        from .stores import adapters
+        items = adapters()[store].read_saved(page, cfg, prep)
     finally:
         page.context.close()
     if not items:
@@ -1404,10 +321,10 @@ class Library:
     def __init__(self, path: Path):
         """Load library.json, or start empty."""
         self.path = path
-        self.lock = threading.Lock()
+        self.lock = storage.metadata_lock
         self.data = {"items": [], "stores": {}}
         self._pictured, self._pictured_from = {}, None   # key -> item with a picture, for data["items"] (see _with_picture)
-        if path.exists():
+        if storage.exists(path):
             try:
                 raw = read_json_file(path, 256 * 1024 * 1024)
             except DataFileError as e:
@@ -1439,7 +356,7 @@ class Library:
             if not isinstance(i, dict) or i.get("store") not in STORES or not isinstance(i.get("id"), (str, int)):
                 continue
             fields = {k: i.get(k) for k in ("name", "creator", "creator_url", "thumbnail", "url", "download_url",
-                                             "variants", "archived", "gift", "gift_from", "added", "page", "store_tags")}
+                                             "variants", "archived", "gift", "gift_from", "added", "page", "store_tags", "adult")}
             fields["files"] = [f for f in i.get("files", []) if isinstance(f, dict)] if isinstance(i.get("files"), list) else []
             clean = item(i["store"], clean_text(i["id"], 200), **fields)
             if clean["key"] not in seen:
@@ -1462,6 +379,18 @@ class Library:
         write_file_safely(self.path, json.dumps(seal(self.data), indent=1, ensure_ascii=False))
         remember_sealed(self.path)
 
+    @contextlib.contextmanager
+    def changing(self):
+        """Publish a refresh and its identities together; restore memory if persistence fails."""
+        with self.lock:
+            before = copy.deepcopy(self.data)
+            try:
+                with storage.transaction() if storage.managed(self.path) else contextlib.nullcontext():
+                    yield
+            except BaseException:
+                self.data = before
+                raise
+
     def _stamp(self, store: str, items: list[dict]) -> str:
         """Note when each item first appeared in the library (issue #18: Recently added, and the New badge), and
         return when this store was first read. An item seen before keeps its time (an item listed before Hoard
@@ -1478,12 +407,14 @@ class Library:
                 i["page"] = before[i["key"]].get("page")
             if "store_tags" not in i and "store_tags" in before.get(i["key"], {}):   # (its store's tags, read before)
                 i["store_tags"] = before[i["key"]]["store_tags"]
+            if "adult" not in i and "adult" in before.get(i["key"], {}):   # (and whether it's for adults)
+                i["adult"] = before[i["key"]]["adult"]
         return first
 
     def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
         """Swap in a store's freshly read items and record the refresh. keep_others: the refresh couldn't read
         everything (a Payhip shop), so items it didn't find are kept rather than dropped."""
-        with self.lock:
+        with self.changing():
             if keep_others:
                 found = {i["key"] for i in items}
                 items = items + [i for i in self.data["items"] if i["store"] == store and i["key"] not in found]
@@ -1495,7 +426,7 @@ class Library:
 
     def merge_store(self, store: str, items: list[dict]) -> int:
         """Add or update imported items without dropping ones from other imported pages."""
-        with self.lock:
+        with self.changing():
             first = self._stamp(store, items)
             merged = {i["key"]: i for i in self.data["items"] if i["store"] == store}
             merged.update({i["key"]: i for i in items})
@@ -1652,9 +583,9 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     return fetch_picture(*found) if found else None
 
 
-def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
+def fetch_picture(url: str, referer: str, hosts: tuple[str, ...] | None = None) -> tuple[bytes, str] | None:
     """A picture from a store's image host (an item's, or one a set remembers), fetched once with the store's
-    referrer and cached on disk: (its bytes, its type), or None."""
+    referrer and cached on disk: (its bytes, its type), or None. Given hosts, only from those, redirects included."""
     h = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
     for p in THUMB_DIR.glob(h + ".*"):
         ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)
@@ -1662,7 +593,7 @@ def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
             return p.read_bytes(), ctype
         p.unlink(missing_ok=True)  # e.g. an SVG saved by an older version
     got = fetch_public(url, {"Referer": referer, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024)
+                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36"}, 15 * 1024 * 1024, hosts=hosts)
     if not got:
         return None
     data, ctype = got
@@ -1675,7 +606,7 @@ def fetch_picture(url: str, referer: str) -> tuple[bytes, str] | None:
 
 
 _PICTURE_HASHES: dict[str, tuple[int, int, str]] = {}   # saved picture's file name -> (size, modified, SHA-256)
-_PICTURE_LOCK = threading.Lock()
+_PICTURE_LOCK = storage.metadata_lock
 
 
 def picture_hashes(urls) -> dict[str, str]:
@@ -1726,10 +657,11 @@ def picture_looks() -> dict[str, str]:
     the file changes."""
     path = _looks_file()
     try:
-        st = path.stat()
+        st = storage.stat(path)
     except OSError:
         return {}
-    if _LOOKS_CACHE["at"] == (st.st_size, st.st_mtime_ns):
+    stamp = (str(path), st.st_size, st.st_mtime_ns)
+    if _LOOKS_CACHE["at"] == stamp:
         return _LOOKS_CACHE["looks"]
     try:
         raw = read_json_file(path, 8 * 1024 * 1024)
@@ -1737,7 +669,7 @@ def picture_looks() -> dict[str, str]:
         raw = {}
     looks = {k: v for k, v in (raw.get("looks") if isinstance(raw, dict) and isinstance(raw.get("looks"), dict) else {}).items()
              if _is_hex(k, 64) and _is_hex(v, 16)}
-    _LOOKS_CACHE.update(at=(st.st_size, st.st_mtime_ns), looks=looks)
+    _LOOKS_CACHE.update(at=stamp, looks=looks)
     return looks
 
 
@@ -1936,23 +868,29 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
                           limit: int = STORE_TAG_PAGES) -> int:
     """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
     from each product's public page as anyone sees it, a few each time the store is read, until every product has
-    been read once (each keeps "store_tags", empty when its page has none). Only a product with a public page is read
+    been read once (each keeps "store_tags", empty when its page has none; and "adult", where its store says whether
+    it's for adults: one read before Hoard kept that is read once more, after the rest). Only a product with a public page is read
     (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
     read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
     how many products' pages were read."""
     from .sets import product_link
-    from .wishlists import TAGGED_STORES, LinkError, from_product_page
+    from .wishlists import ADULT_SAID_BY, TAGGED_STORES, LinkError, from_product_page
     if store not in TAGGED_STORES:
         return 0
     with lib.lock:
-        waiting = [(i["key"], link) for i in lib.data["items"] if i["store"] == store and "store_tags" not in i
+        waiting = [(i["key"], link, "store_tags" in i) for i in lib.data["items"] if i["store"] == store
+                   and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
                    and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
-    todo = sorted(waiting, key=lambda w: _TAG_PAGE_FAILS.get(w[0], 0))[:limit]   # (otherwise in the library's order)
+    # (those never read first, then those read before Hoard asked whether they're for adults; otherwise in the library's order)
+    todo = [(k, link) for k, link, _ in sorted(waiting, key=lambda w: (w[2], _TAG_PAGE_FAILS.get(w[0], 0)))[:limit]]
     read: dict[str, list] = {}
+    adult: dict[str, bool] = {}
     for n, (key, page) in enumerate(todo, 1):
         progress(f"The tags creators gave their products, {n} of {len(todo)}")
         try:
-            read[key] = from_product_page(page, fetch).get("store_tags") or []
+            got = from_product_page(page, fetch)
+            read[key] = got.get("store_tags") or []
+            adult[key] = got.get("adult") is True
         except LinkError as e:
             if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
                 read[key] = []
@@ -1968,6 +906,8 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
             for i in lib.data["items"]:
                 if i["key"] in read:
                     i["store_tags"] = item(i["store"], i["id"], store_tags=read[i["key"]])["store_tags"]
+                    if store in ADULT_SAID_BY:   # (read: not asked again, whatever the answer)
+                        i["adult"] = adult.get(i["key"], False)
             lib.save()
     return len(read)
 

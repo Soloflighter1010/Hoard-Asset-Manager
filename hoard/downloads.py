@@ -11,7 +11,7 @@ from pathlib import Path
 from . import previous
 from .paths import HERE
 from .safety import DataFileError, read_json_file, safe_join, store_link
-from .sets import product_link
+from .sets import product_link, public_page
 from .tags import TagMatcher, TagStore, tag_key, tag_overview
 
 
@@ -100,6 +100,30 @@ def _linked_folder(location: str) -> Path | None:
     return Path(location)
 
 
+def problems(assets: list[dict], checked: dict | None = None, failed: dict | None = None) -> dict:
+    """What's wrong with each product, by its tag_key, for an error mark on its tile (issue #334): each as
+    {"kind": "folder"} (a Local product's own folder isn't there), {"kind": "missing", "n"} (files gone from disk),
+    {"kind": "changed", "n"} (files the last check of the downloads found changed: downloader.last_integrity) or
+    {"kind": "failed", "why", "at"} (a download of it that didn't finish: asset_updates' "failed"). A product with
+    none isn't in it."""
+    out: dict[str, list] = {}
+    for a in assets:
+        if a.get("folder_gone"):
+            out.setdefault(a["tag_key"], []).append({"kind": "folder"})
+        elif a.get("missing"):
+            out.setdefault(a["tag_key"], []).append({"kind": "missing", "n": a["missing"]})
+    changed: dict[str, int] = {}
+    for x in (checked or {}).get("problems") or []:
+        if x.get("kind") == "changed" and x.get("name"):
+            k = tag_key(x["store"], x["name"])
+            changed[k] = changed.get(k, 0) + 1
+    for k, n in changed.items():
+        out.setdefault(k, []).append({"kind": "changed", "n": n})
+    for k, e in (failed or {}).items():
+        out.setdefault(k, []).append({"kind": "failed", "why": e.get("why") or "", "at": e.get("at") or ""})
+    return out
+
+
 def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = None, progress=None) -> dict:
     """The data behind the page: every downloaded asset with its files, sizes, image and matches. libraries: every
     library folder, the downloads folder (root) first (hoard/libraries.py); an asset in another one is named by its
@@ -134,9 +158,12 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             except OSError:
                 missing += 1
                 files.append({"path": rel, "size": None, "missing": True})
-        if files and missing == len(files):
+        folder_gone = bool(linked and files and missing == len(files) and not folder.is_dir())
+        if files and missing == len(files) and not folder_gone:
             # every file was deleted from disk: it isn't a download any more, so it isn't shown, and the library
-            # offers it again (issue #24). Its record is kept, so downloading it again works as before.
+            # offers it again (issue #24). Its record is kept, so downloading it again works as before. A Local
+            # product listed where it is whose folder has gone is shown, saying so (issue #334): moved, it can be
+            # listed again where it is now; there's nothing to download again.
             gone += 1
             continue
         # Pictures are only served from the downloads folder: an item listed where it is has a copy of one there
@@ -157,6 +184,9 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "variants": e.get("variants"),
             "url": store_link(e["store"], e.get("url")),
             "page": product_link(e["store"].lower(), e.get("page")),   # its public page (catalog.json), for credits
+            # what Copy store link copies: its public page, never a page of the buyer's own (a Gumroad purchase's link
+            # is its download page, which opens its files for whoever has it)
+            "public": public_page(e["store"].lower(), e.get("page"), e.get("url")),
             "folder": place,
             "catalog_folder": e["folder"],   # as catalog.json (and Hoard for Unity's project reports) name it
             "library": lib,
@@ -170,6 +200,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "files": files,
             "size": total,
             "missing": missing,
+            "folder_gone": folder_gone,
             "added": e.get("added"),
             "modified": newest or None,
             "thumb": f"{place}/{thumb}" if thumb else None,

@@ -14,10 +14,11 @@ import tempfile
 import threading
 import time
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import cli, common, config, downloader, jobs, library, paths, server, tags  # noqa: E402
@@ -25,7 +26,7 @@ downloader.RETRY_WAITS = (0.0, 0.0, 0.0)   # failed downloads are still tried ag
 from hoard.safety import ACCESS_HEADER, header_safe  # noqa: E402
 
 
-class Settings(unittest.TestCase):
+class Settings(IsolatedTestCase):
     """What the Settings panel may change, and how."""
 
     def test_valid_changes(self):
@@ -86,7 +87,7 @@ class Settings(unittest.TestCase):
             srv.server_close()
 
 
-class EmptyLibrary(unittest.TestCase):
+class EmptyLibrary(IsolatedTestCase):
     """B-01 (2.3.1 review): once nothing is downloaded any more, catalog.json and tags.json say so, instead of going
     on listing what's gone (the Unity window shows what catalog.json lists)."""
 
@@ -117,7 +118,7 @@ class EmptyLibrary(unittest.TestCase):
         self.assertEqual(list(root.iterdir()), [])
 
 
-class DeletingRemovedDownloads(unittest.TestCase):
+class DeletingRemovedDownloads(IsolatedTestCase):
     """Issue #81: removing something from the Library left its download in Downloads. Its downloaded files can now be
     deleted too, after you confirm: only a removed product's, only the files Hoard downloaded, never through a link."""
 
@@ -144,8 +145,11 @@ class DeletingRemovedDownloads(unittest.TestCase):
     def test_only_its_downloaded_files_go(self):
         mine = self.folder / "Textures" / "body-edited.png"   # something of your own, in the same folder
         mine.write_bytes(b"mine")
+        from hoard.asset_updates import AssetUpdates
+        AssetUpdates().after_download(set(), ["x"], set(), {self.key: {"store": "booth", "why": "rusk.zip: timed out"}})
         done = downloader.delete_downloaded_files(config.load_config(), self.root, {self.key})
         self.assertEqual((done["products"], done["files"], done["bytes"]), (1, 3, 8))
+        self.assertEqual(AssetUpdates().load()["failed"], {}, "a download of it that didn't finish isn't wrong any more (#334)")
         self.assertTrue(mine.exists(), "your own files stay")
         self.assertFalse((self.folder / "rusk.unitypackage").exists())
         self.assertEqual(done["kept"], ["Booth/Kitsu Studio/Rusk"])
@@ -166,7 +170,7 @@ class DeletingRemovedDownloads(unittest.TestCase):
         outside = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, outside, True)
         (outside / "precious.txt").write_bytes(b"keep")
-        (self.folder / "rusk.unitypackage").unlink()
+        storage.remove(self.folder / "rusk.unitypackage")
         os.symlink(outside / "precious.txt", self.folder / "rusk.unitypackage")
         shutil.rmtree(self.folder / "Textures")
         os.symlink(outside, self.folder / "Textures")
@@ -182,7 +186,7 @@ class DeletingRemovedDownloads(unittest.TestCase):
         cfg = {**config.load_config(), "root": str(self.root)}
         srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
-        self.addCleanup(marks.MarkStore().path.unlink, missing_ok=True)
+        self.addCleanup(storage.remove, marks.MarkStore().path, missing_ok=True)
         try:
             def call(body):
                 c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
@@ -228,7 +232,7 @@ def MarkStore_removed():
     return marks.MarkStore().load()["removed"]
 
 
-class EditableCopies(unittest.TestCase):
+class EditableCopies(IsolatedTestCase):
     """Issue #82: files changed in the downloads folder are replaced by the next sync, and an edited file can't be
     told from a tampered one. An editable copy goes to a folder of its own that Hoard never checks or replaces;
     only files still as Hoard downloaded them are copied, so a changed one isn't passed on as the store's."""
@@ -272,13 +276,13 @@ class EditableCopies(unittest.TestCase):
     def test_never_through_a_link(self):
         secret = self.base / "secret.txt"
         secret.write_bytes(b"pkg")   # the same size as the file it stands in for
-        (self.folder / "rusk.unitypackage").unlink()
+        storage.remove(self.folder / "rusk.unitypackage")
         os.symlink(secret, self.folder / "rusk.unitypackage")
         done = downloader.make_editable_copy(self.cfg, self.root, self.key)   # a record leading outside isn't read
         self.assertFalse((Path(done["folder"]) / "rusk.unitypackage").exists())
         inside = self.folder / "inside.bin"   # and a link to somewhere inside isn't followed either
         inside.write_bytes(b"png!")
-        (self.folder / "Textures" / "body.png").unlink()
+        storage.remove(self.folder / "Textures" / "body.png")
         os.symlink(inside, self.folder / "Textures" / "body.png")
         done = downloader.make_editable_copy(self.cfg, self.root, self.key)
         self.assertEqual(done["skipped"], [("Textures/body.png", "missing, or not a plain file")])
@@ -302,12 +306,32 @@ class EditableCopies(unittest.TestCase):
             r = c.getresponse(); data = json.loads(r.read()); c.close()
             self.assertEqual((r.status, data["files"], data["skipped"]), (200, 2, []))
             self.assertTrue(Path(data["folder"]).is_dir())
+            # issue #328: the copy is listed in Local, where it is, so it's found in Hoard afterwards
+            self.assertTrue(data["local"])
+            for _ in range(200):
+                if not srv.jobs.state["running"] and srv.jobs.history:
+                    break
+                time.sleep(0.05)
+            from hoard import local
+            (rec,) = downloader.Manifest(local.local_dir(self.root)).assets.values()
+            self.assertEqual((rec["name"], rec["creator"], rec["location"]), ("Rusk (editable copy)", "Kitsu Studio", data["folder"]))
+            self.assertIn("editable copy of your download from Booth", rec["note"])
+            self.assertEqual(len(rec["files"]), 3, "its two files and the read-me, listed where they are")
+            self.assertEqual([p.name for p in local.local_dir(self.root).rglob("*") if p.is_file() and not p.name.startswith("_") and p.name != "asset.json"], [],
+                             "nothing copied again: only Hoard's own records are in Local's folder")
+            (shown,) = [a for a in srv.index(rescan=True)["assets"] if a["store"] == "Local"]
+            self.assertEqual(shown["abs_folder"], data["folder"], "the page finds its tile by its folder")
+            c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
+            c.request("POST", "/api/edit-copy", body=json.dumps({"key": self.key, "local": False}),
+                      headers={"Content-Type": "application/json", ACCESS_HEADER: srv.key})
+            r = c.getresponse(); again = json.loads(r.read()); c.close()
+            self.assertEqual((again["local"], len(downloader.Manifest(local.local_dir(self.root)).assets)), (False, 1), "only when asked")
         finally:
             srv.shutdown()
             srv.server_close()
 
 
-class RoutineChecks(unittest.TestCase):
+class RoutineChecks(IsolatedTestCase):
     """Issue #83: you couldn't tell when (or whether) Hoard checked your downloads. A check now runs on a schedule (a
     week by default) or when you ask: every recorded file is there, the size it was downloaded at, and has the same
     SHA-256 as when first checked; Downloads says when it last ran and what it found."""
@@ -324,7 +348,7 @@ class RoutineChecks(unittest.TestCase):
         rec["files"] = {"f1": {"path": "rusk.unitypackage", "size": 3}, "f2": {"path": "body.png", "size": 4},
                         "f3": {"path": "gone.zip", "size": 9}}
         man.save()
-        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
 
     def test_it_finds_changed_and_missing_files(self):
         first = downloader.check_integrity(self.root)
@@ -496,14 +520,14 @@ class RoutineChecks(unittest.TestCase):
         self.assertNotIn("Rusk", json.dumps(view), "names stay in Tasks, where hidden ones are masked")
 
 
-class RealJobs(unittest.TestCase):
+class RealJobs(IsolatedTestCase):
     """The tasks added in 3.0, run by the real job runner, not a stand-in. ("Check now" once failed to start at all:
     its function had lost its name, and the runner it had taken was never let go, so every task after it waited.)"""
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root, True)
-        self.addCleanup(downloader.integrity_file().unlink, missing_ok=True)
+        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
         self.cfg = {**config.load_config(), "root": str(self.root)}
         self.jobs = jobs.Jobs(self.cfg, library.Library(self.root / "library.json"))
         self.addCleanup(mock_tasks_file(self.root).stop)
@@ -545,6 +569,8 @@ class RealJobs(unittest.TestCase):
         window = types.SimpleNamespace(close=lambda: None)
         tried = []
         with mock.patch.object(jobs, "reachable", lambda store: online), \
+                mock.patch.object(jobs, "cache_images", return_value=0), \
+                mock.patch.object(library, "store_tags_from_pages", return_value=0), \
                 mock.patch.object(jobs, "_playwright", lambda: (lambda: contextlib.nullcontext(None))), \
                 mock.patch.object(jobs, "launch", lambda *a: window), \
                 mock.patch.dict(jobs.FETCHERS, {s: fetchers.get(s, not_signed_in) for s in ("booth", "gumroad")}), \
@@ -608,7 +634,7 @@ def mock_tasks_file(root):
     return patch
 
 
-class ManifestSaves(unittest.TestCase):
+class ManifestSaves(IsolatedTestCase):
     """P-08 (2.3.1 review): while downloading, a store's manifest is written at most every SAVE_EVERY seconds, not
     after every file and every product; each sync still ends by saving everything, however it ends."""
 
@@ -633,7 +659,7 @@ class ManifestSaves(unittest.TestCase):
         self.assertFalse(man.path.exists())
 
 
-class LibraryLookups(unittest.TestCase):
+class LibraryLookups(IsolatedTestCase):
     """P-05/P-06 (2.3.1 review): a picture is found without going through the whole library, and a page's copy of
     the library is a snapshot, not a JSON round trip of all of it."""
 
@@ -660,7 +686,7 @@ class LibraryLookups(unittest.TestCase):
         self.assertIsNone(stores["booth"]["error"])
 
 
-class Downloading(unittest.TestCase):
+class Downloading(IsolatedTestCase):
     """A download job reports progress, stops cleanly, and still rebuilds the catalog."""
 
     def setUp(self):
@@ -777,7 +803,7 @@ class Downloading(unittest.TestCase):
         done.wait(10)
 
 
-class JobQueue(unittest.TestCase):
+class JobQueue(IsolatedTestCase):
     """Issue #49: jobs started while another runs wait in a queue, in order, and can be taken off it; finished
     jobs are kept for the Tasks tab."""
 
@@ -857,7 +883,7 @@ class JobQueue(unittest.TestCase):
         self.assertEqual(self.ran, ["x"])
 
 
-class ForceStop(unittest.TestCase):
+class ForceStop(IsolatedTestCase):
     """Issue #201: Stop and Force stop end a task at once, not after a wait it was in the middle of (between a store's
     pages, before trying a download again), nor when a quiet store's connection times out."""
 
@@ -907,7 +933,7 @@ class ForceStop(unittest.TestCase):
         self.assertGreaterEqual(time.monotonic() - started, 0.04)
 
 
-class Retries(unittest.TestCase):
+class Retries(IsolatedTestCase):
     """Issue #19: a file download that fails is tried again (download_retries more times) before it counts as
     failed, unless trying again can't help."""
 
@@ -983,7 +1009,7 @@ def mock_response(status):
     return mock.Mock(status_code=status)
 
 
-class RecentlyAdded(unittest.TestCase):
+class RecentlyAdded(IsolatedTestCase):
     """Issue #18: when each item first appeared in the library, for Recently added and the New badge."""
 
     def setUp(self):
@@ -1050,7 +1076,7 @@ class RecentlyAdded(unittest.TestCase):
                 server.apply_settings(cfg, {"new_days": bad})
 
 
-class SigningOut(unittest.TestCase):
+class SigningOut(IsolatedTestCase):
     """Signing out of a store forgets what that account owns, so the next account never sees it."""
 
     def test_clear_store(self):
@@ -1091,14 +1117,14 @@ class SigningOut(unittest.TestCase):
         self.assertIn("downloaded files are still on disk", lib.data["stores"]["gumroad"]["error"])
 
 
-class JinxxyBanners(unittest.TestCase):
+class JinxxyBanners(IsolatedTestCase):
     """Copies of Jinxxy's default banner saved as product pictures by older versions are removed."""
 
     def setUp(self):
         from hoard.paths import data_dir
         self.marker = data_dir() / "jinxxy-banners-checked"
-        self.marker.unlink(missing_ok=True)
-        self.addCleanup(self.marker.unlink, missing_ok=True)
+        storage.remove(self.marker, missing_ok=True)
+        self.addCleanup(storage.remove, self.marker, missing_ok=True)
 
     def test_repeated_pictures_are_forgotten(self):
         store = Path(tempfile.mkdtemp()) / "Jinxxy"
@@ -1114,7 +1140,7 @@ class JinxxyBanners(unittest.TestCase):
         self.assertEqual(downloader.forget_repeated_thumbnails(store), 0)
 
 
-class PayhipShops(unittest.TestCase):
+class PayhipShops(IsolatedTestCase):
     """Payhip keeps purchases per shop; the shops you list are the only extra sites Hoard trusts for Payhip."""
 
     def tearDown(self):
@@ -1151,7 +1177,7 @@ class PayhipShops(unittest.TestCase):
         self.assertEqual(both["payhip"], {"shops": ["https://a.store"], "enabled": False})
 
 
-class ArchiveHideRemove(unittest.TestCase):
+class ArchiveHideRemove(IsolatedTestCase):
     """Your archive, hidden and removed choices, and the hidden library's PIN."""
 
     def store(self):
@@ -1201,7 +1227,7 @@ class ArchiveHideRemove(unittest.TestCase):
         with lib.lock:
             lib.data["items"] = [library.item("booth", "701", name="Fox Suit"), library.item("booth", "702", name="Plain Hat")]
             lib.save()
-        self.addCleanup(lambda: marks.MarkStore().path.unlink(missing_ok=True))   # (the data folder is every test's)
+        self.addCleanup(lambda: storage.remove(marks.MarkStore().path, missing_ok=True))   # (the data folder is every test's)
 
         def call(method, path, body=None):
             c = http.client.HTTPConnection("127.0.0.1", srv.server_port, timeout=20)
@@ -1302,7 +1328,7 @@ class ArchiveHideRemove(unittest.TestCase):
             self.assertNotIn("Secret Suit", job["message"])
             srv.jobs.state.update(message="", diagnostic=None)
         finally:
-            marks.MarkStore().path.unlink(missing_ok=True)
+            storage.remove(marks.MarkStore().path, missing_ok=True)
             srv.shutdown()
             srv.server_close()
 
@@ -1351,7 +1377,7 @@ class ArchiveHideRemove(unittest.TestCase):
                              {"ok": True, "unlocked": False, "lock_in": 0}, "using the page doesn't unlock it again")
             self.assertEqual(call("POST", "/api/unlock/touch", {"used": True})[1]["unlocked"], False)
         finally:
-            marks.MarkStore().path.unlink(missing_ok=True)
+            storage.remove(marks.MarkStore().path, missing_ok=True)
             srv.shutdown()
             srv.server_close()
 
@@ -1395,7 +1421,7 @@ class ArchiveHideRemove(unittest.TestCase):
                 self.assertEqual({a["name"]: a["mark"] for a in unlocked["assets"]}["Secret Suit"], "hidden")
                 self.assertTrue(unlocked["privacy"]["unlocked"])
         finally:
-            marks.MarkStore().path.unlink(missing_ok=True)
+            storage.remove(marks.MarkStore().path, missing_ok=True)
             srv.shutdown()
             srv.server_close()
 
@@ -1409,7 +1435,7 @@ class ArchiveHideRemove(unittest.TestCase):
             self.assertFalse(downloader.removed_product("payhip", "My Pack", report))
             self.assertIn("removed from your library", report.skipped[0])
         finally:
-            st.path.unlink(missing_ok=True)
+            storage.remove(st.path, missing_ok=True)
 
     def test_found_payhip_shops_survive_only_if_valid(self):
         p = Path(tempfile.mkdtemp()) / "library.json"
@@ -1419,7 +1445,7 @@ class ArchiveHideRemove(unittest.TestCase):
         self.assertEqual(library.Library(p).data["stores"]["payhip"]["found_shops"], ["https://good.store"])
 
 
-class RecoveryPhrase(unittest.TestCase):
+class RecoveryPhrase(IsolatedTestCase):
     """A forgotten PIN is reset with 6 recovery words, and hidden items stay hidden."""
 
     def store(self):
@@ -1523,12 +1549,12 @@ class RecoveryPhrase(unittest.TestCase):
             self.assertEqual(call("/api/pin/recover", {"phrase": newer["recovery"], "pin": "5555"})[0], 200)
             self.assertFalse(srv.unlocks, "recovering locks every browser")
         finally:
-            marks.MarkStore().path.unlink(missing_ok=True)
+            storage.remove(marks.MarkStore().path, missing_ok=True)
             srv.shutdown()
             srv.server_close()
 
 
-class Sync(unittest.TestCase):
+class Sync(IsolatedTestCase):
     """Sync reads what you own, then downloads anything new, as one job that Stop can end."""
 
     def test_reads_then_downloads(self):
@@ -1557,7 +1583,7 @@ class Sync(unittest.TestCase):
         self.assertTrue(job.state["message"].startswith("Stopped"))
 
 
-class UpdatingOverAnOldInstall(unittest.TestCase):
+class UpdatingOverAnOldInstall(IsolatedTestCase):
     """Python reuses compiled copies whose file date and size haven't changed; an update copied over an old
     install (with its old dates) must still run the new code."""
 
@@ -1598,7 +1624,7 @@ class UpdatingOverAnOldInstall(unittest.TestCase):
             self.assertIn("PYTHONDONTWRITEBYTECODE", (REPO / launcher).read_text(), launcher)
 
 
-class PayhipBotCheck(unittest.TestCase):
+class PayhipBotCheck(IsolatedTestCase):
     """A Payhip refresh in a visible window waits while you complete the store's check, instead of giving up."""
 
     def test_waits_then_carries_on(self):
@@ -1632,7 +1658,7 @@ class PayhipBotCheck(unittest.TestCase):
             browser.goto, browser.still_checking = saved
 
 
-class ComingFrom1x(unittest.TestCase):
+class ComingFrom1x(IsolatedTestCase):
     """Bringing over a 1.x library list and downloads folder, without overwriting anything."""
 
     def test_migrate(self):
@@ -1657,7 +1683,7 @@ class ComingFrom1x(unittest.TestCase):
         self.assertIn("no folder", setup.migrate_from(cfg, old / "missing", config_file, lib))
 
 
-class DeletedSignIns(unittest.TestCase):
+class DeletedSignIns(IsolatedTestCase):
     """Issue #31: a store's sign-in folder deleted while Hoard was closed counts as signing out of it: its list
     goes, as with Sign out, and the downloaded files stay. Imported lists, itch.io's (an API key) and sign-ins an
     older version kept in one shared profile are left alone."""
@@ -1719,7 +1745,7 @@ class DeletedSignIns(unittest.TestCase):
             self.assertFalse(browser.old_signins_waiting(self.cfg), "one folder per store: nothing to split")
             (root / "Local State").write_text("{}")
             self.assertTrue(browser.old_signins_waiting(self.cfg), "1.2 to 1.5: one shared profile")
-            (root / "Local State").unlink()
+            storage.remove(root / "Local State")
             (root.parent / "sign-ins.old").mkdir()
             self.assertTrue(browser.old_signins_waiting(self.cfg), "a move that stopped part-way")
 
@@ -1729,7 +1755,7 @@ class DeletedSignIns(unittest.TestCase):
         self.assertEqual(self.names(), ["Hat", "Imported", "Suit", "Tool"])
 
 
-class SetupAssistant(unittest.TestCase):
+class SetupAssistant(IsolatedTestCase):
     """What the onboarding assistant relies on."""
 
     def test_links_from_emails(self):
@@ -2194,7 +2220,7 @@ class _ItchStandIn:
         return cfg
 
 
-class ItchKeys(unittest.TestCase):
+class ItchKeys(IsolatedTestCase):
     """The itch.io API key: kept with the operating system's protection, never in config.json, and deleted on sign-out."""
 
     def test_kept_and_forgotten(self):
@@ -2332,7 +2358,7 @@ class ItchKeys(unittest.TestCase):
         self.assertFalse(any("GoodKey" in " ".join(cmd) for cmd, _stdin in calls))
 
 
-class ItchAPI(unittest.TestCase):
+class ItchAPI(IsolatedTestCase):
     """itch.io through its API, against a stand-in: the library, the files, and where the key goes."""
 
     @classmethod
@@ -2424,7 +2450,7 @@ class ItchAPI(unittest.TestCase):
             self.assertEqual(run(True).available, [], "up to date")
             self.assertEqual(updates.load()["items"], {})
 
-            (folder / "PawSuit_v1.2.unitypackage").unlink()   # deleted here, unchanged on itch.io
+            storage.remove(folder / "PawSuit_v1.2.unitypackage")   # deleted here, unchanged on itch.io
             self.assertEqual(run(True).available, [], "deleted here isn't an update")
             run(False)
 
@@ -2505,7 +2531,7 @@ class ItchAPI(unittest.TestCase):
         self.assertIsNone(vault.load_key(cfg, "itch"))
 
 
-class PayhipShopByShop(unittest.TestCase):
+class PayhipShopByShop(IsolatedTestCase):
     """A tester's report: with a shop on its own address that Payhip sent round in a loop of redirects (an outage at
     Payhip), "Couldn't read the library: Page.goto: net::ERR_TOO_MANY_REDIRECTS at https://kitskennel.com/b-account
     Call log: ..." and nothing from Payhip was read, not even the shops that worked."""
@@ -2682,11 +2708,11 @@ class PayhipShopByShop(unittest.TestCase):
         safety.set_extra_sites("payhip", ["kitskennel.com"])
         got = {e["name"]: e for e in library.enrich([kit], {})}
         self.assertTrue(got["Kit Tail"]["payhip_shop_added"], "added since: a refresh brings its links")
-        html_src = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
+        html_src = (REPO / "hoard" / "web" / "library.js").read_text("utf-8")
         self.assertIn('data-act="add-shop"', html_src)
 
 
-class PayhipIsListedOnly(unittest.TestCase):
+class PayhipIsListedOnly(IsolatedTestCase):
     """Hoard reads Payhip and never downloads from it: a sync leaves it out, however it's asked."""
 
     def test_syncing_leaves_payhip_out(self):
@@ -2750,7 +2776,7 @@ class PayhipIsListedOnly(unittest.TestCase):
             srv.server_close()
 
 
-class ImportingPages(unittest.TestCase):
+class ImportingPages(IsolatedTestCase):
     """The import endpoint: saved pages a batch at a time, each with its own result. A Payhip shop a page names is
     only added once you've confirmed it; test_readers reads real pages, and test_pages goes through the Library."""
 
@@ -2818,7 +2844,7 @@ class ImportingPages(unittest.TestCase):
             self.assertEqual(self.post(body)[0], 400, body)
 
 
-class ImportCommand(unittest.TestCase):
+class ImportCommand(IsolatedTestCase):
     """hoard-cli import: files and folders of saved pages, a batch at a time, with a line for each page that wasn't
     imported."""
 
@@ -2861,7 +2887,7 @@ class ImportCommand(unittest.TestCase):
         self.assertIn("isn't a Payhip shop", str(stopped.exception))
 
 
-class StoreTables(unittest.TestCase):
+class StoreTables(IsolatedTestCase):
     """Every list of stores, in the app, its pages and Hoard for Unity, names the same stores, so a store can't be
     half added, or half taken away."""
 
@@ -2890,6 +2916,8 @@ class StoreTables(unittest.TestCase):
             for const in ("STORE_SITES", "STORE_NAMES"):
                 keys = set(re.findall(r"(\w+):", re.search(rf"const {const} = \{{(.*?)\}};", html).group(1)))
                 self.assertEqual(keys, stores, f"{page}: {const}")
+            inactive = "downloadsStyles" if page == "library.html" else "libraryStyles"
+            html = re.sub(rf'<style id="{inactive}"[^>]*>.*?</style>', "", html, flags=re.S)
             # the standard colours, in the page's :root (dark) and its light theme; the colour-blind set (issue #112) too
             standard = "\n".join(re.findall(r"^\s*:root \{.*?\n\s*\}", html, re.M | re.S))
             colourblind = "\n".join(re.findall(r':root\[data-colours="colourblind"\] \{[^}]*\}', html))
@@ -2897,7 +2925,7 @@ class StoreTables(unittest.TestCase):
                 self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", standard)), 2, f"{page}: {s}'s colour, in both themes")
                 self.assertEqual(len(re.findall(rf"--{s}: #[0-9A-Fa-f]{{6}};", colourblind)), 2, f"{page}: {s}'s colour-blind colour, in both themes")
                 self.assertIn(f".{s} {{ --c: var(--{s}); }}", html, page)
-        order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.html").read_text("utf-8")).group(1)
+        order = re.search(r"const STORE_ORDER = \[(.*?)\];", (web / "library.js").read_text("utf-8")).group(1)
         self.assertEqual(re.findall(r'"(\w+)"', order), list(library.STORES))
         tabs = set(re.findall(r'data-store="(\w+)"', (web / "downloads.html").read_text("utf-8")))
         self.assertIn("Sets", tabs, "Sets: a tab beside the stores, not a store")
@@ -2914,7 +2942,7 @@ class StoreTables(unittest.TestCase):
         self.assertIn('Prepend("All stores", HoardCatalog.Stores)', window, "the window's list is the catalog's")
 
 
-class CommandLine(unittest.TestCase):
+class CommandLine(IsolatedTestCase):
     """Every command still exists."""
 
     def test_commands(self):
@@ -2927,7 +2955,7 @@ class CommandLine(unittest.TestCase):
             self.assertIn("usage", out.getvalue().lower(), cmd)
 
 
-class CatalogSeal(unittest.TestCase):
+class CatalogSeal(IsolatedTestCase):
     """The Unity window reads catalog.json: when it isn't sealed with this install's key, Hoard seals it again."""
 
     def setUp(self):
@@ -2969,7 +2997,7 @@ class CatalogSeal(unittest.TestCase):
         self.catalog(text="{not json")
         self.assertEqual(downloader.reseal_catalog(self.cfg, self.root), "unreadable")
         self.assertEqual(self.status(), "sealed")
-        (self.root / "catalog.json").unlink()
+        storage.remove(self.root / "catalog.json")
         self.assertIsNone(downloader.reseal_catalog(self.cfg, self.root))
 
     def test_at_startup(self):
@@ -3033,7 +3061,7 @@ class CatalogSeal(unittest.TestCase):
             self.assertFalse(paths.store_python())
 
 
-class StoreTags(unittest.TestCase):
+class StoreTags(IsolatedTestCase):
     """Issue #206: the tags creators give their products on Booth, Jinxxy and itch.io, read from each product's public
     page a few at a time as a store is read, kept with the product, and never read again once read."""
 
@@ -3096,7 +3124,7 @@ class StoreTags(unittest.TestCase):
         self.assertEqual(items[0]["suggested"], [], "not the name's words: the page adds them, apart (shared.js)")
 
 
-class CopiesStack(unittest.TestCase):
+class CopiesStack(IsolatedTestCase):
     """Issue #111: copies of one product stack by their picture's hash, byte for byte, not by name: in beta 4's first
     build, "Hair Pack 1" and "Hair Pack 2" by one creator stacked into one tile."""
 
@@ -3209,7 +3237,7 @@ class CopiesStack(unittest.TestCase):
             self.assertEqual(library.picture_looks(), {"a" * 64: "0123456789abcdef"})
 
 
-class TagKinds(unittest.TestCase):
+class TagKinds(IsolatedTestCase):
     """What a tag is about (issue #157): one of a few kinds, or none, kept through a rename, a match and a keep, and
     nothing else accepted."""
 
@@ -3237,7 +3265,7 @@ class TagKinds(unittest.TestCase):
         self.assertEqual(tags.TAG_TYPES, ("avatar", "world", "clothing", "gimmick", "script", "texture", "other"))
 
 
-class ProductTypes(unittest.TestCase):
+class ProductTypes(IsolatedTestCase):
     """Issue #223: what a product is, a field of its own: set by you, from one of your tags' kinds (how it was said
     before 5.2.0), or Hoard's guess from its name and its store's tags; never by adding a tag."""
 
@@ -3279,7 +3307,7 @@ class ProductTypes(unittest.TestCase):
         self.assertEqual((items[0]["type"], items[0]["type_from"]), ("clothing", "guess"))
 
 
-class ProductNotes(unittest.TestCase):
+class ProductNotes(IsolatedTestCase):
     """Issue #304: your note on a product, kept with your tags (so a refresh never clears it), on the product and its
     copies; plain text, made safe as names are; never in a shared set."""
 
@@ -3334,7 +3362,7 @@ class ProductNotes(unittest.TestCase):
                 self.assertTrue(downloader.validate_catalog_entry({**entry, "your_note": bad}))
 
 
-class TagMatching(unittest.TestCase):
+class TagMatching(IsolatedTestCase):
     """Matching tags go through a word index (review finding P-04), with exactly name_has_word's answers."""
 
     def test_same_answers(self):
@@ -3369,7 +3397,7 @@ class TagMatching(unittest.TestCase):
         self.assertLess(time.time() - start, 5, "20,000 names with 300 matching tags (every tag on every name: ~30 s)")
 
 
-class CheckingForUpdates(unittest.TestCase):
+class CheckingForUpdates(IsolatedTestCase):
     """Issue #26: the check-updates job runs the downloader as a dry run, keeps what it found, and says so; a store
     it couldn't read keeps what an earlier check found for it."""
 
@@ -3408,12 +3436,12 @@ class CheckingForUpdates(unittest.TestCase):
         path.write_text('{"items": {"booth:x": {"store": "nowhere", "files": [{"file": "a"}]}, '
                         '"booth:y": {"store": "booth", "files": [{"file": "b", "kind": "odd"}]}}, "checked": [1]}')
         self.assertEqual(AssetUpdates(path).load(), {"checked": {}, "items": {
-            "booth:y": {"store": "booth", "name": "", "creator": "", "files": [{"file": "b", "kind": "new"}]}}})
+            "booth:y": {"store": "booth", "name": "", "creator": "", "files": [{"file": "b", "kind": "new"}]}}, "failed": {}})
         path.write_text("{not json")
         self.assertEqual(AssetUpdates(path).load(), AssetUpdates.empty())
 
 
-class DeletedFromDisk(unittest.TestCase):
+class DeletedFromDisk(IsolatedTestCase):
     """Issue #24: a download whose files were all deleted from disk leaves the Downloads page on the next rescan,
     and the library offers it again. One with only some files gone stays, marked as missing them."""
 
@@ -3433,7 +3461,7 @@ class DeletedFromDisk(unittest.TestCase):
         self.assertEqual(before["gone"], 0)
 
         shutil.rmtree(root / "booth/Rusk")               # deleted the whole folder
-        (root / "booth/Pollution" / "b.zip").unlink()    # and one file of another
+        storage.remove(root / "booth/Pollution" / "b.zip")    # and one file of another
         after = build_index(root, catalog)
         self.assertEqual([a["name"] for a in after["assets"]], ["Pollution"], "Rusk is no longer shown")
         self.assertEqual(after["gone"], 1)
@@ -3444,7 +3472,7 @@ class DeletedFromDisk(unittest.TestCase):
         self.assertEqual(build_index(root, catalog)["gone"], 1)
 
 
-class DownloadsIndex(unittest.TestCase):
+class DownloadsIndex(IsolatedTestCase):
     """The downloads index is rebuilt outside its lock (review finding P-07): downloads never wait for it."""
 
     def setUp(self):
@@ -3526,7 +3554,7 @@ class DownloadsIndex(unittest.TestCase):
         self.assertEqual(self.srv.index()["assets"][0]["id"], 1)
 
 
-class CompressedLists(unittest.TestCase):
+class CompressedLists(IsolatedTestCase):
     """The library and downloads lists are gzipped for a browser that accepts it, when they're large."""
 
     def setUp(self):
@@ -3570,7 +3598,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class RoutineCheck(unittest.TestCase):
+class RoutineCheck(IsolatedTestCase):
     """Issue #113: one routine check, on a schedule, that reads your stores, checks your downloads and checks for
     updates, then asks which of what it found to download. Issue #110: anything you start goes first."""
 
@@ -3582,8 +3610,8 @@ class RoutineCheck(unittest.TestCase):
         self.fake.start = lambda task, stores, **kw: self.started.append((task, stores, kw)) or "started"
         self.schedule = jobs.Schedule(self.cfg, self.fake)
         self.schedule.not_before = 0
-        jobs._routine_file().unlink(missing_ok=True)
-        self.addCleanup(jobs._routine_file().unlink, missing_ok=True)
+        storage.remove(jobs._routine_file(), missing_ok=True)
+        self.addCleanup(storage.remove, jobs._routine_file(), missing_ok=True)
         patch = mock.patch.object(jobs, "reachable", lambda store: True)
         patch.start()
         self.addCleanup(patch.stop)
@@ -3766,7 +3794,7 @@ class RoutineCheck(unittest.TestCase):
         self.assertEqual((shown["display"]["text_size"], shown["routine_hours"]), (100, 0), "damaged values read as defaults")
 
 
-class LoadingProgress(unittest.TestCase):
+class LoadingProgress(IsolatedTestCase):
     """Issue #200: how far Hoard has got reading what a page shows first, for its splash to count."""
 
     def test_counting(self):
@@ -3808,7 +3836,7 @@ class LoadingProgress(unittest.TestCase):
         c.close()
 
 
-class DownloadChoices(unittest.TestCase):
+class DownloadChoices(IsolatedTestCase):
     """Issue #107: what Download new and Update all would get, to untick first; products always skipped, left out
     of every download and sync, unless chosen by name. Issue #106: several products chosen at once, as one job."""
 
@@ -3951,7 +3979,7 @@ class DownloadChoices(unittest.TestCase):
         self.assertEqual(seen[1].keys, {"booth:rusk", "gumroad:mochi"}, "several stores' products, as one job (#106)")
 
 
-class UpdatesAfterADownload(unittest.TestCase):
+class UpdatesAfterADownload(IsolatedTestCase):
 
     def test_only_what_came_is_taken_off(self):
         """An update of two files: download one (the other left out, or the run stopped), and the other is still an
@@ -3993,7 +4021,7 @@ class UpdatesAfterADownload(unittest.TestCase):
         self.assertEqual(data["checked"], {}, "and Gumroad doesn't count as checked")
 
 
-class StopAfterAMove(unittest.TestCase):
+class StopAfterAMove(IsolatedTestCase):
 
     def test_stop_once_its_moved_lets_it_finish(self):
         """Stop pressed after a move had gone through (while the catalog was rebuilt) said "Nothing was moved",
@@ -4017,7 +4045,7 @@ class StopAfterAMove(unittest.TestCase):
         self.assertNotIn("Nothing was moved", job.state["message"])
 
 
-class SameButtonAgain(unittest.TestCase):
+class SameButtonAgain(IsolatedTestCase):
 
     def test_a_relabelled_page_never_saves_another_file_as_this_one(self):
         """A store page that re-renders between listing its buttons and clicking one: a file whose button is gone
@@ -4056,7 +4084,7 @@ class SameButtonAgain(unittest.TestCase):
         self.assertTrue(any("no longer on the page" in f for f in report.failed), report.failed)
 
 
-class ForceStopInstall(unittest.TestCase):
+class ForceStopInstall(IsolatedTestCase):
 
     def test_a_stop_that_comes_as_the_download_starts(self):
         """Force stop just before the browser download starts (nothing to end yet): it's ended as it starts."""
@@ -4083,7 +4111,7 @@ class ForceStopInstall(unittest.TestCase):
         self.assertEqual(setup._installing, [], "let go of")
 
 
-class ChosenFiles(unittest.TestCase):
+class ChosenFiles(IsolatedTestCase):
     """Choosing what to download, file by file: what the page sends, and what the downloader leaves out."""
 
     def test_only_whats_well_formed_is_kept(self):
@@ -4193,9 +4221,21 @@ class ChosenFiles(unittest.TestCase):
         self.assertEqual(job.state["message"], "Read what 2 products have, to choose from.")
 
 
-class TasksAPI(unittest.TestCase):
+class TasksAPI(IsolatedTestCase):
     """The Tasks window's server side: GET /api/tasks, taking jobs off the queue, and hidden products' names kept
     out of job logs while the hidden library is locked."""
+
+    def test_background_tasks_can_pause_resume_and_stop(self):
+        self.srv.scheduler.add("test-reader", "Reading packages", lambda context: None, delay=3600)
+        status, tasks = self.call("GET", "/api/tasks")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(task["id"] == "test-reader" for task in tasks["background"]))
+        for action, expected in (("pause", "paused"), ("stop", "stopped")):
+            status, result = self.call("POST", "/api/tasks/background", {"id": "test-reader", "action": action})
+            self.assertEqual(status, 200)
+            self.assertEqual(next(task for task in result["background"] if task["id"] == "test-reader")["status"], expected)
+        self.assertEqual(self.call("POST", "/api/tasks/background", {"id": "missing", "action": "pause"})[0], 400)
+        self.assertEqual(self.call("POST", "/api/tasks/background", {"id": "test-reader", "action": "resume"})[0], 200)
 
     def test_force_stop_ends_any_task_now(self):
         """Force stop, in Tasks: any task (Stop only reaches downloads, syncs and checks), ended at once by closing
@@ -4244,7 +4284,7 @@ class TasksAPI(unittest.TestCase):
         with mock.patch.object(changelog, "changelog_file", lambda: Path(tempfile.mkdtemp()) / "missing.md"):
             self.assertEqual(changelog.whats_new(True), [], "no changelog: nothing, not an error")
         fake = Path(tempfile.mkdtemp()) / "CHANGELOG.md"
-        fake.write_text("# Changelog\n\n## 1.1.0-beta.1\n\n- <b>Soon</b>\n\n## 1.0.0\n\n- **Out.**\n", "utf-8")
+        fake.write_text("# Changelog\n\n## Unreleased\n\n- Still being developed.\n\n## 1.1.0-beta.1\n\n- <b>Soon</b>\n\n## 1.0.0\n\n- **Out.**\n", "utf-8")
         with mock.patch.object(changelog, "changelog_file", lambda: fake):
             self.assertEqual([r["version"] for r in changelog.whats_new(False)], ["1.0.0"])
             beta = changelog.whats_new(True)[0]
@@ -4321,7 +4361,7 @@ class TasksAPI(unittest.TestCase):
         self.assertNotIn("Secret Suit", json.dumps(current["log"]) + current["message"])
 
 
-class PageLayout(unittest.TestCase):
+class PageLayout(IsolatedTestCase):
     """How you left the pages (windows' places, the sidebar, tile sizes) is kept in config.json: the pages' own
     storage goes with the server's address, which is new each time Hoard starts."""
 
@@ -4350,7 +4390,7 @@ class PageLayout(unittest.TestCase):
         self.assertNotIn("ui", [k for k in server.JOB_SETTINGS], "saved even while a job runs")
 
 
-class WrongBehaviour(unittest.TestCase):
+class WrongBehaviour(IsolatedTestCase):
     """Fixes from the October 2026 audit (section 5): each did something other than what it says it does."""
 
     def setUp(self):
@@ -4485,7 +4525,7 @@ def mock_credits(projects):
     return mock.patch.object(projects, "credits_text", lambda p, s: "")
 
 
-class BadInput(unittest.TestCase):
+class BadInput(IsolatedTestCase):
     """Fixes from the October 2026 audit (section 6): bad input gets a 400, not a dropped connection; and what was
     made faster (section 7) still gives the same answers."""
 

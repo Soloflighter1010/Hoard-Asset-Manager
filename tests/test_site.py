@@ -3,6 +3,7 @@ complete, loading nothing from elsewhere, pointing at the real listing and downl
 that VCC's addresses keep working."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from html.parser import HTMLParser
 from urllib.parse import unquote
 from pathlib import Path
@@ -24,6 +26,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 import build_site_changelog as changelog  # noqa: E402
 import build_site_docs as docs  # noqa: E402
 import build_press_kit as press  # noqa: E402
+import version_assets  # noqa: E402
 import site_chrome  # noqa: E402
 
 
@@ -84,7 +87,7 @@ class Refs(HTMLParser):
                     self.external_loads.append(one)
 
 
-class TheSite(unittest.TestCase):
+class TheSite(IsolatedTestCase):
 
     def setUp(self):
         self.html = (SITE / "index.html").read_text("utf-8")
@@ -140,6 +143,34 @@ class TheSite(unittest.TestCase):
         self.assertIn("releases/latest", deploy)
         self.assertIn("/latest.json", deploy)
         self.assertNotIn("innerHTML", js, "nothing from GitHub's answer becomes page markup")
+
+    def test_each_page_links_its_stylesheet_by_version(self):
+        """Issue #312: a page never shows with the stylesheet a browser kept from the deploy before. The deploy's last
+        step gives each link to the site's own .css and .js the file's version; another site's, a missing file's and
+        one already versioned are left alone, and running it again changes nothing."""
+        site = Path(tempfile.mkdtemp())
+        (site / "docs" / "ja").mkdir(parents=True)
+        (site / "styles.css").write_text("body{}", "utf-8")
+        (site / "site.js").write_text("1", "utf-8")
+        (site / "index.html").write_text('<link rel="stylesheet" href="styles.css"><script src="site.js" defer></script>'
+                                         '<script src="https://cdn.example/x.js"></script><link href="gone.css">'
+                                         '<a href="docs/index.html">docs</a>', "utf-8")
+        (site / "docs" / "ja" / "page.html").write_text('<link href="../../styles.css"><script src="../../site.js?v=1">'
+                                                        '</script>', "utf-8")
+        self.assertEqual(version_assets.stamp(site), 3)
+        css, js = (hashlib.sha256(b).hexdigest()[:10] for b in (b"body{}", b"1"))
+        self.assertEqual((site / "index.html").read_text("utf-8"),
+                         f'<link rel="stylesheet" href="styles.css?v={css}"><script src="site.js?v={js}" defer></script>'
+                         '<script src="https://cdn.example/x.js"></script><link href="gone.css"><a href="docs/index.html">docs</a>')
+        self.assertEqual((site / "docs" / "ja" / "page.html").read_text("utf-8"),
+                         f'<link href="../../styles.css?v={css}"><script src="../../site.js?v=1"></script>')
+        self.assertEqual(version_assets.stamp(site), 0, "once is enough")
+        deploy = WORKFLOW.read_text("utf-8")
+        step = deploy.index("python3 scripts/version_assets.py")
+        for before in ("python3 scripts/build_site_docs.py", "build_site_changelog.py", "build_press_kit.py",
+                       'cp -r "$GITHUB_WORKSPACE/site/." .'):
+            self.assertLess(deploy.index(before), step, f"after {before}: every page is there")
+        self.assertLess(step, deploy.index("actions/upload-pages-artifact"))
 
     def test_the_videos_are_put_on_the_site_when_it_deploys(self):
         """The videos come from the media release on each deploy, before the docs are built (which play them), so
@@ -295,7 +326,7 @@ class TheSite(unittest.TestCase):
         self.assertIn("@media (max-width: 760px)", (SITE / "styles.css").read_text("utf-8"))
 
 
-class Deploying(unittest.TestCase):
+class Deploying(IsolatedTestCase):
     """The site's workflow: a push that changes what builds it builds it again."""
 
     def test_every_script_it_runs_is_in_its_paths(self):
@@ -308,7 +339,7 @@ class Deploying(unittest.TestCase):
         self.assertEqual(run - listed, set(), "every script it runs, in its paths")
 
 
-class TheOtherPages(unittest.TestCase):
+class TheOtherPages(IsolatedTestCase):
 
     def test_every_tester_is_thanked(self):
         page = (SITE / "testers.html").read_text("utf-8")
@@ -498,7 +529,7 @@ class TheOtherPages(unittest.TestCase):
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")
-        versions = [v for v in re.findall(r"^## (.+)$", md, re.M) if "-beta." not in v]   # betas: on GitHub only
+        versions = [v for v in re.findall(r"^## (.+)$", md, re.M) if "-beta." not in v and v != "Unreleased"]
         page = changelog.page(md, {})
         self.assertEqual(re.findall(r'<h2><a href="#[^"]+">([^<]+)</a></h2>', page), versions)
         self.assertEqual(page.count('class="latest-badge"'), 1)
@@ -552,7 +583,7 @@ class TheOtherPages(unittest.TestCase):
         self.assertEqual(len(re.findall(r"<li[ >]", built)), built.count("</li>"))
 
 
-class TheThreeZeroChangelog(unittest.TestCase):
+class TheThreeZeroChangelog(IsolatedTestCase):
     """3.0.0's changelog (the betas folded into one) uses only what the What's new page can show."""
 
     def test_3_0_0_reads_on_the_whats_new_page(self):
@@ -571,7 +602,7 @@ class TheThreeZeroChangelog(unittest.TestCase):
         self.assertNotIn("## 3.0.0-beta", text, "the betas are folded into 3.0.0")
 
 
-class TheDeploy(unittest.TestCase):
+class TheDeploy(IsolatedTestCase):
 
     def setUp(self):
         self.text = WORKFLOW.read_text("utf-8")
@@ -660,7 +691,7 @@ def _browser() -> bool:
 
 
 @unittest.skipUnless(_browser(), "needs Playwright's Chromium (python -m playwright install chromium)")
-class InABrowser(unittest.TestCase):
+class InABrowser(IsolatedTestCase):
     """The front page's store tabs, as the app's: choosing one raises it and says what Hoard does there; and the
     things to find, as in the app. Opened from disk, so nothing is fetched (the download buttons keep their links)."""
 

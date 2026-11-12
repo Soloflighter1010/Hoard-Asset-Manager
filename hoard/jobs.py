@@ -1,6 +1,8 @@
 """Work Hoard does in the background, one job at a time: refreshing, signing in and out, and downloading."""
 from __future__ import annotations
 
+from . import storage
+
 import contextlib
 import json
 import sys
@@ -21,8 +23,10 @@ from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP
 from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
 from .browser import end_browsers, old_signins_waiting, profile_dir   # (issue #31)
-from .safety import DataFileError, cut_connections, read_json_file, write_file_safely
+from .safety import DataFileError, cut_connections
+from .storage import read_document as read_json_file, write_document as write_file_safely
 from .common import now_iso
+from .scheduler import Again, Scheduler, ROUTINE, USER
 
 
 NO_BROWSER = ("itch",)   # read through an API with a key, rather than with a sign-in in a browser
@@ -88,7 +92,7 @@ def routine_record() -> dict:
     """When the routine check last ran ("last", seconds), and what it found that you haven't looked at yet ("found":
     when, and how many new products and updates), or None."""
     try:
-        raw = read_json_file(_routine_file()) if _routine_file().is_file() else {}
+        raw = read_json_file(_routine_file()) if storage.is_file(_routine_file()) else {}
     except (DataFileError, OSError):
         raw = {}
     raw = raw if isinstance(raw, dict) else {}
@@ -119,7 +123,7 @@ def _sync_file():
 def last_sync() -> float:
     """When the last sync started (yours or an automatic one), or 0."""
     try:
-        data = read_json_file(_sync_file()) if _sync_file().is_file() else {}
+        data = read_json_file(_sync_file()) if storage.is_file(_sync_file()) else {}
     except (DataFileError, OSError):
         return 0.0
     last = data.get("last") if isinstance(data, dict) else None
@@ -187,14 +191,10 @@ class Schedule:
             print(f"Routine check ({', '.join(STORES[s]['label'] for s in stores) or 'your downloads'})", flush=True)
         return started
 
-    def run_forever(self, stop: threading.Event) -> None:
-        """Look once a minute whether the routine check is due, until Hoard stops."""
-        while not stop.wait(60):
-            try:
-                self.tick()
-            except Exception as e:   # never let the schedule die: say so, and try again next minute
-                diagnostics.record_exception(e, area="scheduler", task="sync", include_traceback=True)
-                print(f"Automatic sync: {type(e).__name__}: {e}", flush=True)
+    def register(self, scheduler: Scheduler, stop: threading.Event | None = None) -> None:
+        """Let the shared scheduler decide when to check this routine's due time."""
+        scheduler.add("routine-check", "Routine check", lambda context: None if stop is not None and stop.is_set() else self.tick(),
+                      priority=ROUTINE, delay=60, every=60)
 
 
 MAX_SKIP = 5000   # products you chose to always skip
@@ -203,7 +203,7 @@ MAX_SKIP = 5000   # products you chose to always skip
 def download_skip(cfg: dict) -> set[str]:
     """The products you chose to always skip when downloading (issue #107), by tag key. A download of products you
     choose by name still gets them."""
-    keys = cfg.get("download_skip")
+    keys = storage.current_references("config.json", cfg).get("download_skip")
     return {k for k in keys[:MAX_SKIP] if isinstance(k, str) and 0 < len(k) <= 400} if isinstance(keys, list) else set()
 
 
@@ -214,13 +214,20 @@ TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "S
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
+              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
 FORCE_AFTER = 20.0   # seconds after Stop before a store browser that stopped answering is ended
+WATCH_INTERVAL = 15.0  # scheduler cadence; one cheap progress check, never a polling thread
 STUCK_AFTER = 300.0  # seconds without any progress before a job's whereabouts are written to Hoard's log
 WATCHED = ("download", "check-updates", "sync", "refresh", "quick-refresh", "verify", "routine")   # jobs that never wait on you (sign-ins do)
+# What's still waiting when Hoard closed is started again when it opens: what reads, downloads or adds. What deletes or
+# takes out (files, Local's products, a project), signs in or out, moves your library or changes a project (its
+# packages, Git's pull and push) was confirmed then, not now: it isn't started again, and Tasks says so.
+RESUMED = {"refresh", "quick-refresh", "sync", "download", "check-updates", "verify", "routine", "wishlists",
+           "quick-wishlist", "list-files", "add-local", "rescan-local"}
+RESUMED_PROJECT = {"backup", "refresh", "git-fetch"}   # (a Projects task's "op")
 
 
 # How a finished job went, in the Tasks tab. Partly done: it finished, but a store couldn't be read or a file
@@ -306,9 +313,10 @@ class Jobs:
     Jobs, lane PROJECTS, with its own queue, thread and finished tasks, so they never wait behind a sync or a
     download, and a sync never waits behind them. Its Stop never touches the store browsers, which aren't its own."""
 
-    def __init__(self, cfg: dict, lib: Library, on_download_done=None, lane: str = "main"):
+    def __init__(self, cfg: dict, lib: Library, on_download_done=None, lane: str = "main", scheduler=None):
         """No job is running at first. on_download_done is called after every download job."""
         self.cfg, self.lib = cfg, lib
+        self.scheduler = scheduler or Scheduler(persistent=False)
         self.lane = lane
         self._prefix = "p" if lane == PROJECTS else ""   # (its jobs' ids, told apart from the main lane's)
         self.on_download_done = on_download_done or (lambda: None)
@@ -335,10 +343,64 @@ class Jobs:
         self._ids = 0
         self.history: list[dict] = self._load_history()
         self.listed: dict[str, dict] = {}   # what products have, read to choose from (issue #225): by tag key
+        self._restore_queue()
+
+    def _restore_queue(self) -> None:
+        """Restore waiting intents, but let serve() start them after all services are ready."""
+        if not self.scheduler.persistent:
+            return
+        path = data_dir() / "job-queue.json"
+        raw = storage.read_document(path) if storage.exists(path) else {}
+        entries = raw.get(self.lane, []) if isinstance(raw, dict) else []
+        if not isinstance(entries, list):
+            return
+        left: list[dict] = []   # what isn't started again (RESUMED)
+        for entry in entries[:MAX_QUEUE]:
+            if not isinstance(entry, dict) or not isinstance(entry.get("task"), str) or entry["task"] not in TASK_NAMES:
+                continue
+            stores = entry.get("stores")
+            if not isinstance(stores, list) or any(not isinstance(store, str) or store not in STORES and store != "all" for store in stores):
+                continue
+            if any(entry.get(k) is not None and not isinstance(entry[k], list) for k in ("keys", "items")):
+                continue
+            if any(entry.get(k) is not None and not isinstance(entry[k], dict) for k in ("local", "move", "files", "chosen", "project")):
+                continue
+            if entry.get("only") is not None and not isinstance(entry["only"], str):
+                continue
+            self._ids += 1
+            spec = {k: entry.get(k) for k in ("task", "stores", "skip_imported", "only", "scheduled", "keys", "items",
+                                             "local", "move", "files", "chosen", "project")}
+            spec["skip_imported"] = spec.get("skip_imported") is True
+            job = {**spec, "id": f"{self._prefix}q{self._ids}", "lane": self.lane, "queued": entry.get("queued") or now_iso(),
+                   "label": describe_job(spec["task"], stores, spec.get("only"), spec.get("keys"),
+                                         spec.get("scheduled"), spec.get("project"))}
+            if spec["task"] in RESUMED or (spec["task"] == "project" and (spec.get("project") or {}).get("op") in RESUMED_PROJECT):
+                self._queue.append(job)
+            else:
+                left.append(job)
+        if left:   # (in Tasks, so it's asked for again, not done unasked)
+            for job in left:
+                self.history.append({"id": job["id"], "task": job["task"], "label": job["label"], "stores": job["stores"],
+                                     "started": "", "ended": now_iso(), "outcome": "stopped", "report": None, "log": [],
+                                     "message": "Not started again when Hoard opened: it changes or takes things away, "
+                                                "so it's done only when you ask for it again."})
+            del self.history[:-MAX_HISTORY]
+            try:
+                write_file_safely(self._history_file(), json.dumps({"history": self.history}, ensure_ascii=False))
+            except OSError as e:
+                print(f"Couldn't save the task log: {e}", flush=True)
+        self._publish_queue()
 
     def _history_file(self):
         """Where this lane's finished tasks are kept (Projects' apart from the rest)."""
         return project_tasks_file() if self.lane == PROJECTS else tasks_file()
+
+    def _counted(self, **counts: int) -> None:
+        """What a task did, in numbers alone, kept with its report for its news (issue #342: "Add to Local: done"
+        didn't say how many). Never a product's name: the news is sent to other services (alerts.task_text)."""
+        report = self.state.get("report") if isinstance(self.state.get("report"), dict) else {}
+        kept = {k: v for k, v in counts.items() if isinstance(v, int) and not isinstance(v, bool) and v >= 0}
+        self.state["report"] = {**report, "counts": {**(report.get("counts") or {}), **kept}}
 
     def _set(self, **kw):
         """Update the job state the page polls (and note each new message in the running job's progress)."""
@@ -405,6 +467,8 @@ class Jobs:
     def kick(self) -> None:
         """Start the next waiting job, if nothing is running. (Called whenever the runner is let go.)"""
         with self._qlock:
+            if self.scheduler.closed:
+                return
             if self._queue and self.busy.acquire(blocking=False):
                 spec = self._queue.pop(0)
                 self._publish_queue()
@@ -429,6 +493,13 @@ class Jobs:
         """What's waiting, as the pages show it."""
         self.state["queue"] = [{"id": q["id"], "task": q["task"], "label": q["label"], "queued": q["queued"], "lane": self.lane}
                                for q in self._queue]
+        if self.scheduler.persistent:
+            path = data_dir() / "job-queue.json"
+            with storage.metadata_lock:
+                data = storage.read_document(path) if storage.exists(path) else {}
+                data = data if isinstance(data, dict) else {}
+                data[self.lane] = self._queue
+                storage.write_document(path, json.dumps(data))
 
     def _launch(self, spec: dict) -> None:
         """Run spec now (the runner is already taken). If it can't even start, the runner is let go again, so one job
@@ -489,14 +560,18 @@ class Jobs:
             target = self._wishlists
         elif task == "quick-refresh":
             target = self._quick_refresh
+        elif task == "quick-wishlist":
+            target = lambda s: self._quick_wishlist(s, only or "")  # noqa: E731
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
         self._moved = time.monotonic()
         job_id = self._current["id"]   # (taken now: a quick job can be over before the next line runs)
-        threading.Thread(target=self._wrap, args=(target, stores), daemon=True).start()
+        self.scheduler.call(self._current["label"], lambda: self._wrap(target, stores),
+                            priority=ROUTINE if scheduled else USER, foreground=not scheduled, cancel=self.stop.is_set)
         if task in WATCHED:
-            threading.Thread(target=self._watch, args=(job_id,), daemon=True).start()
+            self.scheduler.add(f"watch-{self.lane}-{job_id}", "Checking task progress", lambda context: self._watch_step(job_id),
+                               delay=WATCH_INTERVAL, durable=False, visible=False, foreground=True, control=True)
 
     def _wrap(self, fn, stores):
         """Run a job, recording any error for the page, and always free the runner afterwards (then start the next
@@ -506,6 +581,8 @@ class Jobs:
         try:
             self._set(running=True)
             with stoppable(self.stop):   # (a wait in this job ends at once on Stop and Force stop: common.pause)
+                from .scheduler import checkpoint
+                checkpoint()
                 fn(stores)
         except Cancelled:   # stopped where the job itself doesn't catch it (a wait, say): it says so as it ends
             if not str(self.state.get("message") or "").startswith(("Stopped", "Force stopp")):
@@ -567,7 +644,7 @@ class Jobs:
     def _load_history(self) -> list[dict]:
         """The finished tasks kept from earlier runs, each checked as it's read."""
         try:
-            raw = read_json_file(self._history_file()) if self._history_file().is_file() else {}
+            raw = read_json_file(self._history_file()) if storage.is_file(self._history_file()) else {}
         except (DataFileError, OSError):
             return []
         out = []
@@ -680,6 +757,7 @@ class Jobs:
             return
         finally:
             self.on_download_done()
+        self._counted(moved=1, files=done["files"])
         self._set(message=f"Moved {done['name']}: {plural(done['files'], 'file')} to {done['to']}.")
 
     def _project(self, what: dict) -> None:
@@ -744,6 +822,7 @@ class Jobs:
                 done = delete_downloaded_files(self.cfg, root, set(what.get("keys") or []))
                 message = (f"Deleted {done['files']:,} {'file' if done['files'] == 1 else 'files'} of {name}."
                            + (" Its folder still has other files, so it was kept." if done["kept"] else ""))
+                self._counted(deleted=done["files"])
             else:
                 found = local.by_folder(root, str(what.get("folder") or ""))
                 if not found:
@@ -751,9 +830,11 @@ class Jobs:
                 if task == "rescan-local":
                     rec = local.rescan(self.cfg, root, found[0])
                     message = f"Rescanned {name}: {plural(len(rec['files']), 'file')}."
+                    self._counted(files=len(rec["files"]))
                 else:
                     local.remove(self.cfg, root, found[0])
                     message = f"Took {name} out of Local."
+                    self._counted(taken_out=1)
         except (ValueError, OSError) as e:
             self._set(message=str(e), error=str(e))
             return
@@ -774,6 +855,7 @@ class Jobs:
         except ValueError as e:
             self._set(message=str(e), error=str(e))
             return
+        self._counted(added=1, files=len(rec["files"]))
         self._set(message=f"Added {rec['name']} to Local: {plural(len(rec['files']), 'file')}"
                           + (", copied into Hoard." if not rec.get("location") else ", listed where they are."))
         self.on_download_done()
@@ -793,6 +875,7 @@ class Jobs:
             return
         finally:
             self.on_download_done()
+        self._counted(matched=done["matched"], local=done["local"], notes=done["notes"], left_out=len(done["left_out"]))
         words = [f"{plural(done['matched'], 'product')} in your library", f"{plural(done['local'], 'Local product')}"]
         message = "Brought in from KonoAsset: " + " and ".join(words) + (
             f", with {plural(done['notes'], 'note')}." if done["notes"] else ".")
@@ -836,6 +919,7 @@ class Jobs:
                      f"{'was left as it was' if one else 'were left as they were'}.")
         if left:
             said += f" Left out {len(left)}: " + "; ".join(left[:5]) + ("…" if len(left) > 5 else "")
+        self._counted(added=added, already=len(already), left_out=len(left))
         self._set(message=said, log=[f"Left out {x}" for x in left][-200:], partial=bool(left))
         self.on_download_done()
 
@@ -929,7 +1013,8 @@ class Jobs:
                                       or self.state.get("sync") or self.state.get("routine")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
-            threading.Thread(target=self._force_stop, args=(self.state.get("job_id"),), daemon=True).start()
+            job_id = self.state.get("job_id")
+            self.scheduler.call("Stopping task", lambda: self._force_stop(job_id), delay=FORCE_AFTER, control=True)
             return True
         return False
 
@@ -975,33 +1060,29 @@ class Jobs:
         frame = sys._current_frames().get(self._job_thread or -1)
         return "".join(traceback.format_stack(frame)) + _paused_in_hoard() if frame else "(not running)"
 
-    def _force_stop(self, job_id, wait: float | None = None) -> None:
+    def _force_stop(self, job_id) -> None:
         """After Stop: a job still running FORCE_AFTER seconds later is waiting on a store browser that stopped
         answering (every other wait Hoard makes has a time limit). End that browser, so the job can finish, and say
         in Hoard's log where it was waiting."""
-        deadline = time.monotonic() + (FORCE_AFTER if wait is None else wait)
-        while time.monotonic() < deadline:
-            if not self._still(job_id):
-                return
-            time.sleep(0.25)
+        if not self._still(job_id):
+            return
         print(f"Stop hadn't taken effect after {FORCE_AFTER:.0f} s, so Hoard ended the store's browser. The job was "
               f"at:\n{self.where()}", flush=True)
         if end_browsers():
             self._set(message="Stopping: the store's browser had stopped answering, so Hoard closed it")
 
-    def _watch(self, job_id, every: float = 15.0) -> None:
-        """While a job runs: if it goes STUCK_AFTER seconds without a word, write where it is to Hoard's log (once),
-        and say so, so a stuck job can be told apart from a slow one, and the log shows why."""
-        told = False
-        while self._still(job_id):
-            time.sleep(every)
-            quiet = time.monotonic() - self._moved
-            if not told and quiet >= STUCK_AFTER and self._still(job_id):
-                told = True
-                last = self.state.get("message") or ""
-                print(f"No progress for {quiet / 60:.0f} minutes (last: {last!r}). The job is at:\n{self.where()}", flush=True)
-                self.state["message"] = (f"No progress for {quiet / 60:.0f} minutes. Stop ends it (closing the store's "
-                                         f"browser if it has stopped answering). Last: {last}")[:500]
+
+    def _watch_step(self, job_id):
+        """One scheduler-owned progress check, without a private thread or timer."""
+        if not self._still(job_id):
+            return None
+        quiet = time.monotonic() - self._moved
+        if quiet >= STUCK_AFTER and not str(self.state.get("message", "")).startswith("No progress for"):
+            last = self.state.get("message") or ""
+            print(f"No progress for {quiet / 60:.0f} minutes (last: {last!r}). The job is at:\n{self.where()}", flush=True)
+            self.state["message"] = (f"No progress for {quiet / 60:.0f} minutes. Stop ends it (closing the store's "
+                                     f"browser if it has stopped answering). Last: {last}")[:500]
+        return Again(WATCH_INTERVAL)
 
     def _download(self, stores: list[str], only: str | None, keys: list[str] | None = None, check: bool = False,
                   items: list[str] | None = None, chosen: dict | None = None, listing: bool = False) -> None:
@@ -1074,11 +1155,13 @@ class Jobs:
                                    else "Checked: no updates") + (f" ({total} in all)" if total != found and not keys else "")
                                   + (f". Couldn't check {', '.join(missed)}." if missed else "."))
                 return
-            AssetUpdates().after_download(report.got, report.failed, report.got_files)
+            AssetUpdates().after_download(report.got, report.failed, report.got_files, report.failed_keys)
             for k in set(keys or []) | report.got:   # what they have that isn't on disk is read again, next time asked
                 self.listed.pop(k, None)
             summary = {k: len(getattr(report, k)) for k in ("new_assets", "new_files", "updated", "skipped", "failed")}
-            self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20]},
+            earlier = self.state.get("report") if isinstance(self.state.get("report"), dict) else {}   # (a sync's refresh)
+            self._set(report={**summary, "problems": report.failed[:20], "skipped_list": report.skipped[:20],
+                              **({"counts": earlier["counts"]} if isinstance(earlier.get("counts"), dict) else {})},
                       partial=bool(summary["failed"]) or None,
                       message=(f"Done: {summary['new_assets']} new, {summary['updated']} updated"
                                + (f", {summary['failed']} couldn't be downloaded" if summary["failed"] else "") + "."))
@@ -1122,12 +1205,15 @@ class Jobs:
         online = [s for s in stores if reachable(s)]
         for store in stores:
             if store not in online:
+                from .stores import health
+                health.record(store, "library", "network")
                 self.lib.set_error(store, unreachable_message(store))
         if stores and not online:
             self._set(message="You're offline. Your saved library still works.",
                       error="You're offline. Your saved library still works.")
             return list(stores)
         refreshed, unread = [], [s for s in stores if s not in online]
+        read = found_new = 0   # (for the task's news: how many products were read, and how many of them are new)
         some_shops = False   # Payhip was read, but not every shop
         # itch.io is read through its API: Playwright isn't started (nor needed) when it's the only store read
         with (_playwright()() if any(s not in NO_BROWSER for s in online) else contextlib.nullcontext()) as p:
@@ -1152,7 +1238,8 @@ class Jobs:
                         # the reader gets its own copy of the settings, with the product pages a refresh found
                         # before (not read again), and hands back what it found besides: none of it is a setting
                         with self.lib.lock:
-                            run_cfg = {**self.cfg, "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
+                            run_cfg = {**self.cfg, "_previous_count": self.lib.data["stores"].get(store, {}).get("count", 0),
+                                       "_known_pages": {i["key"]: i["page"] for i in self.lib.data["items"]
                                                                     if i["store"] == store and i.get("page")},
                                        "_known_pictures": {i["key"]: i["thumbnail"] for i in self.lib.data["items"]
                                                            if i["store"] == store and i.get("thumbnail")},
@@ -1161,17 +1248,25 @@ class Jobs:
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
                         if not items and before:
+                            from .stores import health
+                            health.record(store, "library", "empty")
                             self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
                                                       f"Try again, or run the command: debug {store}")
                         else:
                             # a Payhip shop that couldn't be read keeps what Hoard had from it, as a quick refresh
                             # keeps all it didn't reach
+                            with self.lib.lock:   # (its own keys, read where they are: never a copy of the whole library)
+                                had = {i["key"] for i in self.lib.data["items"] if i.get("store") == store}
                             self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick)
+                            read += len(items)
+                            found_new += len({i["key"] for i in items} - had)
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]
                                     self.lib.save()
                             if shops_unread:
+                                from .stores import health
+                                health.record(store, "library", "partial")
                                 self.lib.set_error(store, payhip_unread_note(shops_unread))
                                 some_shops = True
                             refreshed.append(store)
@@ -1215,6 +1310,8 @@ class Jobs:
                 build_catalog(self.cfg, root_dir(self.cfg))
             except Exception as e:   # never fails the refresh
                 print(f"Couldn't write catalog.json: {e}", flush=True)
+        if refreshed:
+            self._counted(read=read, new=found_new)
         if unread and not refreshed:
             why = f"Couldn't read {_names(unread)}. Each store's row in Stores says why."
             self._set(message=why, error=why)
@@ -1226,10 +1323,11 @@ class Jobs:
             self._set(message="Library updated")
         return unread
 
-    def _wishlists(self, stores: list[str], quick: bool = False) -> None:
+    def _wishlists(self, stores: list[str], quick: bool = False, only: str | None = None) -> None:
         """Read your wishlists from each store (issue #158), in its own signed-in browser as a refresh reads your
         library, and keep each list as a wishlist in Sets (sets.SetStore.put_wishlists). quick: only the start of
-        each list (issue #300), the rest kept."""
+        each list (issue #300), the rest kept. only: the one list read, by its name (issue #331); the others are
+        left as they are."""
         from .sets import SetStore
         from .wishlists import READERS, pictures_from_pages, read_store_page
         stores = [s for s in stores if s in READERS]
@@ -1254,7 +1352,8 @@ class Jobs:
                     continue
                 try:
                     said = lambda m, l=label: self._set(message=f"{l}: {m}")   # noqa: E731
-                    lists = READERS[store](ctx, {**self.cfg, "_quick": True} if quick else self.cfg, said)
+                    lists = READERS[store](ctx, {**self.cfg, **({"_quick": True} if quick else {}),
+                                                 **({"_only_list": only} if only else {})}, said)
                     for one in lists:   # a product with no picture on the list (a video first): its page's (issue #212)
                         pictures_from_pages(one.get("products") or [], read_store_page, said,
                                             float(self.cfg.get("request_delay", 0.8)))
@@ -1282,6 +1381,7 @@ class Jobs:
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
+        self._counted(lists=done["lists"], cheaper=len(cheaper))
         read = f"{done['lists']} {'wishlist' if done['lists'] == 1 else 'wishlists'} read" + \
             (f", {len(cheaper)} {'product' if len(cheaper) == 1 else 'products'} cheaper than before" if cheaper else "")
         if failed and not got:
@@ -1316,6 +1416,18 @@ class Jobs:
         wished, failed = self.state.get("message") or "", self.state.get("error")
         self._set(task="quick-refresh", message=f"{said.rstrip('.')}. {wished}".strip(), error=None,
                   partial=bool(partial or failed or self.state.get("partial")) or None)
+
+    def _quick_wishlist(self, stores: list[str], name: str) -> None:
+        """Issue #331: a quick refresh of one wishlist, by the list's name on its store: the start of it read, as a
+        quick refresh reads each (issue #300), and nothing else. A list that isn't on the store any more says so."""
+        self._wishlists(stores[:1], quick=True, only=name)
+        failed = self.state.get("error")
+        read = (self.state.get("report") or {}).get("counts", {}).get("lists")
+        if not failed and not read and not (self._forced or self.stop.is_set()):
+            why = (f"\u201c{name}\u201d wasn't found among your {_names(stores[:1])} wishlists: it may have been renamed "
+                   f"or deleted there. Read it again reads all of them.")
+            self._set(message=why, error=why)
+        self._set(task="quick-wishlist")
 
     def _login_then_refresh(self, stores: list[str]) -> None:
         """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
