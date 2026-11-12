@@ -1019,6 +1019,39 @@ class CopiesAndActions(unittest.TestCase):
         page.get_by_text("Mochi").first.wait_for()
         return page
 
+    def test_the_last_hoard_built_this_way_says_so(self):
+        """5.1.4 is the last Hoard built with PyInstaller: a note under the bar says the next versions install as a new
+        app, and how to uninstall this one first (for this copy), until Got it; once a newer one is out, it says so for
+        good, with a link to it. Pip or source: nothing to uninstall, no note. On both pages."""
+        from unittest import mock
+        ui = self.srv.cfg.setdefault("ui", {})
+        self.addCleanup(lambda: ui.pop("moving_seen", None))
+        with mock.patch.object(server, "save_config"):
+            ui.pop("moving_seen", None)
+            page = self.open()
+            note = page.locator("#movingNote")
+            self.assertTrue(note.is_hidden(), "running from source")
+            page.evaluate("showMoving({ moving_kind: 'windows', moving: false })")
+            self.assertIn("This is the last Hoard built this way.", note.inner_text())
+            self.assertIn("Windows Settings, Apps, Installed apps", note.inner_text())
+            page.click("#movingOk")
+            self.assertTrue(note.is_hidden())
+            page.evaluate("uiFlush()")
+            page.wait_for_function("() => !uiPending")
+            page.wait_for_timeout(300)
+            self.assertIs(ui.get("moving_seen"), True)
+            page.evaluate("""showMoving({ moving_kind: 'mac', moving: true,
+              latest: { version: '5.2.0', url: 'https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/tag/v5.2.0' } })""")
+            self.assertIn("Hoard 5.2.0 is out", note.inner_text())
+            self.assertIn("move it from Applications to the Bin", note.inner_text())
+            self.assertTrue(page.locator("#movingOk").is_hidden())
+            page.goto(self.srv.url + "downloads")   # (the page has its key now)
+            page.wait_for_function("() => UI.moving_seen === true")   # (your choices, as the page reads them)
+            page.evaluate("showMoving({ moving_kind: 'flatpak', moving: false })")
+            self.assertTrue(page.locator("#movingNote").is_hidden(), "Got it, on this page too")
+            page.close()
+        self.assertIsNone(server.ui_settings({"ui": {"moving_seen": "yes"}}).get("moving_seen"))
+
     def test_copies_stack_and_open(self):
         from unittest import mock
         with mock.patch.object(server, "save_config"):

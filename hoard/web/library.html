@@ -1209,6 +1209,13 @@ body.less-motion .tour-try::before { animation: none; }
     <button id="filtersToggle" class="ghost only-narrow" aria-expanded="false" aria-controls="filters">Filters</button>
   </div>
 </header>
+<!-- The last Hoard built this way (5.1.4): the next are built with Tauri and Nuitka, and install as a new app -->
+<div id="movingNote" class="routine-note moving-note" role="status" hidden>
+  <span id="movingText"></span>
+  <a class="ghost sm" id="movingHow" target="_blank" rel="noopener noreferrer"
+     href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Installing-Hoard#moving-to-the-new-hoard">How</a>
+  <button class="ghost sm" id="movingOk">Got it</button>
+</div>
 <div id="routineNote" class="routine-note" role="status" hidden>
   <span id="routineText"></span>
   <button class="primary sm" id="routineChoose">Choose what to download</button>
@@ -1685,9 +1692,9 @@ async function load() {
     if (!r.ok) throw new Error(r.status === 401 ? NEEDS_KEY : r.status === 403 ? "Open this page at http://127.0.0.1 on the computer running it." : `Server answered ${r.status}.`);
     DATA = await r.json(); DATA.error = null;
     if ($("#quitRow")) $("#quitRow").hidden = !DATA.can_quit;
-    if ($("#updateNote")) showUpdate();
     applyDisplay(DATA.display);
     applyUi(DATA.ui);
+    if ($("#updateNote")) showUpdate();   // (after your choices: the moving note, once Got it, stays put away)
     for (const [k, v] of Object.entries(DATA.store_sites || {})) STORE_SITES[k] = v;  // Payhip shops you've added
   } catch (e) {
     DATA = { items: [], stores: {}, labels: DATA.labels || {}, job: {}, error: e instanceof TypeError ? "Hoard isn't running. Open it again." : e.message };

@@ -1955,5 +1955,14 @@
  "Where Projects backs projects up.": "プロジェクトでプロジェクトをバックアップする場所です。",
  "Not there yet": "まだありません",
  "Hoard's folders couldn't be read just now.": "今はHoardのフォルダーを読み込めませんでした。",
- "That folder didn't open.": "そのフォルダーは開きませんでした。"
+ "That folder didn't open.": "そのフォルダーは開きませんでした。",
+ "How": "方法",
+ "First uninstall this Hoard (Windows Settings, Apps, Installed apps: Hoard, then Uninstall), then download the new Hoard's installer from its release and run it.": "まずこのHoardをアンインストールし(Windowsの設定、アプリ、インストールされているアプリ:Hoard、アンインストール)、新しいHoardのインストーラーをリリースからダウンロードして実行してください。",
+ "First quit Hoard and move it from Applications to the Bin, then download the new Hoard's .dmg for this Mac from its release, open it, and drag Hoard to Applications.": "まずHoardを終了して、アプリケーションからゴミ箱に移動してください。それから、このMac用の新しいHoardの.dmgをリリースからダウンロードして開き、Hoardをアプリケーションにドラッグしてください。",
+ "First uninstall this Hoard (in your software centre, or flatpak uninstall io.github.soloflighter1010.Hoard), then download the new Hoard's AppImage or .deb from its release.": "まずこのHoardをアンインストールし(ソフトウェアセンターで、または flatpak uninstall io.github.soloflighter1010.Hoard)、新しいHoardのAppImageか.debをリリースからダウンロードしてください。",
+ "Download the new Hoard's installer from its release and run it, then delete this folder.": "新しいHoardのインストーラーをリリースからダウンロードして実行し、それからこのフォルダーを削除してください。",
+ "Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.": "Hoard {0}が出ました。新しい方法(TauriとNuitka)で作られていて、新しいアプリとしてインストールされるため、このHoardからは更新できません。",
+ "This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app.": "この作り方のHoardはこれが最後です。次のバージョンからはTauriとNuitkaで作られ、新しいアプリとしてインストールされます。",
+ "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "ライブラリ、設定、サインイン、ダウンロードはそのまま残ります。アンインストールしても消えません。",
+ "Got it": "わかりました"
 }

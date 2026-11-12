@@ -1182,9 +1182,39 @@ async function showUpdate(u) {
   $("#updLink").href = u.available ? u.latest.url : u.releases_page;
   const note = $("#updateNote");   // the header's "Update to ..." link, on the Library page
   if (note) { note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : ""; }
+  showMoving(u);
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
+/* The last Hoard built with PyInstaller (5.1.4; 5.2.0 beta 5 for beta updates). The versions after it are built with
+   Tauri and Nuitka and install as a new app, so this one never installs them itself: a note under the bar says to
+   uninstall this Hoard first (until Got it), and once a newer one is out, says it again, with how, for good. */
+const MOVING_HOW = {
+  windows: "First uninstall this Hoard (Windows Settings, Apps, Installed apps: Hoard, then Uninstall), then download the new Hoard's installer from its release and run it.",
+  mac: "First quit Hoard and move it from Applications to the Bin, then download the new Hoard's .dmg for this Mac from its release, open it, and drag Hoard to Applications.",
+  flatpak: "First uninstall this Hoard (in your software centre, or flatpak uninstall io.github.soloflighter1010.Hoard), then download the new Hoard's AppImage or .deb from its release.",
+  portable: "Download the new Hoard's installer from its release and run it, then delete this folder.",
+};
+// Show the note for this copy of a PyInstaller build (none for pip or source: nothing to uninstall).
+function showMoving(u) {
+  const note = $("#movingNote"), kind = u && u.moving_kind;
+  if (!note) return;
+  const out = !!(u && u.moving && u.latest);
+  note.hidden = !kind || !MOVING_HOW[kind] || (!out && UI.moving_seen === true);
+  if (note.hidden) return;
+  $("#movingText").textContent = (out
+    ? tr("Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.", verText(u.latest.version))
+    : tr("This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app."))
+    + " " + tr(MOVING_HOW[kind]) + " " + tr("Your library, settings, sign-ins and downloads stay: uninstalling never removes them.");
+  if (out) $("#movingHow").href = u.latest.url;
+  $("#movingHow").textContent = tr(out ? "Get it" : "How");
+  $("#movingOk").hidden = out;   // (once it's out: until this Hoard is uninstalled)
+}
+document.addEventListener("click", e => {
+  if (!e.target.closest || !e.target.closest("#movingOk")) return;
+  $("#movingNote").hidden = true;
+  uiSave({ moving_seen: true });
+});
 /* The logo glows, and shakes now and then, while an update to Hoard is waiting; choosing it then opens Updates */
 function markBrand() {
   const b = $(".brand");

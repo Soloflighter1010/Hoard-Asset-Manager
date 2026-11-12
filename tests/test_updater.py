@@ -202,6 +202,10 @@ class Downloading(unittest.TestCase):
         _GitHub.use(self)
         for f in updater.updates_dir().glob("*") if updater.updates_dir().is_dir() else []:
             f.unlink()
+        # (the stand-in's NEXT is built this way here, so the installing these test is the one a release of it gets)
+        moved = mock.patch.object(updater, "LAST_BUILT_THIS_WAY", "999.0.0")
+        moved.start()
+        self.addCleanup(moved.stop)
 
     def test_the_newest_release(self):
         latest = updater.fetch_latest()
@@ -352,6 +356,34 @@ class WhenHoardAsks(unittest.TestCase):
         self.assertEqual(sorted(f.name for f in folder.iterdir()), sorted([new.name, other.name]))
         new.unlink()
         other.unlink()
+
+    def test_the_last_built_this_way(self):
+        """5.1.4 (and 5.2.0 beta 5) are the last Hoards built with PyInstaller: the versions after them (Tauri and
+        Nuitka) install as a new app, so this one never installs one itself, however its release names its installer;
+        5.2.0 beta 5 it still installs. The page is told which copy this is, and that the newer one is the new way."""
+        self.assertEqual(updater.LAST_BUILT_THIS_WAY, "5.2.0-beta.5")
+        self.assertFalse(updater.built_another_way("5.2.0-beta.5"), "beta 5: built this way")
+        self.assertTrue(updater.built_another_way("5.2.0-beta.6"))
+        self.assertTrue(updater.built_another_way("5.2.0"))
+        both = [{"name": "Hoard-Setup-{}.exe"}, {"name": updater.SUMS_NAME}]
+        r = release("v5.2.0", assets=[{"name": both[0]["name"].format("5.2.0")}, both[1]])
+        self.assertFalse(updater.describe(r)["has_installer"], "never this one's installer, whatever it's called")
+        b5 = release("v5.2.0-beta.5", prerelease=True, assets=[{"name": both[0]["name"].format("5.2.0-beta.5")}, both[1]])
+        self.assertTrue(updater.describe(b5)["has_installer"])
+        u = updater.Updates({})
+        u.state["latest"] = {**updater.describe(r), "has_installer": True}   # (as one remembered from before)
+        with mock.patch.object(updater, "installed_copy", lambda: True), mock.patch.object(updater.sys, "frozen", True, create=True), \
+                mock.patch.object(updater.sys, "platform", "win32"):
+            view = u.view(True)
+        self.assertEqual((view["available"], view["can_install"], view["moving"], view["moving_kind"]), (True, False, True, "windows"))
+        kinds = []
+        for platform, frozen, flatpak, installed in (("win32", True, False, True), ("win32", True, False, False),
+                                                     ("darwin", True, False, False), ("linux", False, True, False),
+                                                     ("linux", False, False, False)):
+            with mock.patch.object(updater.sys, "platform", platform), mock.patch.object(updater.sys, "frozen", frozen, create=True), \
+                    mock.patch("hoard.paths.in_flatpak", lambda: flatpak), mock.patch.object(updater, "installed_copy", lambda: installed):
+                kinds.append(updater.moving_kind())
+        self.assertEqual(kinds, ["windows", "portable", "mac", "flatpak", ""], "pip or source: nothing to uninstall")
 
     def test_only_the_installed_app_installs(self):
         self.assertFalse(updater.installed_copy(), "running from source")
