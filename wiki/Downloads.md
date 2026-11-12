@@ -227,7 +227,9 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
 - Open a product to see its files, sizes and folder. **Open folder** opens it in Explorer (or Finder), **Show in
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** (in the **Menu**) checks the
-  folder again, say after you've tidied it yourself.
+  folder again, say after you've tidied it yourself. A product with something wrong (files missing or changed, a
+  download that didn't finish, a Local folder that's gone) has a red mark on its tile, and the **Problems** view
+  (5.2, while there are any) lists them: see [Something wrong with a product](Library#something-wrong-with-a-product).
 - **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without importing
   anything, and takes nothing out until you choose **Extract** (below). A Unity package's files are listed in their folders (each opens as you choose it), with
   their sizes and the preview pictures Unity keeps inside the package; **Search in it** finds a file wherever it
@@ -328,7 +330,8 @@ own folders listed in Local where they are aren't counted: they aren't Hoard's t
 Hoard keeps the downloads folder as the stores sent it: a sync replaces a file there that was changed, so edits
 made there are lost. To change a texture or anything else, open the product and choose **Make an editable copy**.
 Hoard copies its files into a folder of their own, in **Hoard Edits** beside your downloads folder (or the folder
-`edits_root` names in `config.json`), and opens it. A read-me there says what it is.
+`edits_root` names in `config.json`). From 5.2 the copy is added to **Local**, listed where it is, as
+"<name> (editable copy)", and its details open there; before, Hoard opened the folder. A read-me there says what it is.
 
 - Hoard never checks, updates or replaces the copy, and each copy is a new folder (`Rusk (2)` beside an earlier
   one), so your edits stay yours.

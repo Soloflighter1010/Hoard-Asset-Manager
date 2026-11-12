@@ -387,6 +387,10 @@ never goes to one.
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how Hoard is built: the store readers, sign-ins,
 the local servers and their safety rules, and how releases are made.
+The architecture roadmap's implementation and remaining desktop measurements are tracked in
+[docs/ROADMAP-315.md](docs/ROADMAP-315.md). The [app shell](docs/APP-SHELL.md),
+[private storage](docs/STORAGE.md), [store adapters](docs/STORES.md),
+[background scheduler](docs/SCHEDULER.md) and generated [HTTP API](docs/API.md) have dedicated guides.
 The wiki's [Development](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Development) and
 [Releasing](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Releasing) pages cover tests and releases step
 by step. The wiki itself is written in `wiki/` and published by the **Wiki** workflow.

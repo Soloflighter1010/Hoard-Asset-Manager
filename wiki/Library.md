@@ -85,7 +85,8 @@ In the details:
   folder), or **Show in Downloads** when you do, with **See the update** when its store has newer files. Payhip
   products have **Open on Payhip** instead: Hoard lists them and doesn't download them.
 - **Open on** the store (its download page) and **Store page** open the product on its store, in your web browser.
-  These buttons only ever go to that item's own store.
+  These buttons only ever go to that item's own store. **Copy store link** (5.2) copies its public page's address, to
+  paste anywhere (in Downloads too).
 - **Organise:** **Archive**, **Hide**, **Remove** and **Delete downloaded files**. See below.
 - **You also own this on ...**: Hoard spots the same product bought on more than one store. **Show all copies**
   lists them together.
@@ -98,6 +99,34 @@ In the details:
 - **Tags:** add your own tags, or click a suggestion. See [Tags](Tags).
 - **Files** lists what the store offers, each with its own download link.
 - **Archive**, **Remove** and **Hide**: see below.
+
+## Products for adults
+
+From 5.2, a product that's for adults has an **18+** mark on its tile (and says so to a screen reader), and its
+picture is blurred, on its tile and in its details, where clicking the picture shows it (and clicking again blurs
+it). Hoard knows a product is for adults when:
+
+- **you say so:** **Mark as 18+** in its details. **It isn't for adults** says otherwise. Your word wins over
+  everything below, and is how a product of your own in **Local** gets the mark;
+- **its store says so,** when Hoard reads it: Booth's adult flag, Jinxxy's, or an R-18 badge on a wishlist;
+- **its tags or its name say so:** R-18, NSFW, 18+, 成人向け, 19금 and the like, your own tags or its creator's.
+
+Its details say which. To see the pictures unblurred everywhere, turn off **Blur the pictures of products for adults
+(18+)** in [Settings](Settings), under **Accessibility**. A set with a product for adults in it is an Adult set:
+see [Sets](Sets#sharing-a-set).
+
+## Something wrong with a product
+
+From 5.2, a product with something wrong has a red mark on its tile, here and in Downloads, and saying what on hover
+and to a screen reader:
+
+- files of it are missing on disk (moved or deleted since they were downloaded);
+- the last [check of your downloads](Downloads#checking-your-downloads) found files of it changed;
+- a download of it didn't finish (a file failed): it's marked until a download of it goes through;
+- a product of your own in **Local**, listed where it is, whose folder isn't there any more.
+
+Its details list each, with what to do: download it again, deal with it in **Check downloads**, or take it out of
+Local and add it again from where it is now. Downloads has a **Problems** view of them all.
 
 ## Choosing several at once
 

@@ -148,6 +148,12 @@ new packages replace. It's made as a task (see [Projects' tasks](#projects-tasks
 it was. If Unity has the project open,
 Hoard says so: close it first, so nothing it has open is replaced under it.
 
+From 5.2, **Logs** says each package's version now and the one it gets (`lilToon 2.4.0 -> 2.4.1`, or **(new)**,
+**(again)** or **(removed)**), and so does the task when it's done. Once the change is made, Hoard reads the project
+back. If a package's entry in `vpm-manifest.json`, or its own folder in `Packages`, isn't at the version it was to
+have (Unity putting the old one back while it had the project open, say), the task fails and names it, rather than
+ending as done. Close Unity, then try again.
+
 Each package download is checked against the SHA-256 its repository lists for it, and downloads are kept where ALCOM
 keeps them, so neither downloads one twice.
 

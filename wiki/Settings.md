@@ -74,8 +74,10 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   The messages read well where they land (5.2.0 beta 4): on Discord, a card in Hoard's gold with Hoard's name and
   icon and a link; on services that show formatting, bold and links; elsewhere, plain text. Products on your
   wishlists that got cheaper are named, each with its old price struck out, its new one and a link to its store
-  page (the first five, then how many more), with the first one's picture where the service shows pictures. A new
-  version of Hoard links its releases page.
+  page (the first five, then how many more), with the first one's picture where the service shows pictures (on
+  Discord, inside the card, from 5.2). A new version of Hoard links its releases page. A finished task says how
+  many (5.2): products added to Local and how many were there already, wishlists read and products cheaper, files
+  moved or deleted, and so on.
   The [setup assistant](Getting-Started) has a step for this too.
 - **Appearance** (from 3.2):
   - **Language** (from 3.3): **Match my computer**, **English**, **日本語** (Japanese) or **한국어** (Korean). Match
@@ -112,6 +114,8 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
     in every style and theme.
   - **Pause animated pictures:** animated product pictures (GIFs and the like) show as a still of their first
     frame. Turn it off and they move again.
+  - **Blur the pictures of products for adults (18+)** (5.2, on unless you turn it off): see
+    [Products for adults](Library#products-for-adults). Off, their pictures show as any other's; the 18+ mark stays.
   - **Reduce motion:** no sliding panels, lifting tiles or animated progress. Hoard also does this when your
     computer's own settings ask for less motion.
   - **Coloured glow behind the page:** the stores' colours rising from the bottom of the window. Turn it off for a
@@ -159,6 +163,9 @@ Also here:
   A backup with hidden items replaces yours only once your hidden library is unlocked. A backup made while it's
   locked names no hidden product anywhere (from 4.2.0), and restoring one leaves your hidden products' tags, sets
   and choices as they are.
+- **Bring in from another tool** (5.2): **Bring in from KonoAsset...**, as in the Menu, brings in KonoAsset's library:
+  what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their
+  tags and memos. Nothing in KonoAsset's folder is changed. See [Hoard and other tools](Hoard-and-Other-Tools).
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Take the tour:** what Hoard can do, shown on your own library (4.1.0). See
   [Getting started](Getting-Started#the-tour).

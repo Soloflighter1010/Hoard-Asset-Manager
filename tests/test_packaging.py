@@ -9,12 +9,12 @@ import struct
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 
@@ -33,7 +33,7 @@ def blocks(text: str) -> list[str]:
     return [b for b in re.split(r"\n(?=[A-Za-z0-9_.-]+==)", text) if re.match(r"[A-Za-z0-9_.-]+==", b)]
 
 
-class LockedDependencies(unittest.TestCase):
+class LockedDependencies(IsolatedTestCase):
 
     def test_the_mac_app(self):
         lock = (REPO / "requirements-mac.txt").read_text("utf-8")
@@ -100,7 +100,7 @@ class LockedDependencies(unittest.TestCase):
             self.assertIsNone(rank(unusable), unusable)
 
 
-class TheFlatpak(unittest.TestCase):
+class TheFlatpak(IsolatedTestCase):
 
     def setUp(self):
         self.manifest = MANIFEST.read_text("utf-8")
@@ -186,7 +186,7 @@ class TheFlatpak(unittest.TestCase):
             self.assertEqual(paths.data_dir(), Path("/data/sam/Hoard"), "your own XDG_DATA_HOME, as Flatpak passes it on")
 
 
-class Updating(unittest.TestCase):
+class Updating(IsolatedTestCase):
     """The Mac app and the Flatpak can't install an update themselves: they say which file to get."""
 
     def test_the_flatpak(self):
@@ -225,10 +225,10 @@ class Updating(unittest.TestCase):
             view = u.view(False)
         self.assertTrue(view["available"])
         self.assertIn("Hoard-99.0.0-linux-x86_64.flatpak", view["how"])
-        self.assertIn("u.how", (REPO / "hoard" / "web" / "library.html").read_text("utf-8"), "Settings shows it")
+        self.assertIn("u.how", (REPO / "hoard" / "web" / "view-common.js").read_text("utf-8"), "Settings shows it")
 
 
-class TheMacApp(unittest.TestCase):
+class TheMacApp(IsolatedTestCase):
 
     def test_the_bundle(self):
         spec = (REPO / "packaging" / "hoard.spec").read_text("utf-8")
@@ -249,7 +249,7 @@ class TheMacApp(unittest.TestCase):
         self.assertTrue(os.access(REPO / "scripts" / "build_macos_pkg.sh", os.X_OK) or os.name == "nt")
 
 
-class Icons(unittest.TestCase):
+class Icons(IsolatedTestCase):
 
     def test_sizes(self):
         for size in (128, 256, 512):
@@ -261,7 +261,7 @@ class Icons(unittest.TestCase):
         self.assertEqual(struct.unpack(">I", icns[4:8])[0], len(icns))
 
 
-class Workflows(unittest.TestCase):
+class Workflows(IsolatedTestCase):
 
     def setUp(self):
         self.release = (REPO / ".github" / "workflows" / "release.yml").read_text("utf-8")
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class EveryBuildHasHoardsFiles(unittest.TestCase):
+class EveryBuildHasHoardsFiles(IsolatedTestCase):
     """Each build carries every file Hoard reads, not only its code (3.3.0's portable zip had no translations)."""
 
     def files(self) -> set[str]:

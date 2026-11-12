@@ -335,6 +335,14 @@ public static class CoreTests
     {
         string dir = args[0];
         byte[] key = Seal.ReadKey(Path.Combine(dir, "integrity.key"));
+        // docs/schemas/examples.json is also checked by Python's actual writer.
+        var schemaExamples = Json.Parse(File.ReadAllText(Path.Combine(dir, "schema-examples.json"), Encoding.UTF8));
+        foreach (var example in schemaExamples.Items)
+        {
+            var catalog = HoardCatalog.Load(Path.Combine(dir, "schema-examples", example.Str("folder")), key);
+            Check("shared schema: " + example.Str("name"), catalog.Problem == null &&
+                  (catalog.Assets.Count == 1) == example.Get("valid").Bool, catalog.Problem);
+        }
         Check("key read", key != null && key.Length == 32);
         Check("key id matches Hoard's", Seal.KeyId(key) == File.ReadAllText(Path.Combine(dir, "key_id.txt")).Trim());
 

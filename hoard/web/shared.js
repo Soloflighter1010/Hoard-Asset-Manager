@@ -291,7 +291,11 @@ async function api(url, opts = {}) {
   await entered;
   // The request, with the key.
   const send = () => fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-Hoard-Key": ACCESS.key } });
-  if ((opts.method || "GET").toUpperCase() !== "GET") return send();
+  if ((opts.method || "GET").toUpperCase() !== "GET") {
+    const response = await send();
+    if (response.ok) invalidateAppData(url, opts);
+    return response;
+  }
   for (const wait of [300, 1000]) {
     try { return await send(); } catch (e) {
       if (!(e instanceof TypeError)) throw e;   // (an abort isn't one)
@@ -427,15 +431,34 @@ function pictureLook(src) {
 }
 const lookedAt = new Set();   // pictures already worked out while this page is open, found or not
 async function lookAtPictures(wanted) {   // [{look_for: its SHA-256, src}]: true when there's something new to stack by
-  const looks = {};
-  for (const w of wanted) {
-    if (lookedAt.has(w.look_for) || Object.keys(looks).length >= 500) continue;
+  const looks = {}, todo = wanted.filter(w => !lookedAt.has(w.look_for)).slice(0, 500);
+  let done = 0, changed = false;
+  // Persist small batches so a restart keeps completed comparisons without one database write per pixel hash.
+  async function keepLooks() {
+    if (!Object.keys(looks).length) return;
+    try {
+      if ((await apiPost("/api/picture-looks", { looks })).ok) {
+        changed = true; for (const key of Object.keys(looks)) delete looks[key];
+      }
+    } catch (e) { /* the next load can request comparisons not saved yet */ }
+  }
+  for (const w of todo) {
+    // The scheduler owns admission; a foreground job or Pause leaves this work
+    // for the next refresh, without a separate browser timer or private queue.
+    let permit;
+    try { permit = await apiPost("/api/tasks/pictures", { done, total: todo.length }); } catch (e) { break; }
+    if (!permit.ok || !permit.data.allowed) break;
     lookedAt.add(w.look_for);
     const hex = await pictureLook(w.src);
     if (hex) looks[w.look_for] = hex;
+    done++;
+    if (Object.keys(looks).length >= 32) await keepLooks();
   }
-  if (!Object.keys(looks).length) return false;
-  try { return (await apiPost("/api/picture-looks", { looks })).ok; } catch (e) { return false; }
+  if (todo.length) {
+    try { await apiPost("/api/tasks/pictures", { done, total: todo.length }); } catch (e) { /* resumed with the next load */ }
+  }
+  await keepLooks();
+  return changed;
 }
 // The item whose details are open stays marked in the grid.
 function markCurrent(selector) {
@@ -506,6 +529,7 @@ function applyDisplay(d) {
   if (d.font === "dyslexic") html.dataset.font = "dyslexic"; else delete html.dataset.font;
   if (d.spacing) html.dataset.spacing = "wide"; else delete html.dataset.spacing;
   if (d.card_outlines) html.dataset.cards = "outlined"; else delete html.dataset.cards;   // (issue #222: looks.css)
+  if (d.blur_adult === false) html.dataset.adult = "show"; else delete html.dataset.adult;   // (issue #311: looks.css)
   document.body.classList.toggle("no-glow", d.glow === false);
   SECRETS.kind = d.seasonal !== false && SECRET_THEMES.includes(d.theme) ? d.theme : "";   // (issue #260)
   secretsDraw();
@@ -649,7 +673,12 @@ function lazyCards(box, batch = 120) {
     near.disconnect();
     const next = list.slice(shown, shown + count);
     if (next.length) {
-      box.insertAdjacentHTML("beforeend", next.map(card).join(""));
+      const fragment = document.createDocumentFragment();
+      for (const item of next) {
+        const node = card(item);
+        fragment.append(node instanceof Node ? node : legacyFragment(node));
+      }
+      box.append(fragment);
       shown += next.length;
       markSelected();   // cards drawn now get the marks the others have
     }
@@ -658,7 +687,7 @@ function lazyCards(box, batch = 120) {
   return {
     show(items, cardFor) {
       const keep = Math.max(batch, shown);
-      list = items; card = cardFor; shown = 0; box.innerHTML = "";
+      list = items; card = cardFor; shown = 0; box.replaceChildren();
       more(keep);
     },
     get drawn() { return shown; },
@@ -1001,6 +1030,7 @@ function allActions() {
    them (or goes in the other's folder), and on a folder it goes in it. What a drop will do shows on what's under it
    as you drag; Escape (the browser's own) or letting go anywhere else does nothing. Right-click does it all too. */
 const DRAG = { what: "", ids: [], over: null };
+const POINTER_DRAG = { source: null, id: null, x: 0, y: 0, active: false, suppressUntil: 0 };
 // The products a tile drags: those chosen with it, or it alone.
 function dragProducts(slot) {
   const id = tileId(slot);
@@ -1054,9 +1084,63 @@ function dropShow(t) {
 }
 // The drag is over: nothing marked any more.
 function dragDone() { dropShow(null); DRAG.what = ""; DRAG.ids = []; }
+// Internal grouping uses pointer events too: native desktop drop interception can swallow HTML drag events.
+function wirePointerDragging() {
+  // Release the captured pointer and forget the source without changing the user's selection.
+  const reset = () => {
+    const source = POINTER_DRAG.source;
+    if (source && source.hasPointerCapture(POINTER_DRAG.id)) source.releasePointerCapture(POINTER_DRAG.id);
+    POINTER_DRAG.source = null; POINTER_DRAG.id = null; POINTER_DRAG.active = false;
+    document.documentElement.classList.remove("hoard-dragging");
+  };
+  document.addEventListener("pointerdown", e => {
+    if (e.button !== 0 || e.pointerType === "touch") return;   // touch keeps normal scrolling
+    const source = e.target.closest && e.target.closest('#grid .slot[draggable=true], #projectsBody [data-path][draggable=true]');
+    if (!source) return;
+    Object.assign(POINTER_DRAG, { source, id: e.pointerId, x: e.clientX, y: e.clientY, active: false });
+  });
+  document.addEventListener("pointermove", e => {
+    if (!POINTER_DRAG.source || e.pointerId !== POINTER_DRAG.id) return;
+    if (!POINTER_DRAG.active) {
+      if (Math.hypot(e.clientX - POINTER_DRAG.x, e.clientY - POINTER_DRAG.y) < 7) return;
+      const source = POINTER_DRAG.source;
+      if (source.matches("#grid .slot")) {
+        const list = dragProducts(source);
+        if (!list.length) { reset(); return; }
+        Object.assign(DRAG, { what: "products", ids: list.map(T.id) });
+      } else Object.assign(DRAG, { what: "project", ids: [source.dataset.path] });
+      POINTER_DRAG.active = true; source.setPointerCapture(e.pointerId);
+      document.documentElement.classList.add("hoard-dragging");
+    }
+    e.preventDefault();
+    dropShow(dropTarget(document.elementFromPoint(e.clientX, e.clientY)));
+  });
+  document.addEventListener("pointerup", e => {
+    if (!POINTER_DRAG.source || e.pointerId !== POINTER_DRAG.id) return;
+    const active = POINTER_DRAG.active;
+    const target = active ? dropTarget(document.elementFromPoint(e.clientX, e.clientY)) : null;
+    reset();
+    if (!active) return;
+    POINTER_DRAG.suppressUntil = performance.now() + 400;
+    dragDone(); e.preventDefault();
+    if (target) target.run();
+  });
+  document.addEventListener("pointercancel", () => { reset(); dragDone(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && POINTER_DRAG.source) { reset(); dragDone(); }
+  });
+  document.addEventListener("click", e => {
+    // A drag's synthesized click must not open the source product after grouping it.
+    if (performance.now() < POINTER_DRAG.suppressUntil && e.target.closest('#grid .slot, #projectsBody [data-path]')) {
+      POINTER_DRAG.suppressUntil = 0; e.preventDefault(); e.stopImmediatePropagation();
+    }
+  }, true);
+}
 // Dragging products and projects, and dropping them on each other (issue #281).
 function wireDragging() {
+  wirePointerDragging();
   document.addEventListener("dragstart", e => {
+    if (POINTER_DRAG.source) { e.preventDefault(); return; }   // the pointer path owns in-window drags (#313)
     const el = e.target.closest ? e.target : e.target.parentElement;
     const slot = el && el.closest("#grid .slot[draggable=true]"), project = !slot && el && el.closest("#projectsBody [data-path][draggable=true]");
     if (slot) {
@@ -1122,6 +1206,15 @@ function wireSelection() {
       menuFor(slot, { x: r.left + 12, y: r.top + 12 });
     });
   }
+  // In Hoard's own window the web view's menu (Back, Refresh, Save as, Print...) has no place (issue #344): a
+  // right-click that isn't Hoard's own does nothing, but in a box you type in, which keeps its cut, copy and paste.
+  // In your browser, the browser's menu is yours.
+  document.addEventListener("contextmenu", e => {
+    if (e.defaultPrevented || !inOwnWindow()) return;
+    const el = e.target.closest ? e.target : e.target.parentElement;
+    if (el && el.closest('textarea, [contenteditable]:not([contenteditable="false"]), input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=file])')) return;
+    e.preventDefault();
+  });
   document.addEventListener("pointerdown", e => { if (selMenu && !selMenu.el.contains(e.target) && e.target !== selMenu.from) closeSelMenu(); }, true);
   window.addEventListener("resize", () => closeSelMenu());
   // scrolling closes the menu, but not the page settling as it opens: the bar appearing for a right-clicked tile can
@@ -1536,7 +1629,7 @@ function goToAddress() {   // Back or Forward: show the place the address names
   } finally { NAV.quiet = false; }
   NAV.at = placeOf(new URLSearchParams(location.hash.slice(1)));
 }
-addEventListener("popstate", goToAddress);
+// app.js selects the view before restoring the address on Back/Forward.
 // the mouse's back and forward buttons, and Alt+Left and Alt+Right, here as in a browser (Hoard's window too)
 addEventListener("mouseup", e => {
   if (e.button !== 3 && e.button !== 4) return;
@@ -2102,6 +2195,9 @@ async function openSettings(open) {
 }
 // Whether Hoard can show its own file picker (in Hoard's window).
 const canPick = () => !!(typeof DATA === "object" && DATA && DATA.can_pick);
+// Whether this is Hoard's own window (it can be quit, kept running in the background or asked for a folder from here),
+// not a tab in your browser.
+const inOwnWindow = () => !!(typeof DATA === "object" && DATA && (DATA.can_quit || DATA.can_background || DATA.can_pick));
 // Show the Browse buttons only where Hoard can show its own picker.
 function syncBrowse() { for (const b of document.querySelectorAll("[data-browse]")) b.hidden = !canPick(); }
 // Pick a folder (or file) in Hoard's window, and put its path in input. False when none was picked.
@@ -2141,6 +2237,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setFont").value = SETTINGS.display.font || "standard";
   $("#setSpacing").checked = !!SETTINGS.display.spacing;
   $("#setCardOutlines").checked = !!SETTINGS.display.card_outlines;
+  $("#setBlurAdult").checked = SETTINGS.display.blur_adult !== false;
   $("#setGlowOn").checked = SETTINGS.display.glow;
   $("#setSeasonal").checked = SETTINGS.display.seasonal !== false;
   $("#setColours").value = SETTINGS.display.colours;
@@ -2181,9 +2278,39 @@ async function showUpdate(u) {
   for (const note of document.querySelectorAll("#updateNote, [data-update-note]")) {
     note.hidden = !u.available; note.textContent = u.available ? `Update to ${verText(u.latest.version)}` : "";
   }
+  showMoving(u);
   clearTimeout(updTimer);
   if (u.busy) updTimer = setTimeout(() => showUpdate(), 1000);
 }
+/* The last Hoard built with PyInstaller (5.2.0 beta 5). The versions after it are built with Tauri and Nuitka and
+   install as a new app, so this one never installs them itself: a note under the bar says to uninstall this Hoard
+   first (until Got it), and once a newer one is out, says it again, with how, for good. */
+const MOVING_HOW = {
+  windows: "First uninstall this Hoard (Windows Settings, Apps, Installed apps: Hoard, then Uninstall), then download the new Hoard's installer from its release and run it.",
+  mac: "First quit Hoard and move it from Applications to the Bin, then download the new Hoard's .dmg for this Mac from its release, open it, and drag Hoard to Applications.",
+  flatpak: "First uninstall this Hoard (in your software centre, or flatpak uninstall io.github.soloflighter1010.Hoard), then download the new Hoard's AppImage or .deb from its release.",
+  portable: "Download the new Hoard's installer from its release and run it, then delete this folder.",
+};
+// Show the note for this copy of the last PyInstaller build (none for pip or source: nothing to uninstall).
+function showMoving(u) {
+  const note = $("#movingNote"), kind = u && u.moving_kind;
+  if (!note) return;
+  const out = !!(u && u.moving && u.latest);
+  note.hidden = !kind || !MOVING_HOW[kind] || (!out && UI.moving_seen === true);
+  if (note.hidden) return;
+  $("#movingText").textContent = (out
+    ? tr("Hoard {0} is out, built a new way (with Tauri and Nuitka): it installs as a new app, so this one can't update to it.", verText(u.latest.version))
+    : tr("This is the last Hoard built this way. The next versions are built with Tauri and Nuitka, and install as a new app."))
+    + " " + tr(MOVING_HOW[kind]) + " " + tr("Your library, settings, sign-ins and downloads stay: uninstalling never removes them.");
+  if (out) $("#movingHow").href = u.latest.url;
+  $("#movingHow").textContent = tr(out ? "Get it" : "How");
+  $("#movingOk").hidden = out;   // (once it's out: until this Hoard is uninstalled)
+}
+document.addEventListener("click", e => {
+  if (!e.target.closest || !e.target.closest("#movingOk")) return;
+  $("#movingNote").hidden = true;
+  uiSave({ moving_seen: true });
+});
 /* ---------- the Heap, Hoard's logo (issues #277, #278): the gold box with its sparkle on a box for each store you use,
    in its colour, and the Projects box (a small cube on it), always. Drawn as hoard/heap.py draws it (the
    same text: a test holds the two to it), so the logo the page starts with is the one it draws. Each box is placed
@@ -2758,6 +2885,7 @@ function settingsPart(el) {
     case "setFont": return { display: { font: el.value } };
     case "setSpacing": return { display: { spacing: el.checked } };
     case "setCardOutlines": return { display: { card_outlines: el.checked } };
+    case "setBlurAdult": return { display: { blur_adult: el.checked } };
     case "setTextSize": case "setPause": case "setMotion":
       return { display: { text_size: Number($("#setTextSize").value), pause_animations: $("#setPause").checked,
                           reduce_motion: $("#setMotion").checked } };
@@ -2956,6 +3084,7 @@ function renderTasks(t) {
       (problems(h).length ? `<ul class="problems">${problems(h).map(p => `<li>${esc(p)}</li>`).join("")}</ul>` : "") +
       ((h.log || []).length ? `<pre>${esc(h.log.join("\n"))}</pre>` : "") + `</details>`).join("")
       : `<p class="none">Nothing yet. Each refresh, sync and download is listed here when it's done.</p>`);
+  renderBackgroundTasks(t.background || []);
   for (const pre of document.querySelectorAll("#tasksBody details[data-id] pre")) {
     const d = pre.closest("details"), was = place.get(d.dataset.id);
     // what's running follows its newest lines, unless you've scrolled up to read; the rest stay where they were
@@ -2963,6 +3092,45 @@ function renderTasks(t) {
   }
   if (win) win.scrollTop = winTop;
   taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
+}
+// Background readers keep a quiet, separate group and use text nodes for all progress.
+function renderBackgroundTasks(tasks) {
+  if (!tasks.length) return;
+  const group = document.createElement("section"); group.className = "background-tasks";
+  const heading = document.createElement("h3"); heading.textContent = tr("Background work"); group.append(heading);
+  const note = document.createElement("p"); note.className = "none";
+  note.textContent = tr("Background work pauses while your tasks run. Completed work is kept when Hoard closes."); group.append(note);
+  const labels = { "package-reader": tr("Reading packages"), "routine-check": tr("Routine check"),
+    "hoard-update-check": tr("Checking Hoard updates"), "picture-matching": tr("Matching pictures") };
+  const maintenance = { "Checking Unity catalog": tr("Checking Unity catalog"), "Updating Unity catalog": tr("Updating Unity catalog"),
+    "Caching store pictures": tr("Caching store pictures"), "Forgetting old share links": tr("Forgetting old share links") };
+  const statuses = { running: tr("Running"), waiting: tr("Waiting"), paused: tr("Paused"), stopped: tr("Stopped"), complete: tr("Done") };
+  for (const task of tasks) {
+    const row = document.createElement("div"); row.className = "task background-task"; row.dataset.backgroundId = task.id;
+    const top = document.createElement("div"); top.className = "task-top";
+    const title = document.createElement("b"); title.textContent = labels[task.id] || maintenance[task.label] || task.label; top.append(title);
+    const status = document.createElement("span"); status.textContent = statuses[task.status] || ""; top.append(status);
+    const paused = task.status === "paused" || task.status === "stopped";
+    for (const action of paused ? ["resume"] : ["pause", "stop"]) {
+      const button = document.createElement("button"); button.className = "ghost sm";
+      button.dataset.backgroundAction = action; button.dataset.backgroundId = task.id;
+      button.textContent = action === "resume" ? tr("Resume") : action === "pause" ? tr("Pause") : tr("Stop");
+      top.append(button);
+    }
+    row.append(top);
+    const progress = task.progress || {};
+    if (Number.isFinite(progress.total) && progress.total > 0) {
+      const bar = document.createElement("progress"); bar.max = progress.total; bar.value = Math.min(progress.done || 0, progress.total);
+      bar.setAttribute("aria-label", title.textContent); row.append(bar);
+      const count = document.createElement("span"); count.textContent = tr("{0} of {1}", progress.done || 0, progress.total); row.append(count);
+    }
+    if (task.error) {
+      const error = document.createElement("p"); error.className = "err";
+      error.textContent = tr("Background task could not finish. Retry or create a diagnostic report."); row.append(error);
+    }
+    group.append(row);
+  }
+  $("#tasksBody").append(group);
 }
 // Add packages: a repository folded away stays so while you're in Projects
 document.addEventListener("toggle", e => {
@@ -3146,8 +3314,10 @@ function drawProjects() {
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
     ? [...body.querySelectorAll("input[id], textarea[id]")].filter(el => pjTicks(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue)
       .map(el => [el.id, pjTicks(el) ? el.checked : el.value]) : [];
-  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in
-  const tagBox = $("#pjTagInput"), tagTyped = tagBox && tagBox.value ? [tagBox.value, document.activeElement === tagBox] : null;
+  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in (and the box
+  // keeps where you are while it's still empty: what's typed just then went nowhere, and Enter added nothing)
+  const tagBox = $("#pjTagInput"), tagFocused = !!tagBox && document.activeElement === tagBox;
+  const tagTyped = tagBox && (tagBox.value || tagFocused) ? [tagBox.value, tagFocused] : null;
   body.innerHTML = (views[PJ.view] || pjList)();
   pjDrawn = PJ.view;
   for (const [id, v] of typed) {
@@ -3344,6 +3514,15 @@ async function pjLoadAbout(path) {
   if (!panel || !p || panel.dataset.path !== path) return;
   panel.querySelector(".pj-facts").outerHTML = pjFacts(p);
   panel.querySelector(".pj-d-about").innerHTML = pjAboutHTML(p);
+}
+// Run something once Projects isn't busy with a change: what's asked meanwhile isn't lost, however long that takes (a
+// slow drive, a big project); after 10 seconds it says it's waiting.
+async function pjWhenFree(run) {
+  for (let n = 0; PJ.busy; n++) {
+    if (n === 200) toast(tr("Projects is still saving a change: what you asked for is done once it's finished."));
+    await new Promise(ok => setTimeout(ok, 50));
+  }
+  run();
 }
 // A project's folder or tags, changed in its details: saved, and the list drawn again.
 async function pjOrganizeSome(path, change) {   // (true once it's saved and the list read again)
@@ -3924,7 +4103,7 @@ function pjPickFromDownloads() {
   if (T.pickHere) return pickStart(pick);
   try { sessionStorage.setItem(PICK_KEY, JSON.stringify(pick)); }
   catch (e) { toast(tr("That can't be done.")); return; }
-  location.href = "/downloads";
+  navigateApp("/downloads");
 }
 function pickResume() {   // the Downloads page, opened from the Library page to choose for a project
   let pick = null;
@@ -4554,7 +4733,7 @@ async function pjAct(b) {
     if (PJ.selected) pjLoadAbout(PJ.selected);
     return;
   }
-  if (act === "untag" || act === "tagadd") {   // a project's tags, changed in its details
+  if (act === "untag" || act === "tagadd") {   // a project's tags, changed in its details (pjWhenFree: Enter in its box)
     const p = (PJ.data.projects || []).find(x => x.path === path), input = $("#pjTagInput");
     if (!p) return;
     const typed = act === "tagadd" ? (input ? input.value.trim() : "") : "";
@@ -4830,7 +5009,10 @@ function wireProjects() {
   win.addEventListener("keydown", e => {
     if (e.key !== "Enter" || e.isComposing) return;
     if (e.target.id === "pjRepoUrl") { e.preventDefault(); $("[data-pj=addrepo]").click(); }
-    if (e.target.id === "pjTagInput") { e.preventDefault(); $("#projectsBody [data-pj=tagadd]").click(); }   // (a project's tag)
+    if (e.target.id === "pjTagInput") {   // (a project's tag: added once what Projects is saving now is done; an Enter
+      e.preventDefault();                 //  while a change was being saved was dropped, the tag left in its box)
+      pjWhenFree(() => { const add = $("#projectsBody [data-pj=tagadd]"); if (add) add.click(); });
+    }
   });
   win.addEventListener("change", async e => {   // the backups panel's rule for which are old
     if (e.target.id !== "pjBkKeep" && e.target.id !== "pjBkDays") return;
@@ -5077,11 +5259,30 @@ function setCounts(s) {
   return { got, owned, buy, text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length),
     got && tr("{0} downloaded", got), owned && tr("{0} to download", owned), buy && tr("{0} to buy", buy)].filter(Boolean).join(", ") };
 }
+/* How long a set's short link still works (issue #333): { days, text, mark } for a set with a link, or one whose link
+   has run out (days: -1); null for a set with neither. text is said on the set's page, mark on its tile. */
+function linkLeft(s) {
+  if (s.short) {
+    const days = Math.max(0, Math.ceil((s.short * 1000 - Date.now()) / 86400000));
+    return { days, mark: days <= 1 ? tr(days ? "1 day" : "Today") : tr("{0} days", days),
+             text: days === 0 ? tr("Its link runs out today.") : tr(days === 1 ? "Its link works for 1 more day, until {1}." : "Its link works for {0} more days, until {1}.", days, day(s.short)) };
+  }
+  return s.short_ended ? { days: -1, mark: tr("Ran out"), text: tr("Its link ran out on {0}. Share... makes a new one.", day(s.short_ended)) } : null;
+}
+const LINK_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.8 9.2a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.9.9M9.2 6.8a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.9-.9"/></svg>';
+// A set's link mark on its tile: how long its link still works, or that it has run out.
+function linkMark(s) {
+  const left = linkLeft(s);
+  return left ? `<span class="link-mark${left.days < 0 ? " over" : left.days <= 2 ? " soon" : ""}" title="${esc(left.text)}">${LINK_ICON}${esc(left.mark)}</span>` : "";
+}
+// The 18+ mark on an adult set's picture, and on an adult product's in it (products.js draws a product tile's).
+const ADULT_MARK = '<span class="adult-mark" translate="no" aria-hidden="true">18+</span>';
 // A set's tile.
 function setTile(s) {
   const c = setCounts(s);
-  return `<button class="slot settile" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text))}">` +
-    `<span class="art">${setArt(s)}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
+  // (an Adult set, issue #337: one with a product for adults in it, marked 18+ as they are)
+  return `<button class="slot settile${s.adult ? " adult" : ""}" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text) + (s.adult ? ", " + tr("for adults (18+)") : ""))}">` +
+    `<span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}${linkMark(s)}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
 }
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
 function setsRoot() {
@@ -5151,10 +5352,14 @@ function setHead(s) {
     `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
       `<span aria-hidden="true">›</span><span translate="no">${esc(s.name)}</span></nav>` +
-    `<div class="sethead"><span class="art">${setArt(s)}</span><div class="sethead-text">` +
+    `<div class="sethead${s.adult ? " adult" : ""}"><span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}</span><div class="sethead-text">` +
       `<h2 translate="no">${esc(s.name)}</h2><p class="muted">${esc(c.text)}</p>` +
+      (linkLeft(s) ? `<p class="muted set-linkleft">${LINK_ICON} ${esc(linkLeft(s).text)}</p>` : "") +
+      (s.adult ? `<p class="muted set-adult"><span class="adult-chip" translate="no">18+</span> ${esc(tr(isWish(s)
+        ? "Adult: it has products for adults in it." : "Adult: it has products for adults in it. Shared, it asks its viewer's age first."))}</p>` : "") +
       (isWish(s) && s.source ? `<p class="muted">${esc(tr("Your wishlist from {0} ({1}), read {2}.", STORE_NAMES[s.source.store] || s.source.store, s.source.list, s.read ? ago(s.read) : "?"))} ` +
-        `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button></p>` : "") +
+        `<button class="linkish" data-setx="reread" data-store="${esc(s.source.store)}">${esc(tr("Read it again"))}</button> · ` +
+        `<button class="linkish" data-setx="quickwish" data-store="${esc(s.source.store)}" data-list="${esc(s.source.list)}">${esc(tr("Quick refresh"))}</button></p>` : "") +
       `<div class="set-main"><button class="primary" data-setx="share">${esc(tr("Share..."))}</button></div>` +
       `<div class="set-quiet" role="group" aria-label="${esc(tr(isWish(s) ? "More for this wishlist" : "More for this set"))}">${quiet.join("")}</div>` +
     `</div></div>` +
@@ -5188,7 +5393,7 @@ function setExtraHTML(s) {
     (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
   if (saved && !editing) {
     return (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
-      (photos.length ? links(photos, false) : `<p class="none">${esc(tr("No photos."))}</p>`) +
+      (photos.length ? setPhotosHTML(s) : `<p class="none">${esc(tr("No photos."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
   }
   return `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
@@ -5198,6 +5403,135 @@ function setExtraHTML(s) {
     `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div>` +
     `<div class="row"><button class="primary sm" data-setx="save">${esc(tr("Save"))}</button>` +
     (saved ? `<button class="ghost sm" data-setx="cancel">${esc(tr("Cancel"))}</button>` : "") + `</div>`;
+}
+/* What's in a set's photos (issue #346): each photo with a numbered mark where each of its products is, and the same
+   numbers in a list beside it, each with the product's picture and name. A mark opens the product (its details, where
+   this page has its tile; else its store page). Places are kept as 0 to 1000 of the photo's width and height, so the
+   marks line up at whatever size it's shown. The photo comes through Hoard (/setphoto), which fetches it from its
+   photo site: Hoard's pages load pictures only from Hoard. */
+const photoSrc = (s, n) => keyed(`/setphoto/${encodeURIComponent(s.id)}/${n}?p=${(s.photo_p || [])[n] || ""}`);
+// A set's products marked on one of its photos, in order: [{n, row, x, y}], each with its row in the set.
+function photoMarks(s, url) {
+  const rows = new Map(s.items.map(i => [i.key, i]));
+  return ((s.marks || {})[url] || []).filter(m => rows.has(m[0])).map((m, i) => ({ n: i + 1, row: rows.get(m[0]), x: m[1], y: m[2] }));
+}
+// A mark on a photo: its number, where it is, and what it is when pointed at or focused. One with no link (a product
+// of your own) is still reached by keyboard, as the set viewer's are: Tab shows what it is, and Enter opens its tile.
+function photoMarkHTML(m, tag = "a", extra = "") {
+  const where = `left:${m.x / 10}%;top:${m.y / 10}%`, label = tr("{0}: {1}, on {2}", m.n, m.row.name, STORE_NAMES[m.row.store] || m.row.store);
+  const linked = tag === "a" && m.row.url;
+  return `<${tag} class="pmark" style="${where}" data-pmark="${esc(m.row.key)}" aria-label="${esc(label)}"` +
+    (linked ? ` href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer"` : tag === "a" ? ` tabindex="0" role="button"` : "") + `${extra}>${m.n}` +
+    `<span class="pcard" aria-hidden="true">${m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="">` : ""}<b translate="no">${esc(m.row.name)}</b></span></${tag}>`;
+}
+// Sets added from someone else's link whose photos you chose to see, on this page: their photos are on sites that
+// person chose, so Hoard asks those sites for them only when you say so (it tells them you're looking).
+const PHOTOS_SHOWN = new Set();
+// A set's photos, each with what's marked on it and a numbered list of those, and Mark products on it...
+function setPhotosHTML(s) {
+  if (s.from_link && !PHOTOS_SHOWN.has(s.id)) {
+    const sites = [...new Set(s.photos.map(u => { try { return new URL(u).hostname; } catch (e) { return ""; } }).filter(Boolean))];
+    return `<div class="setphotos-held"><p class="hint">${esc(tr("This set came from someone else's link. Its photos are on {0}: Hoard fetches them from there when you choose to see them.", sites.join(", ")))}</p>` +
+      `<div class="row"><button class="ghost sm" data-setx="showphotos">${esc(tr(s.photos.length === 1 ? "Show the photo" : "Show the photos"))}</button></div></div>`;
+  }
+  return `<div class="setphotos-shown">` + s.photos.map((u, n) => {
+    const marks = photoMarks(s, u);
+    return `<figure class="setphoto"><div class="setphoto-pic"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}" loading="lazy">` +
+        marks.map(m => photoMarkHTML(m)).join("") + `</div><figcaption>` +
+      (marks.length ? `<ol class="pmarks">` + marks.map(m => `<li><span class="pnum" aria-hidden="true">${m.n}</span>` +
+        (m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="" loading="lazy">` : `<span class="pnopic"></span>`) +
+        `<span class="pname"><b translate="no">${esc(m.row.name)}</b><small>${esc(STORE_NAMES[m.row.store] || m.row.store)}</small></span>` +
+        (m.row.url ? `<a class="linkish" href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer" data-pmark="${esc(m.row.key)}">${esc(tr("Open"))}</a>` : "") +
+        `</li>`).join("") + `</ol>` : `<p class="none">${esc(tr("Nothing marked on it yet."))}</p>`) +
+      `<div class="row"><button class="ghost sm" data-setx="markphoto" data-n="${n}">${esc(tr(marks.length ? "Change what's marked..." : "Mark products on it..."))}</button>` +
+      `<a class="linkish" href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(new URL(u).hostname)}</a></div>` +
+      `</figcaption></figure>`;
+  }).join("") + `</div>`;
+}
+// A mark (or its line in the list) opens its product's details, where this page has its tile; else its link opens.
+document.addEventListener("click", e => {
+  const m = e.target.closest ? e.target.closest(".setphoto [data-pmark]") : null;
+  const s = m && SETS && SETS.sets.find(x => x.id === state.set);
+  const row = s && s.items.find(i => i.key === m.dataset.pmark);
+  // (the Library's tiles go by library key, Downloads' by download: a product in both has each, and either page's)
+  const tile = row && ((row.lib != null && document.querySelector(`#grid .slot[data-key="${CSS.escape(String(row.lib))}"]`)) ||
+    (row.download != null && document.querySelector(`#grid .slot[data-id="${CSS.escape(String(row.download))}"]`)) || null);
+  if (tile) { e.preventDefault(); tile.click(); }
+});
+// Enter or Space on a mark with no link (role="button"): what a click on it does.
+document.addEventListener("keydown", e => {
+  const m = (e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".setphoto .pmark[role=button]") ? e.target : null;
+  if (m) { e.preventDefault(); m.click(); }
+});
+/* Mark products on a set's photo (issue #346): choose a product, then click where it is on the photo (or, by
+   keyboard, Place puts it in the middle); a chosen mark moves with the arrow keys (Shift for bigger steps) and comes
+   off with Delete. Nothing's saved until Save. */
+async function markPhoto(s, n) {
+  const url = s.photos[n];
+  let marks = ((s.marks || {})[url] || []).map(m => [...m]), placing = null;
+  const d = document.createElement("dialog");
+  d.className = "ask pmark-dlg";
+  d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Mark products on this photo"))}</b></p>` +
+    `<p class="hint">${esc(tr("Choose a product, then click where it is on the photo. A chosen mark moves with the arrow keys, and Delete takes it off."))}</p>` +
+    `<div class="pm-body"><div class="setphoto-pic pm-edit"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}"></div>` +
+    `<ol class="pm-list"></ol></div><p class="pm-status" role="status" aria-live="polite"></p>` +
+    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Save"))}</button></div></form>`;
+  document.body.appendChild(d);
+  const pic = d.querySelector(".pm-edit"), list = d.querySelector(".pm-list"), status = d.querySelector(".pm-status");
+  const rows = s.items;   // (your own, in Local, can be marked too; they aren't shared)
+  // A place on the photo, as a whole number from 0 to 1000.
+  const clamp = v => Math.max(0, Math.min(1000, Math.round(v)));
+  // Draw the marks and the list as they are now (and put the focus back on a mark just moved).
+  const draw = focus => {
+    pic.querySelectorAll(".pmark").forEach(x => x.remove());
+    marks.forEach((m, i) => {
+      const row = rows.find(r => r.key === m[0]);
+      if (row) pic.insertAdjacentHTML("beforeend", photoMarkHTML({ n: i + 1, row, x: m[1], y: m[2] }, "button", ` type="button"`));
+    });
+    list.innerHTML = rows.map(r => {
+      const at = marks.findIndex(m => m[0] === r.key);
+      return `<li class="${placing === r.key ? "placing" : ""}"><span class="pnum" aria-hidden="true">${at < 0 ? "" : at + 1}</span>` +
+        `<span class="pname" translate="no">${esc(r.name)}</span>` +
+        `<button type="button" class="ghost sm" data-pm-place="${esc(r.key)}" aria-pressed="${placing === r.key}">${esc(tr(at < 0 ? "Place" : "Move"))}</button>` +
+        (at < 0 ? "" : `<button type="button" class="linkish" data-pm-off="${esc(r.key)}">${esc(tr("Take off"))}</button>`) + `</li>`;
+    }).join("");
+    if (focus) { const b = pic.querySelector(`.pmark[data-pmark="${CSS.escape(focus)}"]`); if (b) b.focus(); }
+  };
+  // Put a product's mark at a place (a new one goes last, so its number is the next).
+  const put = (key, x, y) => {
+    const m = marks.find(m => m[0] === key);
+    if (m) { m[1] = clamp(x); m[2] = clamp(y); } else if (marks.length < 30) marks.push([key, clamp(x), clamp(y)]);
+    else { status.textContent = tr("A photo has up to 30 products marked on it."); return; }
+    placing = null; draw(key);
+    status.textContent = tr("{0} is marked.", rows.find(r => r.key === key).name);
+  };
+  d.addEventListener("click", e => {
+    const place = e.target.closest("[data-pm-place]"), off = e.target.closest("[data-pm-off]");
+    if (place) {
+      if (e.detail === 0) { const m = marks.find(m => m[0] === place.dataset.pmPlace); put(place.dataset.pmPlace, m ? m[1] : 500, m ? m[2] : 500); return; }
+      placing = placing === place.dataset.pmPlace ? null : place.dataset.pmPlace; draw();
+      status.textContent = placing ? tr("Now click where it is on the photo.") : "";
+      return;
+    }
+    if (off) { marks = marks.filter(m => m[0] !== off.dataset.pmOff); draw(); return; }
+    if (placing && e.target.closest(".pm-edit") && !e.target.closest(".pmark")) {
+      const box = pic.getBoundingClientRect();
+      put(placing, (e.clientX - box.left) / box.width * 1000, (e.clientY - box.top) / box.height * 1000);
+    }
+  });
+  d.addEventListener("keydown", e => {
+    const b = e.target.closest(".pmark"); if (!b) return;
+    const m = marks.find(m => m[0] === b.dataset.pmark); if (!m) return;
+    const step = e.shiftKey ? 50 : 10, move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (move) { e.preventDefault(); put(m[0], m[1] + move[0], m[2] + move[1]); }
+    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); marks = marks.filter(x => x !== m); draw(); }
+  });
+  draw();
+  const yes = await new Promise(resolve => {
+    d.addEventListener("close", () => { resolve(d.returnValue === "yes"); d.remove(); }, { once: true });
+    d.showModal();
+  });
+  if (yes && await changeSets({ action: "marks", id: s.id, photo: url, marks })) toast(tr("Saved what's marked on the photo."));
 }
 // Start changing a set's note and photos (none saved yet: as they are).
 const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", photos: [...s.photos] }; };
@@ -5324,9 +5658,9 @@ function setExtraTile(s, i) {
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
   const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
   const price = !i.owned && !i.local ? priceHTML(i) : "";
-  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}</span>` +
+  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}${i.adult ? ADULT_MARK : ""}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
-  return `<div class="slot ext${buy ? " wanted" : ""}">` +
+  return `<div class="slot ext${buy ? " wanted" : ""}${i.adult ? " adult" : ""}">` +
     (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
     (price ? `<span class="ext-price">${price}</span>` : "") +
@@ -5349,6 +5683,7 @@ function drawSets() {
   }
   if (head !== setViewShown) { view.innerHTML = head; setViewShown = head; wishToolsNow(); }
   if (rest !== setMoreShown) { more.innerHTML = rest; setMoreShown = rest; }
+  showSpots();   // (what's new on a set's page, after an update: issue #244)
 }
 // How many sets you have, in words.
 const setsCountText = () => { const n = (DATA.sets || []).filter(s => !isWish(s)).length; return tr(n === 1 ? "1 set" : "{0} sets", n.toLocaleString()); };
@@ -5575,6 +5910,7 @@ async function setAct(e) {
     return;
   }
   if (act === "readwish" || act === "reread") { readWishlists(act === "reread" ? [b.dataset.store] : null); return; }
+  if (act === "quickwish") { readWishlists([b.dataset.store], b.dataset.list); return; }
   if (act === "mix") { mixAndMatch(); return; }
   if (act === "importwish") { importWishlists(); return; }
   if (act === "import") {
@@ -5592,6 +5928,8 @@ async function setAct(e) {
     return wishChanged();
   }
   if (act === "addlinks") return addByLinks(s);
+  if (act === "markphoto") return markPhoto(s, +b.dataset.n);
+  if (act === "showphotos") { PHOTOS_SHOWN.add(s.id); return showSet(s.id); }   // (someone else's set's photos: asked for)
   if (act === "project") return newProjectWithSet(s);
   if (act === "share") shareSet(s);
   else if (act === "download") { const keys = notDownloaded([s]); if (keys.length) T.download(keys); }
@@ -5631,8 +5969,9 @@ async function setAct(e) {
 }
 // Read my wishlists: from each store chosen, in its own signed-in window, as a task (hoard/wishlists.py)
 const WISH_STORES = ["booth", "gumroad", "jinxxy", "payhip"];
-// Read your wishlists from the stores (asking which, unless only names them).
-async function readWishlists(only) {
+// Read your wishlists from the stores (asking which, unless only names them); with list, a quick refresh of that one
+// wishlist on only's store (issue #331): the start of it, the rest kept.
+async function readWishlists(only, list) {
   let stores = only;
   if (!stores) {
     const d = document.createElement("dialog");
@@ -5651,10 +5990,11 @@ async function readWishlists(only) {
     });
     if (!stores.length) return;
   }
-  const r = await apiPost("/api/wishlists/read", { stores });
+  const r = await apiPost("/api/wishlists/read", list ? { stores, list } : { stores });
   if (!r.ok) { toast(r.data.error || "Hoard is busy. Try again when it's done."); return; }
-  toast(r.data.started === "queued" ? "Reading your wishlists after what Hoard is doing now. See Tasks." : "Reading your wishlists. See Tasks for how it's going.");
-  const done = await whenTaskEnds("wishlists");   // then they show as read, without opening them again
+  toast(r.data.started === "queued" ? (list ? "Refreshing this wishlist after what Hoard is doing now. See Tasks." : "Reading your wishlists after what Hoard is doing now. See Tasks.")
+    : list ? "Refreshing the start of this wishlist. See Tasks for how it's going." : "Reading your wishlists. See Tasks for how it's going.");
+  const done = await whenTaskEnds(list ? "quick-wishlist" : "wishlists");   // then they show as read, without opening them again
   await loadSets();
   if (done && done.message) toast(done.message);
 }
@@ -5790,6 +6130,13 @@ function wireTasks() {
   makeWindow($("#tasksWin"));
   $("#tasksTab").addEventListener("click", () => openTasks());
   $("#tasksWin").addEventListener("click", async e => {
+    const background = e.target.closest("[data-background-action]");
+    if (background) {
+      const result = await apiPost("/api/tasks/background", { id: background.dataset.backgroundId, action: background.dataset.backgroundAction });
+      if (!result.ok) toast(result.data.error || tr("Hoard didn't answer. Try again."));
+      if (result.ok && background.dataset.backgroundId === "picture-matching" && background.dataset.backgroundAction === "resume") load();
+      tasksShown = ""; loadTasks(); return;
+    }
     const b = e.target.closest("[data-task]"); if (!b) return;
     const act = b.dataset.task;
     if (act === "stop") {   // (Hoard not answering isn't the job refusing to stop)
@@ -5951,7 +6298,8 @@ const TOUR = { i: -1, steps: [], timer: null, card: null, ring: null, pick: null
 // Moving between the tour's steps is slow enough to follow by eye (issue #265): the page scrolls smoothly to what's
 // next, the ring moves to it, and the card shows a moment later, beside it. With Reduce motion (motionOk), all at once.
 const TOUR_FOLLOW = 650;   // ms: the ring's move (.tour-ring's transition), and a moment to take it in
-const ON_DOWNLOADS = /downloads/.test(location.pathname);
+// Navigation changes the active view without replacing this script.
+const onDownloads = () => APP.active === "downloads";
 const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 // A name, as the tour shows it.
 const tourName = s => `<strong>${esc(s)}</strong>`;
@@ -5963,7 +6311,7 @@ function tourPick() {
   const pic = a => a.thumbnail || a.thumb;
   // Whether a product has a package or .zip downloaded, to look inside.
   const inside = a => (a.files || []).some(f => !f.missing && /\.(unitypackage|zip)$/i.test(f.path));
-  const item = (ON_DOWNLOADS ? drawn.find(a => inside(a) && pic(a)) || drawn.find(inside) : null) || drawn.find(pic) || drawn[0] || null;
+  const item = (onDownloads() ? drawn.find(a => inside(a) && pic(a)) || drawn.find(inside) : null) || drawn.find(pic) || drawn[0] || null;
   const words = item ? String(item.name).split(/[\s\-_|/()[\]【】「」『』〔〕.,:;!?+&]+/).filter(w => w.length >= 3) : [];
   return { item, word: words.sort((a, b) => b.length - a.length)[0] || (item ? String(item.name).slice(0, 12) : ""), inside: item && inside(item) };
 }
@@ -5978,7 +6326,7 @@ function tourStores() {
   return Object.keys(n).sort((a, b) => n[b] - n[a]).map(s => (DATA.labels || {})[s] || s);
 }
 // How many products the page has.
-const tourCount = () => (ON_DOWNLOADS ? DATA.assets : DATA.items || []).length;
+const tourCount = () => (onDownloads() ? DATA.assets : DATA.items || []).length;
 // Empty the search box, so the tour's product shows.
 function tourClearSearch() {
   const q = $("#q");
@@ -6073,7 +6421,7 @@ const TOUR_STEPS = [
     title: () => tr("Tags"),
     body: () => esc(tr("Tags are your own words for things: an outfit, a base, a style. Add one here, or to many at once from the selection bar. Suggested tags come from words in your items' names. In Tags, give a tag a kind, such as Avatar or Clothing, and your tags are grouped by it.")),
     done: () => ((tourOpen() || {}).tags || []).length > TOUR.tags },
-  { id: "sets", page: "downloads", at: () => $('#stores [data-store="Sets"]'),
+  { id: "sets", page: "downloads", at: () => $('#storeSeg [data-store="Sets"]'),
     enter: () => T.closeDetail(),
     title: () => tr("Sets and Wishlists"),
     body: () => esc(tr("A set gathers products that go together, such as an avatar and its outfits, downloaded or not, with a picture of your choosing. Make one in Sets, from the selection bar, or from a project in Projects. Share it as a short link that shows what's in it and where to buy each, for 14 days. Hoard for Unity imports a whole set at once.")) +
@@ -6167,7 +6515,7 @@ function tourEnd(finished) {
 }
 // to step n, or the next one there's something to show for, going the way you went (dir 1 or -1)
 function tourShow(n, dir) {
-  const here = ON_DOWNLOADS ? "downloads" : "library";
+  const here = onDownloads() ? "downloads" : "library";
   for (; n >= 0 && n < TOUR.steps.length; n += dir) {
     const s = TOUR.steps[n];
     if (s.page !== here) break;
@@ -6180,7 +6528,7 @@ function tourShow(n, dir) {
   const s = TOUR.steps[n];
   if (s.page !== here) {   // the next step is on the other page: off there
     tourSave(s.id);
-    location.href = s.page === "downloads" ? "/downloads" : "/";
+    navigateApp(s.page === "downloads" ? "/downloads" : "/");
     return;
   }
   TOUR.i = n; TOUR.ready = Date.now() + 600;   // (what you did just before doesn't count for this step)
@@ -6195,7 +6543,7 @@ function tourMove(how) {
   const s = TOUR.steps[TOUR.i];
   if (how === "end") { tourEnd(false); return; }
   if (s && s.leave) try { s.leave(); } catch (e) { /* gone already */ }
-  if (how === "next" && s && s.go) { tourSave(s.id); location.href = s.go === "downloads" ? "/downloads" : "/"; return; }
+  if (how === "next" && s && s.go) { tourSave(s.id); navigateApp(s.go === "downloads" ? "/downloads" : "/"); return; }
   tourShow(TOUR.i + (how === "back" ? -1 : 1), how === "back" ? -1 : 1);
 }
 // Draw the tour's step: its words, its buttons, and the ring round what it's about.
@@ -6271,6 +6619,15 @@ function tourTick() {
 const NEW_SPOTS = [
   { id: "product-type", at: '[data-sec="product-type"]',
     text: "New: Product type. Show only avatars, clothing, hair and the rest, as Hoard works out what each thing is. Change one in its details." },
+  // 5.2.0 beta 5: each placed where it is, as that's drawn (showSpots runs there too)
+  { id: "problems", at: "#views",
+    text: "New: a product with something wrong (files missing or changed on disk, a download that didn't finish) has a red mark on its tile, and its details say what to do. Downloads' Problems lists them all." },
+  { id: "adult", at: "#detail .d-adult",
+    text: "New: a product for adults has an 18+ mark, and its picture is blurred until you click it (Settings, Accessibility, turns that off). Mark as 18+ or It isn't for adults when Hoard gets it wrong: your word wins." },
+  { id: "photo-marks", at: ".setphotos-shown",
+    text: "New: mark where each product is on a photo, with Mark products on it... under it. The marks go with the set when you share it." },
+  { id: "quick-store", at: "#storeRows .store-row",
+    text: "New: Quick refresh for one store reads only the start of its library and of the wishlists you keep from it." },
 ];
 // What the tour's offer, once answered, saves: every note seen.
 const spotsAllSeen = () => ({ spots_seen: [...new Set([...(UI.spots_seen || []), ...NEW_SPOTS.map(s => s.id)])] });
@@ -6299,7 +6656,7 @@ function tourResume() {
   let id = null;
   try { id = sessionStorage.getItem("hoard-tour"); } catch (e) { id = null; }
   if (!id) return false;
-  const n = TOUR.steps.findIndex(s => s.id === id), here = ON_DOWNLOADS ? "downloads" : "library";
+  const n = TOUR.steps.findIndex(s => s.id === id), here = onDownloads() ? "downloads" : "library";
   if (n < 0) { tourSave(null); return false; }
   const s = TOUR.steps[n];
   if (s.page === here) tourStart(n);
@@ -6320,7 +6677,7 @@ function tourOffer() {
 function wireTour() {
   const again = $("#tourAgain");
   if (again) again.addEventListener("click", () => {
-    if (ON_DOWNLOADS) { tourSave(TOUR.steps[0].id); location.href = "/"; } else tourStart(0);
+    if (onDownloads()) { tourSave(TOUR.steps[0].id); navigateApp("/"); } else tourStart(0);
   });
   const note = $("#tourNote");
   if (note) note.addEventListener("click", e => {

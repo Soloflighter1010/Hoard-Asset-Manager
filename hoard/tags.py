@@ -1,6 +1,8 @@
 """Your tags, shared by the library and the downloads."""
 from __future__ import annotations
 
+from . import storage
+
 import contextlib
 import hashlib
 import json
@@ -12,7 +14,8 @@ import unicodedata
 from pathlib import Path
 
 from .paths import data_dir
-from .safety import DataFileError, clean_text, read_json_file, set_aside, write_file_safely
+from .safety import DataFileError, clean_text
+from .storage import read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
 
 
 # ----------------------------------------------------------------------------- tags
@@ -83,7 +86,7 @@ TAG_RESERVED = {"__proto__", "constructor", "prototype", "__defineGetter__", "__
 TAG_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):[^\W_]{1,300}\Z")   # local: your own (issue #80); \Z, as "$" lets a newline end it
 
 
-_tag_lock = threading.Lock()
+_tag_lock = storage.metadata_lock
 
 
 def tags_file() -> Path:
@@ -290,7 +293,7 @@ class TagStore:
         """Write tags.json safely; on Linux and macOS only you can read it."""
         write_file_safely(self.path, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True))
         if os.name == "posix":
-            os.chmod(self.path, 0o600)
+            storage.private(self.path)
             os.chmod(self.path.parent, 0o700)
 
     @staticmethod
@@ -308,7 +311,7 @@ class TagStore:
         action = body.get("action")
         with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
             data = self.empty()
-            if self.path.exists():
+            if storage.exists(self.path):
                 try:
                     data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
                 except DataFileError:
@@ -322,7 +325,7 @@ class TagStore:
         problems = []
         with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
             data = self.empty()
-            if self.path.exists():
+            if storage.exists(self.path):
                 try:
                     data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
                 except DataFileError:

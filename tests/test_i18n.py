@@ -10,11 +10,11 @@ import re
 import sys
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from unittest import mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 
@@ -40,51 +40,11 @@ def catalog(lang: str) -> dict:
 def script_keys() -> set[str]:
     """The words the pages' scripts pass to tr() and trHTML(): each string the first argument can be (either side of
     a ?:, and "a" + "b" joined), as tr() looks them up."""
-    keys = set()
-    for name in ("shared.js", "library.html", "downloads.html"):
-        src = (WEB / name).read_text("utf-8")
-        for m in re.finditer(r"(?<![\w.$])(?:tr|trHTML)\(", src):
-            if "//" in src[src.rfind("\n", 0, m.start()):m.start()]:
-                continue   # an example in a comment
-            i, depth, parts, joined = m.end(), 0, [], False
-            while i < len(src):
-                c = src[i]
-                if c in "\"'":
-                    j = i + 1
-                    while src[j] != c:
-                        j += 2 if src[j] == "\\" else 1
-                    text = json.loads('"' + src[i + 1:j].replace("\\'", "'").replace('"', '\\"') + '"') if c == "'" else json.loads(src[i:j + 1])
-                    if joined and parts:
-                        parts[-1] += text
-                    else:
-                        parts.append(text)
-                    joined, i = False, j + 1
-                    continue
-                if c == "`":   # a template: only one without ${} is a key of its own
-                    j = src.index("`", i + 1)
-                    if "${" not in src[i:j]:
-                        parts.append(src[i + 1:j])
-                    i = j + 1
-                    continue
-                if c in "([{":
-                    depth += 1
-                elif c in ")]}":
-                    if depth == 0:
-                        break
-                    depth -= 1
-                elif c == "," and depth == 0:
-                    break
-                elif c == "+" and depth == 0:
-                    joined = True
-                elif not c.isspace():
-                    joined = False
-                i += 1
-            keys.update(re.sub(r"\s+", " ", p).strip() for p in parts)
-    keys.discard("")
-    return keys
+    from scripts.translation_keys import calls
+    return {call["key"] for call in calls()}
 
 
-class Catalogs(unittest.TestCase):
+class Catalogs(IsolatedTestCase):
     def test_every_language_has_every_key(self):
         ja, ko = catalog("ja"), catalog("ko")
         self.assertEqual(set(ja), set(ko))
@@ -109,10 +69,11 @@ class Catalogs(unittest.TestCase):
         self.assertGreater(len(keys), 150)
         for lang in ("ja", "ko"):
             missing = sorted(k for k in keys if k not in catalog(lang))
-            self.assertEqual(missing, [], f"{lang}: tr() words with no translation")
+            from scripts.translation_keys import missing_message
+            self.assertEqual(missing, [], f"{lang}: {missing_message(missing, catalog(lang), keys)}")
 
 
-class ChoosingTheLanguage(unittest.TestCase):
+class ChoosingTheLanguage(IsolatedTestCase):
     def test_from_the_browser(self):
         self.assertEqual(i18n.from_header("ja-JP,ja;q=0.9,en;q=0.8"), "ja")
         self.assertEqual(i18n.from_header("ko-KR,ko;q=0.9"), "ko")
@@ -141,7 +102,7 @@ class ChoosingTheLanguage(unittest.TestCase):
         self.assertEqual(set(i18n.SETTINGS), {"system", "en", "ja", "ko"})
 
 
-class Served(unittest.TestCase):
+class Served(IsolatedTestCase):
     def test_page_carries_its_language(self):
         for lang in ("ja", "ko"):
             html = server.page_source("library.html", {"display": {"language": lang}}).decode("utf-8")
@@ -160,7 +121,7 @@ class Served(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
-class Drawn(unittest.TestCase):
+class Drawn(IsolatedTestCase):
     """Both pages, stepped through their panels and views (scripts/i18n_strings.py): what's left untranslated is only
     the sample's names, stores, paths and file names, and Hoard's own name."""
     NAMES = {"Booth", "Gumroad", "Jinxxy", "Payhip", "itch.io", "Hoard", "GitHub", "Microsoft Edge", "Google Chrome",
@@ -178,7 +139,7 @@ class Drawn(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
-class Patterns(unittest.TestCase):
+class Patterns(IsolatedTestCase):
     def test_a_message_with_no_translation_stays_whole(self):
         """A pattern's {0} takes a name, a number or a message of its own, never a run of English words: Hoard's
         messages with no translation stay in English, not half translated ("{0} of {1}", "Sync: {0}")."""
@@ -209,7 +170,7 @@ class Patterns(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "Playwright's Chromium isn't installed")
-class SetupAsks(unittest.TestCase):
+class SetupAsks(IsolatedTestCase):
     def test_the_first_step_is_the_language(self):
         """Someone new, whose computer is in Korean: the assistant opens on the language, in Korean and written in
         all three; choosing Japanese saves it and brings the assistant back in Japanese, one step on."""

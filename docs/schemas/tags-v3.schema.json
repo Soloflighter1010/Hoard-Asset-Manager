@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hoard.furryup.link/schemas/tags-v3.schema.json",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "hoard-tags"
+    },
+    "version": {
+      "const": 3
+    },
+    "generated_at": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "total_assets": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "type": {
+            "enum": [
+              "avatar",
+              "world",
+              "clothing",
+              "gimmick",
+              "script",
+              "texture",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "count",
+          "assets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "suggested": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            }
+          },
+          "type": {
+            "enum": [
+              "avatar",
+              "world",
+              "clothing",
+              "gimmick",
+              "script",
+              "texture",
+              "other"
+            ]
+          }
+        },
+        "required": [
+          "count",
+          "assets"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "properties": {
+        "alg": {
+          "const": "HMAC-SHA256"
+        },
+        "key_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "mac": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "alg",
+        "key_id",
+        "mac"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "generated_at",
+    "total_assets",
+    "tags",
+    "suggested",
+    "integrity"
+  ],
+  "additionalProperties": false
+}

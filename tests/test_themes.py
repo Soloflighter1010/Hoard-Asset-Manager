@@ -5,9 +5,9 @@ import os
 import re
 import tempfile
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import server, themes
 
@@ -39,7 +39,7 @@ def distance(a, b):
     return math.dist(lab(a), lab(b))
 
 
-class EveryTheme(unittest.TestCase):
+class EveryTheme(IsolatedTestCase):
 
     def test_complete(self):
         self.assertIn(themes.DEFAULT, themes.THEMES)
@@ -116,7 +116,7 @@ class EveryTheme(unittest.TestCase):
         self.assertNotRegex(themes.css("hoard", "light"), r"[<>{]\s*/?style", "nothing that could end the page's style")
 
 
-class ThePages(unittest.TestCase):
+class ThePages(IsolatedTestCase):
 
     def test_served_with_the_chosen_theme(self):
         cfg = {"display": {"theme": "geode", "mode": "light"}}

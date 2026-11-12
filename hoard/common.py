@@ -73,6 +73,8 @@ def pause(seconds: float) -> None:
     """Wait seconds, as time.sleep does: between a store's pages, before trying a download again. In a running job's
     own thread, Stop or Force stop chosen meanwhile ends the job straight away (raising Cancelled, as a progress
     message would; the Stop is used up), instead of only after the wait (issue #201)."""
+    from .scheduler import checkpoint
+    checkpoint()
     got = _stops.get(_this_lane())
     if got is None or got[1] != threading.get_ident():
         time.sleep(seconds)
@@ -107,6 +109,8 @@ class Progress(str):
 def tick(msg: str, transfer: dict | None = None) -> None:
     """Say how far something has got, for the app to show while it's current. Unlike log, it isn't printed or kept,
     so it can be said every second; and a job's sink checks for Stop on every tick, as it does on every log."""
+    from .scheduler import checkpoint
+    checkpoint()
     note = Progress(msg)
     note.transfer = transfer
     for sink in _sinks_here():

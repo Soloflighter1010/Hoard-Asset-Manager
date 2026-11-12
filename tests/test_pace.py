@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -31,7 +32,7 @@ def worst_minute(times, per=60.0):
     return max((sum(1 for t in times[i:] if t < start + per) for i, start in enumerate(times)), default=0)
 
 
-class KeepingToJinxxysLimit(unittest.TestCase):
+class KeepingToJinxxysLimit(IsolatedTestCase):
     def setUp(self):
         self.clock = Clock()
         self.window = pace.Window(120, 60, clock=self.clock, sleep=self.clock.sleep)

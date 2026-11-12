@@ -25,6 +25,10 @@ stores the same way. A store whose wishlists you've never read isn't started on.
 was, so it never takes a product out of your library or a wishlist: only **Refresh** does that, when a product is
 gone from the store. It's a task of its own in Tasks, **Quick refresh**.
 
+Each store's row has a **Quick refresh** of its own too (5.2), beside its **Refresh**: the start of that store's
+library, then of the wishlists you keep from it. A wishlist has one for itself alone, on its page: see
+[Wishlists](Sets#wishlists).
+
 Hoard only shows and reads the stores you use. Switch stores on or off in [Settings](Settings).
 
 ## Signing in

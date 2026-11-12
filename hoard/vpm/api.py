@@ -337,9 +337,10 @@ class Service:
             changes = self.changes(project, what)
             if changes.empty():
                 return "Nothing needed changing."
-            resolve.apply(project, changes, self.settings().folder)
+            lines = self._apply(project, changes)
             view = changes.view()
-            return f"{Path(path).name}: {len(view['install'])} installed, {len(view['remove'])} removed."
+            return (f"{Path(path).name}: {len(view['install'])} installed, {len(view['remove'])} removed"
+                    + (f" ({', '.join(lines[:8])}{', ...' if len(lines) > 8 else ''})." if lines else "."))
         if op == "preload":
             return self._preload(path, what.get("picks") or [], assets_by_key, new=False)
         if op == "backup":
@@ -562,12 +563,26 @@ class Service:
         listing.add(path)
         listing.note(path, created=time.strftime("%Y-%m-%dT%H:%M:%S"), template=what.get("template"))
         log("Installing its packages")
-        changes = resolve.repair(project, self.collection())
-        resolve.apply(project, changes, settings.folder)
+        self._apply(project, resolve.repair(project, self.collection()))
         done = f"Made the project {name}."
         if what.get("picks"):
             done += " " + self._preload(path, what["picks"], assets_by_key, new=True)
         return done
+
+    def _apply(self, project: UnityProject, changes: resolve.Changes) -> list[str]:
+        """Make a project's package changes, saying first what each is (a package's version now and the one it gets),
+        then reading the project back to see they were made: one that wasn't (Unity putting a package back while it
+        had the project open, say) fails the task, naming it, rather than ending as done (issue #335). Returns the
+        lines said."""
+        lines = resolve.planned(project, changes)
+        log(f"Changing {project.folder.name}'s packages: " + ("; ".join(lines) if lines else "nothing to change"))
+        resolve.apply(project, changes, self.settings().folder)
+        left = resolve.not_applied(project.folder, changes)
+        if left:
+            raise ProjectsError(f"{project.folder.name}'s packages weren't all changed: " + "; ".join(left[:8]) +
+                                (". Close Unity if it has the project open, then try again." if project.unity_running()
+                                 else ". Try again; if it happens again, create a support report."))
+        return lines
 
     def _preload(self, path: str, picks: list, assets_by_key, new: bool) -> str:
         """Put products from your library (their Unity packages and VPM packages) into a project, with what they need;
@@ -591,8 +606,8 @@ class Service:
         if resolve.needs_repair(project):
             log("Installing what the added packages need")
             try:
-                resolve.apply(project, resolve.repair(project, self.collection()), self.settings().folder)
-            except resolve.ResolveError as e:
+                self._apply(project, resolve.repair(project, self.collection()))
+            except (resolve.ResolveError, ProjectsError) as e:   # (ProjectsError: not all made, said by _apply)
                 done["failed"].append({"what": "the packages they need", "why": str(e)})
         listing.add_preloaded(path, [{"tag_key": a["tag_key"], "name": a["name"], "file": e["file"],
                                       "member": e.get("member"), "label": e.get("label"), "kind": e["kind"],

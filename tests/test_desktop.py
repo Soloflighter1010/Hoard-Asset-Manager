@@ -11,11 +11,12 @@ import threading
 import time
 import types
 import unittest
+from tests.isolation import IsolatedTestCase
+from hoard import storage
 import unittest.mock
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 sys.path.insert(0, str(REPO))
 
 from hoard import app, config  # noqa: E402
@@ -104,7 +105,7 @@ def enter(link):
     return data.get("key") if status == 200 else None
 
 
-class _Harness(unittest.TestCase):
+class _Harness(IsolatedTestCase):
     """Starts Hoard as the desktop app does, with a stand-in window."""
 
     def setUp(self):
@@ -113,7 +114,7 @@ class _Harness(unittest.TestCase):
         app.webbrowser.open = lambda url: self.opened.append(url)
         app.has_console = lambda: True
         self.messages, self.opened = [], []
-        app.running_file().unlink(missing_ok=True)
+        storage.remove(app.running_file(), missing_ok=True)
         # no test asks GitHub: the check each start (on in a new Hoard) is test_updater's, and an answer kept in
         # update.json would change what the other tests' pages say
         from hoard import updater
@@ -132,11 +133,21 @@ class _Harness(unittest.TestCase):
         result = {}
         t = threading.Thread(target=lambda: result.update(code=app.run_app(config.load_config(), None, **kw)), daemon=True)
         t.start()
+        # running.json announces the server before the window opens. Wait for the actual UI boundary too;
+        # otherwise a fast poll can inspect an empty fake window list and leave the instance lock held.
         for _ in range(100):
-            if app.running_file().exists():
+            view = sys.modules.get("webview")
+            if app.running_file().exists() and (self.opened or getattr(view, "start_kw", None)):
                 break
             time.sleep(0.1)
+        self.addCleanup(self.finish_window, t, view)
         return t, result, json.loads(app.running_file().read_text())
+
+    def finish_window(self, thread, view):
+        """Release the fake desktop and its instance lock even when an assertion fails before Quit."""
+        for window in getattr(view, "windows", []):
+            window.destroy()
+        thread.join(15)
 
 
 class DesktopApp(_Harness):
@@ -195,8 +206,8 @@ class DesktopApp(_Harness):
     def test_the_window_opens_where_it_was(self):
         """Issue #16: the window's size and place are kept when it closes, and it opens there next time, maximized
         if it was; a place no longer on any screen isn't used, so the window never opens out of sight."""
-        app.place_file().unlink(missing_ok=True)
-        self.addCleanup(app.place_file().unlink, missing_ok=True)
+        storage.remove(app.place_file(), missing_ok=True)
+        self.addCleanup(storage.remove, app.place_file(), missing_ok=True)
 
         def run(wv, then):
             sys.modules["webview"] = wv
@@ -236,8 +247,12 @@ class DesktopApp(_Harness):
         self.assertEqual((kw["width"], kw["height"]), (1200, 720), "no bigger than the screen")
 
     def test_where_the_window_goes_from_a_damaged_or_odd_file(self):
-        path = app.place_file()
-        self.addCleanup(path.unlink, missing_ok=True)
+        # Malformed legacy JSON is tested separately from the sealed SQLite store.
+        path = app.place_file().with_name("legacy-window-place.json")
+        place = unittest.mock.patch.object(app, "place_file", return_value=path)
+        place.start()
+        self.addCleanup(place.stop)
+        self.addCleanup(storage.remove, path, missing_ok=True)
         screens = [(0, 0, 1920, 1080), (1920, 0, 2560, 1440)]
         for text, expect in [
                 ("{not json", {"width": 1440, "height": 920, "maximized": False}),
@@ -308,7 +323,7 @@ class DesktopApp(_Harness):
         folder = paths.logs_dir()
         folder.mkdir(parents=True, exist_ok=True)
         for old in folder.glob("hoard*.log"):
-            old.unlink()
+            storage.remove(old)
         now = time.time()
         made = []
         for n, days in enumerate([0, 1, 5, 10, 20, 29, 31, 35, 40, 45, 50, 60, 90]):
@@ -510,7 +525,7 @@ class ClosingTheWindow(_Harness):
         self.assertLess(time.monotonic() - began, 3)
 
 
-class Packaging(unittest.TestCase):
+class Packaging(IsolatedTestCase):
     """The Windows app's build: PyInstaller spec, installer, locked dependencies, icon and workflows."""
 
     def test_spec_and_entry_points(self):

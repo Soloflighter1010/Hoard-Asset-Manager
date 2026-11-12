@@ -24,9 +24,9 @@ from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
 from ..common import log, tick
-from . import fetch
-from .manifest import unity_compatible
-from .project import UnityProject
+from . import environment, fetch
+from .manifest import Package, unity_compatible
+from .project import ProjectError, UnityProject
 from .repos import Collection, Info, Selector
 from .version import ALLOW, DENY, MINIMUM, DependencyRange, Version, VersionRange, allow_or_minimum
 
@@ -772,6 +772,56 @@ def unzip(zip_path: Path, dest: Path) -> None:
             out.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(m) as src, open(out, "wb") as dst:
                 shutil.copyfileobj(src, dst, 1 << 20)
+
+
+def planned(project: UnityProject, changes: Changes) -> list[str]:
+    """Each package a change installs or removes, with the version it has now and the one it gets, as a line for the
+    log: "lilToon 2.4.0 -> 2.4.1", "VRCFury 1.1442.0 (again)", "Gesture Manager 3.9.9 (new)", "Old Tool (removed)".
+    Issue #335: a log that names versions says what Hoard meant to do."""
+    out = []
+    for name, c in sorted(changes.packages.items()):
+        was = project.locked.get(name)
+        if isinstance(c, Install) and c.package is not None:
+            label, now = c.package.package.label(), c.package.version
+            out.append(f"{label} {was[0]} -> {now}" if was and was[0] != now else
+                       f"{label} {now} (again)" if was else f"{label} {now} (new)")
+        elif isinstance(c, Remove):
+            out.append(f"{name} (removed)")
+    return out
+
+
+def _version_on_disk(folder: Path, name: str) -> Version | None:
+    """The version a package's own folder in the project's Packages says it is; None when it isn't there or can't be
+    read."""
+    from ..safety import DataFileError
+    try:
+        raw = environment.read_json(folder / "Packages" / name / "package.json", 4 << 20)
+    except (DataFileError, OSError):
+        return None
+    pkg = Package.parse(raw, loose=True)
+    return pkg.version if pkg is not None and pkg.name == name else None
+
+
+def not_applied(folder: Path, changes: Changes) -> list[str]:
+    """What a change didn't do, read back from the project once it's made (issue #335: a change that left a project as
+    it was ended as done): each package not at the version it was to have, in vpm-manifest.json or in its folder, and
+    each one still there that was to go. Empty when all is as it should be."""
+    try:
+        after = UnityProject.load(folder)
+    except ProjectError as e:
+        return [f"the project can't be read now ({e})"]
+    out = []
+    for name, c in sorted(changes.packages.items()):
+        if isinstance(c, Install) and c.package is not None:
+            want, label = c.package.version, c.package.package.label()
+            locked, on_disk = after.locked.get(name), _version_on_disk(folder, name)
+            if c.add_to_locked and (locked is None or locked[0] != want):
+                out.append(f"{label}: vpm-manifest.json says {locked[0] if locked else 'nothing'}, not {want}")
+            elif on_disk != want:
+                out.append(f"{label}: its folder in Packages has {on_disk or 'nothing'}, not {want}")
+        elif isinstance(c, Remove) and (name in after.locked or (folder / "Packages" / name).exists()):
+            out.append(f"{name}: still there")
+    return out
 
 
 def _copy_folder(src: Path, dest: Path) -> None:

@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
@@ -25,7 +26,7 @@ def rel(id_, tag, name=None, prerelease=False, draft=False):
     return {"id": id_, "tag_name": tag, "name": name, "prerelease": prerelease, "draft": draft}
 
 
-class Kinds(unittest.TestCase):
+class Kinds(IsolatedTestCase):
 
     def test_each_kind_of_tag(self):
         cases = {"v3.1.0": ("app", "Hoard 3.1.0", False, True),
@@ -63,7 +64,7 @@ class Kinds(unittest.TestCase):
         self.assertIn("EARLY_BEFORE: ${{ inputs.early_before }}", tidy, "inputs reach the script through the environment")
 
 
-class Tidying(unittest.TestCase):
+class Tidying(IsolatedTestCase):
 
     LISTED = [rel(1, "v2.11.1", "Hoard v2.11.1"), rel(2, "unity-v0.3.0", "Hoard for Unity 0.3.0"),
               rel(3, "v2.4.1", None, prerelease=True), rel(4, "unity-v0.1.0", "Hoard for Unity 0.1.0", prerelease=True),
@@ -122,7 +123,7 @@ class Tidying(unittest.TestCase):
         self.assertTrue(all(c[2].get("make_latest") == "false" for c in Fake.calls[:-1]))
 
 
-class FlatpakMetainfo(unittest.TestCase):
+class FlatpakMetainfo(IsolatedTestCase):
     """Each Flatpak build lists its own version in the metainfo, so a release needs no edit there by hand; a broken
     file stops the release before anything is built (v3.0.0-beta.1's run failed at the Flatpak, on a stray <releases>)."""
 
@@ -167,7 +168,7 @@ def release_info_version():
     return re.search(r'__version__ = "([^"]+)"', (REPO / "hoard" / "__init__.py").read_text("utf-8")).group(1)
 
 
-class UnityNotes(unittest.TestCase):
+class UnityNotes(IsolatedTestCase):
     """Hoard for Unity 0.5.0 followed 0.3.0: 0.3.1 and 0.4.0 were never released on their own, and 0.5.0's notes
     left out what they brought (your own packages, Projects, the credits fix)."""
 
@@ -229,7 +230,7 @@ class UnityNotes(unittest.TestCase):
         self.assertIn("VT_CHECKED_NOTES: dist/CHECKED_NOTES.md", steps["Scan them with VirusTotal"])
 
 
-class Notes(unittest.TestCase):
+class Notes(IsolatedTestCase):
 
     def test_whats_new_leaves_betas_out(self):
         page = changelog.page("## 3.1.0-beta.1\n\n- Testing.\n\n## 3.0.0\n\n- Released.\n", {})

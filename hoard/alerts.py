@@ -252,11 +252,13 @@ HOARD_URL = "https://github.com/Soloflighter1010/Hoard-Asset-Manager"
 HOARD_ICON = "https://raw.githubusercontent.com/Soloflighter1010/Hoard-Asset-Manager/main/packaging/icons/hoard-256.png"
 
 
-def _asset(apprise):
-    """Hoard as Apprise names it on a rich message: its name, a line about it, its address, its icon and its colour."""
+def _asset(apprise, picture_url: str | None = None):
+    """Hoard as Apprise names it on a rich message: its name, a line about it, its address, its icon and its colour.
+    With picture_url, the picture a rich message shows is that one (a product's, on its store's image host) and not
+    Hoard's icon, which stays in the footer."""
     asset = apprise.AppriseAsset(app_id="Hoard", app_desc="Hoard Asset Manager", app_url=HOARD_URL)
     try:
-        asset.image_url_mask = HOARD_ICON
+        asset.image_url_mask = picture_url or HOARD_ICON
         asset.image_url_logo = HOARD_ICON
         asset.html_notify_map = {k: GOLD for k in list(asset.html_notify_map)}
         asset.default_html_color = GOLD
@@ -265,12 +267,16 @@ def _asset(apprise):
     return asset
 
 
+def embeds(url: str) -> bool:
+    """Whether an address is a Discord webhook's, which shows a message as an embed."""
+    return url.split("://", 1)[0].lower() == "discord" or \
+        bool(re.match(r"https://(?:\w+\.)?discord(?:app)?\.com/api/webhooks/", url, re.I))
+
+
 def rich(url: str, link: str | None = None) -> str:
     """An address as it's sent to (issue #285): a Discord webhook's asks for an embed (Markdown, Hoard's footer and icon,
     and the link, when there is one); others are as you gave them. Nothing you set on an address is changed."""
-    scheme = url.split("://", 1)[0].lower()
-    discord = scheme == "discord" or re.match(r"https://(?:\w+\.)?discord(?:app)?\.com/api/webhooks/", url, re.I)
-    if not discord:
+    if not embeds(url):
         return url
     have = {k.lower() for k in parse_qs(urlsplit(url).query, keep_blank_values=True)}
     add = [f"{k}={v}" for k, v in (("format", "markdown"), ("footer", "yes"), ("image", "yes")) if k not in have]
@@ -281,11 +287,14 @@ def rich(url: str, link: str | None = None) -> str:
 
 
 def deliver(addresses: list[str], body: str, title: str = TITLE, event: str = "test", link: str | None = None,
-            picture: tuple[bytes, str] | None = None) -> str | None:
+            picture=None, picture_url: str | None = None) -> str | None:
     """Send now, to each service in turn, noting in Hoard's log what it was for (event) and how each service took it
     (issue #238). body is Markdown: each service gets it as it shows best (issue #285); link is what a Discord embed
-    links to, and picture (its bytes and type) goes with it where a service takes pictures. None when every service
-    took it, or what went wrong, in what each service said (never an address: they hold tokens)."""
+    links to. picture (its bytes and type, or what fetches them) goes with it where a service takes pictures, as a
+    file; a Discord embed shows the picture at picture_url itself (its https address on a store's image host), in
+    the embed with everything else, and is sent no file: Discord posts a file as a message of its own, under the
+    embed (issue #330). None when every service took it, or what went wrong, in what each service said (never an
+    address: they hold tokens)."""
     try:
         import apprise
     except ImportError:
@@ -293,7 +302,10 @@ def deliver(addresses: list[str], body: str, title: str = TITLE, event: str = "t
         return "Apprise isn't installed."
     try:   # (a service Apprise can't find, as when its services weren't packed with Hoard's app: issue #237)
         sender = apprise.Apprise(asset=_asset(apprise))
-        added = sum(bool(sender.add(rich(u, link))) for u in addresses)
+        shown = picture_url if isinstance(picture_url, str) and re.fullmatch(r"https://[^\s{}]+", picture_url) else None
+        pictured = _asset(apprise, shown) if shown and any(embeds(u) for u in addresses) else None
+        added = sum(bool(sender.add(rich(u, link), asset=pictured) if pictured is not None and embeds(u)
+                         else sender.add(rich(u, link))) for u in addresses)
         services = list(sender)
     except Exception as e:  # noqa: BLE001 - Apprise's own problem, said in Hoard's words
         log(f"A notification through Apprise ({event}) wasn't sent: Apprise couldn't start ({type(e).__name__}).")
@@ -304,6 +316,17 @@ def deliver(addresses: list[str], body: str, title: str = TITLE, event: str = "t
         return "None of the addresses is one Apprise knows."
     took, problems = [], []
     attach, pic_file = None, None
+
+    def in_embed(service) -> bool:
+        """Whether this service's message shows the picture itself."""
+        return pictured is not None and getattr(service, "asset", None) is pictured
+    if picture and any(getattr(s, "attachment_support", False) and not in_embed(s) for s in services):
+        try:   # (fetched only now there's a service to send it to as a file)
+            picture = picture() if callable(picture) else picture
+        except Exception:  # noqa: BLE001 - no picture, the message all the same
+            picture = None
+    else:
+        picture = None
     if picture:   # (the product's picture, as a file Apprise can send)
         ext = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}.get(picture[1], ".jpg")
         with tempfile.NamedTemporaryFile(prefix="hoard-picture-", suffix=ext, delete=False) as fh:
@@ -317,7 +340,8 @@ def deliver(addresses: list[str], body: str, title: str = TITLE, event: str = "t
         name = str(getattr(service, "service_name", "") or type(service).__name__)
         _heard.here.lines = []
         try:
-            kwargs = {"attach": attach} if attach is not None and getattr(service, "attachment_support", False) else {}
+            kwargs = {"attach": attach} if attach is not None and getattr(service, "attachment_support", False) \
+                and not in_embed(service) else {}
             # (a service that shows only plain text gets it as text, as Apprise would render it for that service)
             resolve = getattr(service, "resolve_format", None)
             text_only = callable(resolve) and str(getattr(resolve(apprise.NotifyFormat.MARKDOWN), "value", "")) == "text"
@@ -357,9 +381,10 @@ _worker: threading.Thread | None = None
 _lock = threading.Lock()
 
 
-def send(cfg: dict, event: str, body: str, title: str = TITLE, link: str | None = None, picture=None) -> bool:
+def send(cfg: dict, event: str, body: str, title: str = TITLE, link: str | None = None, picture=None,
+         picture_url: str | None = None) -> bool:
     """Send this news in the background, if it's an event you chose and there may be addresses kept. True when it's
-    on its way. Never raises: notifications never get in the way of what Hoard is doing. The addresses are read by
+    on its way. picture and picture_url are deliver's. Never raises: notifications never get in the way of what Hoard is doing. The addresses are read by
     the worker, not here: reading the Keychain or the keyring starts a program, and a task that sends news (as it
     finishes) would wait for it."""
     global _worker
@@ -370,7 +395,7 @@ def send(cfg: dict, event: str, body: str, title: str = TITLE, link: str | None 
             _worker = threading.Thread(target=_work, name="apprise", daemon=True)
             _worker.start()
     try:
-        _out.put_nowait((cfg, event, body, title, link, picture))
+        _out.put_nowait((cfg, event, body, title, link, picture, picture_url))
     except queue.Full:
         return False
     return True
@@ -381,12 +406,12 @@ def _work() -> None:
     log). Nothing stops it: a notification that can't be sent is noted, and the next one is sent."""
     global _kept
     while True:
-        cfg, event, body, title, link, picture = _out.get()
+        cfg, event, body, title, link, picture, picture_url = _out.get()
         try:
             addresses = urls(cfg)
             _kept = len(addresses)
             if addresses:
-                deliver(addresses, body, title, event, link, picture() if callable(picture) else picture)
+                deliver(addresses, body, title, event, link, picture, picture_url)
         except Exception as e:  # noqa: BLE001 - the worker carries on with the next
             log(f"A notification through Apprise ({event}) wasn't sent ({type(e).__name__}).")
 
@@ -434,16 +459,39 @@ def cheaper_text(count: int, items: list[dict]) -> tuple[str, str | None]:
     return "\n".join(lines), first
 
 
+# What a task counted (jobs.Jobs._counted), as its news says each, in this order (issue #342). Those in SAID_AT_NONE
+# are said at 0 too: "0 new" is news, "0 left out" isn't.
+COUNTED = (("read", lambda n: plural(n, "product") + " read"), ("new", lambda n: f"{n:,} new"),
+           ("added", lambda n: f"{n:,} added"), ("already", lambda n: f"{n:,} already there"),
+           ("taken_out", lambda n: f"{n:,} taken out"), ("moved", lambda n: f"{n:,} moved"),
+           ("deleted", lambda n: plural(n, "file") + " deleted"),
+           ("matched", lambda n: f"{n:,} matched to your library"), ("local", lambda n: plural(n, "Local product")),
+           ("notes", lambda n: plural(n, "note")), ("files", lambda n: plural(n, "file")),
+           ("lists", lambda n: plural(n, "wishlist") + " read"), ("cheaper", lambda n: f"{n:,} cheaper than before"),
+           ("left_out", lambda n: f"{n:,} left out"))
+SAID_AT_NONE = ("new", "added", "taken_out", "deleted")
+
+
 def task_text(record: dict) -> str:
-    """A finished task, as the news says it: its name, how it went, and its counts (from its report)."""
+    """A finished task, as the news says it: its name, how it went, and its counts (from its report): how many, never
+    which. A download that found nothing says so."""
     from .jobs import TASK_NAMES
     name = TASK_NAMES.get(record.get("task"), "A task")
     outcome = record.get("outcome")
     report = record.get("report") if isinstance(record.get("report"), dict) else {}
     counts = []
+    counted = report.get("counts") if isinstance(report.get("counts"), dict) else {}
+    downloaded = [report.get(k) for k in ("new_assets", "updated", "failed")]
+    for key, say in COUNTED:
+        n = counted.get(key)
+        if isinstance(n, int) and not isinstance(n, bool) and (n > 0 or (n == 0 and key in SAID_AT_NONE)) \
+                and not (key == "new" and isinstance(downloaded[0], int)):   # (a sync says what it downloaded, below)
+            counts.append(say(n))
     for key, one in (("new_assets", "new"), ("updated", "updated"), ("failed", "couldn't be downloaded")):
         if isinstance(report.get(key), int) and report[key]:
             counts.append(f"{report[key]:,} {one}")
+    if all(isinstance(n, int) for n in downloaded) and not any(downloaded):
+        counts.append("nothing new")
     if isinstance(report.get("updates"), int):
         counts.append(plural(report["updates"], "product") + " with updates")
     said = {"failed": "failed", "partial": "partly done", "stopped": "stopped"}.get(outcome, "done")

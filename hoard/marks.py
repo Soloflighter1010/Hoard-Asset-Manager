@@ -11,6 +11,8 @@ update, its new name is marked too (follow), rather than the product coming back
 - removed: out of everything but the Removed view. Kept out after refreshes, so a store can't bring it back.
 - hidden: out of view everywhere (library, Downloads, counts, tags) until unlocked with your PIN.
 - apart: not a copy of anything, whatever its name or picture: never stacked with other products (issue #217).
+- adult, not_adult: for adults (18+), or not, as you say: it wins over what a product's store and tags say, and is
+  how a product of your own in Local is marked (issue #338, hoard/adult.py).
 
 The PIN is stored only as a slow, salted hash (scrypt). Wrong guesses lock the hidden library for longer each
 time, and that survives restarts. It's a privacy screen for the app, not encryption: anyone who can open your
@@ -21,6 +23,8 @@ made when the PIN is first set and shown once. Like the PIN, it's kept only as a
 phrases count toward the same lockout. It only unlocks Hoard's hidden library; it isn't a crypto wallet phrase.
 """
 from __future__ import annotations
+
+from . import storage
 
 import hashlib
 import json
@@ -33,10 +37,14 @@ import time
 from pathlib import Path
 
 from .paths import data_dir
-from .safety import DataFileError, check_seal, read_json_file, seal, write_file_safely
+from .safety import DataFileError, seal
+from .storage import seal_status as check_seal, read_document as read_json_file, write_document as write_file_safely
 from .tags import TAG_KEY_RX
 
-KINDS = ("archived", "unarchived", "removed", "hidden", "apart")   # apart: "Not a copy", kept out of stacks (issue #217)
+# apart: "Not a copy", kept out of stacks (issue #217). adult, not_adult: for adults, or not, by your word, which wins
+# over what its store and tags say (issue #338, hoard/adult.py)
+KINDS = ("archived", "unarchived", "removed", "hidden", "apart", "adult", "not_adult")
+OPPOSITES = {"archived": "unarchived", "unarchived": "archived", "adult": "not_adult", "not_adult": "adult"}
 ITEM_KEY_RX = re.compile(r"^(booth|gumroad|jinxxy|payhip|itch|local):\S{1,300}\Z")   # a store's own key: store:id
 PHRASE_WORDS = 6
 WORDS = (Path(__file__).with_name("recovery_words.txt")).read_text("utf-8").split()   # the BIP-39 English list
@@ -76,8 +84,8 @@ def _hash(pin: str, salt: bytes, n: int, r: int, p: int) -> bytes:
 class MarkStore:
     """marks.json: one lock for every change. Read again whenever the file has changed (a page asks for it several
     times a request, and a download once a product): what was read is kept until then."""
-    _lock = threading.Lock()
-    _read_lock = threading.Lock()
+    _lock = storage.metadata_lock
+    _read_lock = storage.metadata_lock
     _read: dict = {}   # path -> (the file's stamp, what was read from it)
 
     def __init__(self, path: Path | None = None):
@@ -100,7 +108,7 @@ class MarkStore:
     def _cached(self) -> dict:
         """The choices file as last read, read again only when the file has changed (a new one each save)."""
         try:
-            st = self.path.stat()
+            st = storage.stat(self.path)
             stamp = (st.st_mtime_ns, st.st_size, st.st_ino)   # written by replacing it: a new file each time
         except OSError:
             stamp = None
@@ -120,7 +128,7 @@ class MarkStore:
         empty = {k: set() for k in KINDS} | {"ids": {k: {} for k in KINDS}, "pin": None, "recovery": None,
                                              "failures": 0, "wait_until": 0.0}
         try:
-            raw = read_json_file(self.path, 16 * 1024 * 1024) if self.path.exists() else None
+            raw = read_json_file(self.path, 16 * 1024 * 1024) if storage.exists(self.path) else None
         except (DataFileError, OSError, ValueError):
             return empty
         if not isinstance(raw, dict):
@@ -152,7 +160,7 @@ class MarkStore:
             "failures": data["failures"], "wait_until": data["wait_until"]}
         write_file_safely(self.path, json.dumps(seal(body), indent=1, sort_keys=True))
         if os.name == "posix":
-            os.chmod(self.path, 0o600)
+            storage.private(self.path)
 
     def change(self, kind: str, keys, on: bool, ids: dict | None = None) -> dict:
         """Mark (on) or unmark products. ids: the store's own keys of the products marked ({store:id: product key}),
@@ -168,10 +176,8 @@ class MarkStore:
                     raise PinError("Set a PIN for your hidden library first.")
                 data[kind] |= keys
                 data["ids"][kind].update(ids)
-                if kind == "archived":
-                    self._unmark(data, "unarchived", keys)
-                if kind == "unarchived":
-                    self._unmark(data, "archived", keys)
+                if kind in OPPOSITES:   # (one or the other)
+                    self._unmark(data, OPPOSITES[kind], keys)
             else:
                 self._unmark(data, kind, keys)
             if len(data[kind]) > MAX_KEYS or len(data["ids"][kind]) > MAX_KEYS:

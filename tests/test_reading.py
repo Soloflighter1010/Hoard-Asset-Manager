@@ -4,10 +4,10 @@ import os
 import tempfile
 import threading
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 from unittest import mock
 
-os.environ.setdefault("HOARD_DATA_DIR", str(Path(tempfile.mkdtemp(prefix="hoard-tests-")) / "Hoard"))
 
 from hoard import config, server  # noqa: E402
 from tests.browsing import menu  # noqa: E402
@@ -18,7 +18,7 @@ except ImportError:
     BROWSER = False
 
 
-class Setting(unittest.TestCase):
+class Setting(IsolatedTestCase):
     def test_checked(self):
         self.assertEqual(server.display_settings({})["font"], "standard")
         self.assertFalse(server.display_settings({})["spacing"])
@@ -48,7 +48,7 @@ class Setting(unittest.TestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
-class InSetup(unittest.TestCase):
+class InSetup(IsolatedTestCase):
     def test_chosen_in_setup_and_shown_at_once(self):
         from playwright.sync_api import sync_playwright
         tmp = tempfile.TemporaryDirectory()

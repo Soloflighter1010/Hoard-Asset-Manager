@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import unittest
+from tests.isolation import IsolatedTestCase
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -17,7 +18,7 @@ LOCKS = ("requirements.txt", "requirements-app.txt", "requirements-mac.txt", "re
 norm = lambda name: re.sub(r"[-_.]+", "-", name).lower()  # noqa: E731
 
 
-class Acknowledgements(unittest.TestCase):
+class Acknowledgements(IsolatedTestCase):
 
     def test_every_locked_package_is_credited(self):
         """Every package any of Hoard's lock files pins (what Setup installs, and what each app ships or is built
@@ -26,6 +27,34 @@ class Acknowledgements(unittest.TestCase):
         credited = {norm(i["package"]) for i in credits.items() if i.get("package")}
         self.assertEqual(pinned - credited, set(), "add these to hoard/credits.json")
         self.assertEqual(credited - pinned, set(), "credited but no longer used")
+
+    def test_every_npm_package_is_credited(self):
+        """Issue #343: the npm packages package-lock.json pins (the tools that build the Look inside component, and
+        what of them is bundled into it) are credited too, by their npm name; esbuild's per-platform builds
+        (@esbuild/linux-x64 and the like) are esbuild's."""
+        import json
+        lock = json.loads((REPO / "package-lock.json").read_text("utf-8"))
+        pinned = {k.rsplit("node_modules/", 1)[1] for k in lock["packages"] if k.startswith("node_modules/")}
+        pinned = {"esbuild" if n.startswith("@esbuild/") else n for n in pinned} - {"svelte/acorn"}   # (svelte's own acorn)
+        credited = {i["npm"] for i in credits.items() if i.get("npm")}
+        self.assertEqual(pinned - credited, set(), "add these to hoard/credits.json, with \"npm\"")
+        self.assertEqual(credited - pinned, set(), "credited but no longer used")
+        for i in credits.items():
+            if i.get("npm"):
+                version = lock["packages"][f"node_modules/{i['npm']}"]
+                self.assertEqual(i["license"], version.get("license"), i["name"])
+
+    def test_what_the_look_inside_component_bundles_is_credited_as_shipped(self):
+        """The npm packages built into hoard/web/inside.generated.js ship with every copy of Hoard: each is credited
+        as "all", with the license text scripts/build_ui.mjs writes beside it."""
+        bundled = set(re.findall(r"['\"]?([\w@/.-]+)['\"]?: '[^']+'", re.search(r"const licenses = \{([^}]*)\}",
+                                                                              (REPO / "scripts" / "build_ui.mjs").read_text("utf-8")).group(1)))
+        shipped = {i["npm"]: i for i in credits.items() if i.get("text") == "hoard/web/inside.LICENSE.txt"}
+        self.assertEqual(set(shipped), bundled)
+        text = (REPO / "hoard" / "web" / "inside.LICENSE.txt").read_text("utf-8")
+        for name, i in shipped.items():
+            self.assertEqual(i["in"], "all", name)
+            self.assertIn(f"{name}\n", text, name)
 
     def test_each_has_a_license_a_link_and_a_place(self):
         names = [i["name"] for i in credits.items()]
