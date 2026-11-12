@@ -1,5 +1,14 @@
-// Hoard's pop-ups (ui/Dialog.svelte): open one, and get its answer. shared.js's ask, askName, askFolder and the set
-// picker call open(); heading() turns a question's text into its title and the line under it.
+// Hoard's pop-ups (ui/Dialog.svelte): open one, and get its answer. shared.js's ask, askName, askFolder, askChoice and
+// askForm, and the windows whose inside the page draws (Mix and match, Share, marks on a photo), call open();
+// heading() turns a question's text into its title and the line under it.
+//
+// A form's blocks (askForm), each {type, ...}: "text" {text, tone: "hint" or "warn", strong}; "heading" {text}; "pre"
+// {text} (a license, Git's rules); "list" {items: [{name, sub}]}; "field" {id, label, value, rows (a box of lines),
+// browse, mustBe (its main button waits until it says this)}; "check" {id, label, checked}; "checks" {id, items:
+// [{label, sub, tags, checked}], allNone, required (its main button waits for a tick)}; "radios" {id, items: [{value,
+// label, tags}], value, find}; "columns" {cols: [{heading, items, none}]}. Each may have cls, for the pages' styles
+// and tests. Its answer's fields hold each field's text, each check's true or false, each checks' list of which are
+// ticked, and each radios' value, by id.
 import { mount, unmount, flushSync } from 'svelte';
 import Dialog from './Dialog.svelte';
 

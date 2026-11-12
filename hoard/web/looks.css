@@ -201,7 +201,6 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 .pm-list .pnum:empty { background: transparent; border: 1.5px dashed currentColor; opacity: .5; }
 .pname { display: grid; min-width: 0; flex: 1; }
 .pname b, .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-dialog.ask.pmark-dlg { width: min(1100px, calc(var(--vw, 100vw) - 32px)); max-width: none; }
 .pmark-dlg form { max-height: calc(var(--vh, 100vh) - 48px); overflow: auto; }
 .pm-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .pm-body { grid-template-columns: 1fr; } }
@@ -388,7 +387,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] :is(.ghost, .btn, .primary) { border-radius: 6px; padding: 0 12px; font-size: 13.5px; }
 [data-style="workbench"] :is(.ghost, .btn, .primary).sm { padding: 0 10px; font-size: 12.5px; }
 [data-style="workbench"] :is(.search input, .tools select, .shelf-tools select, .find, .settings .field input, .settings select,
-  .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.ask input, dialog.pin input) { border-radius: 6px; }
+  .settings textarea, .setup .field input, .setup textarea, .tagadd input, .newtag input, .bulk input, dialog.pin input) { border-radius: 6px; }
 [data-style="workbench"] { --dlg-radius: 10px; --dlg-field-radius: 6px; }   /* every pop-up's corners, and its box's */
 [data-style="workbench"] :is(.stores, .win, .setup-card, .tour-card, .bulk, .dlpanel, .selmenu, .barmenu, .qmenu) { border-radius: 10px; }
 [data-style="workbench"] :is(.task, .proj, .librow, .note, .also, .update, .viewbar, .routine-note, .saver, .support-safe, .support-result,

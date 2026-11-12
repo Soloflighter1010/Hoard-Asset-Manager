@@ -540,10 +540,10 @@ class AccessKey(IsolatedTestCase):
         self.assertGreater(page.locator("#acksList li").count(), 40)
         self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
         page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
-        dialog = page.locator("dialog.ask[open]")
+        dialog = page.locator("dialog.hd[open]")
         dialog.locator(".ack-text").wait_for()
         self.assertIn("SIL OPEN FONT LICENSE", dialog.locator(".ack-text").inner_text().upper())
-        dialog.get_by_role("button", name="Close").click()
+        dialog.locator("footer button", has_text="Close").click()   # (the one under it; the close button at its top does the same)
         self.assertEqual(refused, [])
         page.close()
 

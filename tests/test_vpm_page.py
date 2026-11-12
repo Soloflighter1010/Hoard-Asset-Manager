@@ -900,7 +900,7 @@ class ProjectsPanel(IsolatedTestCase):
         page.locator(".selmenu [role=menuitem]", has_text="Put in a project...").click()
         chooser = page.locator("dialog.pj-dlg")
         self.assertNotIn("Old World", chooser.inner_text(), "only projects whose folder is there")
-        chooser.locator(".linkish", has_text="Rusk Avatar").click()
+        chooser.locator(".hd-row", has_text="Rusk Avatar").click()
         sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
         self.assertIn("rusk.unitypackage", sure.inner_text())
         sure.locator("button[value=yes]").click()

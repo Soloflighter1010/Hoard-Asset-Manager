@@ -258,8 +258,6 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .chips .tgroup:first-child { margin-top: 0; }
 .tagrows select.ttype { width: auto; height: 32px; padding: 0 30px 0 10px; font-size: 13px; }   /* (the arrow: looks.css) */
 /* Mix and match (issue #156) */
-dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
-dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
 .mixlist { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mixlist li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: var(--cave);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -269,7 +267,7 @@ dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
 .mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
 .mixtext b { overflow-wrap: anywhere; }
 .mixtext .muted { font-size: 12.5px; }
-.mixlist label.check, .mixdlg > form > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
+.mixlist label.check, .mixbody > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -537,8 +535,6 @@ body.selecting .toast { bottom: 96px; }
 #acksList ul { list-style: none; margin: 0; padding: 0; }
 #acksList li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
 #acksList li .lic { color: var(--dust); font-size: 12.5px; }
-dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
-  background: var(--cave); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; }
 /* issue #230: notifications through Apprise */
 #setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
 .apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
@@ -1087,8 +1083,6 @@ body.no-glow .projects.win { background: var(--cave); }
 .pj-more { margin: 10px 0; font-size: 13.5px; }
 .pj-more summary { cursor: pointer; color: var(--dust); font-weight: 700; }
 .projects label.check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
-dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
-dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
 .pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
 .pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: break-word; }   /* (#199: never mid-word) */
 .pj-contents .pj-c { display: flex; flex-direction: column; min-width: 0; }
@@ -1174,11 +1168,6 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sets .row > button, .sets .row > a { width: auto; flex: none; margin: 0; }
 .sets-top { margin: 0 0 16px; }
-dialog.ask.share { width: min(600px, calc(var(--vw) - 32px)); }   /* (wider than other questions: its link and four buttons) */
-dialog.ask .ask-row a.ghost { height: var(--btn-h); }   /* (a link among the buttons, the buttons' height) */
-dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only link a set is shared by) */
-dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
-dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background-color: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -1252,18 +1241,7 @@ body.no-glow #glow { display: none; }
 .theme-swatch i { width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg); }
 .custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
-/* Pop-ups not yet drawn by ui/Dialog.svelte (Projects', Git's and the rest built here) on its ground, corners and
-   shadow, so every pop-up looks alike while they move over */
-dialog.ask { width: min(480px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
-  border-radius: var(--dlg-radius, 18px); color: var(--bone); background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 30px 80px rgb(0 0 0 / .55); }
-dialog.ask::backdrop { background: rgb(10 8 6 / .62); }
-dialog.ask input:not([type=checkbox]):not([type=radio]) { height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0;
-  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; }   /* (the dialog is stone) */
-dialog.ask input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
-dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
-dialog.ask p:first-child { font-weight: 700; }
 .ask-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }   /* (large text: buttons wrap, not off the edge) */
-dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 /* library folders, in Settings (as on the Downloads page) */
 .libs { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
 .librow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--stone);

@@ -339,7 +339,7 @@ class EndToEnd(IsolatedTestCase):
             self.assertNotIn("Rusk", locked)
             self.assertNotIn(key, locked)
             self.assertIn("It works until", dialog.locator(".shortlink").inner_text())
-            dialog.get_by_role("button", name="Close").click()
+            dialog.locator('button[value="no"]').click()   # (Close: the one under it, as the close button at its top does)
 
             # the viewer: fetched by its id, unlocked with its key, which is never sent
             asked = []
@@ -360,7 +360,7 @@ class EndToEnd(IsolatedTestCase):
             page.get_by_text("Updated the short link.").wait_for()
             self.assertEqual(dialog.locator(".shortlink input").input_value(), link)
             self.assertNotIn("changed since", dialog.locator(".shortlink").inner_text())
-            dialog.get_by_role("button", name="Close").click()
+            dialog.locator('button[value="no"]').click()
             view.reload()
             view.locator("#setNote", has_text="Snowy worlds").wait_for()
 

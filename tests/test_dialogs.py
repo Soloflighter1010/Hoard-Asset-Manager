@@ -187,6 +187,83 @@ class Popups(IsolatedTestCase):
         page.keyboard.press("Enter")
         self.assertEqual(self.answer(page), "b", "Enter takes the first one shown")
 
+    def test_a_form_in_steps(self):
+        """Projects', Git's and the rest: a form's blocks, its steps (each with its own buttons), a list of ticks that
+        needs one, a box that must say something, and what it answers."""
+        page = self.open()
+        page.evaluate(OPEN, """askForm({ title: 'Fox Avatar', nameTitle: true, ok: 'Put these in', steps: [
+            { label: 'Step 1 of 2: its packages', blocks: [
+              { type: 'checks', id: 'c', required: true, allNone: true, items: [{ label: 'Fox_PC.unitypackage', tags: [{ text: 'PC' }] },
+                                                                                { label: 'Fox Tool', checked: true }] },
+              { type: 'field', id: 'name', label: 'Its name', value: 'Fox' }] },
+            { label: 'Step 2 of 2: what it needs', blocks: [
+              { type: 'checks', id: 'sugg', items: [{ label: 'com.vrcfury.vrcfury', checked: true }] },
+              { type: 'check', id: 'nested', label: 'Anyway' }, { type: 'pre', text: 'Library/', cls: 'pj-plan' }] }] })""")
+        d = page.locator("dialog.hd-form[open]")
+        one, two = d.locator("[data-step='1']"), d.locator("[data-step='2']")
+        self.assertTrue(two.is_hidden())
+        self.assertEqual(d.locator("h2").get_attribute("translate"), "no", "a name, never translated")
+        nxt = one.locator(".primary")
+        one.locator("[data-all='0']").click()
+        self.assertTrue(nxt.is_disabled(), "nothing ticked: nothing to go on with")
+        one.locator("li", has_text="Fox_PC").locator("input").check()
+        one.locator("#name").press("Enter")   # (Enter in a box: Next)
+        self.assertTrue(one.is_hidden())
+        self.assertIn("com.<wbr>vrcfury.<wbr>vrcfury", two.locator(".hd-list").first.inner_html(), "a long name breaks at its dots")
+        two.locator("[data-step-go='1']").click()   # Back: as it was
+        self.assertTrue(one.locator("li", has_text="Fox_PC").locator("input").is_checked())
+        self.assertFalse(one.locator("li", has_text="Fox Tool").locator("input").is_checked())
+        nxt.click()
+        two.locator("#nested").check()
+        two.locator(".primary").click()
+        self.assertEqual(self.answer(page), {"ok": True, "value": "yes",
+                                             "fields": {"c": [True, False], "name": "Fox", "sugg": [True], "nested": True}})
+
+    def test_a_form_that_needs_a_name_typed(self):
+        page = self.open()
+        page.evaluate(OPEN, """askForm({ title: 'Delete Picked Project from this computer?', danger: true, ok: 'Delete it', okId: 'go',
+            blocks: [{ type: 'field', id: 'typed', label: 'Type its name', mustBe: 'Picked Project' }] })""")
+        go = page.locator("#go")
+        self.assertEqual(page.evaluate("document.activeElement.id"), "typed", "the box to type in first")
+        self.assertTrue(go.is_disabled())
+        page.keyboard.type("Picked")
+        page.keyboard.press("Enter")
+        self.assertTrue(go.is_visible(), "Enter does nothing while the name isn't right")
+        page.keyboard.type(" Project")
+        self.assertIn("danger", go.get_attribute("class"))
+        go.click()
+        self.assertEqual(self.answer(page)["fields"], {"typed": "Picked Project"})
+
+    def test_a_window_drawn_by_the_page(self):
+        """Mix and match, Share and marks on a photo: their inside drawn by the page, moved into the card; a button
+        of its own that does something and stays open; and the page ending it from inside."""
+        page = self.open()
+        page.evaluate("""() => { window.box = document.createElement('div'); box.innerHTML = '<p>Inside</p><button type="button" id="mine">Mine</button>';
+            window.control = {}; window.picks = 0; window.answer = undefined;
+            HoardUI.dialogs.open({ kind: 'host', title: 'Mix and match', content: box, control, tr, cancel: 'Close', ok: 'Make a set of them',
+              buttons: [{ label: 'Pick again', attrs: { 'data-mix': 'again' }, act: () => { picks++; } }] }).then(a => { window.answer = a; }); }""")
+        d = page.locator("dialog.hd-host[open]")
+        self.assertEqual(page.evaluate("document.activeElement.id"), "mine", "the keyboard starts inside it")
+        d.locator("[data-mix=again]").click()
+        d.locator("[data-mix=again]").click()
+        self.assertEqual(page.evaluate("window.picks"), 2)
+        self.assertTrue(d.is_visible(), "still open")
+        page.evaluate("control.close('no')")
+        self.assertEqual(self.answer(page), {"ok": False, "value": "no"})
+
+    def test_a_list_with_another_way(self):
+        """Put in a project: rows with no picture, and New project with these as another answer."""
+        page = self.open()
+        page.evaluate(OPEN, """HoardUI.dialogs.open({ kind: 'pick', title: 'Put in a project', tr, norm, cancel: 'Cancel',
+            groups: [{ title: '', items: [{ value: '/p/rusk', name: 'Rusk Avatar', sub: 'Avatar · Unity 2022.3.22f1' }] }],
+            buttons: [{ label: 'New project with these...', value: 'new' }] })""")
+        d = page.locator("dialog.hd-pick[open]")
+        self.assertEqual(d.locator(".hd-th").count(), 0, "no picture to show")
+        self.assertEqual(d.locator("h4").count(), 0, "one group, no heading")
+        self.assertEqual(d.locator("input[type=search]").count(), 0, "a short list: nothing to find it with")
+        d.locator("button", has_text="New project with these...").click()
+        self.assertEqual(self.answer(page), "new")
+
     def test_the_styles_corners(self):
         page = self.open()
         radius = lambda sel: page.evaluate(f"getComputedStyle(document.querySelector('{sel}')).borderTopLeftRadius")  # noqa: E731
