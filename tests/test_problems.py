@@ -144,6 +144,8 @@ class OnTheTiles(IsolatedTestCase):
             tile("Mochi").wait_for()
             self.assertEqual(tile("Mochi").locator(".problem-mark").count(), 0, "nothing wrong: no mark")
             self.assertEqual(tile("Rusk").locator(".problem-mark").get_attribute("title"), "1 file is missing on disk.")
+            self.assertEqual(tile("Rusk").locator(".problem-mark").evaluate("e => e.getBoundingClientRect().width"), 30,
+                             "big enough to see on a tile")
             self.assertIn("1 file is missing on disk", tile("Rusk").get_attribute("aria-label"))
             self.assertIn("Its last download didn't finish", tile("Anko").get_attribute("aria-label"))
             # Downloads: the same, a Problems view of them, and what to do in a product's details

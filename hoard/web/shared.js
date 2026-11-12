@@ -460,7 +460,33 @@ async function lookAtPictures(wanted) {   // [{look_for: its SHA-256, src}]: tru
   await keepLooks();
   return changed;
 }
-// The item whose details are open stays marked in the grid.
+// Issue #329: the tile whose details have just closed pulses once where it is again (looks.css: .glow-back), as the
+// grid takes back the room they had. Known by its key, so a tile drawn anew meanwhile (Back closes them, then draws
+// the grid again) carries on the pulse where it was (lazyCards); started over when they're closed again before then.
+const GLOW_BACK = { which: "", since: 0, timer: 0 };
+const GLOW_BACK_MS = 1800;
+// Start that pulse on the tile whose details closed (slot), taking it off any other.
+function glowBack(slot) {
+  for (const s of document.querySelectorAll(".slot.glow-back")) { s.classList.remove("glow-back"); s.style.animationDelay = ""; }
+  clearTimeout(GLOW_BACK.timer);
+  GLOW_BACK.which = "";
+  if (!slot || !slot.closest || !slot.closest("#grid")) return;
+  GLOW_BACK.which = slot.dataset.key ? `.slot[data-key="${CSS.escape(slot.dataset.key)}"]`
+    : slot.dataset.id ? `.slot[data-id="${CSS.escape(slot.dataset.id)}"]` : "";
+  GLOW_BACK.since = performance.now();
+  GLOW_BACK.timer = setTimeout(() => { GLOW_BACK.which = ""; reglow(); }, GLOW_BACK_MS);
+  requestAnimationFrame(reglow);
+}
+// Put the pulse on the tile it's for, as it's drawn now (and take it off any other).
+function reglow() {
+  const el = GLOW_BACK.which ? document.querySelector(`#grid ${GLOW_BACK.which}`) : null;
+  for (const s of document.querySelectorAll(".slot.glow-back")) if (s !== el) { s.classList.remove("glow-back"); s.style.animationDelay = ""; }
+  if (!el || el.classList.contains("glow-back") || el.getAttribute("aria-current") === "true") return;
+  const gone = (performance.now() - GLOW_BACK.since) / 1000;   // (seconds of it already shown, on the tile it was on)
+  el.style.animationDelay = `${-gone}s, ${0.7 - gone}s`;
+  el.classList.add("glow-back");
+}
+// The item whose details are open stays marked in the grid (and glows: looks.css, issue #329).
 function markCurrent(selector) {
   for (const s of document.querySelectorAll('.slot[aria-current="true"]')) s.removeAttribute("aria-current");
   const slot = selector && document.querySelector(selector);
@@ -681,6 +707,7 @@ function lazyCards(box, batch = 120) {
       box.append(fragment);
       shown += next.length;
       markSelected();   // cards drawn now get the marks the others have
+      if (GLOW_BACK.which) reglow();   // (and the pulse of one whose details just closed: #329)
     }
     if (shown < list.length && box.lastElementChild) near.observe(box.lastElementChild);
   }
@@ -1320,6 +1347,27 @@ async function bulkTag(mode) {   // a tag to add to, or take off, what's selecte
 }
 const TAG_ACTIONS = { name: "Tags", items: [{ label: "Add a tag...", run: () => bulkTag("add") },
                                             { label: "Remove a tag...", run: () => bulkTag("remove") }] };
+// Mark as 18+, or It isn't for adults, for the products chosen, on both pages (issues #311 and #338): your word, which
+// wins over what their store and tags say, as it does in a product's details. Each is offered when it would change
+// one of them: both, when some are for adults and some aren't.
+function ADULT_ACTIONS() {
+  const chosen = sel.kind === "items" ? chosenItems().filter(a => a.tag_key) : [];
+  const some = chosen.some(a => a.adult), every = chosen.length > 0 && chosen.every(a => a.adult);
+  return [...(every ? [] : [{ label: "Mark as 18+", run: list => markAdult(list, "adult") }]),
+          ...(some ? [{ label: "It isn't for adults", run: list => markAdult(list, "not_adult") }] : [])];
+}
+// Keep your word for these products: for adults ("adult") or not ("not_adult").
+async function markAdult(list, kind) {
+  const keys = [...new Set(list.filter(a => a && a.tag_key).map(a => a.tag_key))];
+  if (!keys.length) { toast("Select some items first."); return; }
+  const r = await apiPost("/api/marks", { kind, keys, on: true });
+  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
+  sel.ids.clear();   // (done with them, as with Archive and Hide)
+  await T.reload();
+  const one = keys.length === 1;
+  toast(kind === "adult" ? (one ? tr("Marked as 18+.") : tr("Marked {0} products as 18+.", keys.length))
+                         : (one ? tr("Marked as not for adults.") : tr("Marked {0} products as not for adults.", keys.length)));
+}
 
 /* ---------- the search's prefixes (issue #220): one kind of thing, as creator:mochi, tag:hoodie or settings:language.
    Products are filtered by creator, tag, store, type, your note (issue #304) and set; a set, a project or a setting is a place to go, offered

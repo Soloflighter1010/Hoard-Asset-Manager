@@ -178,10 +178,10 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 /* Something wrong with a product (issue #334): files missing or changed, a download that didn't finish, a Local
    folder that's gone. A red mark on its tile, beside its note's (which moves over for it); in its details, a list of
    what and what to do. */
-.problem-mark { position: absolute; right: 7px; bottom: 7px; z-index: 2; width: 24px; height: 24px; display: grid; place-items: center;
-  border-radius: 7px; background: #b3261e; color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
-.problem-mark svg { width: 15px; height: 15px; stroke-width: 2; }
-.slot.has-problem .note-mark { right: 36px; }
+.problem-mark { position: absolute; right: 7px; bottom: 7px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center;
+  border-radius: 8px; background: #b3261e; color: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .4); }
+.problem-mark svg { width: 19px; height: 19px; stroke-width: 2; }
+.slot.has-problem .note-mark { right: 43px; }
 .d-problems { list-style: none; margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: rgb(179 38 30 / .12);
   border: 1px solid rgb(179 38 30 / .35); display: grid; gap: 8px; font-size: 13.5px; }
 .d-problems li { display: flex; gap: 9px; align-items: flex-start; }
@@ -647,3 +647,15 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 /* View-specific controls share the shell, while windows remain mounted across navigation. */
 html[data-app-view="library"] [data-app-view="downloads"],
 html[data-app-view="downloads"] [data-app-view="library"] { display: none !important; }
+
+/* Issue #329: the tile whose details are open glows, so it's found again at once when the grid makes room for them
+   (fewer tiles to a row: it moves). It pulses as they open, glows while they're open, and pulses once more where
+   it is again as they close (.glow-back, shared.js glowBack). With Reduce motion it glows without pulsing. After every
+   style's own look for the open tile, which this goes over. */
+:root .grid .slot:is([aria-current="true"], .glow-back) { position: relative; z-index: 1; }
+:root .grid .slot:is([aria-current="true"], .glow-back) .art {
+  box-shadow: 0 0 0 3px var(--gold), 0 0 30px 10px color-mix(in srgb, var(--gold) 65%, transparent); }
+:root .grid .slot[aria-current="true"] .art { animation: found-pulse .7s ease-in-out 3; }
+:root .grid .slot.glow-back:not([aria-current="true"]) .art { animation: found-pulse .7s ease-in-out, found-fade 1.1s ease-in .7s forwards; }
+@keyframes found-pulse { 50% { box-shadow: 0 0 0 5px var(--gold), 0 0 56px 22px color-mix(in srgb, var(--gold) 85%, transparent); } }
+@keyframes found-fade { to { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; } }

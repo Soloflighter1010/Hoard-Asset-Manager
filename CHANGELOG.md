@@ -5,9 +5,25 @@
 - **Products for adults are known, and blurred, without waiting for refreshes** ([#311](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/311)). Booth and
   Jinxxy say a product is for adults only on its own page, which Hoard read 40 at a time with each refresh: after
   updating to beta 5, most of a large library wasn't blurred yet (often only the first of a set's), and a set shared
-  with them in it didn't ask its viewer's age. After a refresh, the rest are now read in the background, a few at a
-  time at the store's own pace, waiting while a task of yours runs (**Reading products' pages** in Tasks, with Pause
-  and Stop). A set's link says it's for adults once they're read: update its link (**Share**) for the set viewer to ask.
+  with them in it didn't ask its viewer's age. After a refresh, the rest are now read in the background
+  (**Reading products' pages** in Tasks, with Pause and Stop), products in a set you've shared first, then those in
+  your other sets. A set's link says it's for adults once they're read: update its link (**Share**) for the set
+  viewer to ask.
+- **Products' pages are read faster**, with the same pause for each store as before (`request_delay`, a second):
+  Booth, Jinxxy and itch.io side by side (they're different sites), the pause counted from the start of the last
+  page rather than its end, one connection to each store kept open from one page to the next, and pages sent
+  compressed (a quarter of the data from Jinxxy). The background reader carries on while a task of yours runs, leaving only the
+  stores that task uses until it's done; Jinxxy's pages count towards its limit of 120 requests a minute.
+- **Jinxxy's own ratings.** Jinxxy rates a product with content warnings, not a flag Hoard looked for, so its own
+  word was missed and only a product's tags or name could say it's for adults. A product Jinxxy rates **Suggestive**
+  or **Explicit** is now for adults; **General Mature Themes** alone (horror, intense scenes) isn't. Where Jinxxy's
+  data sends the ratings to its inventory, a refresh knows them without reading the products' pages.
+- **Mark as 18+ and It isn't for adults on a right-click**, and in the selection bar's **More**, for all the products
+  you've chosen, on Library and Downloads: each offered when it would change one of them.
+- **The tile you open glows** ([#329](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/329)). The grid
+  makes room for a product's details, so the tile you clicked moves: it now pulses as they open and glows while
+  they're open, and pulses again where it is as they close. With Reduce motion it glows without pulsing.
+- **The mark on a product with a problem is bigger** ([#334](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/334)), easier to see on a tile.
 - **Downloads keeps your theme and style.** Switching from the Library to Downloads showed Hoard's own colours instead.
 - **A product for adults' store and its 18+ mark** no longer overlap: pointed at, its store's name is shown above the
   mark.

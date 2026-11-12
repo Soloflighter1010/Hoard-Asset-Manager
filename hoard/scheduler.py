@@ -76,7 +76,7 @@ class Context:
                         from .common import Cancelled
                         raise Cancelled()
                     raise TaskStopped()
-                waiting = not task["foreground"] and scheduler._foreground_waiting()
+                waiting = not task["foreground"] and not task.get("beside") and scheduler._foreground_waiting()
                 if not task["paused"] and not waiting:
                     task["status"] = "running"
                     return
@@ -99,8 +99,10 @@ class Scheduler:
     """One clock and worker owner for an app's foreground lanes and maintenance.
 
     At most one maintenance callback runs at a time. A foreground callback can
-    start immediately; maintenance yields at its next checkpoint. Timer-only
-    control callbacks may run alongside both, for stuck-job monitoring and Stop.
+    start immediately; maintenance yields at its next checkpoint, but for one
+    registered beside=True, which keeps out of your tasks' way itself (reading
+    products' public pages from stores a task isn't using). Timer-only control
+    callbacks may run alongside both, for stuck-job monitoring and Stop.
     Registered durable keys recover their progress, pause state and next run.
     """
 
@@ -123,7 +125,8 @@ class Scheduler:
 
     def add(self, key: str, label: str, callback, *, priority: int = MAINTENANCE,
             delay: float = 0, every: float | None = None, foreground: bool = False,
-            durable: bool = True, visible: bool = True, control: bool = False, cancel=None, external: bool = False) -> str:
+            durable: bool = True, visible: bool = True, control: bool = False, cancel=None, external: bool = False,
+            beside: bool = False) -> str:
         """Register trusted code and its schedule; repeating registration never duplicates a worker."""
         with self._condition:
             if self._closed:
@@ -139,7 +142,7 @@ class Scheduler:
             self._tasks[key] = {
                 "key": key, "label": label, "callback": callback, "priority": priority,
                 "foreground": foreground, "control": control, "durable": durable, "visible": visible,
-                "external": external,
+                "external": external, "beside": beside,
                 "every": every, "due": due if isinstance(due, (int, float)) and not isinstance(due, bool) and math.isfinite(due) else time.time() + max(0, delay),
                 "checkpoint": old.get("checkpoint", {}),
                 "progress": progress if isinstance(progress, dict) else {},
@@ -247,7 +250,8 @@ class Scheduler:
                 now = time.time()
                 maintenance = any(t["running"] and not t["foreground"] and not t["control"] for t in self._tasks.values())
                 ready = [t for t in self._tasks.values() if not any(t[k] for k in ("running", "paused", "stopped", "finished", "external"))
-                         and t["due"] <= now and (t["foreground"] or t["control"] or not maintenance and not self._foreground_waiting())]
+                         and t["due"] <= now and (t["foreground"] or t["control"]
+                                                  or not maintenance and (t["beside"] or not self._foreground_waiting()))]
                 if not ready or len(self._workers) >= 4:
                     self._condition.wait(0.1)
                     continue

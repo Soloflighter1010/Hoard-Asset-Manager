@@ -20,11 +20,12 @@ import threading
 import time
 import unicodedata
 import weakref
+import zlib
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from .paths import data_dir
 
@@ -577,6 +578,137 @@ def fetch_public(url: str, headers: dict, max_bytes: int, timeout: int = 20,
     except Exception as e:
         _note_fetch_failure(e)
         return None
+
+
+class PublicPages:
+    """Small public pages, one after another, from a few https hosts (a store's products' pages): as fetch_public
+    reads them (every connection only to a checked public address, redirects only to those hosts, nothing sent but
+    the headers given), but over one connection to each host, kept open from one page to the next (HTTP/1.1
+    keep-alive: no new connection and TLS handshake for each), and compressed (gzip) where the site will.
+    Called as fetch_public is, with hosts: (data, content type) or None. One page at a time; close() when done
+    (or use it in a with). Jinxxy's are counted to its limit (pace.py), as Hoard's other requests to it are."""
+
+    REDIRECTS = 5
+    _AGAIN = (http.client.RemoteDisconnected, http.client.BadStatusLine, ConnectionResetError, BrokenPipeError)
+
+    def __init__(self, headers: dict, max_bytes: int, timeout: int = 20):
+        self.headers, self.max_bytes, self.timeout = dict(headers), max_bytes, timeout
+        self._conns: dict[str, http.client.HTTPSConnection] = {}
+        self._lock = threading.Lock()
+
+    def __enter__(self) -> "PublicPages":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+    def close(self) -> None:
+        """Close every connection kept open."""
+        with self._lock:
+            conns, self._conns = list(self._conns.values()), {}
+        for conn in conns:
+            self._shut(conn)
+
+    @staticmethod
+    def _shut(conn) -> None:
+        """Close one connection, whatever state it's in."""
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+    def __call__(self, url: str, hosts: "tuple[str, ...]", headers: dict | None = None) -> tuple[bytes, str] | None:
+        """One page (following its redirects on those hosts), or None: refused, not there, too big or cut short."""
+        with self._lock:
+            try:
+                return self._get(url, hosts, headers or {})
+            except urllib.error.URLError:
+                return None
+            except Exception as e:
+                _note_fetch_failure(e)
+                return None
+
+    def _get(self, url: str, hosts, headers: dict):
+        """Ask for url, then each address it's sent on to, on those hosts only."""
+        from . import pace
+        for _ in range(self.REDIRECTS + 1):
+            u = urlparse(url)
+            if not _on_hosts(u, hosts) or u.port not in (None, 443) or u.username or u.password:
+                return None
+            host = (u.hostname or "").rstrip(".").lower()
+            pace.sending(url)   # (Jinxxy's: kept to its limit, issue #262)
+            conn, r = self._ask(host, (u.path or "/") + (f"?{u.query}" if u.query else ""), headers)
+            if r.status in (301, 302, 303, 307, 308) and r.getheader("Location"):
+                url = urljoin(url, r.getheader("Location"))
+                self._finish(host, conn, r)
+                continue
+            if r.status != 200:   # (the store said no: a page that's gone)
+                self._finish(host, conn, r)
+                return None
+            return self._body(host, conn, r)
+        return None
+
+    def _ask(self, host: str, path: str, headers: dict):
+        """Send the request on the connection kept for host (a new one, checked public, when there's none or the one
+        kept was closed by the site meanwhile)."""
+        sent = {**self.headers, **headers, "Accept-Encoding": "gzip"}
+        for attempt in (0, 1):
+            conn = self._conns.get(host)
+            kept = conn is not None
+            if conn is None:
+                conn = self._conns[host] = _PublicHTTPSConnection(host, 443, timeout=self.timeout, context=tls_context())
+            try:
+                conn.request("GET", path, headers=sent)
+                return conn, conn.getresponse()
+            except self._AGAIN:
+                self._conns.pop(host, None)
+                self._shut(conn)
+                if not kept or attempt:   # (a fresh connection that failed: that's the answer)
+                    raise
+            except BaseException:
+                self._conns.pop(host, None)
+                self._shut(conn)
+                raise
+        raise OSError(f"couldn't ask {host}")
+
+    def _finish(self, host: str, conn, r) -> None:
+        """Done with an answer whose body isn't wanted: read a small one through, so the connection can be kept;
+        close it otherwise."""
+        try:
+            r.read(64 * 1024)
+        except Exception:
+            pass
+        if not r.isclosed() or r.will_close:
+            self._conns.pop(host, None)
+            self._shut(conn)
+
+    def _body(self, host: str, conn, r):
+        """The page itself: no bigger than max_bytes (as sent, and once unpacked), and all of it."""
+        encoding = (r.getheader("Content-Encoding") or "").strip().lower()
+        length = (r.getheader("Content-Length") or "").strip()
+        kind = r.msg.get_content_type()
+        try:
+            raw = r.read(self.max_bytes + 1)
+        except BaseException:
+            self._conns.pop(host, None)
+            self._shut(conn)
+            raise
+        whole = r.isclosed() and len(raw) <= self.max_bytes and not (length.isdigit() and len(raw) < int(length))
+        if not whole or r.will_close:   # (too big, or cut short: the rest isn't read; or the site closes it)
+            self._conns.pop(host, None)
+            self._shut(conn)
+        if not whole:
+            return None
+        if encoding == "gzip":
+            unpack = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            try:
+                data = unpack.decompress(raw, self.max_bytes + 1)
+            except zlib.error:
+                return None
+            if len(data) > self.max_bytes or unpack.unconsumed_tail or not unpack.eof:
+                return None   # (bigger than it may be once unpacked, or cut short)
+            return data, kind
+        return (raw, kind) if encoding in ("", "identity") else None   # (no encoding Hoard didn't ask for)
 
 
 _FETCH_FAILURES: set = set()

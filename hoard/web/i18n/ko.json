@@ -2494,6 +2494,8 @@
  "Blurred: for adults. Click to show it.": "성인용이라 흐리게 했어요. 클릭하면 보여요.",
  "Marked as 18+.": "18+로 표시했어요.",
  "Marked as not for adults.": "성인용이 아닌 것으로 표시했어요.",
+ "Marked {0} products as 18+.": "상품 {0}개를 18+로 표시했어요.",
+ "Marked {0} products as not for adults.": "상품 {0}개를 성인용이 아닌 것으로 표시했어요.",
  "Blur the pictures of products for adults (18+)": "성인용(18+) 상품의 이미지를 흐리게 표시",
  "Adult: it has products for adults in it.": "성인용: 성인용 상품이 들어 있어요.",
  "Adult: it has products for adults in it. Shared, it asks its viewer's age first.": "성인용: 성인용 상품이 들어 있어요. 공유하면 보는 사람에게 먼저 나이를 물어봐요.",

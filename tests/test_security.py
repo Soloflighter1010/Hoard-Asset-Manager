@@ -261,6 +261,112 @@ class PublicOnlyFetching(IsolatedTestCase):
             opened.assert_not_called()
 
 
+class KeptOpen(IsolatedTestCase):
+    """PublicPages: a store's products' pages one after another over one connection (kept open between them) and
+    compressed, with fetch_public's checks: only the hosts given, by https, each connection to a checked address."""
+
+    def setUp(self):
+        import gzip
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.connections, self.asked = [], []
+        test = self
+        page = b"<html>" + b"a product's page " * 2000 + b"</html>"
+
+        class Store(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def setup(self):
+                super().setup()
+                test.connections.append(self.client_address)
+
+            def log_message(self, *a):
+                pass
+
+            def send(self, code, body=b"", **headers):
+                self.send_response(code)
+                for k, v in {"Content-Length": str(len(body)), "Content-Type": "text/html", **headers}.items():
+                    self.send_header(k.replace("_", "-"), v)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                test.asked.append((self.path, self.headers.get("Accept-Encoding"), self.headers.get("Cookie")))
+                if self.path.startswith("/page"):
+                    zipped = "gzip" in (self.headers.get("Accept-Encoding") or "")
+                    self.send(200, gzip.compress(page) if zipped else page, **({"Content_Encoding": "gzip"} if zipped else {}))
+                elif self.path == "/moved":
+                    self.send(302, b"moved", Location="/page/2")
+                elif self.path == "/away":
+                    self.send(302, b"moved", Location="https://evil.example/page")
+                elif self.path == "/big":
+                    self.send(200, b"x" * 5000)
+                elif self.path == "/bomb":   # (small as sent, huge once unpacked)
+                    self.send(200, gzip.compress(b"\0" * (10 << 20)), Content_Encoding="gzip")
+                elif self.path == "/short":   # (says more than it sends, then closes)
+                    self.send_response(200)
+                    self.send_header("Content-Length", "1000")
+                    self.end_headers()
+                    self.wfile.write(b"cut")
+                    self.close_connection = True
+                else:
+                    self.send(404, b"gone")
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Store)
+        self.server.handle_error = lambda request, address: None   # (a connection the test closes on purpose)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        port = self.server.server_port
+        made = []
+
+        def connection(host, port_, timeout=None, context=None):   # (the test's store, on this computer, over plain HTTP)
+            made.append(host)
+            return http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+        self.made = made
+        patch = mock.patch.object(safety, "_PublicHTTPSConnection", connection)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.page = page
+
+    def test_one_connection_many_pages(self):
+        with safety.PublicPages({"User-Agent": "Hoard"}, 1 << 20) as pages:
+            for n in range(5):
+                self.assertEqual(pages(f"https://shop.example/page/{n}", ("shop.example",)), (self.page, "text/html"), "unpacked")
+            self.assertIsNone(pages("https://shop.example/missing", ("shop.example",)), "gone")
+            self.assertEqual(pages("https://shop.example/moved", ("shop.example",))[0], self.page, "sent on, on the same site")
+        self.assertEqual(len(self.connections), 1, "one connection for all of them")
+        self.assertEqual({a[1] for a in self.asked}, {"gzip"}, "asked for them compressed")
+        self.assertEqual({a[2] for a in self.asked}, {None}, "and sent no sign-in")
+
+    def test_what_it_refuses(self):
+        with safety.PublicPages({}, 4096) as pages:
+            for url, why in (("http://shop.example/page/1", "not https"), ("https://elsewhere.example/page/1", "another site"),
+                             ("https://user:pw@shop.example/page/1", "an address with a sign-in in it"),
+                             ("https://shop.example:8443/page/1", "another port"),
+                             ("https://shop.example/away", "sent on to another site"),
+                             ("https://shop.example/big", "bigger than it may be"),
+                             ("https://shop.example/bomb", "bigger than it may be once unpacked"),
+                             ("https://shop.example/short", "cut short")):
+                self.assertIsNone(pages(url, ("shop.example",)), why)
+            self.assertNotIn("evil.example", self.made, "never connected to the site it was sent on to")
+            self.assertEqual(pages("https://shop.example/page/1", ("shop.example",)), None, "4 KB at most, unpacked too")
+        with safety.PublicPages({}, 1 << 20) as pages:
+            self.assertEqual(pages("https://shop.example/page/1", ("shop.example",))[0], self.page, "after all that, still reads")
+
+    def test_a_connection_the_site_closed_is_made_again(self):
+        with safety.PublicPages({}, 1 << 20) as pages:
+            self.assertIsNotNone(pages("https://shop.example/page/1", ("shop.example",)))
+            for conn in pages._conns.values():   # (the site closed it while it was kept)
+                conn.sock.shutdown(socket.SHUT_RDWR)
+            self.assertEqual(pages("https://shop.example/page/2", ("shop.example",))[0], self.page)
+        self.assertEqual(len(self.connections), 2)
+
+    def test_jinxxys_count_to_its_limit(self):
+        from hoard import pace
+        with mock.patch.object(pace, "sending") as sending, safety.PublicPages({}, 1 << 20) as pages:
+            pages("https://jinxxy.com/page/1", ("jinxxy.com",))
+        sending.assert_called_once_with("https://jinxxy.com/page/1")
+
+
 class Pages(IsolatedTestCase):
     """The pages run only their own script, and nothing else from the server runs as a page."""
 

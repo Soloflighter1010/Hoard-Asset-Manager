@@ -110,8 +110,9 @@ big it is). A download that stops coming in
 (the store stops sending it but doesn't hang up) is given up on after 2 minutes with nothing new, and tried again
 like any other failed download, so it can't hold up the job, or the jobs waiting after it.
 
-Hoard waits a moment between pages on a store (1 second, `request_delay` in
-[`config.json`](Settings#settings-only-in-configjson)) to stay polite.
+Hoard waits a moment between pages on a store (1 second from the start of one to the next, `request_delay` in
+[`config.json`](Settings#settings-only-in-configjson)) to stay polite. Products' own pages (their creators' tags,
+and whether they're for adults) are read from each store beside the others, since they're different sites.
 
 ## Your downloads folder
 

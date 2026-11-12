@@ -26,6 +26,18 @@ PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
 BODY, HAT, MINE = tag_key("booth", "Night Body"), tag_key("booth", "Straw Hat"), tag_key("local", "My Edit")
 
 
+def jinxxy_page(own, others=(), name="Lace Set") -> str:
+    """A Jinxxy product page as Jinxxy writes it: its data streamed in JSON strings (Next.js's self.__next_f), the
+    products it shows beside this one (more from its creator) first, each with content warnings of its own."""
+    stream = ('2:["$","$L2a",null,{"more":' + json.dumps([{"__typename": "ProductPreview", "name": "Other", "restrictions": o}
+                                                         for o in others]) + "}]\n"
+              + '3a:["$","$L3b",null,{"product":' + json.dumps({"__typename": "PublicProduct", "id": "4023", "name": name,
+                                                                "tags": ["lace"], "restrictions": own}) + "}]\n")
+    half = len(stream) // 2   # (in two chunks, as a long page comes)
+    return f'<meta property="og:title" content="{name}">' + "".join(
+        f"<script>self.__next_f.push([1,{json.dumps(part)}])</script>" for part in (stream[:half], stream[half:]))
+
+
 class WhoSaysSo(IsolatedTestCase):
     def test_your_word_then_the_stores_then_its_tags_and_name(self):
         marks = {"adult": {"booth:hat"}, "not_adult": {"booth:body"}}
@@ -49,8 +61,14 @@ class WhoSaysSo(IsolatedTestCase):
     def test_what_a_stores_page_says(self):
         self.assertIs(adult.on_a_page("booth", {"is_adult": True}), True)
         self.assertIs(adult.on_a_page("booth", {"is_adult": False}), False)
-        self.assertIs(adult.on_a_page("jinxxy", 'x\\"nsfw\\":true,y'), True)
-        self.assertIs(adult.on_a_page("jinxxy", '{"nsfw": false, "name": "nsfw"}'), False)
+        # Jinxxy: the product's own content warnings, Suggestive or Explicit; not General Mature Themes alone, nor
+        # the warnings of the other products its page shows
+        for own, said in (([], False), (["CONTENT_SUGGESTIVE"], True), (["CONTENT_EXPLICIT", "CONTENT_MATURE"], True),
+                          (["CONTENT_MATURE"], False)):
+            self.assertIs(adult.on_a_page("jinxxy", jinxxy_page(own, others=[["CONTENT_EXPLICIT"]])), said, own)
+        self.assertIsNone(adult.on_a_page("jinxxy", "<html>its data isn't here</html>"), "a page that doesn't say")
+        self.assertIs(adult.on_a_page("jinxxy", 'x\\"nsfw\\":true,y'), True, "a flag, on a page without its data")
+        self.assertIsNone(adult.on_a_page("jinxxy", '{"nsfw": false, "name": "nsfw"}'))
         self.assertIsNone(adult.on_a_page("gumroad", "<html>"), "a store that doesn't say")
 
     def test_one_or_the_other(self):
@@ -72,6 +90,26 @@ class ReadFromTheStores(IsolatedTestCase):
         self.assertNotIn("adult", wishlists.from_product_page(
             "https://kitsu.gumroad.com/l/hat", lambda url, hosts: ('<meta property="og:title" content="Hat">', "text/html")),
             "Gumroad's page doesn't say")
+
+    def test_a_jinxxy_page_that_doesnt_say(self):
+        """A Jinxxy page that doesn't carry its product's data (Jinxxy keeps mature products from those signed out,
+        it says) gives its tags, but isn't taken for one saying the product isn't for adults: it's asked again with
+        the next refresh, not in the same run."""
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("jinxxy", [library.item("jinxxy", "a1", name="Lace Set", page="https://jinxxy.com/kitsu/lace"),
+                                     library.item("jinxxy", "a2", name="Straw Hat", page="https://jinxxy.com/kitsu/hat")])
+        pages = {"https://jinxxy.com/kitsu/lace": '<meta property="og:title" content="Lace Set">',
+                 "https://jinxxy.com/kitsu/hat": jinxxy_page([], name="Straw Hat")}
+        library._TAG_PAGE_FAILS.clear()
+        self.addCleanup(library._TAG_PAGE_FAILS.clear)
+        self.assertEqual(library.store_tags_from_pages(lib, "jinxxy", lambda url, hosts: (pages[url], "text/html")), 2)
+        by = {i["id"]: i for i in lib.data["items"]}
+        self.assertIs(by["a2"]["adult"], False, "its page said")
+        self.assertNotIn("adult", by["a1"], "its page didn't")
+        self.assertIn("store_tags", by["a1"])
+        self.assertEqual(library.store_pages_waiting(lib, "jinxxy"), 0, "not again this run")
+        library._TAG_PAGE_FAILS.clear()   # (the next run)
+        self.assertEqual(library.store_pages_waiting(lib, "jinxxy"), 1)
 
     def test_the_library_keeps_it_and_asks_once(self):
         lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
@@ -95,8 +133,8 @@ class ReadFromTheStores(IsolatedTestCase):
     def test_the_rest_are_read_in_the_background(self):
         """A refresh reads at most STORE_TAG_PAGES of a store's products' pages; the rest are read in the background
         after it, a few at a time, until each has been read once: a library of hundreds no longer waits a refresh for
-        every 40 to know which of them are for adults (so only the first few were blurred). It waits while a task of
-        yours runs, and a page that couldn't be read is left for the next refresh."""
+        every 40 to know which of them are for adults (so only the first few were blurred). It leaves a store alone
+        while a task of yours uses it (and only then), and a page that couldn't be read is left for the next refresh."""
         from unittest import mock
         from hoard import jobs
         from hoard.scheduler import Scheduler
@@ -117,11 +155,19 @@ class ReadFromTheStores(IsolatedTestCase):
         scheduler = Scheduler(persistent=False)
         self.addCleanup(scheduler.close)
         lane = jobs.Jobs({**config.load_config(), "request_delay": 0}, lib, scheduler=scheduler)
-        lane.state["running"] = True   # a task of yours: the reader waits for it
+        lane.state["running"] = True   # a task of yours reading Booth: the reader leaves Booth to it
+        lane._current = {"task": "download", "stores": ["booth"]}
         with mock.patch.object(wishlists, "read_store_page", fetch), mock.patch.object(jobs.Jobs, "STORE_PAGES_A_STEP", 4):
             lane.read_store_pages_later()
             threading.Event().wait(1.5)
-            self.assertEqual(asked, [], "nothing while your task runs")
+            self.assertEqual(asked, [], "nothing of Booth's while your task reads Booth")
+            lane._current = {"task": "project", "stores": []}   # one that reads no store: it reads beside it
+            scheduler.wake("store-pages")
+            for _ in range(100):
+                if asked:
+                    break
+                threading.Event().wait(0.05)
+            self.assertTrue(asked, "read while that task runs")
             lane.state["running"] = False
             scheduler.wake("store-pages")
             for _ in range(200):
@@ -134,6 +180,89 @@ class ReadFromTheStores(IsolatedTestCase):
         self.assertNotIn("adult", by["30"], "the page that couldn't be read: left for the next refresh")
         self.assertEqual(len(asked), len(set(asked)), "none read twice")
         self.assertEqual(library.store_pages_waiting(lib, "booth"), 0)
+
+    def test_each_page_a_gap_from_the_last_ones_start(self):
+        """A store's next page is asked for request_delay after the last one was (from its start: a page that took a
+        while leaves less to wait), whoever asked; another store has a gap of its own."""
+        from unittest import mock
+        clock, waits = [100.0], []
+
+        def pause(seconds):
+            waits.append(round(seconds, 2))
+            clock[0] += seconds
+        library._NEXT_PAGE.clear()
+        self.addCleanup(library._NEXT_PAGE.clear)
+        with mock.patch("time.monotonic", lambda: clock[0]), mock.patch.object(library, "pause", pause):
+            library._wait_for_turn("booth", 1.0)   # the first: at once
+            clock[0] += 0.4                         # (its page took 0.4 s to come)
+            library._wait_for_turn("booth", 1.0)   # 0.6 s more, not 1
+            clock[0] += 1.5                         # (a slow one: longer than the gap)
+            library._wait_for_turn("booth", 1.0)   # at once
+            library._wait_for_turn("jinxxy", 1.0)  # another store: at once
+        self.assertEqual(waits, [0.6])
+
+    def test_your_sets_first(self):
+        """The products in your sets are read first, those in a set you've shared (its link works) before the rest:
+        what a viewer of that link sees says soonest whether it's for adults."""
+        import time
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        names = {1: "Amber Coat", 2: "Birch Hat", 3: "Cedar Boots", 4: "Dune Scarf", 5: "Elm Gloves", 6: "Fern Dress"}
+        lib.replace_store("booth", [library.item("booth", str(n), name=names[n], url=f"https://booth.pm/ja/items/{n}")
+                                    for n in names])
+        store = sets.SetStore()
+        self.addCleanup(store.path.unlink, missing_ok=True)
+        mine = store.change({"action": "create", "name": "Mine", "items": [tag_key("booth", "Dune Scarf")]})["sets"][-1]["id"]
+        shared = store.change({"action": "create", "name": "Shared", "items": [tag_key("booth", "Fern Dress")]})["sets"][-1]["id"]
+        store.set_short(shared, {"id": "abcDEF0123", "key": "k" * 22, "token": "t" * 43, "made": "0123456789abcdef",
+                                 "expires": int(time.time()) + 86400})
+        self.assertTrue(store.load()["sets"][-1].get("short"), "(a link that works)")
+        self.assertEqual({k: library._in_sets()[k] for k in (tag_key("booth", "Dune Scarf"), tag_key("booth", "Fern Dress"))},
+                         {tag_key("booth", "Dune Scarf"): 1, tag_key("booth", "Fern Dress"): 0})
+        asked = []
+
+        def fetch(url, hosts):
+            asked.append(int(url.rsplit("/", 1)[1].split(".")[0]))
+            return json.dumps({"name": "x", "is_adult": False, "tags": []}), "application/json"
+        library.store_tags_from_pages(lib, "booth", fetch, limit=3)
+        self.assertEqual(asked, [6, 4, 1], "the shared set's, then the other set's, then the library's order")
+        del mine
+
+    def test_the_stores_side_by_side(self):
+        """Each store's pages are read beside the others' (different sites, each at its own pace), not one store after
+        another."""
+        import time
+        from unittest import mock
+        from hoard import jobs
+        from hoard.scheduler import Scheduler
+        lib = library.Library(Path(tempfile.mkdtemp()) / "library.json")
+        lib.replace_store("booth", [library.item("booth", str(n), name=f"Outfit {n}", url=f"https://booth.pm/ja/items/{n}")
+                                    for n in range(1, 5)])
+        lib.replace_store("jinxxy", [library.item("jinxxy", f"j{n}", name=f"Hat {n}", page=f"https://jinxxy.com/kitsu/hat{n}")
+                                     for n in range(1, 5)])
+        spans = {"booth": [], "jinxxy": []}
+
+        def fetch(url, hosts):
+            start = time.monotonic()
+            time.sleep(0.15)
+            store = "booth" if "booth" in url else "jinxxy"
+            spans[store].append((start, time.monotonic()))
+            if store == "booth":
+                return json.dumps({"name": "x", "is_adult": False, "tags": []}), "application/json"
+            return jinxxy_page([], name="Hat"), "text/html"
+        scheduler = Scheduler(persistent=False)
+        self.addCleanup(scheduler.close)
+        lane = jobs.Jobs({**config.load_config(), "request_delay": 0}, lib, scheduler=scheduler)
+        with mock.patch.object(wishlists, "read_store_page", fetch):
+            lane.read_store_pages_later()
+            scheduler.wake("store-pages")
+            for _ in range(200):
+                if all(library.store_pages_waiting(lib, s) == 0 for s in spans) and not any(
+                        t["id"] == "store-pages" and t["status"] == "running" for t in scheduler.snapshot()):
+                    break
+                threading.Event().wait(0.05)
+        self.assertEqual({s: len(v) for s, v in spans.items()}, {"booth": 4, "jinxxy": 4})
+        overlap = any(a0 < b1 and b0 < a1 for a0, a1 in spans["booth"] for b0, b1 in spans["jinxxy"])
+        self.assertTrue(overlap, "a Booth page and a Jinxxy page at the same time")
 
     def test_a_wishlists_cards(self):
         from hoard.stores import booth, jinxxy
@@ -330,6 +459,41 @@ class InHoard(IsolatedTestCase):
             night.click()
             page.locator(".sethead.adult .set-adult", has_text="asks its viewer's age first").wait_for()
             self.assertEqual(page.locator("#setView .slot.ext.adult, #grid .slot.adult").count(), 1, "the hat, in the set")
+            self.assertEqual(errors, [])
+            browser.close()
+
+
+    def test_by_a_right_click(self):
+        """Mark as 18+, or It isn't for adults, for the products chosen, from a right-click (or the bar's More menu):
+        each offered when it would change one of them, both when some are for adults and some aren't."""
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            tile = lambda name: page.locator("#grid .slot", has_text=name)   # noqa: E731
+            offered = lambda: page.locator(".selmenu [role=menuitem]").all_inner_texts()   # noqa: E731
+            tile("Straw Hat").wait_for()
+            tile("Straw Hat").click(button="right")
+            self.assertIn("Mark as 18+", offered())
+            self.assertNotIn("It isn't for adults", offered(), "the hat isn't")
+            page.keyboard.press("Escape")
+            tile("Night Body").click(button="right")
+            self.assertEqual([x for x in offered() if "adult" in x or "18+" in x], ["It isn't for adults"])
+            page.keyboard.press("Escape")
+            tile("Straw Hat").click(modifiers=["Control"])   # (both chosen: one for adults, one not)
+            tile("Straw Hat").click(button="right")
+            self.assertEqual([x for x in offered() if "adult" in x or "18+" in x], ["Mark as 18+", "It isn't for adults"])
+            page.locator(".selmenu [role=menuitem]", has_text="Mark as 18+").click()
+            page.locator(".toast", has_text="Marked 2 products as 18+.").wait_for()
+            self.assertEqual(MarkStore().keys("adult"), frozenset({HAT, BODY}))
+            self.assertIn("adult", tile("Straw Hat").get_attribute("class"))
+            tile("Straw Hat").click(button="right")
+            page.locator(".selmenu [role=menuitem]", has_text="It isn't for adults").click()
+            page.locator(".toast", has_text="Marked as not for adults.").wait_for()
+            self.assertEqual(MarkStore().keys("not_adult"), frozenset({HAT}))
+            self.assertNotIn("adult", tile("Straw Hat").get_attribute("class"))
             self.assertEqual(errors, [])
             browser.close()
 

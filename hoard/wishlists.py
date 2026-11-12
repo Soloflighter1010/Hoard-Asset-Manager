@@ -11,14 +11,16 @@ keeps the products it didn't reach.
 from __future__ import annotations
 
 import re
+import threading
 import time
+from contextlib import contextmanager
 from urllib.parse import parse_qs, urlencode, urlparse, urlsplit, urlunparse
 
 from .adult import on_a_page as adult_on_a_page
 from .browser import goto, goto_past_check, has_password_field, settle
 from .common import QUICK_ITEMS, NotLoggedIn, pause, quick_done
 from .config import payhip_shops
-from .safety import clean_text, fetch_public, inert_html, is_video_address, offline_page, safe_url
+from .safety import PublicPages, clean_text, inert_html, is_video_address, offline_page, safe_url
 
 MAX_PAGES = 200            # pages of one list (Booth shows 20 on each: 4,000 products)
 MAX_LISTS = 50             # lists from one store
@@ -218,13 +220,38 @@ def store_tags_in(store: str, got) -> list[str]:
     return out[:MAX_STORE_TAGS]
 
 
+_PAGE_AGENT = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                             "Chrome/140.0 Safari/537.36"}
+_KEPT = threading.local()   # this thread's PublicPages, inside store_pages()
+
+
+@contextmanager
+def store_pages():
+    """While in this, read_store_page keeps one connection to each store open from one page to the next (this
+    thread's: safety.PublicPages), for a run of products' pages; they're closed at its end. Outside it, each page
+    has a connection of its own, closed once it's read."""
+    if getattr(_KEPT, "pages", None) is not None:   # (inside another: that one closes them)
+        yield
+        return
+    _KEPT.pages = PublicPages(_PAGE_AGENT, MAX_PRODUCT_PAGE)
+    try:
+        yield
+    finally:
+        pages, _KEPT.pages = _KEPT.pages, None
+        pages.close()
+
+
 def read_store_page(url: str, hosts: tuple) -> tuple[str, str] | None:
     """A store's public page (or Booth's item JSON), as Add products by link reads it: only from those hosts (https,
-    redirects included), at public addresses, sending no sign-in. (Its text, its content type), or None."""
-    got = fetch_public(url, {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, "
-                                           "like Gecko) Chrome/140.0 Safari/537.36",
-                             "Accept": "application/json" if url.endswith(".json") else "text/html"},
-                       MAX_PRODUCT_PAGE, hosts=hosts)
+    redirects included), at public addresses, sending no sign-in, compressed where the store will. (Its text, its
+    content type), or None."""
+    accept = {"Accept": "application/json" if url.endswith(".json") else "text/html"}
+    kept = getattr(_KEPT, "pages", None)
+    if kept is not None:
+        got = kept(url, hosts, accept)
+    else:
+        with PublicPages(_PAGE_AGENT, MAX_PRODUCT_PAGE) as once:
+            got = once(url, hosts, accept)
     return (got[0].decode("utf-8", "replace"), got[1]) if got else None
 
 

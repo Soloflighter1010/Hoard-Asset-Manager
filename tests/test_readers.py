@@ -750,6 +750,25 @@ class JinxxyData(IsolatedTestCase):
         self.assertIsNone(known["1006"].get("creator_url"))
         self.assertIsNone(known["1006"].get("page"), "never an address made from something that isn't a name")
         self.assertIsNone(known["1007"].get("page"))
+        self.assertNotIn("adult", known["1001"], "no content warnings in its data: not known from it")
+
+    def test_whether_its_for_adults(self):
+        """Where Jinxxy's data has a product's content warnings, they say whether it's for adults (Suggestive or
+        Explicit: hoard/adult.py), so it's known with the refresh, without its page."""
+        lace = {**jx_listing("Lace Set", "kitsu", "Lace"), "restrictions": ["CONTENT_SUGGESTIVE"]}
+        dark = {**jx_listing("Dark Room", "kitsu", "Dark"), "restrictions": ["CONTENT_MATURE"]}
+        hat = {**jx_listing("Straw Hat", "kitsu", "Hat"), "restrictions": []}
+        known = library.jinxxy_data([{"data": {"inventory_items": {"payload": [
+            jx_item("2001", lace), jx_item("2002", dark), jx_item("2003", hat), jx_item("2004", PAW)]}}}])
+        self.assertEqual({k: v.get("adult") for k, v in known.items()}, {"2001": True, "2002": False, "2003": False, "2004": None})
+        found = {f"/my/inventory/{n}": {"key": f"/my/inventory/{n}", "url": f"https://jinxxy.com/my/inventory/{n}", "name": "x",
+                                        "creator": "Kitsu", "creator_url": "https://jinxxy.com/kitsu", "thumbnail": "t", "page": ""}
+                 for n in ("2001", "2003", "2004")}
+        library.jinxxy_merge(found, {}, known)
+        items = {c["key"]: library.jinxxy_item(c) for c in found.values()}
+        self.assertIs(items["/my/inventory/2001"]["adult"], True)
+        self.assertIs(items["/my/inventory/2003"]["adult"], False)
+        self.assertNotIn("adult", items["/my/inventory/2004"], "not known: its page says, later")
 
     def test_put_into_the_cards(self):
         """A card gets its page, its creator and its gift from the data; a gift only on the Gifts tab is added, and

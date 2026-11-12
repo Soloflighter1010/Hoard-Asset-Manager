@@ -143,7 +143,7 @@ class Selecting(IsolatedTestCase):
         self.assertEqual(page.locator("#bulkActs [data-main]").all_inner_texts(), ["Download"], "its main action")
         page.click("#bulkActs [data-group='More']")
         self.assertEqual(page.locator(".selmenu [role=menuitem]").all_inner_texts(),
-                         ["Archive", "Hide", "Remove", "Delete downloaded files"])
+                         ["Archive", "Hide", "Remove", "Mark as 18+", "Delete downloaded files"])
         page.close()
 
     def test_menus_stay_on_screen_at_the_largest_text_size(self):

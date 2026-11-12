@@ -862,17 +862,44 @@ STORE_TAG_PAGES = 40   # products' public pages read for their store's tags, at 
 
 
 _TAG_PAGE_FAILS: dict[str, int] = {}   # products whose page couldn't be read, and how often, this run: tried after the rest
+_NEXT_PAGE: dict[str, float] = {}      # when each store's next product page may be asked for (time.monotonic())
+_NEXT_PAGE_LOCK = threading.Lock()
 
 
-def _pages_waiting(lib: "Library", store: str) -> list[tuple[str, str, bool]]:
+def _wait_for_turn(store: str, delay: float) -> None:
+    """Wait until the store's next product page may be asked for: delay seconds after the last one was asked for
+    (from its start, not its end: a page that took a while to come leaves less to wait), whoever asked for it (a
+    refresh's reads and the background reader's share it)."""
+    import time
+    with _NEXT_PAGE_LOCK:
+        now = time.monotonic()
+        at = max(now, _NEXT_PAGE.get(store, 0.0))
+        _NEXT_PAGE[store] = at + max(0.0, delay)
+    if at > now:
+        pause(at - now)
+
+
+def _pages_waiting(lib: "Library", store: str) -> list[tuple[str, str, bool, str]]:
     """The store's products whose own page is still to be read (key, its page, whether it was read before Hoard asked
-    whether it's for adults): never read, or read before that, where the store says it there (Booth, Jinxxy)."""
+    whether it's for adults, its tag key): never read, or read before that, where the store says it there (Booth,
+    Jinxxy)."""
     from .sets import product_link
     from .wishlists import ADULT_SAID_BY
     with lib.lock:
-        return [(i["key"], link, "store_tags" in i) for i in lib.data["items"] if i["store"] == store
-                and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
+        return [(i["key"], link, "store_tags" in i, tag_key(store, i.get("name") or "")) for i in lib.data["items"]
+                if i["store"] == store and ("store_tags" not in i or (store in ADULT_SAID_BY and "adult" not in i))
                 and (link := next((u for u in (i.get("page"), i.get("url")) if product_link(store, u)), None))]
+
+
+def _in_sets() -> dict[str, int]:
+    """The products in your sets, by tag key: 0 in one you've shared (a link that works), 1 in any other. Their pages
+    are read first, so the sets you share say whether they're for adults soonest (their viewer's question)."""
+    from .sets import SetStore
+    rank: dict[str, int] = {}
+    for s in SetStore().load()["sets"]:
+        for k in s["items"]:
+            rank[k] = min(rank.get(k, 1), 0 if s.get("short") else 1)
+    return rank
 
 
 def store_pages_waiting(lib: "Library", store: str) -> int:
@@ -881,32 +908,45 @@ def store_pages_waiting(lib: "Library", store: str) -> int:
     from .wishlists import TAGGED_STORES
     if store not in TAGGED_STORES:
         return 0
-    return sum(1 for key, _, _ in _pages_waiting(lib, store) if not _TAG_PAGE_FAILS.get(key))
+    return sum(1 for key, *_ in _pages_waiting(lib, store) if not _TAG_PAGE_FAILS.get(key))
 
 
 def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: None, delay: float = 0.0,
-                          limit: int = STORE_TAG_PAGES) -> int:
+                          limit: int = STORE_TAG_PAGES, enough=lambda: False) -> int:
     """Issue #206: the tags creators gave their products on Booth, Jinxxy and itch.io (wishlists.store_tags_in), read
     from each product's public page as anyone sees it, a few each time the store is read, until every product has
     been read once (each keeps "store_tags", empty when its page has none; and "adult", where its store says whether
     it's for adults: one read before Hoard kept that is read once more, after the rest). Only a product with a public page is read
     (one without, a Jinxxy item Hoard knows only by your inventory, waits until it has one). A page that couldn't be
-    read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Returns
-    how many products' pages were read."""
+    read is tried again next time, after those not tried yet, so a few gone for good never hold up the rest. Those
+    in your sets come first, those you've shared before the rest (_in_sets). A page is asked for delay seconds after
+    the store's last (_wait_for_turn). enough(): stop before the next page, keeping those read. Returns how many
+    products' pages were read."""
     from .wishlists import ADULT_SAID_BY, TAGGED_STORES, LinkError, from_product_page
     if store not in TAGGED_STORES:
         return 0
     waiting = _pages_waiting(lib, store)
-    # (those never read first, then those read before Hoard asked whether they're for adults; otherwise in the library's order)
-    todo = [(k, link) for k, link, _ in sorted(waiting, key=lambda w: (w[2], _TAG_PAGE_FAILS.get(w[0], 0)))[:limit]]
+    try:
+        sets = _in_sets() if waiting else {}
+    except Exception:   # (sets that can't be read: the library's order, as before)
+        sets = {}
+    # (those in your sets first, the shared ones' before the rest; then those never read, then those read before
+    # Hoard asked whether they're for adults; otherwise in the library's order)
+    todo = [(k, link) for k, link, _, _ in sorted(waiting, key=lambda w: (sets.get(w[3], 2), w[2], _TAG_PAGE_FAILS.get(w[0], 0)))[:limit]]
     read: dict[str, list] = {}
     adult: dict[str, bool] = {}
     for n, (key, page) in enumerate(todo, 1):
         progress(f"The tags creators gave their products, {n} of {len(todo)}")
+        if enough():
+            break
+        _wait_for_turn(store, delay)
         try:
             got = from_product_page(page, fetch)
             read[key] = got.get("store_tags") or []
-            adult[key] = got.get("adult") is True
+            if isinstance(got.get("adult"), bool):
+                adult[key] = got["adult"]
+            elif store in ADULT_SAID_BY:   # (its page didn't carry what its store says: its tags kept, asked again next time)
+                _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
         except LinkError as e:
             if "couldn't be read" not in str(e):   # (its page is there, and isn't a product's: nothing to read later)
                 read[key] = []
@@ -915,15 +955,13 @@ def store_tags_from_pages(lib: "Library", store: str, fetch, progress=lambda m: 
         except Exception as e:   # (anything else leaves it to try again next time)
             _TAG_PAGE_FAILS[key] = _TAG_PAGE_FAILS.get(key, 0) + 1
             print(f"Couldn't read the store's tags for {key!r}: {str(e)[:200]}", flush=True)
-        if n < len(todo):
-            pause(delay)
     if read:
         with lib.lock:
             for i in lib.data["items"]:
                 if i["key"] in read:
                     i["store_tags"] = item(i["store"], i["id"], store_tags=read[i["key"]])["store_tags"]
-                    if store in ADULT_SAID_BY:   # (read: not asked again, whatever the answer)
-                        i["adult"] = adult.get(i["key"], False)
+                    if i["key"] in adult:   # (read: not asked again, whatever the answer)
+                        i["adult"] = adult[i["key"]]
             lib.save()
     return len(read)
 
