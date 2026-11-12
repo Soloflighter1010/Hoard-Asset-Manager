@@ -425,6 +425,49 @@ class LocalAccess(IsolatedTestCase):
             self.assertEqual(h.rfile.tell(), read, length)
         self.assertEqual(self.call("POST", "/api/quit", {"x": "y" * 2000})[0], 401, "and answers")
 
+    def test_one_connection_answers_many_requests(self):
+        """A page's requests share their connections (HTTP/1.1 keep-alive): on Windows each closed one held on to its
+        port for minutes, and a page that asks often ran out of them (ERR_NO_BUFFER_SPACE, a change lost with it)."""
+        key = {safety.ACCESS_HEADER: self.srv.key}
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=10)
+        try:
+            ports = set()
+            for method, path, body in (("GET", "/api/status", None), ("POST", "/api/cancel", b"{}"),
+                                       ("POST", "/api/quit", b'{"x": 1}'), ("GET", "/api/status", None)):
+                headers = {**({"Content-Type": "application/json"} if body else {}), **({} if path == "/api/quit" else key)}
+                c.request(method, path, body=body, headers=headers)
+                r = c.getresponse()
+                r.read()
+                self.assertEqual((r.status, r.version), (401 if path == "/api/quit" else 200, 11), path)
+                self.assertFalse(r.will_close, path)
+                ports.add(c.sock.getsockname()[1])
+            self.assertEqual(len(ports), 1, "the same connection each time, a refusal's included")
+            # (and with no wait between a reply's headers and its body: Nagle's algorithm held each ~40 ms on Linux)
+            self.assertTrue(server.Handler.disable_nagle_algorithm)
+            # A reply sent before its request's body was read closes the connection, so what's left of the body is
+            # never read as the next request
+            c.putrequest("POST", "/api/quit")
+            c.putheader("Content-Type", "application/json")
+            c.putheader("Content-Length", str(64 * 1024 + 1))
+            c.endheaders()
+            r = c.getresponse()
+            r.read()
+            self.assertEqual(r.status, 401)
+            self.assertEqual(r.getheader("Connection"), "close")
+            self.assertTrue(r.will_close)
+        finally:
+            c.close()
+        h = server.Handler.__new__(server.Handler)
+        for headers, read, closes in (({}, False, False), ({"Content-Length": "2"}, True, False),
+                                      ({"Content-Length": "2"}, False, True), ({"Content-Length": "-1"}, False, True),
+                                      ({"Content-Length": "x"}, False, True), ({"Transfer-Encoding": "chunked"}, False, True)):
+            h.headers, h._body_read, h.close_connection = headers, read, False
+            with mock.patch.object(h, "send_response"), mock.patch.object(h, "send_header") as sent, \
+                    mock.patch.object(h, "end_headers"), mock.patch.object(h, "wfile", create=True):
+                h._send(200, b"", "text/plain")
+            self.assertEqual((h.close_connection, mock.call("Connection", "close") in sent.call_args_list),
+                             (closes, closes), headers)
+
     def test_not_from_a_cookie_or_the_address(self):
         """A browser sends a cookie for 127.0.0.1 to every port there, and addresses end up in histories."""
         self.assertEqual(self.call("GET", "/api/settings", headers={"Cookie": f"hoard_key={self.srv.key}"})[0], 401)

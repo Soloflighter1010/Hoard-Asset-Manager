@@ -3314,8 +3314,10 @@ function drawProjects() {
   const typed = pjDrawn === PJ.view && (PJ.view === "repos" || PJ.view === "settings")
     ? [...body.querySelectorAll("input[id], textarea[id]")].filter(el => pjTicks(el) ? el.checked !== el.defaultChecked : el.value !== el.defaultValue)
       .map(el => [el.id, pjTicks(el) ? el.checked : el.value]) : [];
-  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in
-  const tagBox = $("#pjTagInput"), tagTyped = tagBox && tagBox.value ? [tagBox.value, document.activeElement === tagBox] : null;
+  // a tag being typed in a project's details, too: the list is drawn again as updates and details come in (and the box
+  // keeps where you are while it's still empty: what's typed just then went nowhere, and Enter added nothing)
+  const tagBox = $("#pjTagInput"), tagFocused = !!tagBox && document.activeElement === tagBox;
+  const tagTyped = tagBox && (tagBox.value || tagFocused) ? [tagBox.value, tagFocused] : null;
   body.innerHTML = (views[PJ.view] || pjList)();
   pjDrawn = PJ.view;
   for (const [id, v] of typed) {

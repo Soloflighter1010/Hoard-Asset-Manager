@@ -56,7 +56,11 @@
   - Putting products in a project notes them even when the packages they need couldn't all be made.
   - A damaged record of how the stores went no longer stops the Library opening, and a record that can't be
     written never costs a store read its result.
-  - A tag typed while Projects is saving a change is added however long that takes.
+  - A tag typed while Projects is saving a change is added however long that takes, and the tag box keeps where
+    you are when the list is drawn again, even before you've typed anything.
+  - On Windows, a page that asks Hoard for things often (Projects, a large library's pictures) no longer runs out
+    of connections: a change saved just then failed with **Hoard isn't running** (`ERR_NO_BUFFER_SPACE`). The
+    page's requests now share their connections.
   - A photo mark for a product of your own can be reached by keyboard. On Downloads, a mark for a product that's
     also in your library opens its tile.
   - Less waiting and writing: reading a large data file no longer holds up other saves, short-lived tasks no longer

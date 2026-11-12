@@ -720,6 +720,15 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 class Handler(BaseHTTPRequestHandler):
     """Answers the pages' requests."""
     timeout = 30   # seconds a connection may sit idle or trickle a request before it's closed
+    # HTTP/1.1, so a page's requests share their connections (keep-alive) instead of opening one each. On Windows each
+    # closed connection holds on to its port for minutes, and a page that asks often (Projects' news every second and
+    # a half, a large library's pictures) ran out of them: its next request failed (ERR_NO_BUFFER_SPACE), a change
+    # it saved with it lost. Every reply says its length (_send), and one sent before its request's body was read
+    # closes the connection (_send: the body would be read as the next request).
+    protocol_version = "HTTP/1.1"
+    # A reply's headers and body go out as two writes; on a connection kept open, Nagle's algorithm held the second
+    # until the first was acknowledged, which the browser delays (about 40 ms a reply on Linux, 200 on Windows).
+    disable_nagle_algorithm = True
     server: AppServer
 
     def log_message(self, *args):
@@ -729,6 +738,13 @@ class Handler(BaseHTTPRequestHandler):
         """Send a reply with the security headers; pages get their own policy, everything else is sandboxed."""
         ctype = header_safe(ctype)   # every header is checked for line breaks before anything is sent
         extra = [(header_safe(k), header_safe(v)) for k, v in (headers or {}).items()]
+        try:
+            unread = int(self.headers.get("Content-Length") or 0) != 0 and not getattr(self, "_body_read", False)
+        except ValueError:
+            unread = True
+        if unread or self.headers.get("Transfer-Encoding"):   # (left on the connection: never read as a request)
+            self.close_connection = True
+            extra.append(("Connection", "close"))
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -802,7 +818,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if 0 < length <= 64 * 1024:   # (a larger one is closed on: not worth reading for a refusal)
             try:
-                self.rfile.read(length)
+                self._body_read = len(self.rfile.read(length)) == length
             except OSError:
                 pass
 
@@ -813,6 +829,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---- reading
     def do_GET(self):
         """Authenticate and dispatch a registered read endpoint, including static pages."""
+        self._body_read = False   # (each request on a kept-alive connection starts afresh)
         if not self._host_ok():
             return self._send(403, b"Forbidden", "text/plain")
         u = urlparse(self.path)
@@ -832,6 +849,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Check method, origin, key and body size from the route before calling its handler."""
         path, srv = urlparse(self.path).path, self.server
+        self._body_read = False   # (each request on a kept-alive connection starts afresh)
         route = api_routes.find("POST", path)
         if route is None:
             self._drop_body()
@@ -854,8 +872,10 @@ class Handler(BaseHTTPRequestHandler):
             message = ("That's too large to be saved pages. Import fewer at a time."
                        if route.path in ("/api/import", "/api/wishlists/import") else "That's too large.")
             return self._json({"error": message}, 413)
+        raw = self.rfile.read(length)
+        self._body_read = len(raw) == length
         try:
-            body = json.loads(self.rfile.read(length) or b"{}")
+            body = json.loads(raw or b"{}")
         except (ValueError, RecursionError):
             return self._json({"error": "Bad request."}, 400)
         if not isinstance(body, dict):

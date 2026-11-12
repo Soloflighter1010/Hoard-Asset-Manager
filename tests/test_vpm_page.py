@@ -357,6 +357,10 @@ class ProjectsPanel(IsolatedTestCase):
         page.evaluate("drawProjects()")
         self.assertEqual(page.input_value("#pjTagInput"), "half-typed")
         self.assertTrue(page.evaluate("document.activeElement.id === 'pjTagInput'"), "where you were typing")
+        # and an empty box keeps where you are, so what's typed next goes in it
+        page.evaluate("$('#pjTagInput').value = ''; drawProjects()")
+        self.assertTrue(page.evaluate("document.activeElement.id === 'pjTagInput'"), "still there")
+        page.keyboard.type("half-typed")
         page.press("#pjTagInput", "Enter")
         page.wait_for_function("() => PJ.data.projects.find(p => p.name === 'Rusk Avatar').tags.includes('half-typed') && !PJ.busy")
         # Enter while a change is still being saved: the tag is added once it's done, not dropped
@@ -574,6 +578,7 @@ class ProjectsPanel(IsolatedTestCase):
         self.addCleanup(going.set)
         self.srv.project_jobs.project_runner = slow
         pj_details(page, "Rusk Avatar").locator(".actions [data-pj=manage]").click()
+        page.wait_for_function("() => PJ.view === 'project' && !PJ.busy")   # (a click while it's opening is ignored)
         page.click("[data-pj=backup]")
         page.locator("dialog.pj-dlg button[value=yes]").click()
         strip = page.locator("#pjJob")

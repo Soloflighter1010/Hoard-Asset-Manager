@@ -1965,10 +1965,17 @@ class CopiesAndActions(IsolatedTestCase):
             page.select_option("#ruleStore", "booth")
             page.click("#ruleAdd")
             rules.locator("li", has_text="quest android").wait_for()
-            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "all", "kind": "layered"}, {"store": "booth", "words": "quest android"}])
+
+            def saved(want):   # (the rules are drawn at once and saved after, so what's saved may come a moment later)
+                for _ in range(50):
+                    if self.srv.cfg["file_rules"] == want:
+                        break
+                    page.wait_for_timeout(100)
+                self.assertEqual(self.srv.cfg["file_rules"], want)
+            saved([{"store": "all", "kind": "layered"}, {"store": "booth", "words": "quest android"}])
             rules.locator("li", has_text="Layered images").locator("[data-rule-out]").click()
             page.wait_for_function("() => document.querySelectorAll('#fileRules li').length === 1 && !document.querySelector('#fileRules').textContent.includes('Layered')")
-            self.assertEqual(self.srv.cfg["file_rules"], [{"store": "booth", "words": "quest android"}])
+            saved([{"store": "booth", "words": "quest android"}])
             # two changes before the first is saved: the second builds on the first, not on what was last saved
             slow = self.srv.save_settings
             with mock.patch.object(self.srv, "save_settings", lambda: time.sleep(0.4) or slow()):
