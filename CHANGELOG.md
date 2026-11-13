@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.2.0-beta.9
 
 - **Hoard can read your stores with Vivaldi.** Signing in with Vivaldi worked, but reading a store then waited 3
   minutes, or until Force stop: Vivaldi's own interface doesn't start when another program drives it, so it never
