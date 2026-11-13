@@ -23,7 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
-from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
+from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, receipts, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, browser_name, custom_program, not_chromium, signin_protection, signins_root, use_channel

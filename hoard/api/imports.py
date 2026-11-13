@@ -79,6 +79,9 @@ def _import(self, body: dict):
         if "items" in r:
             said.append({"filename": r["filename"], "store": r["store"], "label": app.STORES[r["store"]]["label"],
                          "count": len(r["items"])})
+        elif "receipts" in r:   # Gumroad receipts, kept to be read by Gumroad's refresh
+            said.append({"filename": r["filename"], "receipts": r["receipts"], "added": r["added"],
+                         "emails_kept": r["emails_kept"]})
         else:
             said.append({"filename": r["filename"], **{k: r[k] for k in ("confirm_shop", "error") if k in r}})
     return self._json({"ok": True, "results": said, "added_shops": added,

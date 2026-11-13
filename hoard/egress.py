@@ -172,6 +172,24 @@ def get(store_sess: requests.Session, url: str, sites, *, stay_on_sites: bool = 
     raise UnsafeRequest("too many redirects")
 
 
+def post(store_sess: requests.Session, url: str, sites, **kwargs) -> requests.Response:
+    """POST a form to a store's own site (Gumroad's email check for a receipt: receipts.py), with that store's
+    session: one hop, its answer returned as it is, a redirect never followed (get() follows it, checked). Refused
+    for any host that isn't one of the store's sites, so a store's cookies and what's sent only ever go to it."""
+    check_hop(url)
+    if not _on_sites(urlparse(url).hostname or "", sites):
+        raise UnsafeRequest(f"refused to send a form to {urlparse(url).hostname}: not the store's own site")
+    pace.sending(url)
+    sess = store_sess
+    if _test_origin(url):   # tests only: stand-in stores on this computer, plain http
+        sess = requests.Session()
+        sess.trust_env = False
+        sess.cookies = store_sess.cookies
+        sess.headers.update(store_sess.headers)
+    kwargs.setdefault("timeout", 60)
+    return sess.post(url, allow_redirects=False, **kwargs)
+
+
 def send(method: str, url: str, user_agent: str = "", **kwargs) -> requests.Response:
     """One request to a site that isn't a store's (Hoard's share server: shortlinks.py), of any method: https to a
     public address only, with no cookies, and no redirect followed. The answer is read in full."""

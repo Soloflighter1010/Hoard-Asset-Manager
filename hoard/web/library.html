@@ -737,6 +737,14 @@ dialog.pin .checks input { letter-spacing: normal; font-size: 15px; }
 dialog.pin #itchKey { font: 500 14px var(--body); letter-spacing: 0; }
 dialog.pin .keysteps { margin: 10px 0; padding-left: 20px; font-size: 14px; line-height: 1.55; }
 dialog.pin .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; gap: 8px; }
+dialog.pin.receipts { width: min(540px, calc(var(--vw) - 32px)); }
+dialog.pin .receipt-rows { list-style: none; margin: 10px 0 0; padding: 0; max-height: 240px; overflow: auto; }
+dialog.pin .receipt-rows:empty { display: none; }
+dialog.pin .receipt-rows li { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--seam); font-size: 13.5px; }
+dialog.pin .receipt-rows .nm { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+dialog.pin .receipt-rows .nm > :first-child { display: block; }
+dialog.pin .receipt-rows .meta { display: block; color: var(--dust); font-size: 12px; }
+dialog.pin .receipt-rows .meta.err { color: var(--warn); }
 /* splash (issue #50): the logo while the page reads your library, the first time the window opens. Later
    pages (Library to Downloads and back) only show it if reading takes a moment. Projects shows it over its window
    while it first reads your projects, the same way. */
@@ -1447,10 +1455,10 @@ body.less-motion .tour-try::before { animation: none; }
       a shop's library page (its address followed by <code>/b-account</code>) and choose the bookmark: it saves all
       that shop's pages as one file. Do the same on each shop, and import the files together.</p>
   </div>
-  <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm" multiple hidden>
+  <input id="importFile" type="file" accept=".mhtml,.mht,.html,.htm,.eml" multiple hidden>
   <input id="importDir" type="file" webkitdirectory multiple hidden>
 </section>
-<div id="drop" class="drop" hidden>Drop saved store pages, or a folder of them, to add them to your hoard</div>
+<div id="drop" class="drop" hidden>Drop saved store pages or Gumroad receipts, or a folder of them, to add them to your hoard</div>
 
 <div id="offline" class="offline" role="status" hidden>You're offline. Your library, search and saved images still work; refreshing and store links need a connection.</div>
 <div class="layout">
@@ -1892,6 +1900,25 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="muted">Hoard keeps it protected by your operating system, only ever sends it to itch.io's API, and never shows it
     again. Signing out of itch.io in Hoard deletes it.</p>
   <div class="row"><span></span><span><button class="ghost" id="itchCancel">Cancel</button> <button class="primary" id="itchSave">Save key</button></span></div>
+</dialog>
+<dialog id="receiptsDialog" class="pin receipts" aria-labelledby="receiptsTitle">
+  <h2 id="receiptsTitle">Gumroad receipts</h2>
+  <p>A purchase made without a Gumroad account, or with an email that isn't your account's, isn't in your Gumroad
+    library. Its receipt opens it: add the receipt, and Hoard lists and downloads it with the rest.</p>
+  <ol class="keysteps">
+    <li>Open the receipt Gumroad emailed you, and save it as a file (Download message, or Save as).</li>
+    <li>Choose <strong>Add receipt files</strong>, or drop it on this window. The purchase's page, saved from your browser
+      with Ctrl+S, works too.</li></ol>
+  <p>Or paste its <strong>View content</strong> link, which starts gumroad.com/d/:</p>
+  <textarea id="receiptLinks" rows="2" spellcheck="false" autocomplete="off" aria-label="View content links"></textarea>
+  <p class="pin-note" id="receiptsNote" aria-live="polite"></p>
+  <ul id="receiptRows" class="receipt-rows" aria-label="Receipts Hoard keeps"></ul>
+  <p class="muted">A receipt's link opens what you bought, so Hoard keeps it on this computer only, never in a backup or a
+    report. When Gumroad asks for the email a purchase was made with, Hoard answers with the email on its receipt, which it
+    keeps protected by your operating system and only ever sends to Gumroad.</p>
+  <div class="row"><button class="ghost" id="receiptFiles">Add receipt files</button>
+    <span><button class="ghost" id="receiptsClose">Close</button> <button class="primary" id="receiptsAdd">Add</button></span></div>
+  <input id="receiptFile" type="file" accept=".eml,.mhtml,.mht,.html,.htm" multiple hidden>
 </dialog>
 <div id="bulk" class="bulk" hidden role="region" aria-label="Selected items">
   <span class="count-sel" id="bulkCount">0 selected</span>

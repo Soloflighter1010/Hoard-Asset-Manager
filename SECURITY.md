@@ -90,6 +90,13 @@ It can't fully protect against:
   file's own button leads to, with the same cookies and the rules above (only a link on Jinxxy's own sites is
   followed, and its cookies go nowhere else). If Jinxxy turns that away, the button is clicked in the window, as
   you would. Payhip is only read: Hoard never downloads from it.
+- Gumroad purchases added by their receipts (`hoard/receipts.py`) are read without the Gumroad sign-in, each in a
+  session of its own that carries only that purchase's cookie. A receipt's download link is kept in
+  `gumroad-receipts.json`, sealed (a file changed outside Hoard, or written on another computer, isn't used), and
+  never put in a backup, a support report or a log (reports scrub any `gumroad.com/d/` link). The email on a
+  receipt is kept with the operating system's protection, as API keys are (below), and is sent only when Gumroad
+  asks for it: as a form to `gumroad.com/confirm-redirect`, through `egress.post`, which refuses any host that
+  isn't the store's own. Hoard's page gets neither: a receipt is named to it by a hash.
 - itch.io is reached through its API with an API key you create on itch.io, never your password. The key is
   kept with the operating system's protection (`hoard/vault.py`): encrypted for your Windows account (DPAPI), in
   your macOS Keychain, or in your Linux keyring through `secret-tool`; without a keyring it isn't kept, unless

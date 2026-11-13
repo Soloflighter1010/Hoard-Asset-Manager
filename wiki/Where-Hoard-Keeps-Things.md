@@ -16,7 +16,8 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
 | `config.json` | Your settings. See [Settings](Settings) |
 | `library.json` | Your library list: names, creators, links and picture addresses for what you own |
-| `keys/` | On Windows: your itch.io API key, encrypted by your Windows account. (On a Mac it's in your Keychain, on Linux in your keyring.) See [Stores](Stores#itchio) |
+| `keys/` | On Windows: your itch.io API key, and the emails on your Gumroad receipts, encrypted by your Windows account. (On a Mac they're in your Keychain, on Linux in your keyring.) See [Stores](Stores#itchio) |
+| `gumroad-receipts.json` | The Gumroad receipts you added: each purchase's download link (which opens it for anyone), its product once read, and the cookie Gumroad gave Hoard for it. Sealed, never in a backup or a support report (5.2.0). See [Stores](Stores#purchases-outside-your-gumroad-library-receipts) |
 | `tags.json` | Your tags, and what you set in a product's details: its type, and your note on it (5.2.0) |
 | `konoasset.json` | Which of KonoAsset's assets you've brought in, and the products they became, so bringing in again adds only what's new (5.2.0). See [Your Own Packages](Your-Own-Packages#from-konoasset) |
 | `picture-looks.json` | How product pictures look (a 64-bit hash of each, by the picture's SHA-256), so copies of one product saved differently by two stores stack. See [Library](Library#finding-things) |

@@ -88,6 +88,36 @@ person to sign in on this computer never sees what you bought. Your downloaded f
   files listed. When a download page lists no files, Hoard saves its pictures into a **Page images** folder, in
   page order. (Beside real files, pictures in the page are previews and instructions, and aren't downloaded.)
 
+### Purchases outside your Gumroad library: receipts
+
+A product bought on Gumroad without an account, or with an email that isn't your account's, isn't in your Gumroad
+library, so a refresh can't find it. Its receipt can: the **View content** button in the receipt Gumroad emailed you
+opens the purchase's download page. Add the receipt to Hoard and the purchase is listed and downloaded with the rest
+of your Gumroad library (5.2.0).
+
+1. In **Stores**, choose **Receipts** on Gumroad's row.
+2. Add the receipt: save the email from your email program as a file (**Download message**, or **Save as**: an
+   `.eml` file) and choose **Add receipt files**, or drop it on Hoard's window. The receipt's page, or the purchase's
+   download page or product page saved from your browser with Ctrl+S, works too. You can also paste the **View
+   content** link itself (it starts `gumroad.com/d/`).
+3. Hoard reads the new receipts straight away (a quick refresh of Gumroad), and every refresh of Gumroad after.
+
+- **You don't need to be signed in to Gumroad.** Receipts are read without your Gumroad sign-in, each on its own.
+  Signed out, a refresh reads only your receipts and keeps the rest of your Gumroad library as it was. A purchase
+  that's also in your library is read from your library.
+- **Gumroad may ask for the email the purchase was made with** before it shows a purchase on a computer or network
+  it hasn't seen it on. Hoard answers with the email on the receipt, once: Gumroad then remembers the purchase for
+  Hoard. A receipt added by its link alone has no email, so if Gumroad asks, its row says to add the receipt email
+  itself instead.
+- **What's kept:** a receipt's link opens what you bought, so Hoard keeps it on this computer only, in
+  `gumroad-receipts.json` (see [Where Hoard Keeps Things](Where-Hoard-Keeps-Things)), never in a backup or a support
+  report. The email on a receipt is kept by your operating system (your Windows account, your Mac's Keychain or your
+  Linux keyring), and only ever sent to Gumroad, for that purchase. Hoard's page never sees either.
+- **Remove** on a receipt forgets it, and its product leaves your library list (unless your Gumroad library has it
+  too). Downloaded files stay. Signing out of Gumroad doesn't remove your receipts.
+- The receipts list says how each one went: the product, once read, or why Gumroad didn't show it (refunded, a
+  membership that ended, or an email it didn't take).
+
 ## Jinxxy
 
 - Hoard reads your inventory, then downloads each file by clicking its download button in the browser,

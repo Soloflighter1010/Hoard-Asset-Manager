@@ -1268,6 +1268,15 @@ class Jobs:
         self._set(message=f"{STORES[store]['label']}: noting how its page is laid out, for a report")
         kept_pages.capture(ctx, self.cfg, store, problem, error)
 
+    def _library_beside_receipts(self) -> bool:
+        """Does the list have Gumroad purchases besides those added by their receipts (your library's, read while
+        you were signed in)?"""
+        from . import receipts
+        mine = receipts.tokens()
+        with self.lib.lock:
+            return any(i["store"] == "gumroad" and receipts.token_of(i.get("download_url")) not in mine
+                       for i in self.lib.data["items"])
+
     def _refresh(self, stores: list[str], skip_imported: bool = False, quick: bool = False) -> list[str]:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty.
         Returns the stores that couldn't be read. When none could, the job has failed: it says which, and why is on
@@ -1323,10 +1332,14 @@ class Jobs:
                                                            if i["store"] == store and i.get("thumbnail")},
                                        **({"_quick": True} if quick else {})}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
-                        if ctx is not None and signin_browser(self.cfg, store) is None:
+                        signed_out = run_cfg.pop("_gumroad_signed_out", False)   # (only Gumroad receipts were read)
+                        keep_keys = set(run_cfg.pop("_keep_keys", None) or ())
+                        if ctx is not None and not signed_out and signin_browser(self.cfg, store) is None:
                             note_signin_browser(self.cfg, store)   # (one from before they were noted: it works with this)
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
+                        if signed_out and not items:
+                            raise NotLoggedIn()
                         if not items and before:
                             from .stores import health
                             health.record(store, "library", "empty")
@@ -1338,9 +1351,13 @@ class Jobs:
                             # keeps all it didn't reach
                             with self.lib.lock:   # (its own keys, read where they are: never a copy of the whole library)
                                 had = {i["key"] for i in self.lib.data["items"] if i.get("store") == store}
-                            self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick)
+                            self.lib.replace_store(store, items, keep_others=bool(shops_unread) or quick or signed_out,
+                                                   keep_keys=keep_keys)
                             read += len(items)
                             found_new += len({i["key"] for i in items} - had)
+                            from . import receipts
+                            if signed_out and self._library_beside_receipts():
+                                self.lib.set_error(store, receipts.SIGNED_OUT)
                             if store == "payhip":   # shops on their own domains, found in your library, to review
                                 with self.lib.lock:
                                     self.lib.data["stores"]["payhip"]["found_shops"] = run_cfg.pop("_found_payhip_shops", [])[:200]

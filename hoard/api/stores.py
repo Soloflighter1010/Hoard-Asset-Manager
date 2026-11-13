@@ -54,6 +54,61 @@ def _itch_key(self, body: dict):
     return self._json({"ok": True, "user": name, "kept": app.vault.key_protection(srv.cfg), "queued": started == "queued"})
 
 
+def get_api_gumroad_receipts(self, path, body, query):
+    """GET /api/gumroad-receipts. The purchases you added by their Gumroad receipts (receipts.py): never their links
+    or emails, which stay on the server."""
+    return self._json({"receipts": app.receipts.listing(), "kept": app.vault.key_protection(self.server.cfg)})
+
+
+def post_api_gumroad_receipts(self, path, body, query):
+    """POST /api/gumroad-receipts. Keep the Gumroad receipts in what you add (receipts.find): View content links
+    pasted as text, and receipt emails (.eml), receipt pages and purchases' saved pages, as files. Gumroad's refresh
+    reads them; the page starts one."""
+    srv = self.server
+    text = body.get("text") if isinstance(body.get("text"), str) else ""
+    files = body.get("files") if isinstance(body.get("files"), list) else []
+    if len(text) > 200000 or len(files) > app.MAX_IMPORT_FILES or \
+            not all(isinstance(f, dict) and isinstance(f.get("content"), str) for f in files):
+        return self._json({"error": f"Add at most {app.MAX_IMPORT_FILES} receipts at a time."}, 400)
+    found, problems = app.receipts.find("", text) if text.strip() else [], []
+    if text.strip() and not found:
+        problems.append({"error": "There's no Gumroad View content link in what you pasted (it starts gumroad.com/d/)."})
+    for f in files:
+        name = str(f.get("filename") or "receipt")[:300]
+        try:
+            got = app.receipts.find(name, f["content"])
+        except Exception:   # (a damaged file: said, and the rest carry on)
+            problems.append({"filename": name, "error": "It couldn't be read."})
+            continue
+        if not got:
+            problems.append({"filename": name, "error": "There's no Gumroad receipt in it. Save the email with its View "
+                                                        "content button, or the purchase's page from your browser."})
+        found += got
+    if not found:
+        return self._json({"error": "Nothing was added.", "problems": problems}, 400)
+    with srv.cfg_lock:
+        done = app.receipts.add(srv.cfg, found)
+    if not done["emails_kept"]:
+        problems.append({"error": "This computer has no keyring to protect the receipts' emails, so Hoard didn't keep "
+                                  "them: a purchase Gumroad asks to confirm can't be read."})
+    return self._json({"ok": True, "found": len({f["token"] for f in found}), "added": done["added"],
+                       "already": done["already"], "problems": problems, "receipts": app.receipts.listing()})
+
+
+def post_api_gumroad_receipts_remove(self, path, body, query):
+    """POST /api/gumroad-receipts/remove. Forget a receipt (by the ref the list gives it, or "all"), and take its
+    purchase off your library list. One also in your Gumroad library comes back with the next refresh."""
+    srv = self.server
+    which = body.get("ref")
+    if not isinstance(which, str) or not app.re.fullmatch(r"[0-9a-f]{12}|all", which):
+        return self._json({"error": "That receipt isn't one Hoard keeps."}, 400)
+    gone = app.receipts.remove(srv.cfg, which)
+    if gone is None:
+        return self._json({"error": "That receipt isn't one Hoard keeps."}, 404)
+    removed = srv.lib.forget_downloads("gumroad", set(gone["tokens"]), app.receipts.token_of)
+    return self._json({"ok": True, "removed": removed, "receipts": app.receipts.listing()})
+
+
 def get_api_download_choices(self, path, body, query):
     """GET /api/download-choices. issue #107: what downloading new things, or updating, would get"""
     srv = self.server
@@ -146,6 +201,9 @@ def post_api_refresh(self, path, body, query):
 METHODS = {'_remember_files': _remember_files, '_download_choices': _download_choices, '_itch_key': _itch_key}
 
 ROUTES = [
+    Route('GET', '/api/gumroad-receipts', get_api_gumroad_receipts, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
+    Route('POST', '/api/gumroad-receipts', post_api_gumroad_receipts, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'), ('text', 'string')), response='object'),
+    Route('POST', '/api/gumroad-receipts/remove', post_api_gumroad_receipts_remove, changes=True, auth='key', image_key=False, max_body=1048576, request=(('ref', 'string'),), response='object'),
     Route('GET', '/api/download-choices', get_api_download_choices, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/itch-key', post_api_itch_key, changes=True, auth='key', image_key=False, max_body=1048576, request=(('key', 'string'),), response='object'),
     Route('POST', '/api/download-skip', post_api_download_skip, changes=True, auth='key', image_key=False, max_body=1048576, request=(('keys', 'array'), ('skip', 'boolean')), response='object'),

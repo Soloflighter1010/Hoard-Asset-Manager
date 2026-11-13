@@ -222,6 +222,7 @@ def get_api_library(self, path, body, query):
                        "labels": {k: v["label"] for k, v in app.STORES.items()}, "job": app.public_job(srv.jobs.state, self._hidden_names()),
                        "downloadable": list(app.DOWNLOADABLE), "importable": list(app.IMPORTABLE),
                        "itch_key": app.vault.has_key(srv.cfg, "itch"),
+                       "gumroad_receipts": len(app.receipts.load()),   # (purchases added by their receipts: receipts.py)
                        # which stores Hoard holds a sign-in for, so Stores offers Sign in or Sign out, not both
                        "signed_in": {s: app.signed_in(srv.cfg, s) for s in app.STORES if srv.cfg[s].get("enabled", True)},
                        "signins": str(app.signins_root(srv.cfg)), "signins_note": app.signin_protection(srv.cfg),

@@ -61,8 +61,13 @@ def lib_gumroad_permalink(prod: dict):
 
 
 def lib_fetch_gumroad(ctx, cfg, progress) -> list[dict]:
-    """Every purchase in your Gumroad library, archived ones included when configured."""
+    """Every purchase in your Gumroad library, archived ones included when configured, then those you added by their
+    receipts (receipts.py) that your library doesn't have. Signed out, with receipts kept, only the receipts are
+    read: cfg["_gumroad_signed_out"] says so, and cfg["_keep_keys"] names receipts' purchases read before that
+    couldn't be read now (both handed back to the refresh, which keeps what it didn't read)."""
+    from .. import receipts
     items, seen = [], set()
+    kept = receipts.tokens()
 
     def read_props(params: dict) -> dict:
         """One page of Gumroad's library, as the page's own data; raises NotLoggedIn when Gumroad asks you to sign
@@ -80,21 +85,41 @@ def lib_fetch_gumroad(ctx, cfg, progress) -> list[dict]:
     def on_page(archived, page_no, pages):
         """Say which page of the library is being read."""
         progress(f"{'Archived purchases, page' if archived else 'Page'} {page_no} of {pages}, {len(items)} items")
-    for card in lib.gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
-                              float(cfg.get("request_delay", 0.8)), on_page, cfg):
-        prod, pur = card.get("product") or {}, card.get("purchase") or {}
-        creator = prod.get("creator") or {}
-        variants = (pur.get("variants") or "").strip() or None
-        dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
-        if dedupe in seen:  # bought twice
-            continue
-        seen.add(dedupe)
-        items.append(lib.item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
-                          creator=creator.get("name"), creator_url=creator.get("profile_url"),
-                          thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
-                          page=lib.gumroad_page(creator.get("profile_url"), lib.gumroad_permalink(prod)),
-                          download_url=pur.get("download_url"), variants=variants,
-                          archived=bool(pur.get("is_archived"))))
+    try:
+        for card in lib.gumroad_cards(read_props, cfg["gumroad"].get("include_archived", True),
+                                      float(cfg.get("request_delay", 0.8)), on_page, cfg):
+            prod, pur = card.get("product") or {}, card.get("purchase") or {}
+            creator = prod.get("creator") or {}
+            variants = (pur.get("variants") or "").strip() or None
+            dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
+            if dedupe in seen:  # bought twice
+                continue
+            seen.add(dedupe)
+            items.append(lib.item("gumroad", pur.get("id") or len(items), name=prod.get("name"),
+                              creator=creator.get("name"), creator_url=creator.get("profile_url"),
+                              thumbnail=prod.get("thumbnail_url"), url=pur.get("download_url"),
+                              page=lib.gumroad_page(creator.get("profile_url"), lib.gumroad_permalink(prod)),
+                              download_url=pur.get("download_url"), variants=variants,
+                              archived=bool(pur.get("is_archived"))))
+    except lib.NotLoggedIn:
+        if not kept:
+            raise
+        cfg["_gumroad_signed_out"] = True   # (your receipts are read all the same)
+        items = []
+    if kept:
+        found = {receipts.token_of(i.get("download_url")) for i in items} - {None}
+        got, keep = receipts.read(cfg, lambda m: progress(m), only_new=bool(cfg.get("_quick")), skip=found)
+        have = {i["key"] for i in items}
+        known = cfg.get("_known_pictures") or {}
+        for i in got:
+            if i["key"] not in have:
+                i["thumbnail"] = i.get("thumbnail") or known.get(i["key"])
+                items.append(i)
+                have.add(i["key"])
+        cfg["_keep_keys"] = keep
+        # a download page shows no picture: the product's public page does (read once; a later refresh keeps it)
+        wish.pictures_from_pages([i for i in got if not i.get("thumbnail") and i.get("page")], wish.read_store_page,
+                                 progress, float(cfg.get("request_delay", 0.8)), page_of=lambda x: x.get("page"))
     return items
 
 
@@ -250,21 +275,32 @@ def dl__gumroad_page_images(gr, content: dict, rec: dict, folder: dl.Path, name:
 
 
 def dl_sync_gumroad(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
-    """Download everything new or changed in your Gumroad library."""
+    """Download everything new or changed in your Gumroad library, and from the purchases you added by their
+    receipts (each read in a session of its own: receipts.py). Signed out, with receipts kept, only theirs."""
+    from .. import receipts
     store_dir = root / "Gumroad"
     man = dl.StoreRecords(cfg, root, "Gumroad")
-    gr = dl.Gumroad(cfg, dl.gumroad_session(cfg))
-
+    try:
+        gr = dl.Gumroad(cfg, dl.gumroad_session(cfg))
+    except dl.NotLoggedIn:
+        if not receipts.tokens():
+            raise
+        gr = None   # (not signed in: only the receipts)
     try:
         dl._sync_gumroad_purchases(cfg, gr, store_dir, man, args, report)
     finally:
-        gr.sess.cookies.clear()  # the copied sign-in only lives for this sync
-        gr.sess.close()
+        if gr is not None:
+            gr.sess.cookies.clear()  # the copied sign-in only lives for this sync
+            gr.sess.close()
         man.save_changes()   # every finished file recorded, however the sync ended
 
 
-def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man: dl.StoreRecords, args, report: dl.Report) -> None:
-    """Download everything new or changed, one purchase at a time (see sync_gumroad)."""
+def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad | None", store_dir: dl.Path, man: dl.StoreRecords, args, report: dl.Report) -> None:
+    """Download everything new or changed, one purchase at a time (see sync_gumroad). gr is None when you aren't
+    signed in to Gumroad: then only purchases added by their receipts are read."""
+    from .. import receipts
+    kept = receipts.tokens()
+    addresses: dict | None = None
     chosen = (getattr(args, "targets", None) or {}).get("gumroad")
     if chosen:   # straight to the chosen purchases' download pages
         cards = [{"product": {"name": i.get("name"), "creator": {"name": i.get("creator")},
@@ -273,8 +309,19 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
                  for i in chosen]
         dl.log(f"Gumroad: {len(cards)} chosen {'purchase' if len(cards) == 1 else 'purchases'}")
     else:
-        cards = list(gr.library())
-        dl.log(f"Gumroad: {len(cards)} purchases in your library")
+        cards = list(gr.library()) if gr is not None else []
+        if gr is not None:
+            dl.log(f"Gumroad: {len(cards)} purchases in your library")
+        else:
+            dl.log("Gumroad: not signed in, so only the purchases you added by their receipts are downloaded. Sign "
+                   "in to Gumroad to download the rest of your library too.")
+        listed = {receipts.token_of((c.get("purchase") or {}).get("download_url")) for c in cards} - {None}
+        extra = [{"product": {"name": r.get("name"), "creator": {"name": r.get("creator")}},
+                  "purchase": {"id": r.get("id"), "download_url": receipts.download_link(r["token"]), "variants": ""}}
+                 for r in receipts.load() if r["token"] not in listed and not r.get("error", "").startswith("Gumroad says")]
+        if extra:
+            dl.log(f"Gumroad: {len(extra)} {'purchase' if len(extra) == 1 else 'purchases'} added by their receipts")
+        cards += extra
     seen: set[str] = set()
 
     for n, card in enumerate(cards, 1):
@@ -288,81 +335,118 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
         if not page_url:
             report.skipped.append(f"Gumroad: {name} - no download page (refunded or membership inactive)")
             continue
+        token = receipts.token_of(page_url)
+        if token in kept:   # added by its receipt: read in a session of its own, without your sign-in
+            if addresses is None:
+                addresses = receipts.emails(cfg)
+            reader = receipts.reader_for(cfg, token, addresses)
+            if reader is None:   # (its receipt was removed meanwhile)
+                continue
+        elif gr is None:
+            report.skipped.append(f"Gumroad: {name} - sign in to Gumroad to download it")
+            continue
+        else:
+            reader = gr
         try:
-            page = gr.page(page_url)
+            page = reader.page(page_url)
         except dl.NotLoggedIn:
             raise
+        except receipts.ReceiptError as e:
+            report.failed_product("gumroad", name, f"Gumroad: {name} - {e}", str(e))
+            if reader is not gr:
+                reader.close()
+            continue
         except Exception as e:
-            report.failed_product("gumroad", name, f"Gumroad: {name} - couldn't open download page: {e}",
-                                  f"couldn't open its download page: {e}")
+            if reader is not gr:
+                reader.close()
+            why = f"{type(e).__name__}" if reader is not gr else str(e)   # (a receipt's link never goes in a log)
+            report.failed_product("gumroad", name, f"Gumroad: {name} - couldn't open download page: {why}",
+                                  f"couldn't open its download page: {why}")
             continue
+        said = (page.get("props") or {}).get("purchase") or {}
+        if not prod.get("name") and isinstance(said.get("product_name"), str) and said["product_name"].strip():
+            name = said["product_name"].strip()   # (a receipt not read yet: its page says what it is)
+        if not (prod.get("creator") or {}).get("name") and isinstance(said.get("seller_name"), str) and said["seller_name"].strip():
+            creator = said["seller_name"].strip()
+        try:
+            dl._gumroad_purchase(cfg, reader, page, card, name, creator, page_url, store_dir, man, args, report, seen)
+        finally:
+            if reader is not gr:
+                reader.close()
 
-        props = page.get("props") or {}
-        content = props.get("content")
-        if not content:
-            report.skipped.append(f"Gumroad: {name} - page type {page.get('component')!r} has no files "
-                                  "(may need email confirmation - open it once in the browser)")
+
+def dl__gumroad_purchase(cfg: dict, gr, page: dict, card: dict, name: str, creator: str, page_url: str,
+                         store_dir: dl.Path, man: dl.StoreRecords, args, report: dl.Report, seen: set) -> None:
+    """Download what's new or changed in one purchase, from its download page's data (page), with gr reading it
+    (your signed-in session, or its receipt's own: receipts.Reader)."""
+    prod, pur = card.get("product") or {}, card.get("purchase") or {}
+
+    props = page.get("props") or {}
+    content = props.get("content")
+    if not content:
+        report.skipped.append(f"Gumroad: {name} - page type {page.get('component')!r} has no files "
+                              "(may need email confirmation - open it once in the browser)")
+        return
+
+    p = props.get("purchase") or {}
+    key = f"{p.get('product_id') or pur.get('id')}:{p.get('variant_id') or ''}"
+    if key in seen:  # bought the same product/variant twice
+        return
+    seen.add(key)
+
+    variants = (pur.get("variants") or "").strip()
+    if dl.removed_product("gumroad", name, report) or man.away(key, f"Gumroad: {name}", report):
+        return
+    rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
+    is_new_asset = not rec["files"]
+    rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
+               last_synced=dl.now_iso())
+    folder = man.folder_of(rec)
+    token = props.get("token")
+    dl.log(f"\n[Gumroad] {creator} / {name}{f' ({variants})' if variants else ''}")
+
+    got_any = False
+    offered = {f.get("id") for _sub, f in dl.gumroad_files(content.get("content_items"))}
+    for sub, f in dl.gumroad_files(content.get("content_items")):
+        fid, size = f.get("id"), f.get("file_size")
+        relpath = dl.distinct_name(sub + dl.gumroad_filename(f), fid, rec, offered)
+        target = dl.rel_to_path(folder, relpath)
+        old = rec["files"].get(fid)
+        if target.exists() and (not size or target.stat().st_size == size):
+            rec["files"][fid] = {**(old or {}), "path": relpath, "size": target.stat().st_size}
             continue
-
-        p = props.get("purchase") or {}
-        key = f"{p.get('product_id') or pur.get('id')}:{p.get('variant_id') or ''}"
-        if key in seen:  # bought the same product/variant twice
+        if not f.get("download_url"):
+            report.skipped.append(f"Gumroad: {name} / {relpath} - streaming only, no download")
             continue
-        seen.add(key)
-
-        variants = (pur.get("variants") or "").strip()
-        if dl.removed_product("gumroad", name, report) or man.away(key, f"Gumroad: {name}", report):
+        is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
+        label = f"{creator} / {name} / {relpath}"
+        if dl.left_out(args, report, "gumroad", name, relpath):
             continue
-        rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
-        is_new_asset = not rec["files"]
-        rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
-                   last_synced=dl.now_iso())
-        folder = man.folder_of(rec)
-        token = props.get("token")
-        dl.log(f"\n[Gumroad] {creator} / {name}{f' ({variants})' if variants else ''}")
-
-        got_any = False
-        offered = {f.get("id") for _sub, f in dl.gumroad_files(content.get("content_items"))}
-        for sub, f in dl.gumroad_files(content.get("content_items")):
-            fid, size = f.get("id"), f.get("file_size")
-            relpath = dl.distinct_name(sub + dl.gumroad_filename(f), fid, rec, offered)
-            target = dl.rel_to_path(folder, relpath)
-            old = rec["files"].get(fid)
-            if target.exists() and (not size or target.stat().st_size == size):
-                rec["files"][fid] = {**(old or {}), "path": relpath, "size": target.stat().st_size}
-                continue
-            if not f.get("download_url"):
-                report.skipped.append(f"Gumroad: {name} / {relpath} - streaming only, no download")
-                continue
-            is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
-            label = f"{creator} / {name} / {relpath}"
-            if dl.left_out(args, report, "gumroad", name, relpath):
-                continue
-            if args.dry_run:
-                dl.would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
-                continue
-            try:
-                got = dl.with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: dl.egress.download(
-                    gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, dl.STORE_SITES["gumroad"],
-                    desc=relpath, progress=dl.downloading(relpath)))
-            except Exception as e:
-                report.failed_product("gumroad", name, f"Gumroad: {label} - {e}", f"{relpath}: {e}")
-                continue
-            dl.log(f"    {'updated' if is_update else 'saved'}: {relpath}")
-            (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
-            report.saved("gumroad", name, relpath)
-            rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": dl.now_iso()}
-            got_any = True
-            man.checkpoint()
-
-        if not offered:   # no files: what the creator put in the page itself, such as a set of textures
-            got_any = dl._gumroad_page_images(gr, content, rec, folder, name, creator, man, args, report) or got_any
-
-        if got_any and is_new_asset:
-            report.new_assets.append(f"Gumroad: {creator} / {name}")
-        if cfg["gumroad"].get("save_thumbnails", True) and not args.dry_run:
-            dl.save_thumbnail(prod.get("thumbnail_url"), folder)
+        if args.dry_run:
+            dl.would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
+            continue
+        try:
+            got = dl.with_retries(report, relpath, lambda fid=fid, f=f, target=target, relpath=relpath: dl.egress.download(
+                gr.sess, gr.file_url(page_url, token, fid, f.get("download_url")), target, dl.STORE_SITES["gumroad"],
+                desc=relpath, progress=dl.downloading(relpath)))
+        except Exception as e:
+            report.failed_product("gumroad", name, f"Gumroad: {label} - {e}", f"{relpath}: {e}")
+            continue
+        dl.log(f"    {'updated' if is_update else 'saved'}: {relpath}")
+        (report.updated if is_update else report.new_files).append(f"Gumroad: {label}")
+        report.saved("gumroad", name, relpath)
+        rec["files"][fid] = {"path": relpath, "size": got, "downloaded_at": dl.now_iso()}
+        got_any = True
         man.checkpoint()
+
+    if not offered:   # no files: what the creator put in the page itself, such as a set of textures
+        got_any = dl._gumroad_page_images(gr, content, rec, folder, name, creator, man, args, report) or got_any
+
+    if got_any and is_new_asset:
+        report.new_assets.append(f"Gumroad: {creator} / {name}")
+    if cfg["gumroad"].get("save_thumbnails", True) and not args.dry_run:
+        dl.save_thumbnail(prod.get("thumbnail_url"), folder)
+    man.checkpoint()
 
 
 wish_GUMROAD_WISHLISTS = "https://gumroad.com/wishlists"
@@ -486,6 +570,7 @@ DOWNLOADER_EXPORTS = {
     '_gumroad_page_images': dl__gumroad_page_images,
     'sync_gumroad': dl_sync_gumroad,
     '_sync_gumroad_purchases': dl__sync_gumroad_purchases,
+    '_gumroad_purchase': dl__gumroad_purchase,
 }
 
 WISHLISTS_EXPORTS = {

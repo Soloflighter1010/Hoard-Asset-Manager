@@ -9,6 +9,9 @@ is in [PRIVACY.md](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/
 - **That pass is locked by your computer.** It's encrypted with your Windows account, your Mac's Keychain or your
   Linux keyring, so copying Hoard's files to another computer doesn't give anyone access.
 - **Each store is kept separate.** Your Booth sign-in and your Gumroad sign-in never mix.
+- **Gumroad receipts stay on this computer.** A receipt you add keeps its purchase's link on this computer only, never
+  in a backup or a report, and the email on it is locked by your computer like a sign-in, only ever sent to Gumroad
+  when it asks to confirm that purchase. See [Stores](Stores#purchases-outside-your-gumroad-library-receipts).
 - **Signing out really signs you out**, and that store's items leave your library. See
   [Stores](Stores#signing-out).
 

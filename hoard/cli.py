@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -159,6 +160,7 @@ def cmd_import(cfg: dict, args, batch: int = 20) -> int:
     items_by_store: dict[str, int] = {}
     totals: dict[str, int] = {}
     problems, new_shops = [], {}
+    receipts_added = 0
     for start in range(0, len(files), batch):   # a batch at a time, so a large folder isn't all in memory at once
         pages = []
         for f in files[start:start + batch]:
@@ -173,6 +175,8 @@ def cmd_import(cfg: dict, args, batch: int = 20) -> int:
             if "items" in r:
                 found.setdefault(r["store"], []).extend(r["items"])
                 items_by_store[r["store"]] = items_by_store.get(r["store"], 0) + len(r["items"])
+            elif "receipts" in r:   # a Gumroad receipt: kept, and read by Gumroad's refresh
+                receipts_added += r["added"]
             elif "confirm_shop" in r:
                 new_shops.setdefault(r["confirm_shop"], []).append(r["filename"])
             else:
@@ -184,6 +188,9 @@ def cmd_import(cfg: dict, args, batch: int = 20) -> int:
     if items_by_store:
         print("Imported " + ", ".join(f"{n} {STORES[s]['label']} {'item' if n == 1 else 'items'}" for s, n in items_by_store.items()) + ". "
               + "Your library now has " + ", ".join(f"{n} from {STORES[s]['label']}" for s, n in totals.items()) + ".")
+    if receipts_added:
+        print(f"Added {receipts_added} Gumroad {'receipt' if receipts_added == 1 else 'receipts'}. Read "
+              f"{'it' if receipts_added == 1 else 'them'} with: refresh --store gumroad")
     for shop, names in new_shops.items():
         address = shop.split("://", 1)[1]
         problems.append(f"{', '.join(names)}: from the Payhip shop {address}, which isn't in your list. If it's the "
@@ -192,6 +199,52 @@ def cmd_import(cfg: dict, args, batch: int = 20) -> int:
         print(f"{len(problems)} {'page wasn' if len(problems) == 1 else 'pages weren'}'t imported:")
         for line in problems:
             print(f"  - {line}")
+    return 1 if problems else 0
+
+
+def cmd_receipts(cfg: dict, args) -> int:
+    """Gumroad receipts (receipts.py): list them, add View content links or receipt files, or remove one."""
+    from . import receipts
+    if args.action == "list":
+        rows = receipts.listing()
+        for r in rows:
+            how = r["error"] or ("in your Gumroad library too" if r["in_library"] else r["creator"] if r["read"] else "")
+            print(f"{r['ref']}  {r['name'] or 'Not read yet'}" + (f"  ({how})" if how else ""))
+        print(f"{len(rows)} {'receipt' if len(rows) == 1 else 'receipts'}." if rows else
+              "No Gumroad receipts yet. Add one with: receipts add <receipt.eml or View content link>")
+        return 0
+    if args.action == "remove":
+        which = (args.what or [""])[0]
+        gone = receipts.remove(cfg, which) if re.fullmatch(r"[0-9a-f]{12}|all", which) else None
+        if gone is None:
+            sys.exit("There's no such receipt. See them with: receipts list")
+        Library(LIBRARY_FILE).forget_downloads("gumroad", set(gone["tokens"]), receipts.token_of)
+        print("Removed." if which != "all" else "Removed every receipt.")
+        return 0
+    found, problems = [], []
+    for given in args.what or []:
+        path = Path(given)
+        if path.is_file():
+            try:
+                got = receipts.find(path.name, path.read_text("utf-8", errors="replace"))
+            except OSError as e:
+                problems.append(f"{path.name}: couldn't be opened ({e.strerror or e})")
+                continue
+            if not got:
+                problems.append(f"{path.name}: there's no Gumroad receipt in it")
+            found += got
+        else:
+            got = receipts.find("", given)
+            if not got:
+                problems.append(f"{given[:80]}: not a file, nor a Gumroad View content link (gumroad.com/d/...)")
+            found += got
+    done = receipts.add(cfg, found) if found else {"added": 0, "already": 0, "emails_kept": True}
+    print(f"Added {done['added']} Gumroad {'receipt' if done['added'] == 1 else 'receipts'}"
+          + (f" ({done['already']} kept before)" if done["already"] else "") + ". Read them with: refresh --store gumroad")
+    if not done["emails_kept"]:
+        problems.append("this computer has no keyring to protect the receipts' emails, so they weren't kept")
+    for line in problems:
+        print(f"  - {line}")
     return 1 if problems else 0
 
 
@@ -229,6 +282,10 @@ def main(argv=None) -> None:
     s.add_argument("--store", choices=list(IMPORTABLE), help="only needed if the store can't be worked out")
     s.add_argument("--trust-shop", metavar="ADDRESS", action="append",
                    help="add the Payhip shop a page is from (its exact address); repeat for several")
+    s = sub.add_parser("receipts", help="Gumroad purchases outside your Gumroad library, added by their receipts")
+    s.add_argument("action", choices=["list", "add", "remove"])
+    s.add_argument("what", nargs="*", metavar="file-link-or-ref",
+                   help="add: receipt emails (.eml), saved pages or View content links; remove: a receipt's ref (from list), or all")
     s = sub.add_parser("sync", help="download everything new or changed")
     s.add_argument("--store", choices=[*DOWNLOADABLE, "all"], default="all")
     s.add_argument("--dry-run", action="store_true", help="list what would download, download nothing")
@@ -265,6 +322,8 @@ def main(argv=None) -> None:
             cmd_refresh(cfg, args.store or list(STORES))
         elif args.cmd == "import":
             sys.exit(cmd_import(cfg, args))
+        elif args.cmd == "receipts":
+            sys.exit(cmd_receipts(cfg, args))
         elif args.cmd == "sync":   # the files to leave out, as in the app (issue #225: Settings, and each product's)
             args.rules, args.remembered = file_rules(cfg), remembered_files(cfg)
             cmd_sync(cfg, args)

@@ -155,6 +155,7 @@ function renderStores() {
       (info.source === "import" ? "" : `<button class="ghost sm" data-quick="${s}" ${busy ? "disabled" : ""}>Quick refresh</button>`) +
       (downloadable(s) ? `<button class="ghost sm" data-download="${s}" ${busy ? "disabled" : ""}>Download</button>` : "") +
       (importable(s) ? `<button class="ghost sm" data-import="${s}" ${importing ? "disabled" : ""}>Import pages</button>` : "") +
+      (s === "gumroad" ? `<button class="ghost sm" data-receipts>${esc(DATA.gumroad_receipts ? tr("Receipts ({0})", DATA.gumroad_receipts) : tr("Receipts"))}</button>` : "") +
       (signedIn ? `<button class="ghost sm" data-logout="${s}" ${busy ? "disabled" : ""}>Sign out</button>` : "") + `</span>` +
       (info.error ? `<span class="err${/^Signed out/.test(info.error) ? " info" : ""}">${esc(info.error)}${!/^Signed out/.test(info.error) ? ` <button class="linkish" data-report-store="${esc(s)}">Create report</button>` : ""}</span>` : "") +
       ((info.found_shops || []).length ? `<span class="found">${esc(tr(info.found_shops.length === 1 ? "Your library has products from {0} more Payhip shop on its own address."
@@ -521,6 +522,64 @@ async function saveItchKey() {
 
 
 
+/* ---------- Gumroad receipts (receipts.py): purchases outside your Gumroad library, added by their receipts. Their
+   links and emails stay with Hoard: the page only ever sees each one's name, and a ref to remove it by. */
+// Open the receipts dialog, with the receipts Hoard keeps.
+async function openReceipts() {
+  $("#receiptLinks").value = ""; $("#receiptsNote").textContent = ""; $("#receiptsAdd").disabled = false;
+  $("#receiptsDialog").showModal(); $("#receiptLinks").focus();
+  try {
+    const r = await api("/api/gumroad-receipts");
+    const got = await r.json();
+    drawReceipts(got.receipts || []);
+  } catch (e) { drawReceipts([]); }
+}
+// List the receipts kept: each one's product (once read), how it went, and Remove.
+function drawReceipts(list) {
+  $("#receiptRows").innerHTML = list.map(x => {
+    const how = x.error ? tr(x.error) : x.in_library ? tr("In your Gumroad library too, so it's read from there.")
+      : x.read ? x.creator : tr("Read with Gumroad's next refresh.");
+    // (a product's name and creator are names, and what's said is translated here already: the page leaves them be)
+    return `<li><span class="nm"><span translate="no">${esc(x.name || tr("Not read yet"))}</span>` +
+      `<span class="meta${x.error ? " err" : ""}" translate="no">${esc(how || "")}</span></span>` +
+      `<button class="linkish" data-receipt-remove="${esc(x.ref)}" aria-label="${esc(tr("Remove {0}", x.name || tr("this receipt")))}">${esc(tr("Remove"))}</button></li>`;
+  }).join("");
+  DATA.gumroad_receipts = list.length; renderStores();
+}
+// What a receipt problem says: its file, then why.
+const receiptProblem = p => (p.filename ? p.filename + ": " : "") + tr(p.error || "");
+// Keep the receipts in what's pasted and the files chosen, then read the new ones (a quick refresh of Gumroad).
+async function addReceipts(files = []) {
+  const text = $("#receiptLinks").value.trim();
+  if (!text && !files.length) { $("#receiptsNote").textContent = tr("Paste a View content link, or add a receipt file."); return; }
+  $("#receiptsAdd").disabled = true; $("#receiptsNote").textContent = tr("Adding");
+  let sent = [];
+  try { sent = await Promise.all(files.map(async f => ({ filename: f.name, content: await f.text() }))); }
+  catch (e) { $("#receiptsAdd").disabled = false; $("#receiptsNote").textContent = tr("Those files couldn't be opened."); return; }
+  const r = await apiPost("/api/gumroad-receipts", { text, files: sent });
+  $("#receiptsAdd").disabled = false;
+  const problems = (r.data.problems || []).map(receiptProblem);
+  if (!r.ok) { $("#receiptsNote").textContent = [tr(r.data.error || "They weren't added."), ...problems].join(" "); return; }
+  $("#receiptLinks").value = "";
+  drawReceipts(r.data.receipts || []);
+  const said = r.data.added ? tr(r.data.added === 1 ? "Added 1 receipt. Reading it now." : "Added {0} receipts. Reading them now.", r.data.added)
+                            : tr("Hoard already keeps that receipt.");
+  $("#receiptsNote").textContent = [said, ...problems].join(" ");
+  if (r.data.added) readReceipts();
+}
+// Read the receipts just added: Gumroad's quick refresh reads the ones never read.
+const readReceipts = () => runJob("/api/refresh", ["gumroad"], false, { quick: true });
+// Forget a receipt (its product leaves the list too).
+async function removeReceipt(ref) {
+  if (!await ask("Remove this receipt? Its product leaves your library list, unless your Gumroad library has it too. Downloaded files stay.", "Remove", true)) return;
+  const r = await apiPost("/api/gumroad-receipts/remove", { ref });
+  if (!r.ok) { $("#receiptsNote").textContent = tr(r.data.error || "It wasn't removed."); return; }
+  drawReceipts(r.data.receipts || []);
+  $("#receiptsNote").textContent = tr("Removed.");
+  await load();
+}
+
+
 /* ---------- the Save for Hoard bookmark (Payhip): run on a shop's library page in your usual browser, it reads every
    page of that shop's library, as you, from that shop only, and saves them as one file to import, instead of saving
    each page by hand. It sends nothing anywhere: the file goes to your downloads. (No backticks or "${" in it: it's
@@ -599,7 +658,7 @@ const payhipSaverUrl = () => "javascript:void " + encodeURIComponent(PAYHIP_SAVE
 
 /* ---------- importing saved pages: any number at once, from the file picker, a folder, or dropped on the window.
    They go to Hoard a batch at a time, and each page gets its own result, so one bad page doesn't stop the rest. */
-const PAGE_FILE = /\.(mhtml|mht|html|htm)$/i;
+const PAGE_FILE = /\.(mhtml|mht|html|htm|eml)$/i;   // (.eml: a Gumroad receipt's email)
 const IMPORT_BATCH = { pages: 10, bytes: 24 * 1024 * 1024 };   // per request, well inside what Hoard accepts
 const MOST_PAGES = 2000;
 // A count, with the word for one or many.
@@ -616,7 +675,7 @@ async function importPages(files, store) {
   }
   if (importing) { toast("Hoard is already importing pages. Wait for it to finish."); return; }
   importing = { stop: false };
-  const done = { pages: 0, items: {}, totals: {}, problems: [], log: [], shops: new Map(), added: [] };
+  const done = { pages: 0, items: {}, totals: {}, problems: [], log: [], shops: new Map(), added: [], receipts: 0 };
   if (all.length > pages.length) done.problems.push(`Only the first ${MOST_PAGES} pages were imported. Import the rest separately.`);
   renderStores();
   showImport(done, `Reading ${plural(pages.length, "page", "pages")}`);
@@ -675,6 +734,10 @@ async function sendPages(files, store, trust, done) {
         done.pages += 1;
         done.items[res.label] = (done.items[res.label] || 0) + res.count;
         done.log.push(`${res.filename}: ${plural(res.count, `${res.label} item`, `${res.label} items`)}`);
+      } else if (res.receipts != null) {   // a Gumroad receipt: kept, and read by Gumroad's refresh
+        done.receipts += res.added || 0;
+        done.log.push(`${res.filename}: ${tr(res.receipts === 1 ? "1 Gumroad receipt" : "{0} Gumroad receipts", res.receipts)}`);
+        if (res.emails_kept === false) done.problems.push(`${res.filename}: ${tr("This computer has no keyring to protect the receipts' emails, so Hoard didn't keep them: a purchase Gumroad asks to confirm can't be read.")}`);
       } else if (res.confirm_shop) {
         if (!done.shops.has(res.confirm_shop)) done.shops.set(res.confirm_shop, []);
         done.shops.get(res.confirm_shop).push(batch[k]);
@@ -705,11 +768,13 @@ function finishImport(done, notPages, stopped) {
   const said = [stopped && tr("Stopped."), got.length
     ? tr("Imported {0} from {1}.", listed(got.map(([l, n]) => tr(n === 1 ? "{0} {1} item" : "{0} {1} items", n, l))),
          tr(done.pages === 1 ? "{0} page" : "{0} pages", done.pages))
-    : tr("Nothing was imported."),
+    : !done.receipts && tr("Nothing was imported."),
     totals.length && tr("Your library now has {0}.", listed(totals.map(([l, n]) => tr("{0} from {1}", n, l)))),
-    done.added.length && tr("Added {0} to your Payhip shops.", listed(done.added.map(shopName)))].filter(Boolean).join(" ");
+    done.added.length && tr("Added {0} to your Payhip shops.", listed(done.added.map(shopName))),
+    done.receipts && tr(done.receipts === 1 ? "Added 1 Gumroad receipt: reading it now." : "Added {0} Gumroad receipts: reading them now.", done.receipts)].filter(Boolean).join(" ");
+  if (done.receipts && !stopped) readReceipts();
   showImport(done, said, true,
-             stopped ? "Import stopped" : done.problems.length ? (got.length ? "Imported, with problems" : "Nothing imported") : "Imported");
+             stopped ? "Import stopped" : done.problems.length ? (got.length || done.receipts ? "Imported, with problems" : "Nothing imported") : "Imported");
 }
 
 
@@ -1672,7 +1737,8 @@ viewListen("library", $("#storeRows"), "click", e => {
   const l = e.target.closest("[data-login]"), r = e.target.closest("[data-refresh]"), i = e.target.closest("[data-import]");
   const o = e.target.closest("[data-logout]"), q = e.target.closest("[data-quick]");
   const d = e.target.closest("[data-download]");
-  if (d) downloadNew([d.dataset.download]);
+  if (e.target.closest("[data-receipts]")) openReceipts();
+  else if (d) downloadNew([d.dataset.download]);
   else if (o) runJob("/api/logout", [o.dataset.logout]);
   else if (l && l.dataset.login === "itch") openItchKey();
   else if (l) runJob("/api/login", [l.dataset.login]);
@@ -1680,6 +1746,11 @@ viewListen("library", $("#storeRows"), "click", e => {
   else if (q) runJob("/api/refresh", [q.dataset.quick], false, { quick: true });   // (one store's start: issue #331)
   else if (i) { importStore = i.dataset.import; $("#importFile").value = ""; $("#importFile").click(); }
 });
+viewListen("library", $("#receiptsAdd"), "click", () => addReceipts());
+viewListen("library", $("#receiptsClose"), "click", () => $("#receiptsDialog").close());
+viewListen("library", $("#receiptFiles"), "click", () => { $("#receiptFile").value = ""; $("#receiptFile").click(); });
+viewListen("library", $("#receiptFile"), "change", e => { const files = [...e.target.files]; e.target.value = ""; if (files.length) addReceipts(files); });
+viewListen("library", $("#receiptRows"), "click", e => { const b = e.target.closest("[data-receipt-remove]"); if (b) removeReceipt(b.dataset.receiptRemove); });
 viewListen("library", $("#itchSave"), "click", saveItchKey);
 viewListen("library", $("#itchKey"), "keydown", e => { if (e.key === "Enter") saveItchKey(); });
 viewListen("library", $("#itchCancel"), "click", () => { $("#itchKey").value = ""; $("#itchDialog").close(); });

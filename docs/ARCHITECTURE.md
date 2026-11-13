@@ -49,6 +49,9 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   alerts.py            notifications through Apprise (issue #230): the news you choose, to the services you give
                        addresses for; the addresses kept by vault.py, as API keys are
   vault.py             API keys and other secrets, kept by the operating system (DPAPI, Keychain, keyring)
+  receipts.py          Gumroad purchases outside your Gumroad library, by their receipts: found in what you add,
+                       kept (links sealed, emails by vault.py) and read without the sign-in, answering Gumroad's
+                       email check
   loading.py           how far reading what a page shows first has got, for its splash's count (issue #200)
   updater.py           checking GitHub for a newer release; downloading, checking and running its installer
   vpm/                 Projects: the Unity projects shared with ALCOM and the Creator Companion, their VPM packages,
@@ -125,7 +128,7 @@ all in `browser.py`):
 
 | Store | How purchases are found | Notes |
 |---|---|---|
-| Gumroad | The library page's embedded Inertia data (`data-page` JSON), 15 purchases a page, archived ones read separately | The most dependable reader; the data shapes follow Gumroad's open-source code |
+| Gumroad | The library page's embedded Inertia data (`data-page` JSON), 15 purchases a page, archived ones read separately; then each receipt you added (`receipts.py`): its download page, `gumroad.com/d/<token>` (`UrlRedirects/DownloadPage`), read without the sign-in, in a session of its own | The most dependable reader; the data shapes follow Gumroad's open-source code. A receipt's page asks for the purchase's email (`UrlRedirects/ConfirmPage`) on a computer or network it hasn't been seen on: Hoard posts the email from the receipt to `/confirm-redirect` once and keeps the `confirmed_redirect` cookie Gumroad gives that purchase |
 | Booth | `BOOTH_JS` reads each card on `accounts.booth.pm/library`, `/library/gifts` and `/library/free_downloads`, page by page | Files come from the download-button placeholders' `data-href` (`test=downloadable`). They redirect to a short-lived address; if Booth refuses the direct request, `booth_fetch` downloads that file through the browser (and, refused twice running, the rest of the run); a dropped connection is retried directly. The reader and the downloader page through the library with the same `library.booth_cards` |
 | Jinxxy | `JX_CARDS_JS` reads the inventory cards, scrolling and clicking "load more" until nothing new appears | No buyer API. Card text skips buttons, menus and screen-reader labels |
 | Payhip | Purchases live in each shop (`<shop>/b-account`, often on the shop's own domain). `PAYHIP_SHOP_JS` reads each shop listed in settings (`payhip.shops`), crediting each card to the shop its link is in; on a creator's own shop (its menu's Creator/Customer switch leads back to the page) the cards are their purchases from everywhere, with no creator on them, so they're left as Unknown creator (issue #25). `config.apply_store_sites` adds the listed shops to Payhip's trusted sites | Read only: Hoard lists Payhip purchases and never downloads them (`DOWNLOADABLE` leaves it out). Payhip shows automated browsers a bot check, so a refresh uses a visible window and waits for the user to complete it; most people import each shop's saved pages instead |

@@ -28,6 +28,7 @@ FILES = frozenset({
     "sync.json", "tasks.json", "project-tasks.json", "library_folders.json",
     "integrity.json", "picture-looks.json", "update.json", "window-place.json",
     "vpm-projects.json", "vpm-presets.json", "sealed-files.json", "store-health.json", "scheduler.json", "job-queue.json",
+    "gumroad-receipts.json",
 })
 _instances: dict[Path, "Database"] = {}
 # Domain read/modify/write sections share the same lock as transactions. This

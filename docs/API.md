@@ -38,6 +38,9 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/api/folders` | key | no | — | object |
 | POST | `/api/folders/open` | key | yes | `id: string` | object |
 | POST | `/api/force-stop` | key | yes | `lane: any` | object |
+| GET | `/api/gumroad-receipts` | key | no | — | object |
+| POST | `/api/gumroad-receipts` | key | yes | `files: array`, `text: string` | object |
+| POST | `/api/gumroad-receipts/remove` | key | yes | `ref: string` | object |
 | POST | `/api/hidden/forget` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
 | POST | `/api/import` | key | yes | `files: array`, `store: string`, `trust_shops: array` | object |
 | GET | `/api/integrity` | key | no | — | object |

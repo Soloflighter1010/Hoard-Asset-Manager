@@ -33,7 +33,8 @@ The examples below say `hoard-cli`; use whichever of these fits. Without a comma
 | `login <store>` | Sign in to a store (`booth`, `gumroad`, `jinxxy`, `payhip`) in a browser window, or add an itch.io API key (`itch`) |
 | `logout <store>` | Sign out of a store in Hoard, or of every store with `all` |
 | `refresh [--store <store>]` | Read what you own from the stores (repeat `--store` for several; default: all) |
-| `import <file or folder>... [--store <store>] [--trust-shop <address>]` | Add library pages you saved from your own browser (`.mhtml` or `.html`): any number of files, and folders of them. A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address (repeat it for several). Exits with 1 if any page wasn't imported |
+| `import <file or folder>... [--store <store>] [--trust-shop <address>]` | Add library pages you saved from your own browser (`.mhtml` or `.html`): any number of files, and folders of them. Gumroad receipts among them (`.eml`) are kept as receipts. A Payhip shop that isn't in your list is only added with `--trust-shop` and its exact address (repeat it for several). Exits with 1 if any page wasn't imported |
+| `receipts list` / `receipts add <file or link>...` / `receipts remove <ref or all>` | Gumroad purchases outside your Gumroad library, by their receipts: list them (each with its ref), add receipt emails (`.eml`), saved pages or **View content** links, or remove one. `refresh --store gumroad` reads them. See [Stores](Stores#purchases-outside-your-gumroad-library-receipts) |
 | `sync` | Download everything new or changed, from every store but Payhip, which Hoard only lists (options below) |
 | `tags` | Rebuild `catalog.json` and `tags.json` from what's downloaded |
 | `verify` | Check whether any data file was changed outside Hoard, then rebuild the catalog files. Exits with 1 if anything was changed |

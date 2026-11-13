@@ -25,7 +25,7 @@ from hoard import common, config, downloader, i18n, library, server  # noqa: E40
 
 # what to do on each page, in turn: open a panel or a view, then read what it shows
 STEPS = {
-    "/": ["", "#settingsBtn", "#storesBtn", "#tagsBtn", "#tasksTab", "#projectsTab",
+    "/": ["", "#settingsBtn", "#storesBtn", "[data-receipts]", "#receiptsClose", "#tagsBtn", "#tasksTab", "#projectsTab",
           # Projects: a project, its changes and backup asked about, one Hoard for Unity reported, a new project with
           # the packages and products to choose from, the repositories, and Unity and folders
           "[data-pj=manage] >> nth=0", "[data-pj=versions] >> nth=0", "dialog.pj-dlg button[value=no]",

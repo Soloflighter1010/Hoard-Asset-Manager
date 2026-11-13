@@ -147,6 +147,8 @@ def _redact_credentials(text: str) -> str:
         # "token abc123..." without a colon: only a value that looks like one (long, no spaces), so a name such as
         # "Secret Fox Avatar" keeps its words
         (re.compile(r"(?i)\b(token|secret)\b\s+[A-Za-z0-9._~+/=-]{16,}"), r"\1 [credential]"),
+        # a Gumroad purchase's download link opens it for anyone (a receipt's: receipts.py)
+        (re.compile(r"(?i)(gumroad\.com/(?:d|r|s|read|zip)/)[A-Za-z0-9]{16,64}"), r"\1[link]"),
     )
     for pattern, replacement in patterns:
         text = pattern.sub(replacement, text)
