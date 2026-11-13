@@ -49,7 +49,9 @@ python scripts/test_suite.py --seed 315 --repeat 2
   development dependencies from `npm ci`. Running the Python app requires neither Node nor npm.
 - Without those, their tests are skipped. GitHub Actions has both, and the **Check** workflow runs everything on
   Ubuntu and Windows for every pull request and every push to `main`, then builds the zips, the Unity package and
-  the Windows app, the Mac app and its `.pkg`, and the Flatpak, and runs each app's self-test.
+  Hoard for Windows, macOS (Apple silicon and Intel) and Linux as a release does, unsigned, with the Flatpak made as
+  soon as Linux's `.deb` is, and runs each one's self-test. Nuitka's compiler cache is kept between Check's builds
+  (`actions/cache`), so a build compiles again only the C files that changed.
 
 Each security test names the review finding it guards.
 Tests inherit `tests.isolation.IsolatedTestCase`, whose fixture owns and restores its app-data home and path

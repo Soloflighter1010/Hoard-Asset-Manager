@@ -425,4 +425,6 @@ it, raise `version` in its `package.json` and add a section to its `CHANGELOG.md
 The logo files are in `brand/`. The logo is the Heap: a box for each store, one with a cube for Projects, and the
 gold one on top, drawn by `hoard/heap.py`. `python3 scripts/heap_files.py --write` puts it in the brand files and the
 app's pages, and `scripts/make_icons.py` makes the apps' icons from it. The wordmark is outlined from Dela Gothic One,
-so the files need no fonts installed.
+so the files need no fonts installed. `brand/banners/` has Hoard's banners for a VRChat group (1920 × 1080), X and
+Bluesky (1500 × 500), YouTube (2560 × 1440), Discord (960 × 540) and GitHub's social preview (1280 × 640), each with
+what matters inside what that site always shows; `scripts/make_banners.py` draws them.

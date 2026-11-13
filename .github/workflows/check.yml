@@ -79,7 +79,8 @@ jobs:
         run: python scripts/test_summary.py test-results --expected 12
 
   # Hoard for each system, built as release.yml builds it (without signing anything): the server compiled by Nuitka and
-  # checked with its self-test, the window built by Tauri with the server in its resources, and its installer.
+  # checked with its self-test, the window built by Tauri with the server in its resources, and its installer. Linux's
+  # is app-linux, below: the same steps, on their own so the Flatpak can start as soon as its .deb is there.
   app:
     strategy:
       fail-fast: false
@@ -88,12 +89,11 @@ jobs:
           - { os: windows-latest, name: windows-x86_64, bundles: nsis }
           - { os: macos-15, name: macos-apple-silicon, bundles: "app,dmg" }
           - { os: macos-15-intel, name: macos-intel, bundles: "app,dmg" }
-          - { os: ubuntu-22.04, name: linux-x86_64, bundles: "appimage,deb" }
     runs-on: ${{ matrix.os }}
-    defaults:
+    defaults: &app-defaults
       run:
         shell: bash
-    steps:
+    steps: &app-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -104,10 +104,25 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf ccache
       - name: Install the locked dependencies and Nuitka (every file hash-checked)
         run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt -r requirements-nuitka.txt
+      # Nuitka's compiler cache (ccache on Linux and macOS, clcache on Windows, all in NUITKA_CACHE_DIR), kept from the
+      # last build on this system: only the C files that changed are compiled again, where each of the ~670 took most
+      # of the build's time. A cached file is found by what it compiles, so an older cache is never wrong, only less
+      # use. Check's builds only: a release (release.yml) compiles everything from scratch.
+      - name: Nuitka's compiler cache, from the last build on this system
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nuitka-cache
+          key: nuitka-${{ matrix.name }}-${{ hashFiles('requirements.txt', 'requirements-nuitka.txt') }}-${{ github.sha }}
+          restore-keys: |
+            nuitka-${{ matrix.name }}-${{ hashFiles('requirements.txt', 'requirements-nuitka.txt') }}-
+            nuitka-${{ matrix.name }}-
       - name: Compile Hoard's server with Nuitka
+        env:
+          NUITKA_CACHE_DIR: ${{ runner.temp }}/nuitka-cache
+          CCACHE_MAXSIZE: 1500M   # (what's used least is let go past this)
         run: python scripts/build_nuitka.py
       - name: Check the server has everything it needs
         run: build/nuitka/server/hoard-server self-test
@@ -137,10 +152,22 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  # Linux's build: app's steps (the same, by their anchor), on their own so the Flatpak needs only this one, not
+  # Windows' or the Macs', which take longer. Named as app's are.
+  app-linux:
+    name: app (${{ matrix.os }}, ${{ matrix.name }}, ${{ matrix.bundles }})
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-22.04, name: linux-x86_64, bundles: "appimage,deb" }
+    runs-on: ${{ matrix.os }}
+    defaults: *app-defaults
+    steps: *app-steps
+
   # The Linux Flatpak (shell/flatpak), built from that .deb as a release builds it. Its build checks every library the
   # window needs is in the runtime, and runs the server's self-test inside the sandbox.
   flatpak:
-    needs: app
+    needs: app-linux
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210

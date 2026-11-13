@@ -287,7 +287,7 @@ class Workflows(IsolatedTestCase):
         self.assertIn("manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml", r)
         self.assertIn("Hoard-${TAG#v}-linux-x86_64.flatpak", r)
         self.assertIn("scripts/update_manifest.py update", r, "Hoard-update.json")
-        self.assertIn("needs: [release, build, flatpak-release, update-manifest]", r, "scanned once every file is on it")
+        self.assertIn("needs: [release, build, build-linux, flatpak-release, update-manifest]", r, "scanned once every file is on it")
 
     def test_windows_programs_are_signed_where_signing_is_set_up(self):
         """The server's programs and libraries are signed before the window is built around them (issue #327),
@@ -327,6 +327,35 @@ class Workflows(IsolatedTestCase):
         self.assertIn("npx tauri bundle", c)
         self.assertIn("manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml", c)
         self.assertNotRegex(c, r"azure|AZURE|TAURI_SIGNING|secrets\.", "nothing signed, no secret")
+
+    def test_the_flatpak_waits_only_for_linux(self):
+        """The Flatpak is made from Linux's .deb alone, so it starts once Linux's build is done, not after Windows' and
+        the Macs' (which take longer): Linux's build is a job of its own, with the very same steps (by their anchor)."""
+        import yaml
+        for text, matrix_job, linux_job in ((self.check, "app", "app-linux"), (self.release, "build", "build-linux")):
+            jobs = yaml.safe_load(text)["jobs"]
+            with self.subTest(linux_job):
+                self.assertEqual(jobs["flatpak"]["needs"], linux_job)
+                self.assertEqual(jobs[linux_job]["steps"], jobs[matrix_job]["steps"], "the same steps")
+                self.assertEqual([leg["name"] for leg in jobs[linux_job]["strategy"]["matrix"]["include"]], ["linux-x86_64"])
+                self.assertNotIn("linux-x86_64", [leg["name"] for leg in jobs[matrix_job]["strategy"]["matrix"]["include"]])
+                self.assertEqual(jobs[linux_job]["name"], matrix_job + " (${{ matrix.os }}, ${{ matrix.name }}, ${{ matrix.bundles }})",
+                                 "named as the others are")
+        release = yaml.safe_load(self.release)["jobs"]
+        for job in ("update-manifest", "clean-up", "virustotal", "publish"):
+            self.assertIn("build-linux", release[job]["needs"], job)
+        self.assertEqual(release["build-linux"]["env"], release["build"]["env"])
+        self.assertEqual(release["build-linux"]["permissions"], release["build"]["permissions"])
+
+    def test_only_checks_keep_nuitkas_compiler_cache(self):
+        """Check's builds keep Nuitka's compiler cache (ccache, clcache) from the last on each system, so only what
+        changed is compiled again; a release compiles everything from scratch, from nothing an earlier run left."""
+        self.assertIn("uses: actions/cache@", self.check)
+        self.assertIn("NUITKA_CACHE_DIR: ${{ runner.temp }}/nuitka-cache", self.check)
+        self.assertIn("path: ${{ runner.temp }}/nuitka-cache", self.check)
+        self.assertIn("patchelf ccache", self.check, "Linux's ccache (macOS and Windows have theirs through Nuitka)")
+        self.assertNotIn("actions/cache", self.release)
+        self.assertNotIn("NUITKA_CACHE_DIR", self.release)
 
 
 if __name__ == "__main__":

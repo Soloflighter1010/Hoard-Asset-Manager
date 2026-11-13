@@ -147,6 +147,8 @@ jobs:
   # Hoard for each system: the server compiled by Nuitka and checked with its self-test, the window built by Tauri with
   # the server in its resources, then its installer; on Windows each program and library signed first (and the
   # installer after), then each file the updater installs signed for it, and everything added to the release.
+  # Linux's is build-linux, below: the same steps, on their own so the Flatpak can start as soon as its .deb is there.
+  # Nothing is cached from earlier builds: every release is compiled from scratch.
   build:
     needs: release
     strategy:
@@ -156,22 +158,21 @@ jobs:
           - { os: windows-latest, name: windows-x86_64, bundles: nsis }
           - { os: macos-15, name: macos-apple-silicon, bundles: "app,dmg" }
           - { os: macos-15-intel, name: macos-intel, bundles: "app,dmg" }
-          - { os: ubuntu-22.04, name: linux-x86_64, bundles: "appimage,deb" }   # (22.04: the AppImage runs on older systems too)
     runs-on: ${{ matrix.os }}
     environment: ${{ matrix.name == 'windows-x86_64' && 'release-signing' || '' }}
-    permissions:
+    permissions: &build-permissions
       contents: write        # add the files to the release
       id-token: write        # sign the build provenance, and sign in to Azure to sign the programs
       attestations: write   # store the provenance with the repository
-    env:
+    env: &build-env
       TAG: ${{ inputs.tag || github.ref_name }}
       # (not SIGN: linuxdeploy's AppImage plugin reads that, and signs the AppImage with GPG if it's set to anything)
       SIGN_WINDOWS: ${{ matrix.name == 'windows-x86_64' && vars.AZURE_SIGNING_ACCOUNT != '' }}
       SIGN_UPDATES: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-    defaults:
+    defaults: &build-defaults
       run:
         shell: bash
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
@@ -397,11 +398,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
 
+  # Linux's build: build's steps (the same, by their anchor), on their own so the Flatpak needs only this one, not
+  # Windows' or the Macs', which take longer. Named as build's are.
+  build-linux:
+    name: build (${{ matrix.os }}, ${{ matrix.name }}, ${{ matrix.bundles }})
+    needs: release
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-22.04, name: linux-x86_64, bundles: "appimage,deb" }   # (22.04: the AppImage runs on older systems too)
+    runs-on: ${{ matrix.os }}
+    permissions: *build-permissions
+    env: *build-env
+    defaults: *build-defaults
+    steps: *build-steps
+
 
   # The Flatpak (shell/flatpak): the .deb's files on the GNOME runtime, as a bundle. Its build checks every library the
   # window needs is in the runtime, and runs the server's self-test inside the sandbox.
   flatpak:
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51@sha256:78d969b18225ae107ca29497bf09c4a3f791e5f1838a9a912a529d0024fb6210
@@ -458,7 +474,7 @@ jobs:
   # Hoard-update.json, from each system's part: what Hoard's window updates from (Tauri's updater's own format).
   # Only when the updates' key is there; without it, the window doesn't update itself, and Hoard says where to go.
   update-manifest:
-    needs: build
+    needs: [build, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write        # add it to the release
@@ -493,7 +509,7 @@ jobs:
   # made it, so the fix can be released with the same tag by running the workflow again. Not when VirusTotal is what
   # stopped it (that draft waits for a person to check the report, below), nor with "keep its draft" ticked.
   clean-up:
-    needs: [release, build, flatpak, flatpak-release, update-manifest]
+    needs: [release, build, build-linux, flatpak, flatpak-release, update-manifest]
     if: ${{ failure() && !inputs.keep_draft }}
     runs-on: ubuntu-latest
     permissions:
@@ -527,7 +543,7 @@ jobs:
   # has checked the reports, and only with the flags its notes showed them. Needs the VT_API_KEY repository secret
   # (a free VirusTotal account's API key).
   virustotal:
-    needs: [release, build, flatpak-release, update-manifest]
+    needs: [release, build, build-linux, flatpak-release, update-manifest]
     if: ${{ !failure() && !cancelled() }}   # after the builds, or with none (publishing anyway)
     runs-on: ubuntu-latest
     timeout-minutes: 60      # the scans are waited for up to 40 minutes (VT_WAIT_MINUTES); never GitHub's 6 hours
@@ -595,7 +611,7 @@ jobs:
 
   # Last: publishing makes the release immutable, so it waits until every file is attached and scanned.
   publish:
-    needs: [release, build, flatpak-release, update-manifest, virustotal]
+    needs: [release, build, build-linux, flatpak-release, update-manifest, virustotal]
     if: ${{ !failure() && !cancelled() }}   # the builds and the scan passed (or, publishing anyway, the scan)
     runs-on: ubuntu-latest
     permissions:

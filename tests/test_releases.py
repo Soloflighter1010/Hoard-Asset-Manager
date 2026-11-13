@@ -157,7 +157,7 @@ class FlatpakMetainfo(IsolatedTestCase):
         wf = (REPO / ".github/workflows/release.yml").read_text("utf-8")
         self.assertLess(wf.index("scripts/flatpak_metainfo.py --check"), wf.index("scripts/build_release.py"))
         job = wf[wf.index("  clean-up:"):wf.index("  virustotal:")]
-        self.assertIn("needs: [release, build, flatpak, flatpak-release, update-manifest]", job, "not VirusTotal's draft")
+        self.assertIn("needs: [release, build, build-linux, flatpak, flatpak-release, update-manifest]", job, "not VirusTotal's draft")
         self.assertIn("failure() && !inputs.keep_draft", job)
         self.assertIn('if [ "$draft" = "false" ]', job, "a published release is never touched")
         self.assertIn('if [ "$MADE_TAG" = "true" ]', job, "only a tag this run made is deleted")

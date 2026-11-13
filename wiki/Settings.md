@@ -146,8 +146,10 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   choose by its program (**Browse…**, or type its path): its `.exe` on Windows, its `.app` on a Mac, Arc or
   Thorium, say. It has to be built on Chromium, as Hoard drives it the way it drives Edge and Chrome: Firefox and
   Safari can't be it. Whichever you choose, it keeps its own sign-ins, apart from the browser you browse with
-  (even when it's the same browser), and after changing it you may need to sign in to your stores again. The setup assistant offers
-  the ones on your computer too.
+  (even when it's the same browser). A store you've signed in to keeps the browser it was signed in with, as one
+  browser can't always use another's sign-ins: Hoard reads that store and signs out of it with that browser while
+  it's installed. Signing in to the store again moves it to the browser you've chosen: Hoard signs out with the old
+  one first, so the new one starts afresh. The setup assistant offers the ones on your computer too.
 
 While Hoard is refreshing or downloading, the downloads folder, the browser, the stores and the Payhip shops
 can't change (the job is using them): a change to one of those is put back, and you can make it again once the

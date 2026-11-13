@@ -287,7 +287,8 @@ class TheWorkflow(IsolatedTestCase):
         self.assertLessEqual(limit, 90)
 
     def test_publishing_waits_for_the_scan(self):
-        self.assertIn("needs: [release, build, flatpak-release, update-manifest]", self.jobs["virustotal"], "every file is attached first")
+        self.assertIn("needs: [release, build, build-linux, flatpak-release, update-manifest]", self.jobs["virustotal"],
+                      "every file is attached first")
         self.assertIn("virustotal", re.search(r"needs: \[([^\]]*)\]", self.jobs["publish"]).group(1))
 
     def test_only_the_scan_sees_the_key(self):
@@ -320,9 +321,10 @@ class TheWorkflow(IsolatedTestCase):
         """No build runs (a build is never the same file twice), the scan and publish still do, and the scan is given
         the draft's notes from before it, with the results the person was shown."""
         self.assertIn("if: ${{ !inputs.allow_detections }}", self.jobs["release"].split("steps:", 1)[0])
-        self.assertIn("needs: release", self.jobs["build"], "the builds are skipped with the release job")
-        for job in ("flatpak", "update-manifest"):
-            self.assertIn("needs: build", self.jobs[job], f"{job} is skipped with the builds")
+        for job in ("build", "build-linux"):
+            self.assertIn("needs: release", self.jobs[job], "the builds are skipped with the release job")
+        self.assertIn("needs: build-linux", self.jobs["flatpak"], "the Flatpak is skipped with Linux's build")
+        self.assertIn("needs: [build, build-linux]", self.jobs["update-manifest"], "skipped with the builds")
         self.assertIn("needs: flatpak", self.jobs["flatpak-release"])
         for job in ("virustotal", "publish"):
             self.assertIn("if: ${{ !failure() && !cancelled() }}", self.jobs[job].split("steps:", 1)[0],

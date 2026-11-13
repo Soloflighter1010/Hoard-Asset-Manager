@@ -2562,7 +2562,7 @@
  "Links": "リンク",
  "Another Chromium browser…": "ほかのChromiumブラウザー…",
  "The browser's program": "ブラウザーのプログラム",
- "It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you browse with, and after changing it you may need to sign in to your stores again.": "Chromiumで作られたブラウザーならどれでも使えます: Edge、Chrome、Brave、Vivaldi、Opera、またはプログラムを選んだほかのブラウザー(Arc、Thoriumなど)。FirefoxとSafariは使えません。普段使うブラウザーとは別にサインインを保存し、変えたあとはストアにもう一度サインインが必要な場合があります。",
+ "It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you browse with. A store you've signed in to keeps the browser it was signed in with until you sign in to it again.": "Chromiumで作られたブラウザーならどれでも使えます: Edge、Chrome、Brave、Vivaldi、Opera、またはプログラムを選んだほかのブラウザー(Arc、Thoriumなど)。FirefoxとSafariは使えません。普段使うブラウザーとは別にサインインを保存します。サインインしたストアは、もう一度サインインするまで、サインインしたときのブラウザーを使います。",
  "The browser you chose": "選んだブラウザー",
  "Choose its program: its .exe, or a Mac's .app. Until then, Hoard signs in with its own browser.": "そのプログラムを選んでください(.exe、Macでは.app)。それまでは、Hoardは専用のブラウザーでサインインします。",
  "Sign in with": "サインインに使うブラウザー",

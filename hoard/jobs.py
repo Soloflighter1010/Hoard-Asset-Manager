@@ -12,7 +12,8 @@ import traceback
 from pathlib import Path
 
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
-                      browser_name, check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
+                      browser_name, check_saved_signin, chosen_channel, for_signin, launch, made_with_another,
+                      note_signin_browser, sign_out, signin_browser, signins_root, use_channel)
 from .safety import store_link
 from .tags import tag_key
 from .setup import browser_problem, install_browser, own_browser_installed, stop_install
@@ -1285,6 +1286,10 @@ class Jobs:
                     self.lib.set_error(store, PAYHIP_NO_SHOPS)
                     continue
                 self._set(task="quick-refresh" if quick else "refresh", store=store, message=f"Reading {label}")
+                kept = None if store in NO_BROWSER else made_with_another(self.cfg, store)
+                if kept and for_signin(self.cfg, store) is not self.cfg:   # (still installed: read with it)
+                    print(f"Reading {label} with {kept}, which its sign-in was made with: sign in to {label} again to "
+                          f"use {browser_name(use_channel(self.cfg), self.cfg)} for it.", flush=True)
                 try:
                     # each store has its own sign-in; Payhip checks for automated browsers, so it gets a visible
                     # window you can complete its check in. itch.io is read through its API: no browser at all.
@@ -1305,6 +1310,8 @@ class Jobs:
                                                            if i["store"] == store and i.get("thumbnail")},
                                        **({"_quick": True} if quick else {})}
                         items = FETCHERS[store](ctx, run_cfg, lambda m, l=label: self._set(message=f"{l}: {m}"))
+                        if ctx is not None and signin_browser(self.cfg, store) is None:
+                            note_signin_browser(self.cfg, store)   # (one from before they were noted: it works with this)
                         shops_unread = run_cfg.pop("_unread_payhip_shops", None) or []
                         before = self.lib.data["stores"].get(store, {}).get("count", 0)
                         if not items and before:
@@ -1515,6 +1522,14 @@ class Jobs:
         # own, and that used to happen without a word (issue #20)
         print(f"Signing in to {label} with {name}" + (f" ({browser_name(chosen, self.cfg)} was chosen, and isn't installed)"
                                                      if chosen != channel else ""), flush=True)
+        before = made_with_another(self.cfg, store)
+        if before:   # a sign-in made with another browser: signed out of with it first, so this one starts afresh
+            self._set(task="login", store=store, message=f"Your {label} sign-in was made with {before}: signing out of "
+                                                         f"it there first, so {name} starts afresh")
+            with _playwright()() as p:
+                print(sign_out(p, self.cfg, store), flush=True)
+            if self._forced:
+                return
         if not self.cfg.get("automated_sign_in"):
             self._sign_in_plainly(store, label, name)
         else:

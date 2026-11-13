@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- **Changing the browser no longer breaks the stores you're signed in to.** A store's sign-in is kept by the browser
+  that made it, and another browser can't always use it: on a Mac and on Linux each browser keeps its own key to
+  its sign-ins, Chrome on Windows ties its sign-ins to itself, and a browser on an older Chromium may refuse a
+  folder a newer one has used. So each store now keeps the browser it was signed in with. Hoard reads it, and signs
+  out of it, with that browser while it's installed. Signing in to the store again moves it to the browser you've
+  chosen: Hoard signs out with the old one first, so the new one starts afresh. Before, Hoard opened every store
+  with the browser chosen now, which might not be able to read the sign-in. A store would then say it wasn't signed
+  in, and signing out said the store had confirmed it when it hadn't been told.
+- **Signing out works when a browser was left open on the store.** A browser still on a store's sign-in (one that
+  didn't quit when Hoard let go of it) is ended first, and deleting the sign-in is tried again for a few seconds
+  while Windows still holds its files. Before, signing out could fail with the folder still there.
+- **Force stop ends a browser that's still starting.** Playwright hands Hoard a browser only once its first tab is
+  open, and Force stop only reached browsers that had been handed over. A browser that stopped answering as it
+  started kept the task waiting for up to 3 minutes, and Force stop did nothing. It's ended now. On a Mac and on
+  Linux, a browser that doesn't quit when Hoard lets go of it is ended too.
+- **A browser that won't open a tab when Hoard asks has one opened from a tab that's open**, as a link opening in a
+  new tab would. Vivaldi was seen to refuse ("Failed to open a new tab"), and reading the library then failed. If
+  that doesn't work either, Hoard says to choose another browser in Settings.
+
 ## 5.2.0-beta.7
 
 - **Bring in from KonoAsset... is in Settings only**, under Bring in from another tool (and, the first time, in the

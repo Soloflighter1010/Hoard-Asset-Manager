@@ -2562,7 +2562,7 @@
  "Links": "링크",
  "Another Chromium browser…": "다른 Chromium 브라우저…",
  "The browser's program": "브라우저 프로그램",
- "It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you browse with, and after changing it you may need to sign in to your stores again.": "Chromium으로 만든 브라우저라면 무엇이든 될 수 있어요: Edge, Chrome, Brave, Vivaldi, Opera, 또는 프로그램을 골라 정한 다른 브라우저(Arc, Thorium 등). Firefox와 Safari는 안 돼요. 평소 쓰는 브라우저와 따로 로그인을 보관하고, 바꾼 뒤에는 스토어에 다시 로그인해야 할 수 있어요.",
+ "It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you browse with. A store you've signed in to keeps the browser it was signed in with until you sign in to it again.": "Chromium으로 만든 브라우저라면 무엇이든 될 수 있어요: Edge, Chrome, Brave, Vivaldi, Opera, 또는 프로그램을 골라 정한 다른 브라우저(Arc, Thorium 등). Firefox와 Safari는 안 돼요. 평소 쓰는 브라우저와 따로 로그인을 보관해요. 로그인한 스토어는 다시 로그인할 때까지 로그인했던 브라우저를 써요.",
  "The browser you chose": "고른 브라우저",
  "Choose its program: its .exe, or a Mac's .app. Until then, Hoard signs in with its own browser.": "그 프로그램을 골라 주세요(.exe, Mac에서는 .app). 그때까지는 Hoard가 전용 브라우저로 로그인해요.",
  "Sign in with": "로그인에 쓸 브라우저",
