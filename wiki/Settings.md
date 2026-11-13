@@ -149,7 +149,9 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   (even when it's the same browser). A store you've signed in to keeps the browser it was signed in with, as one
   browser can't always use another's sign-ins: Hoard reads that store and signs out of it with that browser while
   it's installed. Signing in to the store again moves it to the browser you've chosen: Hoard signs out with the old
-  one first, so the new one starts afresh. The setup assistant offers the ones on your computer too.
+  one first, so the new one starts afresh. Vivaldi reads your stores as the plain Chromium window (started with
+  `--disable-vivaldi`), as its own interface doesn't start when Hoard drives it; signing in is Vivaldi as you know
+  it. The setup assistant offers the ones on your computer too.
 
 While Hoard is refreshing or downloading, the downloads folder, the browser, the stores and the Payhip shops
 can't change (the job is using them): a change to one of those is put back, and you can make it again once the

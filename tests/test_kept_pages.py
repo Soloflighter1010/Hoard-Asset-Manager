@@ -275,6 +275,17 @@ class WhenAReadFails(IsolatedTestCase):
         self.refresh(signed_out)
         self.assertEqual(self.kept, [])
 
+    def test_a_force_stopped_task_just_says_stopped(self):
+        """What Force stop ends fails with "Connection closed" or the like: the task says it was stopped, never that."""
+        self.job._forced = True
+
+        def fails(stores):
+            raise RuntimeError("The store's browser was ended (Force stop) as it started.")
+        self.job.busy.acquire()   # (as a task holds the runner while it runs)
+        with mock.patch.object(self.job, "_finish"):
+            self.job._wrap(fails, ["booth"])
+        self.assertEqual((self.job.state.get("message"), self.job.state.get("error")), ("Stopped.", None))
+
     def test_gone_once_it_reads_fine(self):
         kept_pages.keep("booth", PAGE, "layout")
         self.refresh(lambda ctx, cfg, progress: [library.item("booth", "1", name="Item 1", creator="Kitsu")])

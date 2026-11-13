@@ -140,6 +140,45 @@ class StartingThem(IsolatedTestCase):
             self.assertNotIn("executable_path", got)
         self.assertEqual(self.launched({"browser_channel": "chromium"})["channel"], "chromium")
 
+    def test_vivaldi_is_started_as_plain_chromium_when_driven(self):
+        """Vivaldi's own interface doesn't start when a program drives it (it never opens its first tab: a tester's
+        refresh waited on it until Force stop), so Hoard starts it with --disable-vivaldi; nothing else gets that."""
+        with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: f"/opt/{channel}/{channel}"), \
+                mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: True):
+            got = self.launched({"browser_channel": "vivaldi"})
+            self.assertIn("--disable-vivaldi", got["args"])
+            self.assertEqual(got["timeout"], browser.FOUND_START_SECONDS * 1000, "never Playwright's 3 minutes")
+            self.assertNotIn("--disable-vivaldi", self.launched({"browser_channel": "brave"}).get("args", []))
+            self.assertNotIn("timeout", self.launched({"browser_channel": "msedge"}), "Edge and Chrome as before")
+        with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: "C:/Vivaldi/Application/vivaldi.exe"):
+            self.assertEqual(browser.driven_switches("custom", {}), ["--disable-vivaldi"], "Vivaldi chosen by its program")
+        with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: "/opt/thorium/thorium"):
+            self.assertEqual(browser.driven_switches("custom", {}), [])
+
+    def test_one_that_never_opens_its_first_tab(self):
+        timeout = type("TimeoutError", (Exception,), {})
+        with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: "/opt/opera/opera"), \
+                mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: True), \
+                self.assertRaisesRegex(RuntimeError, "Opera didn't open its first tab for Hoard within 90 seconds"):
+            self.launched({"browser_channel": "opera"}, fail=timeout("launch_persistent_context: Timeout 90000ms exceeded."))
+
+    def test_one_force_stop_ended_as_it_started_isnt_blamed(self):
+        """A tester's Force stop as Vivaldi started said "Vivaldi couldn't be started for Hoard (Connection closed
+        while reading from the driver)": that was Force stop ending it, not Vivaldi failing."""
+        seen = {}
+        p = mock.Mock()
+
+        def start(**kwargs):
+            seen.update(kwargs)
+            browser.end_browsers()   # (Force stop, while it starts)
+            raise Exception("launch_persistent_context: Connection closed while reading from the driver")
+        p.chromium.launch_persistent_context.side_effect = start
+        with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: "/opt/vivaldi/vivaldi"), \
+                mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: True), \
+                mock.patch.object(browser, "_key_args", lambda cfg: []), \
+                self.assertRaisesRegex(RuntimeError, r"^The store's browser was ended \(Force stop\) as it started\.$"):
+            browser._launch(p, {"browser_channel": "vivaldi"}, Path(tempfile.mkdtemp()), headless=True)
+
     def test_one_that_cant_be_started_says_so(self):
         with mock.patch.object(browser, "channel_path", lambda channel, cfg=None: "/opt/opera/opera"), \
                 self.assertRaisesRegex(RuntimeError, "Opera couldn't be started for Hoard .*Choose another browser in Settings"):
