@@ -234,7 +234,7 @@ class SignInsKeepTheirBrowser(IsolatedTestCase):
         self.assertIs(browser.for_signin(self.vivaldi, "booth"), self.vivaldi, "Edge taken away: the one chosen now")
 
     def test_one_chosen_by_its_program(self):
-        thorium = program(Path(tempfile.mkdtemp()) / "thorium")
+        thorium = program(Path(tempfile.mkdtemp()) / ("thorium.exe" if os.name == "nt" else "thorium"))
         with mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: channel != "custom" or
                                browser.custom_program((cfg or {}).get("browser_path")) is not None):
             browser.note_signin_browser({**self.cfg, "browser_channel": "custom", "browser_path": str(thorium)}, "booth")
