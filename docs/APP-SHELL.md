@@ -93,4 +93,10 @@ engine is WebView2's, whenever `ui/` or the pages change; each run's summary has
 | Engine (where measured) | Bundle read and run, once | A pop-up made and shown (first; middle; 90th percentile) | To its next frame |
 | --- | --- | --- | --- |
 | Chromium 153 (Playwright's, Linux, this change) | 15.9 ms | 12.3; 2.5; 3.1 ms | 3.9 ms |
-| WebKit (macOS), Edge (Windows), WebKit (Linux) | from the Engines workflow's first run | | |
+| WebKit 26.6 (Playwright's, macOS 15, GitHub's runner) | 9.0 ms | 13.0; 1.0; 2.0 ms | 12.0 ms |
+| Edge 156 (WebView2's engine, Windows, GitHub's runner) | 10.5 ms | 13.4; 3.1; 3.8 ms | 7.8 ms |
+| WebKit 26.6 (Playwright's, Ubuntu 22.04, as WebKitGTK's stand-in) | 4.0 ms | 15.0; 1.0; 2.0 ms | 214 ms* |
+
+The Engines workflow's first run, on the pull request that brought the pop-ups in; all 11 checks passed in each
+engine. WebKit's clock gives whole milliseconds. *Linux's runner has no screen, so its first frame waits on a
+stand-in compositor: that time says nothing about a desktop's.

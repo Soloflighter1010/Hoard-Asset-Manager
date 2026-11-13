@@ -2204,12 +2204,33 @@ function closeSettings() {
   $("#settingsPanel").hidden = true;
   $("#settingsBtn").setAttribute("aria-expanded", "false");
 }
-const BROWSER_NAMES = { msedge: "Microsoft Edge", chrome: "Google Chrome", chromium: "Hoard's own browser" };
+const BROWSER_NAMES = { msedge: "Microsoft Edge", chrome: "Google Chrome", brave: "Brave", vivaldi: "Vivaldi", opera: "Opera",
+                        opera_gx: "Opera GX", chromium: "Hoard's own browser" };
+// The browsers found only where they're installed (Brave, Vivaldi, Opera): offered when they are, or when chosen
+const FOUND_BROWSERS = ["brave", "vivaldi", "opera", "opera_gx"];
+// A browser's name, as Settings says it: one chosen by its program by that program's name.
+const browserName = c => c === "custom" ? (SETTINGS && SETTINGS.browser_name) || tr("The browser you chose") : BROWSER_NAMES[c];
 function showBrowserInUse() {   // what the chosen browser really is on this computer (issue #20)
   const chosen = $("#setBrowser").value, used = ((SETTINGS && SETTINGS.browsers) || {})[chosen];
+  $("#browserPathRow").hidden = chosen !== "custom";
   $("#browserInUse").textContent = !used ? ""
-    : chosen && used !== chosen ? `${BROWSER_NAMES[chosen]} isn't installed on this computer, so Hoard signs in with its own browser.`
-    : `Hoard signs in with ${BROWSER_NAMES[used]}.`;
+    : chosen === "custom" && used !== chosen ? tr("Choose its program: its .exe, or a Mac's .app. Until then, Hoard signs in with its own browser.")
+    : chosen && used !== chosen ? tr("{0} isn't installed on this computer, so Hoard signs in with its own browser.", browserName(chosen))
+    : tr("Hoard signs in with {0}.", browserName(used));
+}
+// Offer Brave, Vivaldi and Opera where they're installed (or chosen), and put the chosen browser and its program in.
+function fillBrowser() {
+  const used = SETTINGS.browsers || {};
+  for (const c of FOUND_BROWSERS) {
+    const o = $(`#setBrowser option[value="${c}"]`);
+    if (o) o.hidden = used[c] !== c && SETTINGS.browser_channel !== c;
+  }
+  $("#setBrowser").value = SETTINGS.browser_channel;
+  const box = $("#setBrowserPath"), os = navigator.userAgent;
+  box.value = SETTINGS.browser_path || "";
+  box.placeholder = /Windows/.test(os) ? "C:\\Program Files\\Thorium\\Application\\thorium.exe"
+    : /Mac OS X|Macintosh/.test(os) ? "/Applications/Arc.app" : "/usr/bin/thorium-browser";
+  showBrowserInUse();
 }
 // Open Settings (or close it, when it's open and open isn't given), filled with the settings as they are.
 async function openSettings(open) {
@@ -2259,8 +2280,7 @@ function fillSettings() {   // the controls, as the settings are now
   fillApprise();
   $("#notifyRow").hidden = !DATA.can_notify;
   showUpdate();
-  $("#setBrowser").value = SETTINGS.browser_channel;
-  showBrowserInUse();
+  fillBrowser();
   $("#setRoutine").value = String(SETTINGS.routine_hours ?? 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
@@ -2906,6 +2926,7 @@ function settingsPart(el) {
     case "setBackground": return { close_to_taskbar: el.checked };
     case "setNotify": return { notify_found: el.checked };
     case "setBrowser": return { browser_channel: el.value };
+    case "setBrowserPath": return { browser_path: el.value.trim() };
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
@@ -2947,7 +2968,7 @@ function savePart(part) {
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
     if (part.display && "colours" in part.display) fillColours();
-    if ("browser_channel" in part) showBrowserInUse();
+    if ("browser_channel" in part || "browser_path" in part) fillBrowser();
     if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
     if ("file_rules" in part) drawFileRules();
     winNote("settingsPanel", "Saved", true);
@@ -2998,6 +3019,10 @@ function wireFileRules() {
 function wireAutosave() {
   wireFileRules();
   $("#setBrowser").addEventListener("change", showBrowserInUse);   // at once, before it's saved
+  $("#setBrowserBrowse").addEventListener("click", async () => {   // another Chromium browser: its program
+    const box = $("#setBrowserPath");
+    if (await browseInto(box, "file")) autosave(box);
+  });
   $("#settingsPanel").addEventListener("change", e => { if (e.target.matches("input, select, textarea")) autosave(e.target); });
   $("#setRootBrowse").addEventListener("click", async () => {
     if (SETTINGS && await browseInto($("#setRoot"))) autosave($("#setRoot"));

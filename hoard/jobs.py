@@ -12,10 +12,10 @@ import traceback
 from pathlib import Path
 
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
-                      check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
+                      browser_name, check_saved_signin, chosen_channel, launch, sign_out, signins_root, use_channel)
 from .safety import store_link
 from .tags import tag_key
-from .setup import BROWSER_NAMES, browser_problem, install_browser, own_browser_installed, stop_install
+from .setup import browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
 from . import diagnostics
 from .config import payhip_shops
@@ -1504,7 +1504,7 @@ class Jobs:
             self._set(message=f"Couldn't reach {label}.", error=unreachable_message(store, "opened for signing in"))
             return
         channel, chosen = use_channel(self.cfg), chosen_channel(self.cfg)
-        name = BROWSER_NAMES[channel]
+        name = browser_name(channel, self.cfg)
         if channel == "chromium" and not own_browser_installed():
             # Hoard's own browser isn't downloaded yet: download it here, as part of signing in, rather than failing
             # and sending you to Set up Hoard (a tester tried twice before finding it)
@@ -1513,7 +1513,7 @@ class Jobs:
                 return
         # which browser, in the log and on screen: a chosen browser that isn't installed is stood in for by Hoard's
         # own, and that used to happen without a word (issue #20)
-        print(f"Signing in to {label} with {name}" + (f" ({BROWSER_NAMES[chosen]} was chosen, and isn't installed)"
+        print(f"Signing in to {label} with {name}" + (f" ({browser_name(chosen, self.cfg)} was chosen, and isn't installed)"
                                                      if chosen != channel else ""), flush=True)
         if not self.cfg.get("automated_sign_in"):
             self._sign_in_plainly(store, label, name)

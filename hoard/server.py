@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, libraries, loading, needs, packages, places, previous, projects, sets, shortlinks, space, themes, updater, vault, wishlists
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
-from .browser import SigninsUnprotected, signin_protection, signins_root, use_channel
+from .browser import SigninsUnprotected, browser_name, custom_program, not_chromium, signin_protection, signins_root, use_channel
 from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED, MAX_PROBLEMS, STORE_DIRS,
@@ -54,10 +54,10 @@ FONT_FILES = ("DelaGothicOne-Regular.woff2", "ZenMaruGothic-Medium.woff2", "ZenM
 MAX_UNWRAPPED = 5000   # gifts remembered as opened (issue #263): the last ones opened, past that
 UNLOCK_MINUTES = 15   # how long unlocking the hidden library lasts in one browser, extended while it's in use
 ENTRY_SECONDS = 300   # how long a one-time link to open Hoard's page stays usable, if it's never used
-BROWSER_CHOICES = ("", "msedge", "chrome", "chromium")
+BROWSER_CHOICES = ("", "msedge", "chrome", "brave", "vivaldi", "opera", "opera_gx", "custom", "chromium")
 TEXT_SIZES = (100, 115, 130, 150)   # percent
 FONTS = ("standard", "dyslexic")    # Settings, Accessibility: the pages' own, or OpenDyslexic
-JOB_SETTINGS = ("root", "browser_channel", "stores", "payhip_shops", "library_folders")   # read by a running job: not changed during one
+JOB_SETTINGS = ("root", "browser_channel", "browser_path", "stores", "payhip_shops", "library_folders")   # read by a running job: not changed during one
 NEW_DAYS = (0, 1, 3, 7, 14, 30)     # how long something new in the library is marked New (0: never)
 
 
@@ -226,7 +226,8 @@ def public_settings(cfg: dict) -> dict:
     """The settings the page can show and change, with the downloads folder spelled out."""
     return {
         "root": str(root_dir(cfg)), "default_root": str(default_downloads()), "libraries": libraries.view(cfg),
-        "browser_channel": cfg.get("browser_channel", ""), "offline_images": bool(cfg.get("offline_images", True)),
+        "browser_channel": cfg.get("browser_channel", ""), "browser_path": str(cfg.get("browser_path") or ""),
+        "offline_images": bool(cfg.get("offline_images", True)),
         "store_tags": bool(cfg.get("store_tags", True)), "file_rules": file_rules(cfg), "ask_files": bool(cfg.get("ask_files", True)),
         "request_delay": cfg.get("request_delay", 1.0), "payhip_shops": payhip_shops(cfg),
         "check_for_updates": bool(cfg.get("check_for_updates")),
@@ -245,6 +246,7 @@ def public_settings(cfg: dict) -> dict:
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
         "browsers": {choice: use_channel({**cfg, "browser_channel": choice}) for choice in BROWSER_CHOICES},
+        "browser_name": browser_name("custom", cfg) if custom_program(cfg.get("browser_path")) else "",
         "stores": {s: {"enabled": bool(cfg[s].get("enabled", True)),
                        **({"include_gifts": bool(cfg[s].get("include_gifts", True)),
                            "include_free": bool(cfg[s].get("include_free", True))} if s == "booth" else {}),
@@ -279,6 +281,17 @@ def apply_settings(cfg: dict, body: dict) -> dict:
         if body["browser_channel"] not in BROWSER_CHOICES:
             raise ValueError("Unknown browser.")
         change["browser_channel"] = body["browser_channel"]
+    if "browser_path" in body:   # another Chromium browser, by its program (Settings' Another Chromium browser...)
+        value = str(body["browser_path"] or "").strip().strip('"')
+        if value and len(value) > 1000:
+            raise ValueError("That path is too long.")
+        if value and not_chromium(value):
+            raise ValueError("The browser for store sign-ins has to be built on Chromium (Edge, Chrome, Brave, "
+                             "Vivaldi, Opera, Arc...), not Firefox or Safari.")
+        if value and not custom_program(value):
+            raise ValueError("That isn't a browser's program on this computer: choose the program itself (its .exe, "
+                             "or a Mac's .app).")
+        change["browser_path"] = value
     if "offline_images" in body:
         change["offline_images"] = bool(body["offline_images"])
     if "store_tags" in body:

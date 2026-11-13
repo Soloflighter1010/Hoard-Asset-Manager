@@ -22,7 +22,9 @@ DEFAULT_CONFIG = {
     "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
     "local_copy": True,            # Local (issue #80): copy what you add into Hoard (False: list it where it is); your last choice
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
-    "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "chromium", "msedge" or "chrome"
+    "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "msedge", "chrome", "brave", "vivaldi",
+                                   # "opera", "opera_gx", "custom" (browser_path) or "chromium" (Hoard's own)
+    "browser_path": "",            # "custom": the program of another Chromium browser (a Mac's .app too)
     "profile_dir": "",             # "" = Hoard's private sign-in folder (one profile per store)
     "advanced_signin_location": False,   # only then is profile_dir used; never a network location
     "allow_unprotected_signins": False,  # Linux without a keyring only: keep sign-ins protected by folder permissions

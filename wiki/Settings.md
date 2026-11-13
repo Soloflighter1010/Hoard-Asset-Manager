@@ -141,8 +141,13 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   shows the changelog, version by version, with the one you're running marked; tick **Include beta updates** there
   to see betas' changes too.
 - **Browser for store sign-ins:** **Automatic** (Microsoft Edge on Windows, Hoard's own browser elsewhere),
-  **Microsoft Edge**, **Google Chrome** or **Hoard's own browser**. After changing it, you may need to sign in to
-  your stores again.
+  **Microsoft Edge**, **Google Chrome**, **Brave**, **Vivaldi**, **Opera** or **Opera GX** (each offered where
+  it's installed), **Another Chromium browser…**, or **Hoard's own browser**. Another Chromium browser is one you
+  choose by its program (**Browse…**, or type its path): its `.exe` on Windows, its `.app` on a Mac, Arc or
+  Thorium, say. It has to be built on Chromium, as Hoard drives it the way it drives Edge and Chrome: Firefox and
+  Safari can't be it. Whichever you choose, it keeps its own sign-ins, apart from the browser you browse with
+  (even when it's the same browser), and after changing it you may need to sign in to your stores again. The setup assistant offers
+  the ones on your computer too.
 
 While Hoard is refreshing or downloading, the downloads folder, the browser, the stores and the Payhip shops
 can't change (the job is using them): a change to one of those is put back, and you can make it again once the

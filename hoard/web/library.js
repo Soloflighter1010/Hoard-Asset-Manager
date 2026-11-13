@@ -904,6 +904,17 @@ const PASSWORD_HELP = `<details><summary>Where are my saved passwords?</summary>
 // the first step, so someone who doesn't read English can set Hoard up in their own language. Each language is
 // named in its own words; "Match my computer" says which one that is here.
 const LANGUAGE_NAMES = { en: "English", ja: "日本語", ko: "한국어" };
+// The browsers on this computer Hoard can sign in with (Edge, Chrome, Brave, Vivaldi, Opera...), and its own: one to
+// choose in the setup assistant, saved at once. Settings can choose another by its program.
+function setupBrowserPick(st) {
+  const found = st.browser.found || [];
+  if (!found.length) return "";
+  const names = { ...BROWSER_NAMES, ...(st.browser.names || {}) };
+  const chosen = found.includes(st.browser.channel) ? st.browser.channel : "chromium";
+  return `<label class="setup-browser">Sign in with <select id="setupBrowser">${[...found, "chromium"].map(c =>
+      `<option value="${c}"${c === chosen ? " selected" : ""}${c !== "chromium" ? ' translate="no"' : ""}>${esc(names[c])}</option>`).join("")}</select></label>
+    <p class="muted">Any browser built on Chromium can be it; Settings, under Browser for store sign-ins, can choose another by its program.</p>`;
+}
 const SETUP_VIEWS = {
   language: () => {
     const now = (DATA.display || {}).language || "system", here = LANGUAGE_NAMES[document.documentElement.lang] || "English";
@@ -947,6 +958,7 @@ const SETUP_VIEWS = {
     <p class="muted">Hoard runs only on this computer. It never sees your passwords: you sign in on each store's own page, in a browser window that belongs to Hoard alone.</p>`,
   browser: st => `<h2 id="setupTitle">The browser Hoard signs in with</h2>
     <p>Hoard reads your stores through a browser it controls, kept apart from the one you browse with.</p>
+    ${setupBrowserPick(st)}
     <div class="status${st.browser.ready ? " ok" : ""}">${esc(st.browser.name)} ${st.browser.ready ? "is ready." : "isn't installed yet."}</div>
     ${!st.browser.ready && st.browser.can_install ? `<button class="primary" id="installBrowser">Install Hoard's browser</button>
       <span class="muted">About 150 MB, downloaded once.</span><div class="progress" id="installProgress" aria-live="polite"></div>` : ""}
@@ -1061,6 +1073,14 @@ const SETUP_WIRES = {
     });
   },
   browser: () => {
+    const pick = $("#setupBrowser");
+    if (pick) viewListen("library", pick, "change", async () => {
+      const r = await apiPost("/api/settings", { browser_channel: pick.value });
+      if (!r.ok) { toast(r.data.error || "That setting wasn't saved."); return; }
+      SETTINGS = r.data.settings;
+      await setupStatus();
+      renderSetup();
+    });
     const b = $("#installBrowser");
     if (!b) return;
     viewListen("library", b, "click", async () => {

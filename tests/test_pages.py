@@ -243,7 +243,7 @@ class AccessKey(IsolatedTestCase):
         from hoard import browser as hb
         self.addCleanup(self.srv.cfg.update, browser_channel=self.srv.cfg.get("browser_channel", ""))
         with mock.patch.object(server, "save_config"), \
-                mock.patch.object(hb, "channel_installed", lambda channel: channel == "msedge"):
+                mock.patch.object(hb, "channel_installed", lambda channel, cfg=None: channel == "msedge"):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.wait_for()
             for url in (None, f"{self.srv.url}downloads"):
@@ -267,6 +267,44 @@ class AccessKey(IsolatedTestCase):
                 self.assertEqual(self.srv.cfg["browser_channel"], "chromium", "the choice is saved")
                 page.locator("#settingsPanel .win-x").click()
                 self.srv.cfg["browser_channel"] = ""
+    @unittest.skipIf(os.name == "nt", "the program chosen is a file that can be run")
+    def test_settings_offer_more_browsers(self):
+        """Brave, Vivaldi and Opera are offered where they're installed; another Chromium browser by its program,
+        saved once it's one (Firefox isn't), and named by it."""
+        from hoard import browser as hb
+        tmp = Path(tempfile.mkdtemp())
+        thorium, firefox = tmp / "thorium", tmp / "firefox"
+        for prog in (thorium, firefox):
+            prog.write_text("#!/bin/sh\n")
+            prog.chmod(0o755)
+        self.addCleanup(self.srv.cfg.update, browser_channel=self.srv.cfg.get("browser_channel", ""),
+                        browser_path=self.srv.cfg.get("browser_path", ""))
+        here = lambda channel, cfg=None: channel in ("msedge", "brave") or (  # noqa: E731
+            channel == "custom" and bool(hb.custom_program((cfg or {}).get("browser_path"))))
+        with mock.patch.object(server, "save_config"), mock.patch.object(hb, "channel_installed", here):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            offered = page.evaluate("[...document.querySelectorAll('#setBrowser option')].filter(o => !o.hidden).map(o => o.value)")
+            self.assertEqual(offered, ["", "msedge", "chrome", "brave", "custom", "chromium"], "Brave, installed; not the others")
+            page.select_option("#setBrowser", "brave")
+            self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Brave.")
+            self.assertTrue(page.locator("#browserPathRow").is_hidden())
+            page.select_option("#setBrowser", "custom")
+            self.assertTrue(page.locator("#browserPathRow").is_visible(), "its program, to choose")
+            self.assertIn("Choose its program", page.locator("#browserInUse").inner_text())
+            page.fill("#setBrowserPath", str(firefox))
+            page.locator("#setBrowserPath").dispatch_event("change")
+            page.locator(".toast", has_text="built on Chromium").wait_for()
+            self.assertNotEqual(self.srv.cfg.get("browser_path"), str(firefox), "not saved")
+            page.fill("#setBrowserPath", str(thorium))
+            page.locator("#setBrowserPath").dispatch_event("change")
+            page.wait_for_function("() => document.querySelector('#browserInUse').textContent === 'Hoard signs in with Thorium.'")
+            self.assertEqual((self.srv.cfg["browser_channel"], self.srv.cfg["browser_path"]), ("custom", str(thorium)))
+            self.assertEqual(refused, [])
+            page.close()
+
     def test_the_downloads_page_has_the_librarys_views(self):
         """Issue #29: archiving an item in the Library moves its download to the Downloads page's Archive view,
         as in the Library, instead of leaving no way to tell it apart."""
@@ -2505,6 +2543,35 @@ class SetupAssistant(IsolatedTestCase):
             page.click("#setupBack")
             page.locator("#setupTitle", has_text="When you close Hoard's window").wait_for()
             self.assertTrue(page.locator('input[name="setupClose"][value="quit"]').is_checked(), "and shown as chosen")
+            browser.close()
+
+    def test_choosing_the_browser_in_the_setup_assistant(self):
+        """The assistant's browser step offers the browsers on this computer Hoard can sign in with (Edge, Brave...)
+        and its own, and saves the one chosen at once."""
+        from hoard import browser as hb, setup as hs
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True,
+                                                   "browser_channel": "msedge"}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        here = lambda channel, cfg=None: channel in ("msedge", "brave")  # noqa: E731
+        with sync_playwright() as p, mock.patch.object(server, "save_config"), \
+                mock.patch.object(hb, "channel_installed", here), mock.patch.object(hs, "channel_installed", here), \
+                mock.patch.object(hs, "own_browser_installed", lambda: True):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            goto(page, srv.entry_url())
+            page.wait_for_function("() => DATA && DATA.version")
+            page.evaluate("openSetup().then(() => { SETUP.step = setupSteps().indexOf('browser'); renderSetup(); })")
+            page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()
+            self.assertEqual(page.evaluate("[...document.querySelectorAll('#setupBrowser option')].map(o => [o.value, o.textContent])"),
+                             [["msedge", "Microsoft Edge"], ["brave", "Brave"], ["chromium", "Hoard's own browser"]])
+            self.assertEqual(page.locator("#setupBrowser").input_value(), "msedge", "as it's set now")
+            page.select_option("#setupBrowser", "brave")
+            page.locator("#setupBody .status", has_text="Brave is ready.").wait_for()
+            self.assertEqual(srv.cfg["browser_channel"], "brave")
             browser.close()
 
     def test_notifications_in_the_setup_assistant(self):

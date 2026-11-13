@@ -15,6 +15,11 @@
   with its `#` is your tag; taking a tag off offers only the tags the products have; Enter that finishes a word
   being typed in Japanese or Korean (in the Mac and Linux apps too) never presses the button; and a project's path,
   a file's name and a package's id are never changed by a browser's translation.
+- **Hoard can sign in to your stores with the browser you like**, if it's built on Chromium: Settings, under
+  **Browser for store sign-ins**, now has **Brave**, **Vivaldi**, **Opera** and **Opera GX** where they're
+  installed, and **Another Chromium browser…**, chosen by its program (Arc or Thorium, say: its `.exe`, or a Mac's
+  `.app`). The setup assistant offers the ones on your computer. Firefox and Safari can't be it, as they aren't
+  Chromium. It still keeps its own sign-ins, apart from the browser you browse with.
 - **The set viewer asks again after "I'm under 18".** That answer is kept only until the browser is closed, so a
   browser that once gave it (someone trying the page, say) is asked again next time; "I'm 18 or older" is still
   kept for a year. A set shown without its products for adults says so in a box at the top, with **Change your

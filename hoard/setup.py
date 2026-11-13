@@ -10,13 +10,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .browser import CookiesInUse, _cookie_hosts, _on_sites, _playwright, channel_installed, chosen_channel, profile_dir, use_browsers_folder, STORE_SITES
+from .browser import (BROWSER_NAMES, FOUND, NAMED, CookiesInUse, _cookie_hosts, _on_sites, _playwright, browser_name,
+                      channel_installed, chosen_channel, profile_dir, use_browsers_folder, STORE_SITES)
 from .config import payhip_shops, root_dir, save_config
 from .library import STORES, Library
 from .paths import LIBRARY_FILE, default_downloads
 from .safety import DataFileError, read_json_file
 
-BROWSER_NAMES = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "chromium": "Hoard's own browser"}
 
 
 def own_browser_installed() -> bool:
@@ -28,20 +28,28 @@ def own_browser_installed() -> bool:
         return False
 
 
+def installed_browsers(cfg: dict) -> list[str]:
+    """The browsers Hoard can sign in with that are on this computer (Edge, Chrome, Brave, Vivaldi, Opera, Opera GX;
+    the one you chose by its path, when it's there), for the setup assistant to offer."""
+    return [c for c in (*NAMED, *FOUND, "custom") if channel_installed(c, cfg)]
+
+
 def browser_status(cfg: dict) -> dict:
-    """Which browser Hoard will use to sign in to stores, and whether it's ready."""
-    channel = chosen_channel(cfg)
-    if channel in ("msedge", "chrome") and channel_installed(channel):
-        return {"channel": channel, "name": BROWSER_NAMES[channel], "ready": True, "can_install": False, "note": ""}
+    """Which browser Hoard will use to sign in to stores, whether it's ready, and the others it could use here."""
+    channel, found = chosen_channel(cfg), installed_browsers(cfg)
+    if channel != "chromium" and channel in found:
+        return {"channel": channel, "name": browser_name(channel, cfg), "ready": True, "can_install": False, "note": "",
+                "found": found, "names": {c: browser_name(c, cfg) for c in found}}
     # Hoard's own browser: chosen, or standing in for a chosen browser that isn't installed (use_channel)
     ready = own_browser_installed()
     note = ""
     if channel != "chromium":
-        note = (f"{BROWSER_NAMES[channel]} isn't installed on this computer, so Hoard uses its own browser"
+        note = (f"{browser_name(channel, cfg)} isn't installed on this computer, so Hoard uses its own browser"
                 + ("." if ready else " once it's installed."))
     if not ready and sys.platform.startswith("linux"):
         note += (" " if note else "") + "On Linux the browser may also need system libraries: python -m playwright install-deps chromium"
-    return {"channel": "chromium", "name": BROWSER_NAMES["chromium"], "ready": ready, "can_install": not ready, "note": note}
+    return {"channel": "chromium", "name": BROWSER_NAMES["chromium"], "ready": ready, "can_install": not ready, "note": note,
+            "found": found, "names": {c: browser_name(c, cfg) for c in found}}
 
 
 _installing: list = []   # the browser download running now, for Force stop (stop_install)
