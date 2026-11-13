@@ -187,7 +187,8 @@ const I18N = (() => {
   return { on, lookup, start, untranslated, t: (s, ...values) => {
     // for the script's own use (a dialog's words, a title set in code): {0}, {1} filled in after translating
     const key = norm(s), text = (typeof catalog[key] === "string" && catalog[key]) || lookup(key) || s;   // (its own words, as they're written)
-    return text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
+    // (words given no values are left as they are: translated twice, a name with "{0}" in it is kept)
+    return values.length ? text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "") : text;
   } };
 })();
 const tr = I18N.t;   // the script's own words: tr("Copied"), tr("{0} files", n)
@@ -653,10 +654,12 @@ document.addEventListener("click", e => {   // a tab: a store's, a view's, the p
 
 let toastTimer;
 /* A question before something that can't be undone, in Hoard's own pop-up (ui/Dialog.svelte; the browser's plain
-   confirm box looked out of place). Its question is its title, and what follows says more under it (dialogs.heading).
-   Resolves true for the main button, false for Cancel, Escape, the close button or a click outside it. */
+   confirm box looked out of place). Its question is its title, and what follows says more under it (dialogs.heading,
+   on the translated words: each paragraph is translated whole first, as the catalog has it, then cut). Resolves true
+   for the main button, false for Cancel, Escape, the close button or a click outside it. */
 function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
-  const { title, detail, more } = HoardUI.dialogs.heading(text);
+  const words = String(text).split(/(\n\s*\n)/).map((p, i) => i % 2 ? p : tr(p)).join("");
+  const { title, detail, more } = HoardUI.dialogs.heading(words);
   return HoardUI.dialogs.open({ kind: "confirm", id: "askDialog", textId: "askText", title, detail, paras: more,
     ok: tr(ok), cancel: cancel && tr(cancel), danger: !!danger, icon: danger ? "alert" : cancel ? "help" : "info",
     tone: danger ? "warn" : "gold", tr });
@@ -1314,14 +1317,14 @@ async function bulkTag(mode) {   // a tag to add to, or take off, what's selecte
   const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
   const on = new Map();   // (taking one off: the tags they have, and how many of them have each)
-  for (const a of chosen) for (const x of a.tags || []) on.set(x, (on.get(x) || 0) + 1);
+  if (mode === "remove") for (const a of chosen) for (const x of a.tags || []) on.set(x, (on.get(x) || 0) + 1);
   const suggest = mode === "add" ? ((DATA.tagset || {}).tags || []).map(x => ({ name: x.name, count: x.count }))
     : [...on].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count || coll.compare(x.name, y.name));
   const t = (await askName(mode === "add" ? "Add a tag to the selected" : "Take a tag off the selected", "",
                            { max: 40, icon: "tag", prefix: "#", suggest, create: mode === "add",
                              hint: tr("{0} selected", chosen.length) })).trim();
   if (!t) return;
-  const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
+  const n = mode === "remove" ? on.get(t) || chosen.length : chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
   await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
                    mode === "add" ? `Added ${tag} to ${what}.` : `Removed ${tag} from ${what}.`);
 }
@@ -3187,11 +3190,13 @@ function taskCount(n) {
 }
 // A name for something new (a set), or a tag: Hoard's own pop-up, the name chosen, or "" when it's cancelled. opts:
 // {max: longest, hint: a line under the title, icon, ok: its button; suggest: [{name, count}] to choose from as you
-// type (your tags), create: whether a name that isn't one of them can be given, prefix: shown before each ("#")}.
+// type (your tags), create: whether a name that isn't one of them can be given, prefix: shown before each ("#");
+// fill: what goes in the title's {0}, {1}, put in once it's cut into its title and the line under it, so a name with a
+// colon in it ("Q&A: Test") stays whole}.
 function askName(title, value = "", opts = {}) {
-  const head = HoardUI.dialogs.heading(tr(title), true);
-  return HoardUI.dialogs.open({ kind: "text", inputId: "askName", title: head.title, detail: opts.hint ? tr(opts.hint) : head.detail,
-    paras: head.more, value, max: opts.max || 60, icon: opts.icon || "pencil", ok: tr(opts.ok || "OK"),
+  const head = HoardUI.dialogs.heading(tr(title), true), fill = s => opts.fill ? tr(s, ...opts.fill) : s;
+  return HoardUI.dialogs.open({ kind: "text", inputId: "askName", title: fill(head.title), detail: opts.hint ? tr(opts.hint) : fill(head.detail),
+    paras: head.more.map(fill), value, max: opts.max || 60, icon: opts.icon || "pencil", ok: tr(opts.ok || "OK"),
     suggest: opts.suggest || null, create: opts.create !== false, prefix: opts.prefix || "", norm, tr });
 }
 /* ---------- Bring in a KonoAsset library (issue #305): its data folder, what bringing it in would do, then Bring in
@@ -4053,7 +4058,7 @@ async function pjVersions(name, unityVersion, keep = "") {
 async function pjChooseVersion(name, label, current, unityVersion) {
   const list = await pjVersions(name, unityVersion, current);
   if (!list.some(v => v.version !== current)) { toast(tr("No other version of {0} works with this project's Unity.", label)); return ""; }
-  const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: label, detail: name, nameTitle: true, ok: tr("Use this version"),
+  const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: label, detail: name, nameTitle: true, keep: [name], ok: tr("Use this version"),
     blocks: [{ type: "text", tone: "hint", text: tr("Choose the version to install. An older one replaces the one it has, and the packages it needs change to match.") },
              { type: "radios", id: "pjVer", cls: "pj-picklist pj-vers", label: tr("Versions"), value: current,
                find: list.length > 12 ? tr("Find a version") : "", findId: "pjVerFind",
@@ -4134,7 +4139,6 @@ const pjVariant = name => (PJ_VARIANTS.find(([, re]) => re.test(name)) || [""])[
 // Ask which of a product's packages a project needs, then which packages they need: two steps when it needs both.
 async function pjChooseContents(product) {
   const many = product.contents.filter(c => c.kind === "unitypackage").length > 1, needs = product.suggested.length > 0;
-  // What a package is, how big, and the file it's in.
   // What a package is, how big it is, and the file it's in.
   const kindOf = c => [tr(c.kind === "unitypackage" ? "Unity package" : "VPM package"), c.size && sizeText(c.size), c.member && c.file].filter(Boolean).join(" · ");
   const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: product.name, nameTitle: true, ok: tr("Put these in"), steps: [
@@ -4142,7 +4146,7 @@ async function pjChooseContents(product) {
       ...(many ? [{ type: "text", tone: "hint", text: tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant).") }] : []),
       { type: "checks", id: "pjContents", cls: "pj-picklist pj-contents", allNone: true, required: true, items: product.contents.map(c => {
         const v = pjVariant(c.member || c.label);
-        return { label: c.label, tags: v ? [{ text: v }] : [], sub: kindOf(c), checked: !(many && c.kind === "unitypackage") };
+        return { label: c.label, tags: v ? [{ text: v }] : [], sub: kindOf(c), keep: [c.member && c.file], checked: !(many && c.kind === "unitypackage") };
       }) }] },
     ...(needs ? [{ label: tr("Step {0} of {1}: what it needs", 2, 2),
                    blocks: [...pjNeeds(product.suggested, "It needs these too, from their own repositories:"), ...pjAlready(product.already || [])] }] : [])] });
@@ -4164,11 +4168,11 @@ function pjSplitNeeds(product, have) {
 }
 // The packages products need, each to tick (pjSugg), with where it comes from: as a form's blocks.
 const pjNeeds = (list, heading) => list.length ? [{ type: "text", tone: "hint", text: tr(heading) },
-  { type: "checks", id: "pjSugg", cls: "pj-picklist", sugg: true, items: list.map(s => ({ label: s.package, checked: true,
+  { type: "checks", id: "pjSugg", cls: "pj-picklist", sugg: true, items: list.map(s => ({ label: s.package, checked: true, keep: [s.repo, s.in_repo],
     sub: s.repo && !s.repo_added ? `(${tr("adds the repository {0}", s.repo)})` : s.in_repo ? `(${tr("from {0}", s.in_repo)})` : "" })) }] : [];
 // The packages they need that the project has already: as a form's block.
-const pjAlready = list => list.length ? [{ type: "text", tone: "hint", text: tr("Already in the project: {0}.",
-  listed(list.map(s => s.package + (s.in_project ? " " + s.in_project : "")))) }] : [];
+const pjAlready = list => { const names = list.map(s => s.package + (s.in_project ? " " + s.in_project : ""));
+  return list.length ? [{ type: "text", tone: "hint", text: tr("Already in the project: {0}.", listed(names)), keep: names }] : []; };
 // ---- products into a project from the selection bar and right-click, on both pages: Put in a project..., and New
 // project with these... What's put in of each is all its packages, unless it has several to choose from (a PC and a
 // Quest one, say), when it asks; what they need (lilToon, Modular Avatar...) comes with a tick to leave it out.
@@ -4225,7 +4229,7 @@ async function putInProject(list) {
 async function pjPutIn(project, list) {
   const got = await pjPicksFor(list, { path: project.path });
   if (!got || !got.picks.length) return false;
-  const ok = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: tr("Put these in {0}?", project.name), ok: tr("Put them in"),
+  const ok = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: tr("Put these in {0}?", project.name), keep: [project.name], ok: tr("Put them in"),
     blocks: [{ type: "list", cls: "pj-picklist", items: got.picks.map(x => ({ name: x.product, sub: x.label || x.file, subTranslate: false })) },
              ...pjNeeds(got.suggested, "They need these too, from their own repositories:"), ...pjAlready(got.already),
              { type: "text", tone: "hint", text: tr("Nothing already in the project is replaced.") }] });
@@ -4473,7 +4477,7 @@ async function pjGitAct(act, b, path) {
       detail: tr("Copies the repository, its files and history, into a new folder, and puts it on the list. Opening it in Unity lets the VPM resolver restore its packages."),
       blocks: [{ type: "field", id: "pjCloneUrl", label: tr("Address"), placeholder: "https://github.com/you/project.git", max: 2000 },
                { type: "field", id: "pjCloneName", label: tr("Its folder's name"), max: 255 },
-               { type: "text", tone: "hint", text: tr("In {0}", where) }] });
+               { type: "text", tone: "hint", text: tr("In {0}", where), keep: [where] }] });
     if (!res.ok) return;
     const url = res.fields.pjCloneUrl.trim();
     const name = res.fields.pjCloneName.trim() || url.replace(/[\\/]+$/, "").split(/[\\/:]/).pop().replace(/\.git$/, "");
@@ -4491,9 +4495,9 @@ async function pjGitAct(act, b, path) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { toast(d.error || tr("That can't be done.")); return; }
     const parent = d.where && d.where.parent;
-    const files = d.plan.flatMap(f => [{ type: "text", strong: true, text: `${f.path}: ${tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:")}` },
+    const files = d.plan.flatMap(f => [{ type: "text", strong: true, text: `${f.path}: ${tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:")}`, keep: [f.path] },
                                        { type: "pre", cls: "pj-diff-text pj-plan", text: f.exists ? f.add.join("\n") : f.text }]);
-    const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "git", title: tr("Set up Git for {0}?", pjNamed(path)), ok: tr("Set up Git"), blocks: [
+    const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "git", title: tr("Set up Git for {0}?", pjNamed(path)), keep: [pjNamed(path), parent], ok: tr("Set up Git"), blocks: [
       { type: "text", text: tr("It changes only the project's folder: its ignore rules are written first, then Git starts keeping its history there. Nothing is committed yet, and nothing goes online.") },
       { type: "text", text: tr("Kept: the project's own files, as VRChat recommends. Left out: what Unity makes again, and the VPM packages the resolver restores when the project is opened in Unity.") },
       { type: "columns", cls: "pj-plan-cols", cols: [{ heading: tr("Kept, for example"), items: d.examples.kept, none: tr("None here.") },
@@ -4733,7 +4737,7 @@ async function pjAct(b) {
   }
   if (act === "rename") {   // its folder, where it is (issue #290): the list and Hoard's notes follow it
     const was = pjNamed(path);
-    const name = (await askName(tr("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was), was, { max: 255 })).trim();
+    const name = (await askName("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was, { max: 255, fill: [was] })).trim();
     if (!name || name === was) return;
     const r = await apiPost("/api/vpm/rename", { path, name });
     if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
@@ -4763,7 +4767,7 @@ async function pjAct(b) {
   }
   if (act === "backup") {
     const res = await askForm({ cls: "pj-dlg", icon: "archive", ok: tr("Back up"),
-      ...titled(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path))),
+      ...titled(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path))), keep: [pjNamed(path)],
       blocks: [{ type: "check", id: "pjLeaveOut", label: tr("Leave out packages from repositories (they're downloaded again when it's opened)") },
                ...(pjGitOf(path) ? [{ type: "text", tone: "hint", text: tr("Its .git folder is left out: it can be most of a project.") },
                                     { type: "check", id: "pjBundle", label: tr("Put its Git history in, as a bundle (its commits, branches and tags in one file; not Git LFS files)") }] : [])] });
@@ -4889,7 +4893,7 @@ async function pjAct(b) {
 }
 // Delete a project from this computer: only with its name typed, backed up first unless you untick it; a task
 async function pjDelete(p) {
-  const res = await askForm({ cls: "pj-dlg", icon: "trash", tone: "warn", danger: true, title: tr("Delete {0} from this computer?", p.name),
+  const res = await askForm({ cls: "pj-dlg", icon: "trash", tone: "warn", danger: true, title: tr("Delete {0} from this computer?", p.name), keep: [p.name, p.path],
     ok: tr("Delete it"), okId: "pjDelGo", blocks: [
       { type: "text", text: `${tr("Its folder, and everything in it, is deleted:")} ${p.path}` },
       { type: "check", id: "pjDelBackup", checked: true, label: tr("Back it up first, into your backups folder") },

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.2.0-beta.7
 
 - **Bring in from KonoAsset... is in Settings only**, under Bring in from another tool (and, the first time, in the
   setup assistant's last step): the Menu keeps to Tags, Stores, Rescan and Settings.
@@ -11,13 +11,19 @@
   set with its picture and counts, found as you type. Projects' (choosing packages, a package's version, what a
   change does, deleting a project), Git's, backups', reading wishlists, adding by link, Mix and match, Share and
   marking a photo are the same card too, steps and all; a long package name breaks at its dots. They're built in
-  Svelte, as Look inside is.
+  Svelte, as Look inside is. In Japanese and Korean, a question is translated whole and then titled; a tag typed
+  with its `#` is your tag; taking a tag off offers only the tags the products have; Enter that finishes a word
+  being typed in Japanese or Korean (in the Mac and Linux apps too) never presses the button; and a project's path,
+  a file's name and a package's id are never changed by a browser's translation.
 - **The set viewer asks again after "I'm under 18".** That answer is kept only until the browser is closed, so a
   browser that once gave it (someone trying the page, say) is asked again next time; "I'm 18 or older" is still
   kept for a year. A set shown without its products for adults says so in a box at the top, with **Change your
   answer**, where before it was one small line that was easy to miss.
-- **A browser download that's slow to start isn't taken for a stalled one.** The time the browser takes to start
-  writing a file is no longer counted as nothing coming in.
+- **A browser download that's slow to start is waited for.** A Booth download the browser took more than 5 seconds
+  to start writing was taken for one it had given up on, and saving it then waited with no time limit and no way for
+  Stop to reach it. Hoard now asks the browser whether it has finished with a download; one whose file hasn't
+  appeared after 2 minutes is stopped and tried again, as a stalled one is, and the time before its file appears is
+  never counted as nothing coming in.
 
 ## 5.2.0-beta.6
 

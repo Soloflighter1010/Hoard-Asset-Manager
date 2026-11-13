@@ -74,8 +74,8 @@ Measured locally on Linux with Node 22, Svelte 5.57.3 and esbuild 0.28.2:
 
 | Cost | Look inside alone | With the pop-ups |
 | --- | --- | --- |
-| Generated script | 57,407 bytes | 109,740 bytes |
-| Gzip script | 21,340 bytes | 38,919 bytes |
+| Generated script | 57,407 bytes | 111,855 bytes |
+| Gzip script | 21,340 bytes | 39,828 bytes |
 | Build/check run | 66–94 ms | about 200–260 ms |
 | New runtime dependencies in Python/app installer | None | None |
 | Bundled JS runtime packages | Svelte, clsx, esm-env | the same; MIT texts shipped |
@@ -83,7 +83,9 @@ Measured locally on Linux with Node 22, Svelte 5.57.3 and esbuild 0.28.2:
 The trial's first decision kept Svelte to Look inside until a wider move was measured on the desktop runtimes. With
 the apps now built on Tauri (WebView2 on Windows, WebKit on macOS and Linux), the pop-ups moved over as the second
 part: about 18 KB compressed on top of the runtime already shipped, for one look and one place for every pop-up's
-behaviour (focus, Escape, a click outside, an input method's Enter). `tests/test_dialogs.py` covers them in Chromium.
+behaviour (focus, Escape, a click outside, an input method's Enter). `tests/test_dialogs.py` covers them in Chromium,
+and holds the pages' scripts to what older WebKit reads (no regular expression lookbehind, which Safari before 16.4
+can't parse: the one script the page is made of would stop).
 `scripts/ui_engines.py` checks each pop-up's answers and times them in another engine, and the Engines workflow
 (`.github/workflows/engines.yml`) runs it on WebKit (macOS, and Linux as WebKitGTK's stand-in) and on Edge, whose
 engine is WebView2's, whenever `ui/` or the pages change; each run's summary has its table.

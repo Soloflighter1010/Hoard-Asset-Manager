@@ -201,7 +201,6 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 .pm-list .pnum:empty { background: transparent; border: 1.5px dashed currentColor; opacity: .5; }
 .pname { display: grid; min-width: 0; flex: 1; }
 .pname b, .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pmark-dlg form { max-height: calc(var(--vh, 100vh) - 48px); overflow: auto; }
 .pm-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .pm-body { grid-template-columns: 1fr; } }
 .pm-edit { cursor: crosshair; }

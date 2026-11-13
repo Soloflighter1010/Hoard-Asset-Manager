@@ -36,10 +36,13 @@ class Popups(IsolatedTestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True},
                                    lan=False)
-        with cls.srv.lib.lock:   # in memory only
-            cls.srv.lib.data["items"] = [library.item("booth", "111", name="Rusk", creator="Kitsu Studio"),
+        cls.ja = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": cls.tmp.name, "setup_done": True,
+                                                     "display": {"language": "ja"}}, lan=False)
+        for srv in (cls.srv, cls.ja):
+            with srv.lib.lock:   # in memory only
+                srv.lib.data["items"] = [library.item("booth", "111", name="Rusk", creator="Kitsu Studio"),
                                          library.item("booth", "112", name="Winter Hoodie", creator="Kitsu Studio")]
-        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
         cls.pw = sync_playwright().start()
         cls.browser = cls.pw.chromium.launch()
 
@@ -47,17 +50,18 @@ class Popups(IsolatedTestCase):
     def tearDownClass(cls):
         cls.browser.close()
         cls.pw.stop()
-        cls.srv.shutdown()
-        cls.srv.server_close()
+        for srv in (cls.srv, cls.ja):
+            srv.shutdown()
+            srv.server_close()
         cls.tmp.cleanup()
 
-    def open(self):
-        """Hoard's page, its products drawn, noting any error on it."""
+    def open(self, srv=None):
+        """Hoard's page (in English, or as srv has it), its products drawn, noting any error on it."""
         page = self.browser.new_page()
         self.addCleanup(page.close)
         self.errors = []
         page.on("pageerror", lambda e: self.errors.append(str(e)))
-        page.goto(self.srv.entry_url())
+        page.goto((srv or self.srv).entry_url())
         page.wait_for_selector("#grid .slot[data-key]")
         return page
 
@@ -120,6 +124,38 @@ class Popups(IsolatedTestCase):
         self.assertEqual(heading("Rename Rusk: its folder is renamed.", True),
                          {"title": "Rename Rusk", "detail": "Its folder is renamed.", "more": []}, "a box's title, at its colon")
 
+    def test_a_title_is_never_cut_inside_brackets_or_a_name(self):
+        page = self.open()
+        heading = lambda text, colon=False: page.evaluate("([t, c]) => HoardUI.dialogs.heading(t, c)", [text, colon])  # noqa: E731
+        for text in ("The repository's address (https://... or git@...), without a password or token in it",
+                     "Your Git app's program (its full path: GitHub Desktop, Fork, SourceTree...)"):
+            self.assertEqual(heading(text, True)["title"], text, "a mark inside brackets")
+        self.assertEqual(heading("Hoard waits... then it reads them. Nothing is sent."),
+                         {"title": "Hoard waits... then it reads them.", "detail": "Nothing is sent.", "more": []}, "an ellipsis")
+        self.assertEqual(heading("新しい復元フレーズを作りますか?古いワードは使えなくなります。"),
+                         {"title": "新しい復元フレーズを作りますか?", "detail": "古いワードは使えなくなります。", "more": []},
+                         "Japanese's question mark, with no space after it")
+        page.evaluate(OPEN, "askName(\"Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. "
+                            "Unity Hub's list and its backups keep the old name.\", 'Q&A: Test', { max: 255, fill: ['Q&A: Test'] })")
+        d = page.locator("dialog.hd-text[open]")
+        self.assertEqual(d.locator("h2").inner_text(), "Rename Q&A: Test", "the name put in once it's cut")
+        self.assertTrue(d.locator(".hd-detail").inner_text().startswith("Its folder is renamed"))
+        self.assertEqual(page.evaluate("tr('Hello {0}')"), "Hello {0}", "words given no values are left as they are")
+        page.keyboard.press("Escape")
+        self.answer(page)
+
+    def test_a_question_in_japanese(self):
+        """The question is translated whole, as the catalog has it, then cut into its title and the line under it."""
+        page = self.open(self.ja)
+        page.evaluate(OPEN, "ask('Make a new recovery phrase? The old words will stop working.', 'Make a new phrase', true)")
+        d = page.locator("#askDialog[open]")
+        self.assertEqual(d.locator("h2").inner_text(), "新しい復元フレーズを作りますか?")
+        self.assertEqual(d.locator(".hd-detail").inner_text(), "古いワードは使えなくなります。")
+        self.assertNotIn("Make a new phrase", d.locator("footer").inner_text())
+        page.keyboard.press("Escape")
+        self.assertIs(self.answer(page), False)
+        self.assertEqual(self.errors, [])
+
     def test_a_name(self):
         page = self.open()
         page.evaluate(OPEN, "askName('Name the new set', 'Winter')")
@@ -130,6 +166,10 @@ class Popups(IsolatedTestCase):
         page.evaluate("document.querySelector('#askName').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', isComposing: true, bubbles: true}))")
         page.wait_for_timeout(200)
         self.assertTrue(box.is_visible(), "not while an input method is putting a word together")
+        page.evaluate("""() => { const e = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+            Object.defineProperty(e, 'keyCode', { get: () => 229 }); document.querySelector('#askName').dispatchEvent(e); }""")
+        page.wait_for_timeout(200)
+        self.assertTrue(box.is_visible(), "nor as WebKit says so, after compositionend (keyCode 229)")
         box.press("Enter")
         self.assertEqual(self.answer(page), "Fox base")
         page.evaluate(OPEN, "askName('Name the new set')")
@@ -153,6 +193,28 @@ class Popups(IsolatedTestCase):
         d.locator("#askName").fill("w")
         d.locator(".hd-chip", has_text="#wings").click()
         page.locator(".toast", has_text="Added #wings to 1 item.").wait_for()
+
+    def test_a_tag_typed(self):
+        """Typed with its "#", or with other capitals than yours: your tag, as you wrote it. Taking one off: only one of
+        the tags they have, so Enter and OK wait for one."""
+        page = self.open()
+        tags = "[{ name: 'Winter', count: 3 }, { name: 'boots', count: 2 }]"
+        for typed, create, said in (("#winter", True, "Winter"), ("#Parka", True, "Parka"), ("win", False, "Winter")):
+            page.evaluate(OPEN, f"askName('Add a tag', '', {{ suggest: {tags}, create: {str(create).lower()}, prefix: '#' }})")
+            page.locator("dialog.hd-text[open] #askName").fill(typed)
+            page.keyboard.press("Enter")
+            self.assertEqual(self.answer(page), said, typed)
+        page.evaluate(OPEN, f"askName('Take a tag off', '', {{ suggest: {tags}, create: false, prefix: '#' }})")
+        d = page.locator("dialog.hd-text[open]")
+        d.locator("#askName").fill("parka")
+        self.assertTrue(d.locator("button[value=yes]").is_disabled(), "none of theirs")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(200)
+        self.assertTrue(d.is_visible(), "Enter takes nothing off")
+        d.locator("#askName").fill("")
+        self.assertTrue(d.locator("button[value=yes]").is_disabled(), "nothing typed, nothing taken off")
+        page.keyboard.press("Escape")
+        self.assertEqual(self.answer(page), "")
 
     def test_a_folder(self):
         page = self.open()
@@ -258,11 +320,60 @@ class Popups(IsolatedTestCase):
             groups: [{ title: '', items: [{ value: '/p/rusk', name: 'Rusk Avatar', sub: 'Avatar · Unity 2022.3.22f1' }] }],
             buttons: [{ label: 'New project with these...', value: 'new' }] })""")
         d = page.locator("dialog.hd-pick[open]")
+        self.assertTrue(page.evaluate("document.activeElement.classList.contains('hd-row')"), "the keyboard starts on its first row")
         self.assertEqual(d.locator(".hd-th").count(), 0, "no picture to show")
         self.assertEqual(d.locator("h4").count(), 0, "one group, no heading")
         self.assertEqual(d.locator("input[type=search]").count(), 0, "a short list: nothing to find it with")
         d.locator("button", has_text="New project with these...").click()
         self.assertEqual(self.answer(page), "new")
+
+    def test_the_choice_made_is_in_view_with_its_find_box(self):
+        page = self.open()
+        page.evaluate(OPEN, """askForm({ title: 'Fox Tool', ok: 'Use this version', blocks: [{ type: 'radios', id: 'v', cls: 'pj-picklist pj-vers',
+            value: '1.2.0', find: 'Find a version', findId: 'vf', items: Array.from({ length: 40 }, (_, i) => ({ value: `1.${41 - i}.0`, label: `1.${41 - i}.0` })) }] })""")
+        page.locator("dialog.hd-form[open]").wait_for()
+        page.wait_for_function("document.activeElement.id === 'vf'")
+        seen = page.evaluate("""() => { const r = document.querySelector('dialog.hd input[type=radio]:checked').getBoundingClientRect(),
+            box = document.querySelector('dialog.hd .pj-vers').getBoundingClientRect(); return r.top >= box.top && r.bottom <= box.bottom; }""")
+        self.assertTrue(seen, "the version installed now, scrolled into view")
+        page.keyboard.press("Escape")
+        self.answer(page)
+
+    def test_a_drag_out_of_it_isnt_a_click_outside(self):
+        page = self.open()
+        page.evaluate(OPEN, "ask('Clear the list of finished tasks?')")
+        title = page.locator("#askDialog[open] h2").bounding_box()
+        page.mouse.move(title["x"] + 4, title["y"] + 4)
+        page.mouse.down()
+        page.mouse.move(5, 5)
+        page.mouse.up()   # (selecting its words, let go outside it)
+        page.wait_for_timeout(200)
+        self.assertTrue(page.locator("#askDialog[open]").is_visible(), "still asking")
+        page.mouse.click(5, 5)
+        self.assertIs(self.answer(page), False)
+
+    def test_names_are_kept_from_translation(self):
+        page = self.open()
+        page.evaluate(OPEN, """askForm({ title: 'Delete Rusk Avatar from this computer?', keep: ['Rusk Avatar', '/p/Rusk Avatar'], ok: 'Delete it',
+            blocks: [{ type: 'text', text: 'Its folder, and everything in it, is deleted: /p/Rusk Avatar' },
+                     { type: 'checks', id: 'c', items: [{ label: 'Fox.unitypackage', sub: 'Unity package · fox/Fox.unitypackage', keep: ['fox/Fox.unitypackage'] }] }] })""")
+        d = page.locator("dialog.hd-form[open]")
+        self.assertEqual(d.locator("h2 [translate=no]").all_inner_texts(), ["Rusk Avatar"])
+        self.assertEqual(d.locator(".hd-p [translate=no]").all_inner_texts(), ["/p/Rusk Avatar"])
+        self.assertEqual(d.locator(".muted [translate=no]").all_inner_texts(), ["fox/Fox.unitypackage"])
+        self.assertEqual(d.locator(".hd-p").inner_text(), "Its folder, and everything in it, is deleted: /p/Rusk Avatar")
+        page.keyboard.press("Escape")
+        self.answer(page)
+
+    def test_one_question_after_another(self):
+        """The next pop-up's ids are the only ones on the page, while the last one is taken away."""
+        page = self.open()
+        page.evaluate(OPEN, "ask('One?').then(() => { const next = ask('Two?'); window.ids = document.querySelectorAll('[id=askDialog], [id=askText]').length; return next; })")
+        page.locator("#askDialog[open] button[value=yes]").click()
+        page.locator("#askDialog[open] h2", has_text="Two?").wait_for()
+        self.assertEqual(page.evaluate("window.ids"), 2, "one dialog and its text")
+        page.locator("#askDialog[open] button[value=yes]").click()
+        self.assertIs(self.answer(page), True)
 
     def test_the_styles_corners(self):
         page = self.open()
@@ -287,6 +398,15 @@ class Popups(IsolatedTestCase):
         self.assertEqual(page.locator(".sg-ex dialog.hd h2").all_inner_texts(), ["Delete 2 backups (1.3 GB)?", "Add a tag to the selected"])
         self.assertFalse(page.evaluate("[...document.querySelectorAll('.sg-ex dialog.hd')].some(d => d.matches(':modal'))"), "in the page, not over it")
         self.assertEqual(errors, [])
+
+
+class ThePagesScripts(IsolatedTestCase):
+    def test_no_lookbehind(self):
+        """WebKit before Safari 16.4 (a Mac on macOS 11 that hasn't updated, say) can't read a regular expression's
+        lookbehind: the whole script the page is made of would stop, and Hoard's window would stay blank."""
+        for js in sorted((REPO / "hoard" / "web").glob("*.js")):
+            with self.subTest(js.name):
+                self.assertNotRegex(js.read_text("utf-8"), r"\(\?<[=!]")
 
 
 if __name__ == "__main__":

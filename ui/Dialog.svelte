@@ -20,6 +20,7 @@
     textId = undefined,   // the id of what it says (askText for a question)
     title, detail = "", paras = [],   // its title, the line under it, and any more paragraphs
     nameTitle = false,    // its title is a name (a product's, a package's): never translated by the browser
+    keep = [],            // names in what it says (a project's, a path, a package's id), kept from the browser's translation
     icon = "help", tone = "gold",     // its icon, in gold or (for something that can't be undone) the warning colour
     ok = "OK", okId = undefined, cancel = "Cancel", danger = false,
     buttons = [],         // more beside them: {label, value} closes with value; {label, act} does act and stays open; attrs: its own
@@ -51,14 +52,17 @@
     dlg.showModal();
     tick().then(first);   // (once a window's inside, which an action puts in, is there)
   });
-  // Where the keyboard starts: the box to type in, else the list's find box, else Cancel when it can't be undone, else
-  // the main button (Enter never deletes by accident).
+  // Where the keyboard starts: the box to type in, else the list's find box, else its first row, else Cancel when it
+  // can't be undone, else the main button (Enter never deletes by accident). The choice already made in a list (the
+  // version installed now) is scrolled into view, with its find box or without.
   function first() {
     const here = dlg.querySelector(`[data-step="${step + 1}"]`) || dlg;
     const box = input || findBox || here.querySelector(".hd-body input:not([type=checkbox]):not([type=radio]):not([readonly]), .hd-body textarea");
-    if (box) { box.focus(); if (box.select && box === input) box.select(); return; }
     const picked = here.querySelector(".hd-body input[type=radio]:checked");
+    if (box) { box.focus(); if (box.select && box === input) box.select(); picked?.scrollIntoView?.({ block: "nearest" }); return; }
     if (picked) { picked.focus(); picked.scrollIntoView?.({ block: "nearest" }); return; }
+    const row = kind === "pick" && here.querySelector(".hd-row");
+    if (row) { row.focus(); return; }
     if (kind === "host") { const own = here.querySelector(".hd-inside :is(button, input, a, textarea, [tabindex])"); if (own) { own.focus(); return; } }
     const pick = sel => [...here.querySelectorAll(sel)].find(b => !b.disabled && b.offsetParent !== null);
     (pick(danger ? "footer [value=no]" : "footer .primary") || pick("footer button"))?.focus();
@@ -70,21 +74,33 @@
   // (or "") for a choice, {ok, value, fields} for a form, {ok, value} for a window.
   function ended() {
     const v = dlg.returnValue;
-    done(kind === "confirm" ? v === "yes" : kind === "pick" ? (v === "no" ? "" : v)
+    const answer = kind === "confirm" ? v === "yes" : kind === "pick" ? (v === "no" ? "" : v)
       : kind === "form" ? { ok: v === "yes", value: v, fields: $state.snapshot(vals) } : kind === "host" ? { ok: v === "yes", value: v }
-      : v === "yes" ? input.value.trim() : "");
+      : v !== "yes" ? "" : suggest ? tagAnswer() : input.value.trim();
+    // Its ids go with it, so the next pop-up's are the only ones on the page while this one is taken away
+    for (const el of [dlg, ...dlg.querySelectorAll("[id]")]) el.removeAttribute("id");
+    done(answer);
+  }
+  // A tag's answer: one of your tags whose name it is (as you wrote it), else what's typed (without its "#") when a
+  // new one can be made, else the first of your tags shown; "" when there's none.
+  function tagAnswer() {
+    if (!typedTag) return "";
+    const same = (suggest || []).find(t => norm(t.name) === norm(typedTag));
+    return same ? same.name : create ? typedTag : tags[0]?.name || "";
   }
   // Enter in a box is OK (or Next), but not while an input method is still putting a word together (Japanese,
-  // Korean), nor while the button it would press can't be.
+  // Korean: WebKit says so only with keyCode 229, its Enter coming after compositionend), nor while the button it
+  // would press can't be, nor in a tag's box that would take none of your tags (taking one off).
   function enter(e) {
-    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
+    if (suggest && kind === "text" && !tagAnswer()) return;
     if (kind === "pick") { const row = dlg.querySelector(".hd-row"); if (row) close(row.value); return; }
     if (kind === "form") { const go = dlg.querySelector(`[data-step="${step + 1}"] footer .primary`); if (go && !go.disabled) go.click(); return; }
     close("yes");
   }
   // A tag chosen from your tags: the box takes it, and it's added.
-  function choose(name) { input.value = name; close("yes"); }
+  function choose(name) { input.value = typed = name; close("yes"); }
   // To another step of a form, the keyboard with it.
   function go(n) { step = n; queueMicrotask(first); }
   // Whether a step's main button waits: a list that needs a tick has none, or a box isn't what it must be.
@@ -94,7 +110,8 @@
   }
   // A long name (a package's, a file's) that may break after a dot, a slash or a dash, never in the middle of a word.
   function breaks(node, text) {
-    const set = t => node.replaceChildren(...String(t ?? "").split(/(?<=[._/-])/).flatMap((p, i) => i ? [document.createElement("wbr"), p] : [p]));
+    // (each piece up to and with its mark: no lookbehind, which WebKit before Safari 16.4 can't read)
+    const set = t => node.replaceChildren(...(String(t ?? "").match(/[^._/-]*[._/-]|[^._/-]+/g) || []).flatMap((p, i) => i ? [document.createElement("wbr"), p] : [p]));
     set(text);
     return { update: set };
   }
@@ -103,6 +120,19 @@
     if (inside) node.replaceChildren(inside);
     return { update(next) { if (next) node.replaceChildren(next); } };
   }
+
+  // What it says cut around the names in it (keep, and a block's own): [words, whether it's a name] in turn.
+  function pieces(text, more) {
+    const names = [...keep, ...(more || [])].filter(n => n != null && String(n).trim()).map(String).sort((a, b) => b.length - a.length);
+    const all = String(text ?? "");
+    if (!names.length) return [[all, false]];
+    const rx = new RegExp(`(${names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`);
+    return all.split(rx).map((p, i) => [p, i % 2 === 1]).filter(([p]) => p);
+  }
+  // A click outside it (on its backdrop) closes a question or a choice: only one that began there too, never a drag
+  // from inside it (selecting its words, say) let go outside.
+  let pressed = null;
+  const outside = e => e.target === dlg && pressed === dlg;
 
   const lines = p => String(p).split("\n");
   const words = $derived(norm(query).split(/\s+/).filter(Boolean));
@@ -113,15 +143,17 @@
   const isNew = $derived(create && typedTag && !(suggest || []).some(t => norm(t.name) === norm(typedTag)));
 </script>
 
+{#snippet said(text, more)}{#each pieces(text, more) as [words, name]}{#if name}<span translate="no">{words}</span>{:else}{words}{/if}{/each}{/snippet}
+
 {#snippet tagsOf(list)}
   {#each list || [] as t}<span class="pj-tag" class:warn={t.warn} translate="no">{t.text}</span>{/each}
 {/snippet}
 
 {#snippet block(b)}
   {#if b.type === "text"}
-    <p class="hd-p {b.tone || ''}" class:strong={b.strong} translate={b.translate === false ? "no" : undefined}>{b.text}</p>
+    <p class="hd-p {b.tone || ''}" class:strong={b.strong} translate={b.translate === false ? "no" : undefined}>{@render said(b.text, b.keep)}</p>
   {:else if b.type === "heading"}
-    <h4>{b.text}</h4>
+    <h4>{@render said(b.text, b.keep)}</h4>
   {:else if b.type === "pre"}
     <pre class="hd-pre {b.cls || ''}" translate="no">{b.text}</pre>
   {:else if b.type === "list"}
@@ -132,7 +164,7 @@
     </ul>
   {:else if b.type === "field"}
     <div class="hd-ff">
-      <label for={b.id}>{b.label}</label>
+      <label for={b.id}>{@render said(b.label, b.keep)}</label>
       <div class="hd-field plain">
         {#if b.rows}
           <textarea id={b.id} rows={b.rows} placeholder={b.placeholder || ""} translate="no" bind:value={vals[b.id]}></textarea>
@@ -150,7 +182,7 @@
       </div>
     </div>
   {:else if b.type === "check"}
-    <label class="check hd-check"><input type="checkbox" id={b.id} bind:checked={vals[b.id]}> {b.label}</label>
+    <label class="check hd-check"><input type="checkbox" id={b.id} bind:checked={vals[b.id]}> {@render said(b.label, b.keep)}</label>
   {:else if b.type === "checks"}
     {#if b.allNone}
       <p class="pj-allnone hd-allnone">
@@ -165,7 +197,7 @@
                  onchange={e => { vals[b.id][i] = e.currentTarget.checked; }}>
           <span class="pj-c">
             <span><span translate="no" use:breaks={it.label}></span>{#if it.tags?.length}{" "}{@render tagsOf(it.tags)}{/if}</span>
-            {#if it.sub}<span class="muted">{it.sub}</span>{/if}
+            {#if it.sub}<span class="muted">{@render said(it.sub, it.keep)}</span>{/if}
           </span>
         </label></li>
       {/each}
@@ -208,17 +240,17 @@
 
 <dialog bind:this={dlg} {id} class="hd hd-{kind} {cls}" class:danger class:inline class:mid={width === "mid"} class:wide={width === "wide"} class:huge={width === "huge"}
         open={inline || undefined} aria-labelledby="{uid}-t" aria-describedby={detail || paras.length ? `${uid}-d` : undefined}
-        onclose={ended} oncancel={() => { dlg.returnValue = "no"; }}
-        onclick={e => { if (e.target === dlg && (kind === "confirm" || kind === "pick")) close("no"); }}>
+        onclose={ended} oncancel={() => { dlg.returnValue = "no"; }} onpointerdown={e => { pressed = e.target; }}
+        onclick={e => { if (outside(e) && (kind === "confirm" || kind === "pick")) close("no"); }}>
   <div class="hd-card">
     <header>
       <span class="hd-ic {tone}"><Icon name={icon} size={20} /></span>
       <div class="hd-text" id={textId}>
-        <h2 id="{uid}-t" class:long={title.length > 64} translate={nameTitle ? "no" : undefined}>{title}</h2>
+        <h2 id="{uid}-t" class:long={title.length > 64} translate={nameTitle ? "no" : undefined}>{@render said(title)}</h2>
         {#if detail || paras.length}
           <div id="{uid}-d">
-            {#if detail}<p class="hd-detail">{#each lines(detail) as line, i}{#if i}<br>{/if}{line}{/each}</p>{/if}
-            {#each paras as p}<p>{#each lines(p) as line, i}{#if i}<br>{/if}{line}{/each}</p>{/each}
+            {#if detail}<p class="hd-detail">{#each lines(detail) as line, i}{#if i}<br>{/if}{@render said(line)}{/each}</p>{/if}
+            {#each paras as p}<p>{#each lines(p) as line, i}{#if i}<br>{/if}{@render said(line)}{/each}</p>{/each}
           </div>
         {/if}
       </div>
@@ -311,7 +343,8 @@
         {#if cancel}<button type="button" class="ghost" value="no" onclick={() => close("no")}>{cancel}</button>{/if}
         {@render more()}
         {#if kind !== "pick" && ok}
-          <button type="button" class="primary" class:danger id={okId} value="yes" onclick={() => close("yes")}>{ok}</button>
+          <button type="button" class="primary" class:danger id={okId} value="yes" disabled={suggest && kind === "text" && !tagAnswer()}
+                  onclick={() => close("yes")}>{ok}</button>
         {/if}
       </footer>
     {/if}
