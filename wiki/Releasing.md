@@ -22,8 +22,9 @@ The **Release** workflow then:
    `.app.tar.gz` each updates from. Linux: `Hoard-<version>-linux-x86_64.AppImage` and
    `Hoard-<version>-linux-amd64.deb`. Each system's files have their checksums (`SHA256SUMS-<system>.txt`), and each
    file the window updates from is signed with the updates' key;
-3. builds the Flatpak from the .deb (`shell/flatpak`; flatpak-builder, in Flathub's GNOME 51 container; its build
-   checks every library the window needs is in the runtime and runs the self-test in the sandbox), and attaches
+3. builds the Flatpak from the .deb as soon as Linux's build is done, while Windows' and the Macs' carry on
+   (`shell/flatpak`; flatpak-builder, in Flathub's GNOME 51 container; its build checks every library the window
+   needs is in the runtime and runs the self-test in the sandbox), and attaches
    `Hoard-<version>-linux-x86_64.flatpak` and `SHA256SUMS-flatpak.txt`;
 4. makes `Hoard-update.json` from each system's signed files (`scripts/update_manifest.py`): what Hoard's window
    updates from;
@@ -38,7 +39,8 @@ code-signed (see **Code signing (Windows)** below); the Mac app isn't signed or 
 new app (the old one is uninstalled first). A test holds the workflows to that.
 
 Every push and pull request builds the same, unsigned (**Check**), so a build that breaks is found before a
-release.
+release. Check keeps Nuitka's compiler cache (ccache on Linux and macOS, clcache on Windows) from the last build on
+each system, so only the C files that changed are compiled again; a release compiles everything from scratch.
 
 ### Betas
 
