@@ -131,6 +131,9 @@ def store_glow(y: float = 112, strength: int = 0x77, width: float = 16, height: 
 
 
 def vrchat_group() -> str:
+    """A VRChat group's banner (1920 x 1080): the logo in the band every crop keeps, clear of the VRC+ profile
+    picture; the tagline and site under it, where the group's pages show them; boxes around the edges for the crops
+    that show more."""
     w, h = 1920, 1080
     boxes = [   # around the edges: the gallery shows them all, a nameplate with a short name the top ones
         (150, 150, 120, "booth", -10), (330, 245, 84, "gumroad", 8), (90, 345, 64, "payhip", -6),
@@ -150,6 +153,7 @@ def vrchat_group() -> str:
 
 
 def x_bluesky() -> str:
+    """The header for X and Bluesky (1500 x 500): the logo, the tagline and the stores, with the heap on the right."""
     w, h = 1500, 500
     boxes = [(80, 70, 70, "jinxxy", -8, 0.9), (205, 140, 46, "gold", 6, 0.9), (60, 215, 40, "payhip", 10, 0.8)]
     body = (scatter(w, h, boxes)
@@ -161,6 +165,8 @@ def x_bluesky() -> str:
 
 
 def youtube() -> str:
+    """YouTube's channel banner (2560 x 1440): the logo, tagline, stores and heap inside the 1546 x 423 middle every
+    device shows, and boxes outside it for a TV or a wide window."""
     w, h = 2560, 1440
     boxes = [   # outside the middle: only a TV, or a wide window, shows these
         (180, 200, 190, "booth", -9), (430, 330, 120, "gumroad", 7), (130, 480, 96, "payhip", -6),
@@ -179,6 +185,7 @@ def youtube() -> str:
 
 
 def discord() -> str:
+    """A Discord server's banner (960 x 540): the logo and the tagline in the middle."""
     w, h = 960, 540
     boxes = [(70, 80, 64, "booth", -9), (180, 150, 40, "gumroad", 8, 0.9), (890, 90, 58, "jinxxy", 8),
              (800, 170, 36, "itch", -6, 0.9), (60, 470, 50, "projects", 6), (900, 460, 48, "payhip", -8)]
@@ -190,6 +197,8 @@ def discord() -> str:
 
 
 def github() -> str:
+    """GitHub's social preview for the repository (1280 x 640): the logo, the tagline, a line about Hoard, the stores
+    and the heap."""
     w, h = 1280, 640
     body = (f'<div class="at" style="left:770px;top:110px">{mark(470)}</div>'
             + f'<div class="at" style="left:72px;top:70px;width:700px;font-size:60px">{logo(74)}'
