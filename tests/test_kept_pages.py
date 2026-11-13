@@ -59,8 +59,40 @@ class ItsShape(IsolatedTestCase):
     def test_another_site_is_blanked(self):
         """A creator's own shop site would say whose shop you bought from."""
         self.assertEqual(kept_pages.address("https://kitsu-shop.example.com/b/fox-ears?x=1"), "https://xxxxx-xxxx.xxxxxxx.xxx/b/xxx-xxxx?x=0")
-        self.assertEqual(kept_pages.address("https://kitsu.payhip.com/b/AbC12"), "https://kitsu.payhip.com/b/xxx00")
+        self.assertEqual(kept_pages.address("https://kitsu.payhip.com/b/AbC12"), "https://xxxxx.payhip.com/b/xxx00",
+                         "a creator's shop on a store: the store's part kept, whose shop it is blanked")
+        self.assertEqual(kept_pages.address("https://accounts.booth.pm/library"), "https://accounts.booth.pm/library")
+        self.assertEqual(kept_pages.address("https://booth.pm/x?eyJhbGciOiJIUzI1NiJ9abc&page=2&sortBy=new"),
+                         f"https://booth.pm/x?{kept_pages.blank('eyJhbGciOiJIUzI1NiJ9abc')}&page=0&sortBy=xxx",
+                         "a query's name kept only when it's a name (a token isn't)")
         self.assertEqual(kept_pages.address("javascript:alert(1)"), "javascript:x")
+
+    def test_the_shops_you_bought_from_arent_named(self):
+        """Booth's library links each purchase's shop (<shop>.booth.pm): which shops, with the count of items, would
+        say what you bought."""
+        shaped = kept_pages.shape((REPO / "tests" / "data" / "stores" / "booth" / "library.html").read_text("utf-8"))
+        self.assertNotRegex(shaped, r"shop\d+\.booth\.pm")
+        self.assertIn(".booth.pm", shaped, "that it's a shop on Booth is still said")
+
+    def test_json_in_an_attribute(self):
+        """Inertia (Gumroad) can put the whole page's data in data-page: its JSON is blanked like a script's."""
+        page = ('<div id="app" data-page="{&quot;props&quot;:{&quot;user&quot;:{&quot;email&quot;:&quot;alice.smith@'
+                'example.com&quot;,&quot;name&quot;:&quot;Alice Smith&quot;},&quot;alice.smith@example.com&quot;:1}}">'
+                '</div><script data-page="app" type="application/json">{"props": {}}</script>')
+        shaped = kept_pages.shape(page)
+        for word in ("alice", "Alice", "Smith", "example"):
+            self.assertNotIn(word, shaped)
+        self.assertIn('"email": "xxxxx.xxxxx@xxxxxxx.xxx"', shaped.replace("&quot;", '"'), "its keys kept")
+        self.assertIn('data-page="app"', shaped, "a plain name in a structural attribute kept")
+        shaped = kept_pages.shape((REPO / "tests" / "data" / "stores" / "gumroad" / "wishlist.html").read_text("utf-8"))
+        for word in ("Winter", "snowcap", "Snow Cap", "Mochi", "mochi"):
+            self.assertNotIn(word, shaped)
+
+    def test_a_structural_attribute_holding_words(self):
+        shaped = kept_pages.shape('<div class="card" id="kitsu.fan@example.com" data-testid="Fox Ears キツネ">x</div>')
+        self.assertNotIn("kitsu", shaped)
+        self.assertNotIn("Fox", shaped)
+        self.assertIn('class="card"', shaped)
 
     def test_a_page_too_long_is_cut(self):
         with mock.patch.object(kept_pages, "MAX_PAGE", 100):
@@ -112,6 +144,28 @@ class Kept(IsolatedTestCase):
         self.assertEqual((info["problem"], info["found"]["items"]), ("empty", 0))
         self.assertFalse(kept_pages.capture(ctx, cfg, "booth", "signin"), "not for a sign-in, a block or the network")
         self.assertFalse(kept_pages.capture(None, cfg, "booth", "layout"))
+
+    def test_not_after_the_browser_stopped_answering(self):
+        """Reading the page again would only wait on it too (new_page and the reader's script have no time limit)."""
+        ctx = mock.MagicMock()
+        for error in (RuntimeError("Target page, context or browser has been closed"),
+                      type("TimeoutError", (Exception,), {})("Timeout 30000ms exceeded")):
+            with self.subTest(error=str(error)):
+                self.assertFalse(kept_pages.capture(ctx, config.load_config(), "booth", "layout", error))
+        ctx.new_page.assert_not_called()
+
+    def test_a_reader_that_failed_isnt_run_again(self):
+        page = mock.MagicMock()
+        page.content.return_value = PAGE
+        page.url = "https://accounts.booth.pm/library"
+        ctx = mock.MagicMock()
+        ctx.new_page.return_value = page
+        with mock.patch("hoard.browser.settle"):
+            self.assertTrue(kept_pages.capture(ctx, config.load_config(), "booth", "layout", RuntimeError("no cards")))
+        page.evaluate.assert_not_called()
+        page.set_default_timeout.assert_called_once_with(kept_pages.CAPTURE_SECONDS * 1000)
+        [(info, _page)] = kept_pages.kept("booth")
+        self.assertEqual(info["found"], {"reader": "failed on this page"})
 
     def test_a_page_that_wont_load_keeps_nothing(self):
         page = mock.MagicMock()
@@ -191,7 +245,7 @@ class WhenAReadFails(IsolatedTestCase):
         self.kept = []
 
     def refresh(self, fetch):
-        def capture(ctx, cfg, store, problem):
+        def capture(ctx, cfg, store, problem, error=None):
             self.kept.append((store, problem))
             kept_pages.keep(store, PAGE, problem)
             return True
@@ -228,7 +282,6 @@ class WhenAReadFails(IsolatedTestCase):
 
     def test_gone_when_you_sign_out(self):
         kept_pages.keep("booth", PAGE, "layout")
-        with mock.patch.object(jobs, "_playwright", lambda: NoBrowser), \
-                mock.patch.object(jobs, "sign_out", lambda p, cfg, store: "Booth: no saved sign-in."):
-            self.job._logout(["booth"])
+        with mock.patch.object(jobs, "_playwright", lambda: NoBrowser):
+            self.job._logout(["booth"])   # (no saved sign-in: the page goes all the same)
         self.assertEqual(kept_pages.kept("booth"), [])

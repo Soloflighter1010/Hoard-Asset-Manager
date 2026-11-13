@@ -26,12 +26,14 @@ MAX_PAGE = 3_000_000    # characters of a page's shape kept; the rest is cut (a 
 CAPTURE_SECONDS = 30    # the most a capture waits for the page to load
 PROBLEMS = ("layout", "empty")   # a read that failed on the page itself: not signing in, a block, or the network
 
-# Attributes whose values are the store's own structure, kept as they are (digits aside): what a reader looks for.
+# Attributes whose values are the store's own structure, kept (digits aside) while they're plain names: what a reader
+# looks for. One holding anything else (JSON, an address, words of yours) is blanked like any other.
 STRUCTURE = {"class", "id", "role", "type", "rel", "name", "lang", "dir", "for", "method", "target", "hidden",
              "disabled", "checked", "selected", "colspan", "rowspan", "tabindex", "loading", "decoding", "charset",
              "http-equiv", "aria-hidden", "aria-expanded", "aria-selected", "aria-current", "aria-haspopup",
              "data-page", "data-testid", "data-test", "data-test-id", "data-component-name", "data-controller",
              "data-action", "data-target", "data-state", "data-orientation", "data-side"}
+_PLAIN = re.compile(r"[A-Za-z0-9_ :./#-]{0,200}", re.A)   # a structural value: names, never words of yours
 # Attributes holding an address: its site is kept when it's a store's, and its path where it's the store's words.
 ADDRESSES = {"href", "src", "action", "formaction", "poster", "cite", "background", "data-src", "data-href", "data-url"}
 # The words of a store's addresses that say what a page is (never what you bought): kept in an address's path.
@@ -52,19 +54,37 @@ def blank(text: str) -> str:
 
 
 IMAGE_SITES = ("pximg.net",)   # where a store's pictures come from (Booth's), named in its pages' addresses too
+# The stores' own services, kept by name. A creator's shop is a site of its own on some stores (<shop>.booth.pm,
+# <creator>.gumroad.com, <creator>.itch.io, <shop>.payhip.com), which says whose shop it is: that part is blanked.
+STORE_HOSTS = {"booth.pm", "www.booth.pm", "accounts.booth.pm", "manage.booth.pm", "checkout.booth.pm",
+               "booth.pximg.net", "s.pximg.net", "i.pximg.net", "pixiv.net", "www.pixiv.net", "accounts.pixiv.net",
+               "gumroad.com", "www.gumroad.com", "app.gumroad.com", "api.gumroad.com", "assets.gumroad.com",
+               "public-files.gumroad.com", "files.gumroad.com", "jinxxy.com", "www.jinxxy.com", "api.jinxxy.com",
+               "cdn.jinxxy.com", "payhip.com", "www.payhip.com", "itch.io", "www.itch.io", "api.itch.io"}
 
 
 def _store_sites() -> list[str]:
-    """The stores' own sites (and their sign-in and picture sites), whose names an address keeps."""
+    """The stores' own sites (and their sign-in and picture sites)."""
     from .browser import STORE_SITES
     return [site for sites in STORE_SITES.values() for site in sites] + list(IMAGE_SITES)
 
 
 def _host(host: str) -> str:
-    """An address's site: a store's kept (it says which store the page is from), any other's blanked (a creator's
-    own shop site would say whose shop you bought from)."""
+    """An address's site: a store's own service kept (it says which store the page is from); a creator's shop on a
+    store kept to the store's part (xxxxx.booth.pm: whose shop it is would say what you bought); any other blanked."""
     host = host.lower()
-    return host if any(host == site or host.endswith("." + site) for site in _store_sites()) else blank(host)
+    if host in STORE_HOSTS:
+        return host
+    site = next((s for s in _store_sites() if host.endswith("." + s)), None)
+    return blank(host[:-len(site) - 1]) + "." + site if site else blank(host)
+
+
+def _name(key: str) -> str:
+    """A key of the store's (a JSON key, a query's name): kept while it's a plain name (snake_case, kebab-case or
+    camelCase), digits made 0; anything else (an address, an email, a token) blanked."""
+    if len(key) <= 30 and re.fullmatch(r"[a-z][a-z0-9_]*(?:[-.][a-z0-9_]+)*|[a-z]+(?:[A-Z][a-z]+)*[0-9]*", key):
+        return blank_digits(key)
+    return blank(key)
 
 
 def address(value: str) -> str:
@@ -83,7 +103,7 @@ def address(value: str) -> str:
     path = "/".join(seg if seg.lower() in PATH_WORDS or not seg else blank(seg) for seg in parts.path.split("/"))
     out += path
     if parts.query:
-        out += "?" + "&".join(f"{blank_digits(k)}={blank(v)}" if v else blank_digits(k)
+        out += "?" + "&".join(f"{_name(k)}={blank(v)}" if v else _name(k)
                               for k, v in parse_qsl(parts.query, keep_blank_values=True))
     return out
 
@@ -94,12 +114,12 @@ def blank_digits(text: str) -> str:
 
 
 def _blank_json(value):
-    """JSON with every string blanked and every number 0; its keys kept (they're the store's names for things),
-    their digits aside."""
+    """JSON with every string blanked and every number 0; its keys kept while they're plain names (the store's
+    names for things: see _name)."""
     if isinstance(value, dict):
         out = {}
         for key, inner in value.items():
-            name = blank_digits(str(key))
+            name = _name(str(key))
             while name in out:   # (keys that differed only in their digits)
                 name += "#"
             out[name] = _blank_json(inner)
@@ -147,8 +167,11 @@ class _Shaper(HTMLParser):
             if value is None:
                 said.append(f" {name}")
                 continue
-            if name in STRUCTURE:
-                kept = blank_digits(value)
+            found = _json_or_none(value) if name not in ADDRESSES else None
+            if found is not None:   # (JSON in any attribute: Inertia's data-page holds the whole page's data)
+                kept = json.dumps(_blank_json(found), ensure_ascii=False)
+            elif name in STRUCTURE:
+                kept = blank_digits(value) if _PLAIN.fullmatch(value) and "@" not in value else blank(value)
             elif name in ADDRESSES:
                 kept = address(value)
             elif name == "srcset":
@@ -156,8 +179,7 @@ class _Shaper(HTMLParser):
             elif name == "style":
                 kept = "x"
             else:
-                found = _json_or_none(value) if name.startswith("data-") else None
-                kept = json.dumps(_blank_json(found), ensure_ascii=False) if found is not None else blank(value)
+                kept = blank(value)
             said.append(f' {name}="{escape(kept, quote=True)}"')
         return "".join(said)
 
@@ -297,37 +319,74 @@ def reader_summary(parsed) -> dict:
     return {"items": len(items), "fields_filled": fields, **({"files": files} if files else {})}
 
 
-def read_page(page, cfg: dict, store: str) -> dict:
-    """What the reader finds on the store's page open now: a summary (reader_summary), never the purchases."""
-    from .library import BOOTH_JS, JX_CARDS_JS, PAYHIP_SHOP_JS, extract_page_json
+def open_library(page, cfg: dict, store: str, patient: bool = True, timeout: float | None = None) -> None:
+    """Open a store's library page in a tab and let it finish, scrolled once for what loads as it's scrolled to.
+    patient: wait for the network to go quiet (the debug command); otherwise for the page's load, at most 10 s."""
+    from .browser import settle
+    page.goto(library_address(cfg, store) or "https://payhip.com/", wait_until="domcontentloaded",
+              **({"timeout": timeout * 1000} if timeout else {}))
+    if patient:
+        settle(page, 2000)
+    else:
+        try:
+            page.wait_for_load_state("load", timeout=10000)
+        except Exception:
+            pass
+        page.wait_for_timeout(1500)
+    page.mouse.wheel(0, 4000)
+    page.wait_for_timeout(1500 if patient else 1000)
+
+
+def read_found(page, cfg: dict, store: str):
+    """What the store's reader finds on the page open now, as it finds it (its purchases: never kept or shared as
+    they are), or None for Gumroad, whose library is read from the page's data rather than its layout."""
+    from .library import BOOTH_JS, JX_CARDS_JS, PAYHIP_SHOP_JS
     js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS}.get(store)
     if js:
-        return reader_summary(page.evaluate(js))
+        return page.evaluate(js)
     if store == "jinxxy":
-        return reader_summary(page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"]))
+        return page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"])
+    return None
+
+
+def read_page(page, cfg: dict, store: str) -> dict:
+    """What the reader finds on the store's page open now: a summary (reader_summary), never the purchases."""
+    from .library import extract_page_json
+    if store != "gumroad":
+        return reader_summary(read_found(page, cfg, store))
     data = extract_page_json(page.content())
-    return {"page_data": data is not None, "page_data_keys": sorted(blank_digits(str(k)) for k in data)[:40]
-            if isinstance(data, dict) else []}
+    return {"page_data": data is not None,
+            "page_data_keys": sorted(_name(str(k)) for k in data)[:40] if isinstance(data, dict) else []}
 
 
-def capture(ctx, cfg: dict, store: str, problem: str) -> bool:
+def browser_trouble(error: BaseException | None) -> bool:
+    """Did a read fail because the browser stopped answering or closed (not because of the page)? Then reading the
+    page again would only wait on it too."""
+    if error is None:
+        return False
+    said = f"{type(error).__name__} {error}".lower()
+    return any(w in said for w in ("timeout", "has been closed", "target closed", "connection closed",
+                                   "browser closed", "crashed"))
+
+
+def capture(ctx, cfg: dict, store: str, problem: str, error: BaseException | None = None) -> bool:
     """After a read failed on the page itself: open the store's library page again in its browser and keep its shape,
-    and what the reader finds on it. Best effort, within CAPTURE_SECONDS or so: True when it was kept."""
-    url = library_address(cfg, store)
-    if ctx is None or not url or problem not in PROBLEMS:
+    and, for a read that came back empty, what the reader finds on it (one that failed on the page isn't run again).
+    Not after the browser stopped answering. Best effort, within CAPTURE_SECONDS or so: True when it was kept."""
+    if ctx is None or not library_address(cfg, store) or problem not in PROBLEMS or browser_trouble(error):
         return False
     page = None
     try:
-        from .browser import settle
         page = ctx.new_page()
-        page.goto(url, wait_until="domcontentloaded", timeout=CAPTURE_SECONDS * 1000)
-        settle(page, 1500)
-        page.mouse.wheel(0, 4000)
-        page.wait_for_timeout(1000)
-        try:
-            found = read_page(page, cfg, store)
-        except Exception as e:   # (the reader's own script failing on it is worth knowing too)
-            found = {"reader_failed": type(e).__name__}
+        page.set_default_timeout(CAPTURE_SECONDS * 1000)   # (each wait on the page: its load, its content)
+        open_library(page, cfg, store, patient=False, timeout=CAPTURE_SECONDS)
+        if problem == "empty":
+            try:
+                found = read_page(page, cfg, store)
+            except Exception as e:   # (the reader's own script failing on it is worth knowing too)
+                found = {"reader_failed": type(e).__name__}
+        else:
+            found = {"reader": "failed on this page"}
         keep(store, page.content(), problem, page.url, found)
         return True
     except Exception as e:

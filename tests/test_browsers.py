@@ -250,6 +250,44 @@ class SignInsKeepTheirBrowser(IsolatedTestCase):
         browser._made_with_file(self.cfg, "booth").write_text('{"channel": "firefox"}')
         self.assertIsNone(browser.signin_browser(self.cfg, "booth"), "never a browser Hoard can't start")
 
+    def test_one_made_with_a_browser_taken_away(self):
+        """Signing out of a sign-in made with a browser that isn't installed any more: the browser chosen now can't
+        read it (and would find itself signed out), so the store isn't told, and that's said."""
+        browser._made_with_file(self.cfg, "booth").write_text('{"channel": "brave"}')   # (Brave isn't installed here)
+        with mock.patch.object(browser, "_end_store_session", side_effect=AssertionError("never asked")):
+            said = browser.sign_out(None, self.vivaldi, "booth", online=True)
+        self.assertIn("made with Brave, which isn't installed any more, so Booth wasn't told", said)
+        self.assertNotIn("confirmed", said)
+
+    def test_a_sign_in_folder_that_cant_be_used(self):
+        """profile_dir on a network share can't be used: that's said where the sign-in is used, never here."""
+        with mock.patch.object(browser, "profile_dir", side_effect=browser.SigninsUnprotected("a network location")):
+            self.assertIsNone(browser.signin_browser(self.cfg, "booth"))
+            self.assertIsNone(browser.made_with_another(self.vivaldi, "booth"))
+            browser.note_signin_browser(self.cfg, "booth")
+
+    def test_signing_in_again_starts_afresh_with_the_one_chosen(self):
+        browser.note_signin_browser(self.edge, "booth")
+        with mock.patch.object(browser, "sign_out", lambda p, cfg, store: f"signed out of {store}"):
+            self.assertEqual(browser.start_afresh(None, self.vivaldi, "booth"), "signed out of booth")
+            self.assertIsNone(browser.start_afresh(None, self.edge, "booth"), "the same browser: nothing to do")
+
+    def test_a_folder_whose_files_go_as_it_is_deleted(self):
+        """The browser that has just ended deletes some of its files as Hoard deletes the folder: tried again."""
+        target = browser.profile_dir(self.cfg, "booth")
+        (target / "Default").mkdir(parents=True, exist_ok=True)
+        real, calls = browser._remove_tree, []
+
+        def remove(path):
+            calls.append(path)
+            if len(calls) == 1:
+                raise FileNotFoundError("SingletonCookie")
+            real(path)
+        with mock.patch.object(browser, "_remove_tree", remove):
+            browser._remove_signin(target)
+        self.assertFalse(target.exists())
+        self.assertEqual(len(calls), 2)
+
     def test_its_browser_reads_it_and_signs_out_of_it(self):
         browser.note_signin_browser(self.edge, "booth")
         started = []
@@ -267,7 +305,15 @@ class SignInsKeepTheirBrowser(IsolatedTestCase):
         self.assertFalse(browser._made_with_file(self.cfg, "booth").exists(), "nothing left of it")
 
 
-@unittest.skipIf(os.name == "nt", "a stand-in browser here is a shell script")
+STAND_IN = """import signal, sys, time
+if sys.argv[1] == "stubborn":
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+print("ready", flush=True)
+time.sleep(300)
+"""
+
+
+@unittest.skipIf(os.name == "nt", "a stand-in browser here is a shell script, and its folder's lock a symlink")
 class ForceStop(IsolatedTestCase):
     """Force stop ends a store's browser whatever it's doing: one still starting (Playwright hands a browser over only
     once its first tab is open), and one that stays on its folder after Hoard has let go of it."""
@@ -280,18 +326,6 @@ class ForceStop(IsolatedTestCase):
         made = program(self.tmp / f"stand-in-{len(list(self.tmp.iterdir()))}")
         made.write_text(f"#!/bin/sh\necho $$ > {made}.pid\n{script}\n")
         return made
-
-    def ended(self, pid: int, within: float = 10.0) -> bool:
-        deadline = time.monotonic() + within
-        while time.monotonic() < deadline:
-            try:
-                os.kill(pid, 0)
-                if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":   # (ended, not yet tidied away)
-                    return True
-            except (ProcessLookupError, FileNotFoundError):
-                return True
-            time.sleep(0.1)
-        return False
 
     def kill_later(self, pid: int) -> None:
         def kill():
@@ -333,50 +367,95 @@ class ForceStop(IsolatedTestCase):
         self.assertLess(got["after"], 20)
         self.assertEqual(browser._starting, {})
 
-    def left_behind(self, script: str):
-        stand_in = self.process(script)
-        proc = subprocess.Popen([str(stand_in)], start_new_session=True)
+    def browser_on(self, profile: Path, stubborn: bool = False, started_on: bool = True):
+        """A stand-in for a browser on a folder, as Chromium marks one (the lock naming its process), started on it
+        as Hoard and Playwright start one (--user-data-dir); stubborn: it won't quit when asked."""
+        args = [sys.executable, "-c", STAND_IN, "stubborn" if stubborn else "quits"]
+        proc = subprocess.Popen(args + ([f"--user-data-dir={profile}"] if started_on else []), stdout=subprocess.PIPE,
+                                start_new_session=True)
         self.addCleanup(proc.wait)
         self.kill_later(proc.pid)
-        profile = self.tmp / "profile"
-        profile.mkdir(exist_ok=True)
-        os.symlink(f"{socket.gethostname()}-{proc.pid}", profile / "SingletonLock")   # as Chromium marks its folder
-        return proc, profile
+        self.assertEqual(proc.stdout.readline().strip(), b"ready")
+        proc.stdout.close()
+        profile.mkdir(parents=True, exist_ok=True)
+        os.symlink(f"{socket.gethostname()}-{proc.pid}", profile / "SingletonLock")
+        return proc
+
+    def gone(self, proc, within: float = 10.0) -> bool:
+        """Has the stand-in ended (within seconds)?"""
+        try:
+            proc.wait(timeout=within)
+            return True
+        except subprocess.TimeoutExpired:
+            return False
 
     def test_a_browser_left_on_its_folder(self):
-        proc, profile = self.left_behind("exec sleep 300")
+        profile = self.tmp / "profile"
+        proc = self.browser_on(profile)
         self.assertTrue(browser._profile_in_use(profile))
         browser.end_left_behind([profile], grace=0.2)
-        self.assertTrue(self.ended(proc.pid), "asked to quit, it did")
+        self.assertTrue(self.gone(proc), "asked to quit, it did")
 
     def test_one_that_wont_quit_when_asked(self):
-        proc, profile = self.left_behind("trap '' TERM\nwhile true; do sleep 0.1; done")
+        profile = self.tmp / "profile"
+        proc = self.browser_on(profile, stubborn=True)
         began = time.monotonic()
         browser.end_left_behind([profile], grace=0.2)
-        self.assertTrue(self.ended(proc.pid, within=2), "made to, 3 seconds after it was asked")
+        self.assertTrue(self.gone(proc, within=2), "made to, 3 seconds after it was asked")
         self.assertLess(time.monotonic() - began, 10)
 
     def test_one_started_on_the_folder_since_is_left_alone(self):
         """After Force stop, a new task may open the same store's folder before the old browser's clean-up looks at
         it: only the browser that was there is ended."""
-        proc, profile = self.left_behind("exec sleep 300")
+        profile = self.tmp / "profile"
+        proc = self.browser_on(profile)
         browser.end_left_behind([(profile, proc.pid + 100000)], grace=0.2)   # (the one that was there: gone since)
-        self.assertFalse(self.ended(proc.pid, within=0.5), "the browser on it now is another's")
+        self.assertFalse(self.gone(proc, within=0.5), "the browser on it now is another's")
         browser.end_left_behind([(profile, proc.pid)], grace=0.2)
-        self.assertTrue(self.ended(proc.pid))
+        self.assertTrue(self.gone(proc))
+
+    def test_another_program_named_by_an_old_lock_is_left_alone(self):
+        """A browser that ended without tidying up leaves its lock, and its process number can be another program's
+        by now: a process that wasn't started on the folder is never ended for it."""
+        profile = self.tmp / "profile"
+        proc = self.browser_on(profile, started_on=False)
+        self.assertIsNone(browser._lock_pid(profile))
+        browser.end_left_behind([profile], grace=0.2)
+        self.assertFalse(self.gone(proc, within=0.5), "never asked to quit, nor made to")
 
     def test_signing_out_ends_one_left_on_it(self):
         cfg = {**config.load_config(), "allow_unprotected_signins": True}
-        proc = subprocess.Popen([str(self.process("exec sleep 300"))], start_new_session=True)
-        self.addCleanup(proc.wait)
-        self.kill_later(proc.pid)
         target = browser.profile_dir(cfg, "gumroad")
-        target.mkdir(parents=True, exist_ok=True)
-        os.symlink(f"{socket.gethostname()}-{proc.pid}", target / "SingletonLock")
+        proc = self.browser_on(target)
         with mock.patch.object(browser, "_end_store_session", return_value=False):
             browser.sign_out(None, cfg, "gumroad", online=True)
-        self.assertTrue(self.ended(proc.pid))
+        self.assertTrue(self.gone(proc))
         self.assertFalse(target.exists())
+
+    def test_hoard_closing_ends_them_before_it_goes(self):
+        """Force stop ends a browser left behind in the background (its request isn't kept waiting); Hoard closing
+        does it before it goes, or the process ending would take that with it."""
+        ctx = mock.MagicMock()
+        browser._track(ctx, profile=self.tmp / "profile")
+        done = []
+        with mock.patch.object(browser, "_lock_pid", lambda profile: 4321), \
+                mock.patch.object(browser, "end_left_behind", lambda left, grace=3.0: done.append(left)):
+            browser.end_browsers(wait=True)
+        self.assertEqual(done, [[(self.tmp / "profile", 4321)]], "before end_browsers returned")
+
+    def test_a_launch_that_finishes_as_it_is_ended(self):
+        """Force stop between a browser's start and Hoard being handed it: it's never used, so its sign-in is let go
+        (and nothing waits on a browser whose driver has gone)."""
+        p = mock.Mock()
+
+        def start(**kwargs):
+            browser.end_browsers()   # (Force stop, as the browser finishes starting)
+            return mock.MagicMock()
+        p.chromium.launch_persistent_context.side_effect = start
+        with mock.patch.object(browser, "_key_args", lambda cfg: []), \
+                self.assertRaisesRegex(RuntimeError, "ended .Force stop. as it started"):
+            browser._launch(p, {"browser_channel": "chromium"}, self.tmp / "profile", headless=True)
+        self.assertEqual(browser._open, {}, "never on the list of those open")
 
 
 class ABrowserThatWontOpenATab(IsolatedTestCase):

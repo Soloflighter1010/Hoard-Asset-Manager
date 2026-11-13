@@ -508,7 +508,7 @@ class ClosingTheWindow(_Harness):
         srv = types.SimpleNamespace(jobs=types.SimpleNamespace(clear_queue=lambda: None, cancel=lambda: True), calls=[])
         srv.quit_app = lambda: srv.calls.append("quit")
         from hoard import browser
-        with unittest.mock.patch.object(browser, "end_browsers", lambda: srv.calls.append("ended") or 1):
+        with unittest.mock.patch.object(browser, "end_browsers", lambda **k: srv.calls.append("ended") or 1):
             app.quit_now(srv)
         self.assertEqual(srv.calls, ["ended", "quit"])
 
@@ -519,7 +519,7 @@ class ClosingTheWindow(_Harness):
         srv.quit_app = lambda: srv.calls.append("quit")
         began = time.monotonic()
         from hoard import browser
-        with unittest.mock.patch.object(browser, "end_browsers", lambda: srv.calls.append("ended") or 1):
+        with unittest.mock.patch.object(browser, "end_browsers", lambda **k: srv.calls.append("ended") or 1):
             app.quit_when_done(srv, patience=0.5)
         self.assertEqual(srv.calls, ["ended", "quit"], "its browser ended, then Hoard closed")
         self.assertLess(time.monotonic() - began, 3)

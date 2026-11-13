@@ -8,18 +8,19 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import __version__
-from .browser import PlaywrightMissing, ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch, profile_dir, settle, sign_out, signin_protection
+from .browser import (PlaywrightMissing, ProfileBusy, SigninsUnprotected, _playwright, check_saved_signin, launch,
+                      profile_dir, sign_out, signin_protection, start_afresh)
 from .common import log
 from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save_config
 from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify, file_rules, remembered_files
 from .jobs import Jobs
 from . import itch, vault
-from .library import (BOOTH_JS, DOWNLOADABLE, IMPORTABLE, JX_CARDS_JS,
-                      Library, PAYHIP_SHOP_JS, STORES, import_saved_pages, open_sign_in_pages, saved_pages_in)
+from .library import (DOWNLOADABLE, IMPORTABLE, Library, STORES, import_saved_pages, open_sign_in_pages,
+                      saved_pages_in)
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 
 from .safety import scrub
-from .kept_pages import library_address, reader_summary
+from .kept_pages import open_library, read_found, reader_summary
 from .app import run_app, self_test
 from .server import serve
 from .setup import install_browser, migrate_from
@@ -32,6 +33,9 @@ def cmd_login(cfg, store):
     if store == "itch":
         return cmd_itch_key(cfg)
     with _playwright()() as p:
+        said = start_afresh(p, cfg, store)   # (a sign-in made with another browser: signed out of with it first)
+        if said:
+            print(said)
         ctx = launch(p, cfg, False, store)
         open_sign_in_pages(ctx, cfg, store)
         input(f"Sign in to {STORES[store]['label']} in the browser window, then press Enter here... ")
@@ -114,20 +118,13 @@ def cmd_debug(cfg, store, raw: bool = False):
     with _playwright()() as p:
         ctx = launch(p, cfg, False, store)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.goto(library_address(cfg, store) or "https://payhip.com/", wait_until="domcontentloaded")
-        settle(page, 2000)
-        page.mouse.wheel(0, 4000)
-        page.wait_for_timeout(1500)
+        open_library(page, cfg, store)
         content = page.content()
         (DEBUG_DIR / f"{store}.html").write_text(content if raw else scrub(content), "utf-8")
         links = sorted({urlparse(h).path for h in page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")})
         (DEBUG_DIR / f"{store}_links.txt").write_text("\n".join(links), "utf-8")
-        js = {"booth": BOOTH_JS, "payhip": PAYHIP_SHOP_JS}.get(store)
-        if js:
-            parsed = page.evaluate(js)
-        elif store == "jinxxy":
-            parsed = page.evaluate(JX_CARDS_JS, cfg["jinxxy"]["item_link_pattern"])
-        else:
+        parsed = read_found(page, cfg, store)
+        if parsed is None:
             parsed = {"note": "Gumroad is read from page data, not the layout"}
         summary = reader_summary(parsed)
         (DEBUG_DIR / f"{store}_summary.json").write_text(json.dumps(summary, indent=2), "utf-8")

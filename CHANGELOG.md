@@ -16,7 +16,9 @@
   out of it, with that browser while it's installed. Signing in to the store again moves it to the browser you've
   chosen: Hoard signs out with the old one first, so the new one starts afresh. Before, Hoard opened every store
   with the browser chosen now, which might not be able to read the sign-in. A store would then say it wasn't signed
-  in, and signing out said the store had confirmed it when it hadn't been told.
+  in, and signing out said the store had confirmed it when it hadn't been told. A sign-in made with a browser
+  that has since been uninstalled can't be read, so signing out of it says the store wasn't told, rather than
+  that it confirmed.
 - **Signing out works when a browser was left open on the store.** A browser still on a store's sign-in (one that
   didn't quit when Hoard let go of it) is ended first, and deleting the sign-in is tried again for a few seconds
   while Windows still holds its files. Before, signing out could fail with the folder still there.

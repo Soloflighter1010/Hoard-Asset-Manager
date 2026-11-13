@@ -1905,7 +1905,8 @@ class SetupAssistant(IsolatedTestCase):
         import subprocess
         from hoard import browser
         profile = Path(tempfile.mkdtemp())
-        held = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        # (started on the profile, as the browser is: a process the lock names that wasn't is never ended for it)
+        held = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", f"--user-data-dir={profile}"])
         self.addCleanup(held.kill)
         os.symlink(f"{socket.gethostname()}-{held.pid}", profile / "SingletonLock")
         self.assertTrue(browser._profile_in_use(profile))

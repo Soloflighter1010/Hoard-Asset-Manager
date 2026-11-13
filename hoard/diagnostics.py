@@ -850,6 +850,8 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
         }
         if previous:   # the launch before
             files["application-old-log.txt"] = old_log_text or "[log unavailable]"
+        # (its shape has no words left; the report's own sanitizer goes over it too, for any name of yours it knows)
+        pages = [(info, sanitizer.text(page, asset_names=True, limit=kept_pages.MAX_PAGE + 200)) for info, page in pages]
         for info, page in pages:
             files[f"store-page-{info.get('store')}.html"] = page
         diagnostic = job.get("diagnostic") if isinstance(job, dict) else None

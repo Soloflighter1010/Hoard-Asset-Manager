@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
                       browser_name, check_saved_signin, chosen_channel, for_signin, launch, made_with_another,
-                      note_signin_browser, sign_out, signin_browser, signins_root, use_channel)
+                      note_signin_browser, sign_out, signin_browser, signins_root, start_afresh, use_channel)
 from .safety import store_link
 from . import kept_pages
 from .tags import tag_key
@@ -1240,8 +1240,7 @@ class Jobs:
             for store in chosen:
                 label = STORES[store]["label"]
                 self._set(task="logout", store=store, message=f"Signing out of {label}")
-                done = sign_out(p, self.cfg, store)
-                kept_pages.forget(store)   # (a page kept for a report goes with the sign-in)
+                done = sign_out(p, self.cfg, store)   # (a page kept for a report goes with it)
                 # The list of what that account owns goes too, so whoever signs in next never sees it.
                 # Downloaded files stay where they are.
                 forgot = self.lib.clear_store(store, "Signed out. " + done.split(": ", 1)[-1])
@@ -1257,13 +1256,14 @@ class Jobs:
         else:
             self._set(message="Signed out. " + done.split(": ", 1)[-1])
 
-    def _keep_store_page(self, ctx, store: str, problem: str) -> None:
+    def _keep_store_page(self, ctx, store: str, problem: str, error: BaseException | None = None) -> None:
         """A read that failed on the store's page (or found nothing there) keeps that page's shape for a report:
-        opened again in the same browser, with every word, number and address blanked (see kept_pages)."""
-        if ctx is None or self._forced or self.stop.is_set():
+        opened again in the same browser, with every word, number and address blanked (see kept_pages). Not after
+        the browser stopped answering (error says)."""
+        if ctx is None or self._forced or self.stop.is_set() or kept_pages.browser_trouble(error):
             return
         self._set(message=f"{STORES[store]['label']}: noting how its page is laid out, for a report")
-        kept_pages.capture(ctx, self.cfg, store, problem)
+        kept_pages.capture(ctx, self.cfg, store, problem, error)
 
     def _refresh(self, stores: list[str], skip_imported: bool = False, quick: bool = False) -> list[str]:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty.
@@ -1365,7 +1365,7 @@ class Jobs:
                             self.lib.set_error(store, unreachable_message(store, error=e) if is_network_error(e)
                                                else f"Couldn't read the library: {plain_error(e)}")
                             if not is_network_error(e):
-                                self._keep_store_page(ctx, store, "layout")
+                                self._keep_store_page(ctx, store, "layout", e)
                 finally:
                     if ctx:
                         ctx.close()
@@ -1541,7 +1541,7 @@ class Jobs:
             self._set(task="login", store=store, message=f"Your {label} sign-in was made with {before}: signing out of "
                                                          f"it there first, so {name} starts afresh")
             with _playwright()() as p:
-                print(sign_out(p, self.cfg, store), flush=True)
+                print(start_afresh(p, self.cfg, store) or "", flush=True)
             if self._forced:
                 return
         if not self.cfg.get("automated_sign_in"):
