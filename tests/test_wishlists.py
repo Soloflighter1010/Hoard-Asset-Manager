@@ -483,7 +483,7 @@ class InHoard(IsolatedTestCase):
             # added by its link: the one Nexyy gave (its ?ref=nexyy left off)
             page.click('[data-setx="addlinks"]')
             page.fill("#addLinks", "https://booth.pm/en/items/4242?ref=nexyy")
-            page.locator("dialog.ask button[value=yes]").click()
+            page.locator("dialog.hd button[value=yes]").click()
             buy.locator(".slot.ext", has_text="Fox Tail").wait_for()
             self.assertEqual(buy.locator(".slot.ext", has_text="Fox Tail").locator(".ext-price .price").inner_text(), "¥ 600",
                              "its price, as a badge")
@@ -491,7 +491,7 @@ class InHoard(IsolatedTestCase):
             tail = buy.locator(".slot.ext", has_text="Fox Tail")
             self.assertEqual(tail.locator(".ext-out").get_attribute("aria-label"), "Take Fox Tail off this wishlist")
             tail.locator(".ext-out").click()
-            sure = page.locator("dialog.ask[open]")
+            sure = page.locator("#askDialog[open]")
             self.assertIn("Take Fox Tail off this wishlist?", sure.inner_text())
             sure.locator('button[value="no"]').click()
             self.assertEqual(tail.count(), 1, "Cancel: still on it")

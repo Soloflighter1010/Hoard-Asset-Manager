@@ -1,0 +1,45 @@
+name: Engines
+
+# Hoard's Svelte parts (ui/: the pop-ups and Look inside) in the engines the desktop apps run them in, which the tests
+# (Playwright's Chromium) don't: WebKit, as the Mac app's and the Linux apps' WebKitGTK; and Edge, whose engine is
+# WebView2's on Windows. scripts/ui_engines.py checks each pop-up answers as it should and times them; the times go in
+# the run's summary (docs/APP-SHELL.md keeps them). Only when the pages or their components change. Actions are pinned
+# to exact commits; the version is in the comment.
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["ui/**", "hoard/web/**", "scripts/ui_engines.py", ".github/workflows/engines.yml"]
+  pull_request:
+    paths: ["ui/**", "hoard/web/**", "scripts/ui_engines.py", ".github/workflows/engines.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, engine: webkit, name: "WebKit on macOS" }
+          - { os: ubuntu-22.04, engine: webkit, name: "WebKit on Linux" }
+          - { os: windows-latest, engine: msedge, name: "Edge (WebView2's engine) on Windows" }
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+      - name: Install the locked dependencies
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
+      - name: Playwright's WebKit
+        if: matrix.engine == 'webkit'
+        run: python -m playwright install ${{ runner.os == 'Linux' && '--with-deps' || '' }} webkit
+      - name: The pop-ups in ${{ matrix.name }}
+        shell: bash
+        run: python scripts/ui_engines.py ${{ matrix.engine }} | tee -a "$GITHUB_STEP_SUMMARY"; exit ${PIPESTATUS[0]}

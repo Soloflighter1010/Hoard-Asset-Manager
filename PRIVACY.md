@@ -112,8 +112,9 @@ shows the set without its products for adults and without the sharer's photos.
 
 - **What is kept:** the answer, as one of two words (`adult` or `minor`), in a cookie named `hoard_age`. Not an
   age, not a date of birth, not a name, and nothing about the set.
-- **Where:** in the viewer's own browser, for that page only, for one year. **Change your answer** on the page
-  deletes it, and so does clearing the browser's cookies.
+- **Where:** in the viewer's own browser, for that page only: `adult` for one year, so they aren't asked each time,
+  and `minor` only until the browser is closed, so they're asked again next time. **Change your answer** on the
+  page deletes it, and so does clearing the browser's cookies.
 - **Who sees it:** a browser sends a site's cookies back to that site with each request for the page, so the
   website's host (GitHub Pages) receives the word with requests for `set.html`. Hoard has no code there that reads
   it, and I never receive it. The page's own script reads it in the browser, to decide what to show.

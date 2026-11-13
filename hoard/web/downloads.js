@@ -742,13 +742,13 @@ function holdNodes(root) {
 function openInside(open) {
   const w = $("#insideWin"), show = open ?? w.hidden;
   w.hidden = !show;
-  if (!show) { INSIDE = null; HoardInside.clear($("#insideBody")); }
+  if (!show) { INSIDE = null; HoardUI.inside.clear($("#insideBody")); }
 }
 // Look inside a package or .zip: read what's in it, and show it.
 async function lookInside(path) {
   const body = $("#insideBody"), name = path.split("/").pop();
   INSIDE = null;
-  HoardInside.clear(body);
+  HoardUI.inside.clear(body);
   body.innerHTML = `<p class="file-name" translate="no">${esc(name)}</p><p class="sum">${esc(tr("Reading it. A large package takes a few seconds."))}</p>`;
   openInside(true);
   const r = await apiPost("/api/look-inside", { path });
@@ -880,7 +880,7 @@ function drawInside(q = "") {
         `<li>${pickBox(`z:${f.name}`, 1, f.name)}<span class="nm" translate="no">${esc(f.name)}${codeTag(f)}</span><span class="sz">${esc(sizeText(f.size))}</span></li>`).join("")}</ul>` +
       (I.more ? `<p class="more">${esc(tr("And {0} more.", I.more.toLocaleString()))}</p>` : "") + `</details>`;
   } else html = insidePackage(I.items, 0, true);
-  HoardInside.render(body, { name: I.name, query: q, onlyCode: !!I.onlyCode, ...insideCode(I), ...insideBar(),
+  HoardUI.inside.render(body, { name: I.name, query: q, onlyCode: !!I.onlyCode, ...insideCode(I), ...insideBar(),
     controls: I.kind !== "zip" || !!I.files.length, content: legacyFragment(html) }, tr);
   holdNodes(body);
   for (const d of body.querySelectorAll("details.pkg[open]")) fillPackage(d);
@@ -916,14 +916,14 @@ function pickChanged(box) {
       b.checked = box.checked; b.disabled = box.checked;
     }
   }
-  HoardInside.bar($("#insideBody"), insideBar());
+  HoardUI.inside.bar($("#insideBody"), insideBar());
 }
 // Take what's ticked out of the package (or all of it) into a folder, then open it.
 async function extractInside(what) {
   const I = INSIDE, picks = what === "all" ? ["all"] : [...I.pick.keys()];
   if (!picks.length || I.busy) return;
   // Draw Look inside's bar again.
-  const redraw = () => { if (INSIDE === I) HoardInside.bar($("#insideBody"), insideBar()); };
+  const redraw = () => { if (INSIDE === I) HoardUI.inside.bar($("#insideBody"), insideBar()); };
   I.busy = true;
   redraw();
   const r = await apiPost("/api/look-inside/extract", { path: I.path, picks, metas: !!I.metas, open: true });

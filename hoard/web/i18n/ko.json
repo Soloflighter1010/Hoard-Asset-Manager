@@ -2556,5 +2556,21 @@
  "Your library, settings, sign-ins and downloads stay: uninstalling never removes them.": "라이브러리, 설정, 로그인, 다운로드는 그대로 남아요. 제거해도 지워지지 않아요.",
  "Reading products' pages": "상품 페이지 읽는 중",
  "Download the new Hoard's .flatpak from its release and open it, or run flatpak install with it. It replaces this one, and your library, settings, sign-ins and downloads stay.": "새 Hoard의 .flatpak을 릴리스에서 다운로드해서 열거나, flatpak install로 설치하세요. 지금 버전을 대신하고, 라이브러리, 설정, 로그인, 다운로드는 그대로 남아요.",
- "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "사용하는 시스템에 맞는 새 Hoard(설치 프로그램, .dmg, AppImage, .deb)를 릴리스에서 다운로드해서 지금 버전 위에 설치하세요. 라이브러리, 설정, 로그인, 다운로드는 그대로 남아요."
+ "Download the new Hoard for your system from its release (the installer, the .dmg, the AppImage or the .deb) and install it over this one. Your library, settings, sign-ins and downloads stay.": "사용하는 시스템에 맞는 새 Hoard(설치 프로그램, .dmg, AppImage, .deb)를 릴리스에서 다운로드해서 지금 버전 위에 설치하세요. 라이브러리, 설정, 로그인, 다운로드는 그대로 남아요.",
+ "New tag {0}": "새 태그 {0}",
+ "Nothing has that name.": "그 이름을 가진 것이 없어요.",
+ "Links": "링크",
+ "Another Chromium browser…": "다른 Chromium 브라우저…",
+ "The browser's program": "브라우저 프로그램",
+ "It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you browse with, and after changing it you may need to sign in to your stores again.": "Chromium으로 만든 브라우저라면 무엇이든 될 수 있어요: Edge, Chrome, Brave, Vivaldi, Opera, 또는 프로그램을 골라 정한 다른 브라우저(Arc, Thorium 등). Firefox와 Safari는 안 돼요. 평소 쓰는 브라우저와 따로 로그인을 보관하고, 바꾼 뒤에는 스토어에 다시 로그인해야 할 수 있어요.",
+ "The browser you chose": "고른 브라우저",
+ "Choose its program: its .exe, or a Mac's .app. Until then, Hoard signs in with its own browser.": "그 프로그램을 골라 주세요(.exe, Mac에서는 .app). 그때까지는 Hoard가 전용 브라우저로 로그인해요.",
+ "Sign in with": "로그인에 쓸 브라우저",
+ "Any browser built on Chromium can be it; Settings, under Browser for store sign-ins, can choose another by its program.": "Chromium으로 만든 브라우저라면 무엇이든 쓸 수 있어요. 다른 브라우저는 설정의 '스토어 로그인에 쓸 브라우저'에서 프로그램을 골라 정할 수 있어요.",
+ "The browser for store sign-ins has to be built on Chromium (Edge, Chrome, Brave, Vivaldi, Opera, Arc...), not Firefox or Safari.": "스토어 로그인에 쓸 브라우저는 Chromium으로 만든 것(Edge, Chrome, Brave, Vivaldi, Opera, Arc 등)이어야 해요. Firefox나 Safari는 안 돼요.",
+ "That isn't a browser's program on this computer: choose the program itself (its .exe, or a Mac's .app).": "이 컴퓨터에 있는 브라우저 프로그램이 아니에요. 프로그램 자체(.exe, Mac에서는 .app)를 골라 주세요.",
+ "That path is too long.": "경로가 너무 길어요.",
+ "{0} couldn't be started for Hoard ({1}). Choose another browser in Settings, under Browser for store sign-ins.": "{0}을(를) Hoard용으로 시작할 수 없었어요({1}). 설정의 '스토어 로그인에 쓸 브라우저'에서 다른 브라우저를 골라 주세요.",
+ "{0} isn't installed on this computer, so Hoard uses its own browser.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저를 써요.",
+ "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저가 설치되면 그걸 써요."
 }

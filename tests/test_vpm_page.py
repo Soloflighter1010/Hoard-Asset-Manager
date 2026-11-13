@@ -148,7 +148,7 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertTrue(page.locator(".pj-row", has_text="Old World").locator("[data-pj=star]").get_attribute("aria-pressed") == "true")
         # taken off the list: off the Creator Companion's too, its other settings kept
         pj_details(page, "Old World").locator("[data-pj=forget]").click()
-        page.locator("dialog.ask .primary").click()
+        page.locator("#askDialog .primary").click()
         page.wait_for_function("() => ![...document.querySelectorAll('.pj-row b')].some(b => b.textContent === 'Old World')")
         self.assertEqual([Path(p).name for p in self.settings()["userProjects"]], ["Rusk Avatar"])
 
@@ -900,7 +900,7 @@ class ProjectsPanel(IsolatedTestCase):
         page.locator(".selmenu [role=menuitem]", has_text="Put in a project...").click()
         chooser = page.locator("dialog.pj-dlg")
         self.assertNotIn("Old World", chooser.inner_text(), "only projects whose folder is there")
-        chooser.locator(".linkish", has_text="Rusk Avatar").click()
+        chooser.locator(".hd-row", has_text="Rusk Avatar").click()
         sure = page.locator("dialog.pj-dlg", has_text="Put these in Rusk Avatar?")
         self.assertIn("rusk.unitypackage", sure.inner_text())
         sure.locator("button[value=yes]").click()

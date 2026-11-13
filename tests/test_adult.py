@@ -538,9 +538,10 @@ class TheViewerAsks(IsolatedTestCase):
             self.assertEqual(names(), ["Straw Hat"], "under 18: without the products for adults")
             self.assertTrue(page.locator("#setPhotos").is_hidden(), "or the sharer's photos")
             self.assertIn("1 product for adults isn't shown", page.locator("#setAgeNote").inner_text())
+            self.assertTrue(page.locator("#setAgeNote #ageAgain").is_visible(), "said in a box, with a button to answer again")
             (cookie,) = ctx.cookies()
             self.assertEqual((cookie["name"], cookie["value"], cookie["path"], cookie["secure"]), ("hoard_age", "minor", "/set.html", True))
-            self.assertGreater(cookie["expires"], __import__("time").time() + 300 * 86400, "for a year")
+            self.assertEqual(cookie["expires"], -1, "under 18: only until the browser is closed, then asked again")
             page.goto(all_adult)
             page.locator("#setProblem").wait_for()
             self.assertIn("for adults", page.locator("#setProblemWhy").inner_text())
@@ -555,7 +556,9 @@ class TheViewerAsks(IsolatedTestCase):
             self.assertEqual(names(), ["Night Body", "Straw Hat"])
             self.assertEqual(page.locator(".sv-item .adult-mark").count(), 1)
             self.assertFalse(page.locator("#setPhotos").is_hidden())
-            self.assertEqual(ctx.cookies()[0]["value"], "adult")
+            (cookie,) = ctx.cookies()
+            self.assertEqual(cookie["value"], "adult")
+            self.assertGreater(cookie["expires"], __import__("time").time() + 300 * 86400, "18 or older: for a year")
             browser.close()
 
     def test_the_policy_says_what_the_cookie_is(self):

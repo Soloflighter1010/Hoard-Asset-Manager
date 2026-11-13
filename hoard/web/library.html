@@ -258,8 +258,6 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .chips .tgroup:first-child { margin-top: 0; }
 .tagrows select.ttype { width: auto; height: 32px; padding: 0 30px 0 10px; font-size: 13px; }   /* (the arrow: looks.css) */
 /* Mix and match (issue #156) */
-dialog.ask.mixdlg { width: min(560px, calc(var(--vw) - 32px)); }
-dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
 .mixlist { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mixlist li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 10px; background: var(--cave);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -269,7 +267,7 @@ dialog.ask.mixdlg h3 { margin: 0 0 6px; font-size: 17px; }
 .mixtext small { color: var(--dust); font-size: 11.5px; font-weight: 700; }
 .mixtext b { overflow-wrap: anywhere; }
 .mixtext .muted { font-size: 12.5px; }
-.mixlist label.check, .mixdlg > form > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
+.mixlist label.check, .mixbody > label.check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
 .chip { font-weight: 700; font-size: 14px; padding: 2px 0; border: 0; background: none; color: var(--bone); border-radius: 6px; }
 .chip[data-tag]::before { content: "#"; color: var(--dust); margin-right: 1px; }
 .chip .n { color: var(--dust); margin-left: 4px; font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -509,8 +507,8 @@ body.selecting .toast { bottom: 96px; }
 
 /* local support report */
 .support-dialog { width: min(760px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 26px 28px; border: 0;
-  border-radius: 18px; background: var(--ledge); color: var(--bone); box-shadow: 0 30px 80px rgb(0 0 0 / .55); }
-.support-dialog::backdrop { background: rgb(10 8 6 / .76); }
+  border-radius: var(--dlg-radius, 18px); background: var(--ledge); color: var(--bone); box-shadow: 0 0 0 1px var(--seam), 0 30px 80px rgb(0 0 0 / .55); }
+.support-dialog::backdrop { background: rgb(10 8 6 / .62); }
 /* issue #113: what the routine check found, asking you what to download */
 .routine-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 24px 12px; padding: 10px 14px;
   border-radius: 12px; background: var(--stone); border: 1px solid var(--gold); font-size: 14px; }
@@ -537,8 +535,6 @@ body.selecting .toast { bottom: 96px; }
 #acksList ul { list-style: none; margin: 0; padding: 0; }
 #acksList li { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 3px 0; font-size: 13.5px; }
 #acksList li .lic { color: var(--dust); font-size: 12.5px; }
-dialog.ask .ack-text { max-height: min(60vh, 520px); overflow: auto; margin: 0 0 12px; padding: 10px 12px; border-radius: 8px;
-  background: var(--cave); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; }
 /* issue #230: notifications through Apprise */
 #setApprise { width: 100%; box-sizing: border-box; font: 12.5px/1.5 ui-monospace, monospace; }
 .apprise-acts { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 8px; }
@@ -660,6 +656,8 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .setup p { line-height: 1.55; margin: 8px 0; }
 .setup .muted { color: var(--dust); font-size: 13.5px; }
 .setup .actions { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 26px; }
+.setup .setup-browser { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 6px; font-weight: 600; }
+.setup .setup-browser select { min-width: 220px; }
 .setup .status { display: flex; align-items: center; gap: 10px; margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-weight: 700; }
 .setup .status::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
 .setup .status.ok::before { background: #4CC38A; }
@@ -715,9 +713,9 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .viewbar p { margin: 0; flex: 1; min-width: 240px; }
 .marks { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
 .store-row .found { flex-basis: 100%; font-size: 12.5px; color: var(--dust); }
-dialog.pin { width: min(420px, calc(var(--vw) - 32px)); padding: 24px 26px; border: 0; border-radius: 16px; color: var(--bone);
-  background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 24px 60px rgb(0 0 0 / .5); }
-dialog.pin::backdrop { background: rgb(10 8 6 / .7); }
+dialog.pin { width: min(420px, calc(var(--vw) - 32px)); padding: 24px 26px; border: 0; border-radius: var(--dlg-radius, 18px);
+  color: var(--bone); background: var(--ledge); box-shadow: 0 0 0 1px var(--seam), 0 30px 80px rgb(0 0 0 / .55); }
+dialog.pin::backdrop { background: rgb(10 8 6 / .62); }
 dialog.pin h2 { margin: 0 0 8px; font: 400 22px var(--display); }
 dialog.pin p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
 dialog.pin input { display: block; width: 100%; box-sizing: border-box; height: 40px; margin: 10px 0 0; padding: 0 12px; border: 0;
@@ -1087,8 +1085,6 @@ body.no-glow .projects.win { background: var(--cave); }
 .pj-more { margin: 10px 0; font-size: 13.5px; }
 .pj-more summary { cursor: pointer; color: var(--dust); font-weight: 700; }
 .projects label.check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
-dialog.ask.pj-dlg.wide { width: min(720px, calc(var(--vw) - 32px)); }
-dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc(var(--vh) - 72px); }
 .pj-picklist { list-style: none; margin: 0 0 10px; padding: 0; overflow: auto; min-height: 0; flex: 0 1 auto; font-size: 13.5px; }
 .pj-picklist li { padding: 6px 4px; border-top: 1px solid var(--seam); overflow-wrap: break-word; }   /* (#199: never mid-word) */
 .pj-contents .pj-c { display: flex; flex-direction: column; min-width: 0; }
@@ -1174,11 +1170,6 @@ dialog.ask.pj-dlg form { display: flex; flex-direction: column; max-height: calc
 .sets .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sets .row > button, .sets .row > a { width: auto; flex: none; margin: 0; }
 .sets-top { margin: 0 0 16px; }
-dialog.ask.share { width: min(600px, calc(var(--vw) - 32px)); }   /* (wider than other questions: its link and four buttons) */
-dialog.ask .ask-row a.ghost { height: var(--btn-h); }   /* (a link among the buttons, the buttons' height) */
-dialog.ask.share .shortlink { margin-top: 4px; }   /* (its short link: the only link a set is shared by) */
-dialog.ask.share .shortlink p:first-child { font-weight: 400; }   /* (not a question's first line) */
-dialog.ask .ghost.danger { color: var(--warn); }
 .proj .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
 .proj select { height: 32px; padding: 0 10px; border-radius: 8px; border: 0; background-color: var(--ledge); color: var(--bone);
   box-shadow: inset 0 0 0 1px var(--seam); }
@@ -1252,16 +1243,7 @@ body.no-glow #glow { display: none; }
 .theme-swatch i { width: 9px; height: 9px; border-radius: 3px; transform: rotate(45deg); }
 .custom-colours input[type=color] { width: 32px; height: 24px; padding: 0; border: 1px solid var(--seam); border-radius: 6px; background: none; }
 .seg button[aria-checked="true"]::after { display: none; }
-dialog.ask { width: min(460px, calc(var(--vw) - 32px)); max-height: calc(var(--vh) - 32px); padding: 22px 24px 18px; border: 0;
-  border-radius: 16px; color: var(--bone); background: var(--stone); box-shadow: 0 24px 60px rgb(0 0 0 / .45), inset 0 0 0 1px var(--seam); }
-dialog.ask::backdrop { background: rgb(10 8 6 / .7); }
-dialog.ask input:not([type=checkbox]):not([type=radio]) { height: var(--btn-h-sm); padding: 0 12px; border-radius: 8px; border: 0;
-  background: var(--cave); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: inherit; }   /* (the dialog is stone) */
-dialog.ask input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }
-dialog.ask p { margin: 0 0 10px; font-size: 14.5px; line-height: 1.55; overflow-wrap: anywhere; }
-dialog.ask p:first-child { font-weight: 700; }
 .ask-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }   /* (large text: buttons wrap, not off the edge) */
-dialog.ask .primary.danger { background: var(--warn); color: var(--gold-ink); }
 /* library folders, in Settings (as on the Downloads page) */
 .libs { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
 .librow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--stone);
@@ -1381,7 +1363,6 @@ body.less-motion .tour-try::before { animation: none; }
         <button id="storesBtn" class="stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
         <button id="rescan" title="Re-read what's on disk" data-app-view="downloads">Rescan</button>
 <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-        <button data-konoasset>Bring in from KonoAsset...</button>
         <div class="barmenu-links" role="group" aria-label="About Hoard"><span class="barmenu-ver" translate="no" data-version></span><button class="barmenu-upd" data-update-note hidden></button><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><button data-report-problem>Report a problem</button></div>
       </div>
     </div>
@@ -1699,10 +1680,20 @@ body.less-motion .tour-try::before { animation: none; }
     <option value="">Automatic (Microsoft Edge on Windows)</option>
     <option value="msedge">Microsoft Edge</option>
     <option value="chrome">Google Chrome</option>
+    <option value="brave" translate="no">Brave</option>
+    <option value="vivaldi" translate="no">Vivaldi</option>
+    <option value="opera" translate="no">Opera</option>
+    <option value="opera_gx" translate="no">Opera GX</option>
+    <option value="custom">Another Chromium browser…</option>
     <option value="chromium">Hoard's own browser</option>
   </select>
+  <div class="field" id="browserPathRow" hidden><input id="setBrowserPath" spellcheck="false" autocomplete="off"
+      aria-label="The browser's program" placeholder="C:\Program Files\Thorium\Application\thorium.exe">
+    <button class="ghost sm" id="setBrowserBrowse" data-browse hidden>Browse…</button></div>
   <p class="hint" id="browserInUse" aria-live="polite"></p>
-  <p class="hint">After changing the browser, you may need to sign in to your stores again.</p>
+  <p class="hint">It can be any browser built on Chromium: Edge, Chrome, Brave, Vivaldi, Opera, or another you choose
+    by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you
+    browse with, and after changing it you may need to sign in to your stores again.</p>
   <div id="backgroundRow" hidden>
     <h3>Closing Hoard</h3>
     <label class="check"><input type="checkbox" id="setBackground"> Closing the window minimizes Hoard to the taskbar (the Dock on a Mac), and it keeps working</label>

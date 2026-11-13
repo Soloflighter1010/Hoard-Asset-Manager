@@ -310,7 +310,7 @@
      "license": "MIT",
      "url": "https://svelte.dev",
      "in": "all",
-     "text": "hoard/web/inside.LICENSE.txt",
+     "text": "hoard/web/ui.LICENSE.txt",
      "npm": "svelte"
     },
     {
@@ -318,7 +318,7 @@
      "license": "MIT",
      "url": "https://github.com/lukeed/clsx",
      "in": "all",
-     "text": "hoard/web/inside.LICENSE.txt",
+     "text": "hoard/web/ui.LICENSE.txt",
      "npm": "clsx"
     },
     {
@@ -326,7 +326,7 @@
      "license": "MIT",
      "url": "https://github.com/benmccann/esm-env",
      "in": "all",
-     "text": "hoard/web/inside.LICENSE.txt",
+     "text": "hoard/web/ui.LICENSE.txt",
      "npm": "esm-env"
     }
    ]

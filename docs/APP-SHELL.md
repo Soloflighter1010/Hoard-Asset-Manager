@@ -39,39 +39,64 @@ one of the former pages alone. Subsequent tab changes avoid document, script and
 product reloads. This tradeoff is covered by request-count and DOM-identity tests,
 not a claim that every initial-load workload is faster.
 
-## Svelte trial: Look inside
+## Svelte: Look inside and the pop-ups
 
-The trial owns Look inside's filename, code summary, search field and extraction
-controls in `ui/LookInside.svelte`. It mounts once and updates its model without
-replacing the search field or open folders. The existing lazy package tree is
-attached as an owned DOM fragment while that part is migrated separately. The
-trial uses no `{@html}` and accepts no raw user text as markup. The existing
-server-side extraction validation is unchanged.
+`ui/` holds the pages' Svelte components; `ui/main.js` exposes them as one global, `HoardUI`, with a small boundary
+for each:
 
-`ui/inside.js` exposes only mount/update, extraction-progress update and unmount.
-`node scripts/build_ui.mjs` compiles it into `hoard/web/inside.generated.js` and
-copies the licenses of the bundled runtime packages. The bundle is checked in;
-Python launches, PyInstaller and source releases require no Node runtime. Changes
-to the component require `npm ci --ignore-scripts` and a rebuild. CI runs the
-builder with `--check`, including license drift. The parser for translation keys
-uses Svelte's syntax tree for `.svelte` sources and Acorn for JavaScript; generated
-minified code is not treated as the translation source.
+- **Look inside** (`ui/LookInside.svelte`, `HoardUI.inside`): the window's filename, code summary, search field and
+  extraction controls. It mounts once and updates its model without replacing the search field or open folders. The
+  existing lazy package tree is attached as an owned DOM fragment while that part is migrated separately.
+- **The pop-ups** (`ui/Dialog.svelte`, `HoardUI.dialogs`): every one the pages' scripts open, as one card like a
+  product's details: an icon, the title in the display font, a line under it, a close button, and the buttons under a
+  hairline. Its kinds: a question (`ask`), a name or a tag (`askName`), a folder (`askFolder`), a choice from a list
+  (`askChoice`: the set and project pickers), a form (`askForm`: Projects', Git's, backups', reading wishlists, adding
+  by link; its blocks are data, not markup: text, headings, preformatted text, lists, boxes, ticks, lists of ticks
+  or choices, columns, in steps with Back and Next when it has them), and a window whose inside the page still draws
+  (Mix and match, Share, marks on a photo), moved into the card whole as an owned DOM node, as Look inside's tree is. `open(spec)` returns a promise
+  of the answer; `heading(text)` turns a translated question into its title and what follows (at its `?` or `？`, else
+  its first sentence; a box's title also at a colon). The wrappers in `shared.js` keep their signatures, so their
+  callers didn't change, and the ids the pages and tests know (`#askDialog`, `#askText`, `#askName`, `#askFolder`,
+  buttons valued `yes` and `no`). The tag prompt offers your tags as chips, in place of the browser's own list.
+  The card's styles live in the component; a style's corners come from `--dlg-radius` and `--dlg-field-radius`
+  (`web/looks.css`). The pages' own dialogs in their HTML (the support report, PIN, the itch.io key, closing Hoard,
+  a download's files, the check's results) take the same ground, outline, corners and backdrop from the pages' CSS.
+  The style guide draws the component itself, in place (`dialogs.example`).
 
-Measured locally on Linux with Node 24, Svelte 5.57.3 and esbuild 0.28.2:
+Neither uses `{@html}` or accepts user text as markup. `node scripts/build_ui.mjs` compiles `ui/main.js` into
+`hoard/web/ui.generated.js` and copies the licenses of the bundled runtime packages to `hoard/web/ui.LICENSE.txt`. The
+bundle is checked in; Python launches and the Nuitka builds need no Node runtime. Changes to the components require
+`npm ci --ignore-scripts` and a rebuild. CI runs the builder with `--check`, including license drift. The parser for
+translation keys uses Svelte's syntax tree for `.svelte` sources and Acorn for JavaScript; generated minified code is
+not treated as the translation source.
 
-| Cost | Result |
-| --- | --- |
-| Generated script | 57,407 bytes |
-| Gzip script | 21,340 bytes |
-| Three warm build/check runs | 66–94 ms |
-| New runtime dependencies in Python/app installer | None |
-| Bundled JS runtime packages | Svelte, clsx, esm-env; MIT texts shipped |
-| Translation calls found in component source | 10 |
-| Existing Look inside browser tests | 8 tests, two shuffled runs; both passed |
+Measured locally on Linux with Node 22, Svelte 5.57.3 and esbuild 0.28.2:
 
-Decision: keep this bounded trial and its existing browser tests; do not migrate
-more windows to Svelte in this change. The trial improves ownership of controls
-and focus, but adds a compiler/build dependency and about 21 KB compressed while
-the legacy tree remains. A wider migration should follow a complete tree
-conversion and a measured comparison on the actual desktop runtimes. This Linux
-browser result does not establish performance on WebView2 or WebKit.
+| Cost | Look inside alone | With the pop-ups |
+| --- | --- | --- |
+| Generated script | 57,407 bytes | 111,855 bytes |
+| Gzip script | 21,340 bytes | 39,828 bytes |
+| Build/check run | 66–94 ms | about 200–260 ms |
+| New runtime dependencies in Python/app installer | None | None |
+| Bundled JS runtime packages | Svelte, clsx, esm-env | the same; MIT texts shipped |
+
+The trial's first decision kept Svelte to Look inside until a wider move was measured on the desktop runtimes. With
+the apps now built on Tauri (WebView2 on Windows, WebKit on macOS and Linux), the pop-ups moved over as the second
+part: about 18 KB compressed on top of the runtime already shipped, for one look and one place for every pop-up's
+behaviour (focus, Escape, a click outside, an input method's Enter). `tests/test_dialogs.py` covers them in Chromium,
+and holds the pages' scripts to what older WebKit reads (no regular expression lookbehind, which Safari before 16.4
+can't parse: the one script the page is made of would stop).
+`scripts/ui_engines.py` checks each pop-up's answers and times them in another engine, and the Engines workflow
+(`.github/workflows/engines.yml`) runs it on WebKit (macOS, and Linux as WebKitGTK's stand-in) and on Edge, whose
+engine is WebView2's, whenever `ui/` or the pages change; each run's summary has its table.
+
+| Engine (where measured) | Bundle read and run, once | A pop-up made and shown (first; middle; 90th percentile) | To its next frame |
+| --- | --- | --- | --- |
+| Chromium 153 (Playwright's, Linux, this change) | 15.9 ms | 12.3; 2.5; 3.1 ms | 3.9 ms |
+| WebKit 26.6 (Playwright's, macOS 15, GitHub's runner) | 9.0 ms | 13.0; 1.0; 2.0 ms | 12.0 ms |
+| Edge 156 (WebView2's engine, Windows, GitHub's runner) | 10.5 ms | 13.4; 3.1; 3.8 ms | 7.8 ms |
+| WebKit 26.6 (Playwright's, Ubuntu 22.04, as WebKitGTK's stand-in) | 4.0 ms | 15.0; 1.0; 2.0 ms | 214 ms* |
+
+The Engines workflow's first run, on the pull request that brought the pop-ups in; all 11 checks passed in each
+engine. WebKit's clock gives whole milliseconds. *Linux's runner has no screen, so its first frame waits on a
+stand-in compositor: that time says nothing about a desktop's.

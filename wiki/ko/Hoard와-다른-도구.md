@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-and-Other-Tools (English 94250bc0e444). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-and-Other-Tools (English c21a8dfa6ea9). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-and-Other-Tools">English</a> · <a href="Hoardとほかのツール">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 VRChat 크리에이터가 쓰는 도구는 Hoard만 있는 게 아니에요. 자주 이야기되는 건 VRChat 공식 **Creator Companion**(VCC), **ALCOM**, **KonoAsset** 세 가지예요. 저마다 하는 일이 다르고, 여러 개를 함께 쓰는 사람도 많아요.
@@ -32,7 +32,7 @@ VRChat 크리에이터가 쓰는 도구는 Hoard만 있는 게 아니에요. 자
 - **VRChat 패키지로 아바타나 월드를 만들기만 한다면?** Creator Companion은 VRChat 공식 도구이고, 시작하는 방법도 그 문서에 나와 있어요.
 - **같은 일을, 더 빠르게, 또는 Mac이나 Linux에서?** ALCOM은 같은 설정으로 Creator Companion이 하는 일을 해서, 오가며 쓸 수 있어요.
 - **다운로드한 것을 메모와 맞는 아바타와 함께 직접 정리하고 싶다면?** KonoAsset이 그걸 위한 도구예요.
-- **KonoAsset에서 Hoard로 옮긴다면?** Hoard 메뉴나 설정의 **KonoAsset에서 가져오기...**로 라이브러리를 가져올 수 있어요(5.2.0 베타 5). BOOTH 상품으로 Hoard 라이브러리와 맞추고, 나머지는 지금 자리 그대로 로컬 상품으로, 태그와 메모도 함께 가져와요. [내 패키지](내-패키지#konoasset에서)를 보세요.
+- **KonoAsset에서 Hoard로 옮긴다면?** Hoard 설정의 **KonoAsset에서 가져오기...**로 라이브러리를 가져올 수 있어요(5.2.0 베타 5). BOOTH 상품으로 Hoard 라이브러리와 맞추고, 나머지는 지금 자리 그대로 로컬 상품으로, 태그와 메모도 함께 가져와요. [내 패키지](내-패키지#konoasset에서)를 보세요.
 - **여러 스토어에서 산 것을 한곳에 모으고, 다운로드해서 최신으로 유지하고 싶다면?** 그게 Hoard예요. 상품을 프로젝트에 넣을 수 있고, 프로젝트 목록은 Creator Companion, ALCOM과 같아요.
 
 ## 각 도구의 페이지

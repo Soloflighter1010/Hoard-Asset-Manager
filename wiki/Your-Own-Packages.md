@@ -42,8 +42,8 @@ marked in the list and left as they are. (Packages added with a beta of 3.0, bef
 
 ### From KonoAsset
 
-Switching from [KonoAsset](https://github.com/siloneco/KonoAsset)? Choose **Bring in from KonoAsset...** in the
-Menu (or, the first time, in the setup assistant's last step), and choose KonoAsset's data folder: the one with
+Switching from [KonoAsset](https://github.com/siloneco/KonoAsset)? Choose **Bring in from KonoAsset...** in
+Settings, under Bring in from another tool (or, the first time, in the setup assistant's last step), and choose KonoAsset's data folder: the one with
 `metadata`, `data` and `images` in it (KonoAsset's Settings say where it is). KonoAsset needn't be running, or
 installed. Before anything changes, Hoard says what bringing it in will do; then **Bring in** or **Cancel**.
 

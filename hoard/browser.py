@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import plistlib
 import re
 import shutil
 import subprocess
@@ -348,23 +349,114 @@ def _on_sites(host: str, sites: list[str]) -> bool:
     return any(host == s or host.endswith("." + s) for s in sites)
 
 
-def channel_path(channel: str) -> str | None:
-    """Where Microsoft Edge or Google Chrome is installed, where Playwright looks for it; None when it isn't."""
+# The browsers Hoard's store window can be. Playwright starts Microsoft Edge and Google Chrome by name; the rest of the
+# Chromium family by their program: Brave, Vivaldi, Opera and Opera GX where their installers put them, or another
+# you choose by its program ("custom", in browser_path). Firefox and Safari aren't Chromium, so it can't be them.
+# Whichever it is, the window keeps its own sign-ins, apart from the browser you browse with.
+NAMED = ("msedge", "chrome")
+FOUND = ("brave", "vivaldi", "opera", "opera_gx")
+BROWSER_NAMES = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "brave": "Brave", "vivaldi": "Vivaldi",
+                 "opera": "Opera", "opera_gx": "Opera GX", "custom": "The browser you chose", "chromium": "Hoard's own browser"}
+# Browsers that aren't Chromium (a program chosen by its path that is one of these is refused)
+NOT_CHROMIUM = {"firefox", "firefox-esr", "firefox-bin", "safari", "librewolf", "waterfox", "floorp", "zen",
+                "tor", "torbrowser", "palemoon", "seamonkey", "mullvadbrowser"}
+
+
+def _windows_places(channel: str) -> list[tuple]:
+    """Where each browser's installer puts it on Windows (for everyone, or for you alone in your AppData)."""
+    pf86, pf, local = (os.environ.get(k) for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA"))
+    return {
+        "msedge": [(b, "Microsoft", "Edge", "Application", "msedge.exe") for b in (pf86, pf, local)],
+        "chrome": [(b, "Google", "Chrome", "Application", "chrome.exe") for b in (pf86, pf, local)],
+        "brave": [(b, "BraveSoftware", "Brave-Browser", "Application", "brave.exe") for b in (pf, pf86, local)],
+        "vivaldi": [(b, "Vivaldi", "Application", "vivaldi.exe") for b in (local, pf, pf86)],
+        # (opera.exe itself: launcher.exe hands over to it and ends, which a driven browser can't survive)
+        "opera": [(local, "Programs", "Opera", "opera.exe"), (pf, "Opera", "opera.exe"), (pf86, "Opera", "opera.exe")],
+        "opera_gx": [(local, "Programs", "Opera GX", "opera.exe"), (pf, "Opera GX", "opera.exe")],
+    }.get(channel, [])
+
+
+# A Mac's: its app's name (its program is the one its Info.plist names, in Contents/MacOS)
+MAC_APPS = {"msedge": "Microsoft Edge", "chrome": "Google Chrome", "brave": "Brave Browser", "vivaldi": "Vivaldi",
+            "opera": "Opera", "opera_gx": "Opera GX"}
+# Linux's: the commands its packages put on the path
+LINUX_COMMANDS = {"msedge": ("microsoft-edge",), "chrome": ("google-chrome",),
+                  "brave": ("brave-browser", "brave-browser-stable", "brave"), "vivaldi": ("vivaldi", "vivaldi-stable"),
+                  "opera": ("opera",), "opera_gx": ()}
+
+
+def channel_path(channel: str, cfg: dict | None = None) -> str | None:
+    """Where a browser Hoard can sign in with is installed (Edge and Chrome where Playwright looks for them); for
+    "custom", the program you chose (cfg's browser_path). None when it isn't."""
+    if channel == "custom":
+        return custom_program((cfg or {}).get("browser_path"))
     if sys.platform == "win32":
-        folders = {"msedge": ("Microsoft", "Edge", "Application", "msedge.exe"),
-                   "chrome": ("Google", "Chrome", "Application", "chrome.exe")}[channel]
-        bases = (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA"))
-        return next((str(Path(b, *folders)) for b in bases if b and Path(b, *folders).is_file()), None)
+        return next((str(Path(*place)) for place in _windows_places(channel) if place[0] and Path(*place).is_file()), None)
     if sys.platform == "darwin":
-        app = {"msedge": "Microsoft Edge", "chrome": "Google Chrome"}[channel]
-        path = Path(f"/Applications/{app}.app/Contents/MacOS/{app}")
-        return str(path) if path.is_file() else None
-    return shutil.which({"msedge": "microsoft-edge", "chrome": "google-chrome"}[channel])
+        if channel not in MAC_APPS:
+            return None
+        app = MAC_APPS[channel]
+        if channel in NAMED:   # (only in /Applications, where Playwright starts them from)
+            path = Path("/Applications") / f"{app}.app" / "Contents" / "MacOS" / app
+            return str(path) if path.is_file() else None
+        return next((str(found) for home in (Path("/Applications"), Path.home() / "Applications")
+                     if (found := mac_app_program(home / f"{app}.app"))), None)
+    return next((found for command in LINUX_COMMANDS.get(channel, ()) if (found := shutil.which(command))), None)
 
 
-def channel_installed(channel: str) -> bool:
-    """Is Microsoft Edge or Google Chrome installed where Playwright looks for it?"""
-    return channel_path(channel) is not None
+def custom_program(value) -> str | None:
+    """The program of a browser you chose by its path: the program itself, or a Mac's .app (the program inside it).
+    None when it isn't a program on this computer, or is a browser that isn't Chromium (see NOT_CHROMIUM)."""
+    value = str(value or "").strip().strip('"')
+    if not value or len(value) > 1000:
+        return None
+    path = Path(os.path.expanduser(value))
+    if not path.is_absolute():
+        return None
+    if path.suffix.lower() == ".app" and path.is_dir():   # a Mac's app: the program inside it
+        path = mac_app_program(path)
+        if path is None:
+            return None
+    if not path.is_file() or not_chromium(str(path)):
+        return None
+    if os.name == "nt" and path.suffix.lower() != ".exe":
+        return None
+    if os.name != "nt" and not os.access(path, os.X_OK):
+        return None
+    return str(path)
+
+
+def mac_app_program(app: Path) -> Path | None:
+    """A Mac app's program: the one its Info.plist names (CFBundleExecutable), in Contents/MacOS; None when it isn't
+    there."""
+    try:
+        with open(app / "Contents" / "Info.plist", "rb") as f:
+            program = plistlib.load(f).get("CFBundleExecutable") or app.stem
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+    path = app / "Contents" / "MacOS" / Path(str(program)).name
+    return path if path.is_file() else None
+
+
+def not_chromium(path: str) -> bool:
+    """Is this program a browser that isn't Chromium (Firefox, Safari and the like), by its name?"""
+    name = Path(path).stem.lower().replace(" ", "")
+    return name in NOT_CHROMIUM or name.startswith("firefox")
+
+
+def browser_name(channel: str, cfg: dict | None = None) -> str:
+    """A browser's name, as Settings says it: for one chosen by its path, its program's name (Thorium, say)."""
+    if channel == "custom":
+        program = custom_program((cfg or {}).get("browser_path"))
+        if program:
+            app = next((part for part in Path(program).parts if part.lower().endswith(".app")), None)
+            return Path(app).stem if app else Path(program).stem.replace("-", " ").title()
+    return BROWSER_NAMES.get(channel, BROWSER_NAMES["chromium"])
+
+
+def channel_installed(channel: str, cfg: dict | None = None) -> bool:
+    """Is this browser installed where Hoard looks for it (for "custom", is the program you chose there)?"""
+    return channel_path(channel, cfg) is not None
 
 
 def default_channel() -> str:
@@ -382,7 +474,7 @@ def use_channel(cfg: dict) -> str:
     """The browser Hoard actually starts: the one you chose, or, when that one isn't installed on this computer,
     Hoard's own. (Setup offers to install Hoard's own for exactly that case, so it has to be the one used.)"""
     channel = chosen_channel(cfg)
-    return channel if channel == "chromium" or channel_installed(channel) else "chromium"
+    return channel if channel == "chromium" or channel_installed(channel, cfg) else "chromium"
 
 
 def _key_args(cfg: dict) -> list[str]:
@@ -413,9 +505,21 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
     # Always named, "chromium" too: without it, Playwright starts a different program when there's no window, its
     # "headless shell", and on a Mac that one always uses a stand-in for the Keychain. Sign-ins saved from the
     # sign-in window (with the real Keychain) then couldn't be read, so every store said "Not signed in" after
-    # you'd signed in (issue #33). Named, it's the same Chromium with or without a window.
-    kwargs["channel"] = use_channel(cfg)
-    ctx = p.chromium.launch_persistent_context(**kwargs)
+    # you'd signed in (issue #33). Named, it's the same Chromium with or without a window. The rest of the Chromium
+    # family (Brave, Vivaldi, Opera, one you chose) is started by its program, the same one either way.
+    channel = use_channel(cfg)
+    if channel == "chromium" or channel in NAMED:
+        kwargs["channel"] = channel
+    else:
+        kwargs["executable_path"] = channel_path(channel, cfg)
+    try:
+        ctx = p.chromium.launch_persistent_context(**kwargs)
+    except Exception as e:
+        if "executable_path" not in kwargs or not str(e).strip():
+            raise
+        said = str(e).strip().splitlines()[0][:200]
+        raise RuntimeError(f"{browser_name(channel, cfg)} couldn't be started for Hoard ({said}). Choose another "
+                           "browser in Settings, under Browser for store sign-ins.") from e
     _track(ctx)
     return ctx
 
@@ -608,7 +712,7 @@ def launch_context(p, cfg: dict, headless: bool, store: str):
 def browser_program(p, cfg: dict) -> str:
     """The program of the browser Hoard uses (see use_channel)."""
     channel = use_channel(cfg)
-    path = p.chromium.executable_path if channel == "chromium" else channel_path(channel)
+    path = p.chromium.executable_path if channel == "chromium" else channel_path(channel, cfg)
     if not path or not Path(path).is_file():
         raise RuntimeError("Hoard's browser isn't installed yet. Open Settings, choose Set up Hoard again, and install it.")
     return str(path)
@@ -669,13 +773,14 @@ def _without_sandbox(channel: str) -> bool:
     """Must a plain window start without Chromium's own sandbox, as Hoard's window always does (Playwright's
     default)? Only on Linux, where it can't start: inside the Flatpak's sandbox, as root, or, for Playwright's
     Chromium, where the system stops programs without their own AppArmor profile from using what the sandbox needs
-    (Ubuntu 23.10 and later; installed Chrome and Edge bring a profile, so they keep theirs)."""
+    (Ubuntu 23.10 and later; installed Chrome, Edge, Brave, Vivaldi and Opera have a profile, so they keep theirs;
+    a browser you chose by its path may not)."""
     if not sys.platform.startswith("linux"):
         return False
     from .paths import in_flatpak
     if in_flatpak() or os.geteuid() == 0:
         return True
-    if channel == "chromium":
+    if channel in ("chromium", "custom"):   # (Brave's, Vivaldi's and Opera's packages bring a profile, as Chrome's do)
         try:
             return Path("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").read_text().strip() == "1"
         except OSError:

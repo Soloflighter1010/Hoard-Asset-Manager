@@ -1,5 +1,35 @@
 # Changelog
 
+## 5.2.0-beta.7
+
+- **Bring in from KonoAsset... is in Settings only**, under Bring in from another tool (and, the first time, in the
+  setup assistant's last step): the Menu keeps to Tags, Stores, Rescan and Settings.
+- **Every pop-up looks like the rest of Hoard.** A question, a name, a tag, a folder and the set picker are now one
+  card like a product's details: an icon, the question as its title in Hoard's own lettering and what follows under
+  it, a close button, and the buttons under a line. Adding a tag offers your tags as chips (the counts beside them,
+  a New tag chip for one you haven't used), where it used to be the browser's own list; Add to which set? lists each
+  set with its picture and counts, found as you type. Projects' (choosing packages, a package's version, what a
+  change does, deleting a project), Git's, backups', reading wishlists, adding by link, Mix and match, Share and
+  marking a photo are the same card too, steps and all; a long package name breaks at its dots. They're built in
+  Svelte, as Look inside is. In Japanese and Korean, a question is translated whole and then titled; a tag typed
+  with its `#` is your tag; taking a tag off offers only the tags the products have; Enter that finishes a word
+  being typed in Japanese or Korean (in the Mac and Linux apps too) never presses the button; and a project's path,
+  a file's name and a package's id are never changed by a browser's translation.
+- **Hoard can sign in to your stores with the browser you like**, if it's built on Chromium: Settings, under
+  **Browser for store sign-ins**, now has **Brave**, **Vivaldi**, **Opera** and **Opera GX** where they're
+  installed, and **Another Chromium browser…**, chosen by its program (Arc or Thorium, say: its `.exe`, or a Mac's
+  `.app`). The setup assistant offers the ones on your computer. Firefox and Safari can't be it, as they aren't
+  Chromium. It still keeps its own sign-ins, apart from the browser you browse with.
+- **The set viewer asks again after "I'm under 18".** That answer is kept only until the browser is closed, so a
+  browser that once gave it (someone trying the page, say) is asked again next time; "I'm 18 or older" is still
+  kept for a year. A set shown without its products for adults says so in a box at the top, with **Change your
+  answer**, where before it was one small line that was easy to miss.
+- **A browser download that's slow to start is waited for.** A Booth download the browser took more than 5 seconds
+  to start writing was taken for one it had given up on, and saving it then waited with no time limit and no way for
+  Stop to reach it. Hoard now asks the browser whether it has finished with a download; one whose file hasn't
+  appeared after 2 minutes is stopped and tried again, as a stalled one is, and the time before its file appears is
+  never counted as nothing coming in.
+
 ## 5.2.0-beta.6
 
 - **Hoard is built a new way, and installs as a new app.** Its window is a [Tauri](https://tauri.app) app instead of

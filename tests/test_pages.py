@@ -243,7 +243,7 @@ class AccessKey(IsolatedTestCase):
         from hoard import browser as hb
         self.addCleanup(self.srv.cfg.update, browser_channel=self.srv.cfg.get("browser_channel", ""))
         with mock.patch.object(server, "save_config"), \
-                mock.patch.object(hb, "channel_installed", lambda channel: channel == "msedge"):
+                mock.patch.object(hb, "channel_installed", lambda channel, cfg=None: channel == "msedge"):
             page, refused = self.open(self.srv.entry_url())
             page.get_by_text("Rusk").first.wait_for()
             for url in (None, f"{self.srv.url}downloads"):
@@ -267,6 +267,44 @@ class AccessKey(IsolatedTestCase):
                 self.assertEqual(self.srv.cfg["browser_channel"], "chromium", "the choice is saved")
                 page.locator("#settingsPanel .win-x").click()
                 self.srv.cfg["browser_channel"] = ""
+    @unittest.skipIf(os.name == "nt", "the program chosen is a file that can be run")
+    def test_settings_offer_more_browsers(self):
+        """Brave, Vivaldi and Opera are offered where they're installed; another Chromium browser by its program,
+        saved once it's one (Firefox isn't), and named by it."""
+        from hoard import browser as hb
+        tmp = Path(tempfile.mkdtemp())
+        thorium, firefox = tmp / "thorium", tmp / "firefox"
+        for prog in (thorium, firefox):
+            prog.write_text("#!/bin/sh\n")
+            prog.chmod(0o755)
+        self.addCleanup(self.srv.cfg.update, browser_channel=self.srv.cfg.get("browser_channel", ""),
+                        browser_path=self.srv.cfg.get("browser_path", ""))
+        here = lambda channel, cfg=None: channel in ("msedge", "brave") or (  # noqa: E731
+            channel == "custom" and bool(hb.custom_program((cfg or {}).get("browser_path"))))
+        with mock.patch.object(server, "save_config"), mock.patch.object(hb, "channel_installed", here):
+            page, refused = self.open(self.srv.entry_url())
+            page.get_by_text("Rusk").first.wait_for()
+            menu(page, "#settingsBtn")
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            offered = page.evaluate("[...document.querySelectorAll('#setBrowser option')].filter(o => !o.hidden).map(o => o.value)")
+            self.assertEqual(offered, ["", "msedge", "chrome", "brave", "custom", "chromium"], "Brave, installed; not the others")
+            page.select_option("#setBrowser", "brave")
+            self.assertEqual(page.locator("#browserInUse").inner_text(), "Hoard signs in with Brave.")
+            self.assertTrue(page.locator("#browserPathRow").is_hidden())
+            page.select_option("#setBrowser", "custom")
+            self.assertTrue(page.locator("#browserPathRow").is_visible(), "its program, to choose")
+            self.assertIn("Choose its program", page.locator("#browserInUse").inner_text())
+            page.fill("#setBrowserPath", str(firefox))
+            page.locator("#setBrowserPath").dispatch_event("change")
+            page.locator(".toast", has_text="built on Chromium").wait_for()
+            self.assertNotEqual(self.srv.cfg.get("browser_path"), str(firefox), "not saved")
+            page.fill("#setBrowserPath", str(thorium))
+            page.locator("#setBrowserPath").dispatch_event("change")
+            page.wait_for_function("() => document.querySelector('#browserInUse').textContent === 'Hoard signs in with Thorium.'")
+            self.assertEqual((self.srv.cfg["browser_channel"], self.srv.cfg["browser_path"]), ("custom", str(thorium)))
+            self.assertEqual(refused, [])
+            page.close()
+
     def test_the_downloads_page_has_the_librarys_views(self):
         """Issue #29: archiving an item in the Library moves its download to the Downloads page's Archive view,
         as in the Library, instead of leaving no way to tell it apart."""
@@ -517,13 +555,13 @@ class AccessKey(IsolatedTestCase):
             self.assertTrue(page.is_checked("[data-apprise-event='tasks']"), "kept")
             page.locator("#appriseList li", has_text="hoard-two").locator("[data-apprise-do=remove]").count()
             page.locator("#appriseList li").first.locator("[data-apprise-do=remove]").click()
-            page.locator("dialog.ask .primary").click()
+            page.locator("#askDialog .primary").click()
             page.locator("#appriseKept", has_text="1 address is kept").wait_for()
             self.assertEqual(alerts.urls(self.srv.cfg), ["ntfys://ntfy.example/hoard"])
             self.assertEqual(page.evaluate("api('/api/apprise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, "
                                            "body: JSON.stringify({ urls: '' }) }).then(r => r.status)"), 400)
             page.click("#appriseForget")
-            page.locator("dialog.ask .primary").click()
+            page.locator("#askDialog .primary").click()
             page.locator("#appriseKept", has_text="No addresses yet").wait_for()
         self.assertEqual(refused, [])
         page.close()
@@ -540,10 +578,10 @@ class AccessKey(IsolatedTestCase):
         self.assertGreater(page.locator("#acksList li").count(), 40)
         self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
         page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
-        dialog = page.locator("dialog.ask[open]")
+        dialog = page.locator("dialog.hd[open]")
         dialog.locator(".ack-text").wait_for()
         self.assertIn("SIL OPEN FONT LICENSE", dialog.locator(".ack-text").inner_text().upper())
-        dialog.get_by_role("button", name="Close").click()
+        dialog.locator("footer button", has_text="Close").click()   # (the one under it; the close button at its top does the same)
         self.assertEqual(refused, [])
         page.close()
 
@@ -577,7 +615,7 @@ class AccessKey(IsolatedTestCase):
         row.get_by_role("button", name="Keep it as it is").click()
         dialog.locator(".check-list li", has_text="rusk.zip").wait_for(state="detached")
         gone.get_by_role("button", name="Forget it").click()
-        page.locator("dialog.ask .primary").click()
+        page.locator("#askDialog .primary").click()
         dialog.get_by_text("Nothing left to deal with.").wait_for()
         self.assertEqual(downloader.last_integrity()["changed"], [])
         dialog.locator("[data-check-close]").click()
@@ -862,7 +900,7 @@ class AccessKey(IsolatedTestCase):
         """Issue #345: a product's details, on both pages, open its store page and copy its link. Issue #344: in
         Hoard's own window a right-click that isn't Hoard's own does nothing (the web view's Back, Save as and Print
         had come up), but in a box you type in; in your browser, its menu is yours. Issue #340: Bring in from
-        KonoAsset... is in Settings as well as the Menu. Issue #341: a suggested tag, chosen, reads as a chosen one."""
+        KonoAsset... is in Settings (only there: not in the Menu). Issue #341: a suggested tag, chosen, reads as a chosen one."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         asked = """sel => { const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -925,21 +963,21 @@ class AccessKey(IsolatedTestCase):
 
     def test_each_page_ends_its_header_with_its_one_thing_to_press(self):
         """The gold button is the last in the header, as the one thing to press: Sync in the Library, and Download new
-        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, Settings and Bring in from KonoAsset...
-        (#305) are in the Menu (#219)."""
+        in Downloads, which has no Sync (issue #216). Tags, Stores or Rescan, and Settings are in the Menu (#219);
+        Bring in from KonoAsset... (#305) is in Settings, not the Menu."""
         page, refused = self.open(self.srv.entry_url())
         page.get_by_text("Rusk").first.wait_for()
         shown = "() => [...document.querySelectorAll('header .tools button')].filter(b => b.offsetParent).map(b => b.id)"
         self.assertEqual(page.evaluate(shown), ["menuBtn", "syncBtn"])
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Settings"])
         page.click("nav.apptabs a[href='/downloads']")
         page.wait_for_url("**/downloads**")
         page.get_by_text("Rusk").first.wait_for()
         self.assertEqual(page.evaluate(shown), ["menuBtn", "downloadNew"])
         self.assertTrue(page.locator("#syncBtn").is_hidden())
         page.click("#menuBtn")
-        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Rescan", "Settings", "Bring in from KonoAsset..."])
+        self.assertEqual(page.locator("#barMenu > button:visible").all_inner_texts(), ["Tags", "Stores", "Rescan", "Settings"])
         page.close()
 
     def test_search_prefixes_in_downloads(self):
@@ -2507,6 +2545,35 @@ class SetupAssistant(IsolatedTestCase):
             self.assertTrue(page.locator('input[name="setupClose"][value="quit"]').is_checked(), "and shown as chosen")
             browser.close()
 
+    def test_choosing_the_browser_in_the_setup_assistant(self):
+        """The assistant's browser step offers the browsers on this computer Hoard can sign in with (Edge, Brave...)
+        and its own, and saves the one chosen at once."""
+        from hoard import browser as hb, setup as hs
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": tmp.name, "setup_done": True,
+                                                   "browser_channel": "msedge"}, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        here = lambda channel, cfg=None: channel in ("msedge", "brave")  # noqa: E731
+        with sync_playwright() as p, mock.patch.object(server, "save_config"), \
+                mock.patch.object(hb, "channel_installed", here), mock.patch.object(hs, "channel_installed", here), \
+                mock.patch.object(hs, "own_browser_installed", lambda: True):
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            goto(page, srv.entry_url())
+            page.wait_for_function("() => DATA && DATA.version")
+            page.evaluate("openSetup().then(() => { SETUP.step = setupSteps().indexOf('browser'); renderSetup(); })")
+            page.locator("#setupTitle", has_text="The browser Hoard signs in with").wait_for()
+            self.assertEqual(page.evaluate("[...document.querySelectorAll('#setupBrowser option')].map(o => [o.value, o.textContent])"),
+                             [["msedge", "Microsoft Edge"], ["brave", "Brave"], ["chromium", "Hoard's own browser"]])
+            self.assertEqual(page.locator("#setupBrowser").input_value(), "msedge", "as it's set now")
+            page.select_option("#setupBrowser", "brave")
+            page.locator("#setupBody .status", has_text="Brave is ready.").wait_for()
+            self.assertEqual(srv.cfg["browser_channel"], "brave")
+            browser.close()
+
     def test_notifications_in_the_setup_assistant(self):
         """Issue #288: where Apprise is installed, the assistant has a notifications step: a service, its fields made
         into an address and added, a test sent to it, and what's sent ticked. Skipped (Next with nothing added), it
@@ -2667,10 +2734,10 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         page.evaluate("document.addEventListener('dragstart', e => { e.preventDefault(); e.stopImmediatePropagation(); }, true)")
         # on Sets and Wishlists: which set, then yes
         tile("Mochi").drag_to(page.locator('#storeSeg [data-store="Sets"]'))
-        which = page.locator("dialog.setpick-dlg")
+        which = page.locator("dialog.hd-pick")
         which.wait_for()
-        which.locator(".settile", has_text="Kitsu pair").click()
-        page.locator("dialog.ask .primary", has_text="Add").click()
+        which.locator(".hd-row", has_text="Kitsu pair").click()
+        page.locator("#askDialog .primary", has_text="Add").click()
         page.locator(".toast", has_text="Added it to Kitsu pair.").wait_for()
         self.assertEqual(len(next(x for x in page.evaluate("DATA.sets") if x["id"] == pair["id"])["items"]), 3)
         for i in made:   # (the next test starts with no sets)
@@ -3123,13 +3190,13 @@ class WindowsTabsAndTasks(IsolatedTestCase):
             self.assertEqual(adds(), ["Add to Set 15", "Add to Set 14", "Add to Set 13", "Add to Set 12", "Add to Set 11",
                                       "Add to another set..."], "the newest five, then the rest by name")
             page.locator(".selmenu [role=menuitem]", has_text="Add to another set...").click()
-            picker = page.locator("dialog.setpick-dlg")
+            picker = page.locator("dialog.hd-pick")
             picker.wait_for()
-            self.assertEqual(picker.locator(".settile").count(), 16, "every set")
+            self.assertEqual(picker.locator(".hd-row").count(), 16, "every set")
             self.assertEqual(picker.locator("h4").all_inner_texts(), ["Your sets"])
-            picker.locator(".setpick-find").fill("set 03")
-            self.assertEqual(picker.locator(".settile:not([hidden]) .nm-t").all_inner_texts(), ["Set 03"])
-            picker.locator(".settile", has_text="Set 03").click()
+            picker.locator("input[type=search]").fill("set 03")
+            self.assertEqual(picker.locator(".hd-row .hd-name").all_inner_texts(), ["Set 03"])
+            picker.locator(".hd-row", has_text="Set 03").click()
             page.locator("#askDialog[open]").wait_for()
             self.assertIn("Add it to Set 03?", page.locator("#askText").inner_text())
             page.wait_for_timeout(200)
@@ -3243,14 +3310,14 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         sent = []
         page.route("**/api/konoasset/bring-in", lambda route: (sent.append(json.loads(route.request.post_data)),
                                                                route.fulfill(status=200, json={"ok": True, "queued": False})))
-        page.click("#menuBtn")
-        page.click("#barMenu [data-konoasset]")
-        box = page.locator("dialog.ask-folder input")
+        menu(page, "#settingsBtn")
+        page.click("#settingsPanel [data-konoasset]")
+        box = page.locator("dialog.hd-folder input")
         box.fill(str(folder.parent / "nowhere"))
-        page.click("dialog.ask-folder button[value=yes]")
+        page.click("dialog.hd-folder button[value=yes]")
         page.locator("#toast", has_text="no folder there").wait_for()
-        page.locator("dialog.ask-folder input").fill(str(folder))   # (asked again, with what was typed)
-        page.click("dialog.ask-folder button[value=yes]")
+        page.locator("dialog.hd-folder input").fill(str(folder))   # (asked again, with what was typed)
+        page.click("dialog.hd-folder button[value=yes]")
         page.wait_for_function("() => document.querySelector('#askDialog') && document.querySelector('#askDialog').open")
         said = page.locator("#askText").inner_text()
         for words in ("In KonoAsset: 5 products.", "New Local products: 3.",   # (its Rusk isn't this library's: BOOTH item 1)

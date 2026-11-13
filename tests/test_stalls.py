@@ -280,7 +280,9 @@ class BrowserDownloads(IsolatedTestCase):
         dl = started[0]
         self.page.wait_for_timeout(500)
         dl.cancel()   # as if the connection dropped
+        began = time.monotonic()
         downloader.wait_for_browser_download(dl, "file.bin", stall_s=30)   # ends at once, not after the stall
+        self.assertLess(time.monotonic() - began, 3, "Playwright said it had finished: no waiting it out")
         with self.assertRaisesRegex(Exception, "cancel"):
             safety.save_browser_download(dl, self.folder, "file.bin")
 
@@ -338,6 +340,73 @@ class BrowserDownloads(IsolatedTestCase):
         self.assertEqual(downloader.disposition_name("attachment; filename*=UTF-8''N%C3%B6va.unitypackage; filename=x"),
                          "Növa.unitypackage")
         self.assertEqual(downloader.disposition_name("inline"), "")
+
+
+class _LateDownload:
+    """A browser download whose file the browser only starts writing after a moment, as a busy computer's browser
+    can: its .crdownload appears after `starts` seconds (never, when None), then grows, and becomes the file itself
+    after `ends` (never, when None). Playwright can't be asked whether it has finished (downloader._finished)."""
+
+    def __init__(self, where: Path, starts: float | None, ends: float | None):
+        self._impl_obj = mock.Mock()
+        self._impl_obj._artifact._initializer = {"absolutePath": str(where)}
+        self.page = mock.Mock()
+        self.page.wait_for_timeout.side_effect = lambda ms: time.sleep(ms / 1000)
+        self.cancelled = False
+        part = where.with_name(where.name + ".crdownload")
+
+        def write():
+            if starts is None:
+                return
+            time.sleep(starts)
+            part.write_bytes(b"x" * 1000)
+            if ends is not None:
+                time.sleep(ends - starts)
+                part.replace(where)
+        self.writer = threading.Thread(target=write, daemon=True)
+        self.writer.start()
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class ADownloadSlowToStart(IsolatedTestCase):
+    """A Windows test machine under load took more than the test's second to start writing a download that came in
+    whole, and it was cancelled as stalled: the wait for its file to appear was counted as nothing coming in."""
+
+    def setUp(self):
+        self.folder = Path(tempfile.mkdtemp())
+
+    def test_the_wait_for_its_file_isnt_a_stall(self):
+        dl = _LateDownload(self.folder / "guid", starts=1.5, ends=1.6)
+        downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        dl.writer.join()
+        self.assertFalse(dl.cancelled, "not cancelled as stalled")
+        self.assertTrue((self.folder / "guid").exists())
+
+    def test_once_it_has_started_it_can_still_stall(self):
+        dl = _LateDownload(self.folder / "guid", starts=1.5, ends=None)
+        began = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "stalled"):
+            downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        self.assertGreaterEqual(time.monotonic() - began, 2.5, "a second after its file appeared, not after it began")
+        self.assertTrue(dl.cancelled)
+
+    def test_a_file_slower_than_five_seconds_to_appear_is_still_waited_for(self):
+        """It used to be taken for a download the browser had given up on after 5 s: the wait ended, and saving it
+        then waited with no time limit and no way for Stop to reach it."""
+        dl = _LateDownload(self.folder / "guid", starts=5.5, ends=5.7)
+        downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        self.assertTrue((self.folder / "guid").exists(), "waited until it was complete")
+        self.assertFalse(dl.cancelled)
+
+    def test_a_download_whose_file_never_appears_stalls(self):
+        dl = _LateDownload(self.folder / "guid", starts=None, ends=None)
+        began = time.monotonic()
+        with mock.patch.object(downloader, "START_SECONDS", 2), self.assertRaisesRegex(RuntimeError, "stalled"):
+            downloader.wait_for_browser_download(dl, "file.bin", stall_s=1)
+        self.assertLess(time.monotonic() - began, 10)
+        self.assertTrue(dl.cancelled, "cancelled, so it's tried again")
 
 
 class StoppingAJob(IsolatedTestCase):

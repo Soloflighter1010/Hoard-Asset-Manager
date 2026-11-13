@@ -187,7 +187,8 @@ const I18N = (() => {
   return { on, lookup, start, untranslated, t: (s, ...values) => {
     // for the script's own use (a dialog's words, a title set in code): {0}, {1} filled in after translating
     const key = norm(s), text = (typeof catalog[key] === "string" && catalog[key]) || lookup(key) || s;   // (its own words, as they're written)
-    return text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "");
+    // (words given no values are left as they are: translated twice, a name with "{0}" in it is kept)
+    return values.length ? text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? "") : text;
   } };
 })();
 const tr = I18N.t;   // the script's own words: tr("Copied"), tr("{0} files", n)
@@ -652,39 +653,16 @@ document.addEventListener("click", e => {   // a tab: a store's, a view's, the p
 }, true);
 
 let toastTimer;
-/* A question before something that can't be undone, in Hoard's own dialog (the browser's plain confirm box looked
-   out of place). Resolves true for the main button, false for Cancel, Escape or a click outside it. */
+/* A question before something that can't be undone, in Hoard's own pop-up (ui/Dialog.svelte; the browser's plain
+   confirm box looked out of place). Its question is its title, and what follows says more under it (dialogs.heading,
+   on the translated words: each paragraph is translated whole first, as the catalog has it, then cut). Resolves true
+   for the main button, false for Cancel, Escape, the close button or a click outside it. */
 function ask(text, ok = "OK", danger = false, cancel = "Cancel") {
-  return new Promise(resolve => {
-    let d = document.getElementById("askDialog");
-    if (!d) {
-      d = document.createElement("dialog");
-      d.id = "askDialog"; d.className = "ask";
-      d.setAttribute("aria-labelledby", "askText");
-      d.innerHTML = '<div id="askText"></div><div class="ask-row"><button class="ghost" value="no"></button>' +
-                    '<button class="primary" value="yes"></button></div>';
-      d.addEventListener("click", e => {
-        const b = e.target.closest("button");
-        if (b) d.close(b.value);
-        else if (e.target === d) d.close("no");   // the dimmed page around it
-      });
-      document.body.appendChild(d);
-    }
-    const body = d.querySelector("#askText");
-    body.replaceChildren(...String(text).split(/\n\n+/).map(par => {
-      const p = document.createElement("p");
-      p.append(...par.split("\n").flatMap((line, i) => i ? [document.createElement("br"), line] : [line]));
-      return p;
-    }));
-    const [no, yes] = d.querySelectorAll("button");
-    no.textContent = cancel; yes.textContent = ok;
-    no.hidden = !cancel;   // (an empty cancel: something to read, with only the one button)
-    yes.classList.toggle("danger", !!danger);
-    d.returnValue = "no";
-    d.addEventListener("close", () => resolve(d.returnValue === "yes"), { once: true });
-    d.showModal();
-    (danger ? no : yes).focus();   // Enter doesn't delete anything by accident
-  });
+  const words = String(text).split(/(\n\s*\n)/).map((p, i) => i % 2 ? p : tr(p)).join("");
+  const { title, detail, more } = HoardUI.dialogs.heading(words);
+  return HoardUI.dialogs.open({ kind: "confirm", id: "askDialog", textId: "askText", title, detail, paras: more,
+    ok: tr(ok), cancel: cancel && tr(cancel), danger: !!danger, icon: danger ? "alert" : cancel ? "help" : "info",
+    tone: danger ? "warn" : "gold", tr });
 }
 
 // Only the cards near the screen are drawn (review finding P-02): a batch now, and the next whenever the last one
@@ -1338,10 +1316,15 @@ function wireBar() {
 async function bulkTag(mode) {   // a tag to add to, or take off, what's selected
   const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
+  const on = new Map();   // (taking one off: the tags they have, and how many of them have each)
+  if (mode === "remove") for (const a of chosen) for (const x of a.tags || []) on.set(x, (on.get(x) || 0) + 1);
+  const suggest = mode === "add" ? ((DATA.tagset || {}).tags || []).map(x => ({ name: x.name, count: x.count }))
+    : [...on].map(([name, count]) => ({ name, count })).sort((x, y) => y.count - x.count || coll.compare(x.name, y.name));
   const t = (await askName(mode === "add" ? "Add a tag to the selected" : "Take a tag off the selected", "",
-                           { list: "tagList", max: 40 })).trim();
+                           { max: 40, icon: "tag", prefix: "#", suggest, create: mode === "add",
+                             hint: tr("{0} selected", chosen.length) })).trim();
   if (!t) return;
-  const n = chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
+  const n = mode === "remove" ? on.get(t) || chosen.length : chosen.length, what = `${n} ${n === 1 ? "item" : "items"}`, tag = "#" + t.toLowerCase();
   await changeTags({ action: "assign", keys: keysOf(chosen), [mode]: [t] },
                    mode === "add" ? `Added ${tag} to ${what}.` : `Removed ${tag} from ${what}.`);
 }
@@ -2221,12 +2204,33 @@ function closeSettings() {
   $("#settingsPanel").hidden = true;
   $("#settingsBtn").setAttribute("aria-expanded", "false");
 }
-const BROWSER_NAMES = { msedge: "Microsoft Edge", chrome: "Google Chrome", chromium: "Hoard's own browser" };
+const BROWSER_NAMES = { msedge: "Microsoft Edge", chrome: "Google Chrome", brave: "Brave", vivaldi: "Vivaldi", opera: "Opera",
+                        opera_gx: "Opera GX", chromium: "Hoard's own browser" };
+// The browsers found only where they're installed (Brave, Vivaldi, Opera): offered when they are, or when chosen
+const FOUND_BROWSERS = ["brave", "vivaldi", "opera", "opera_gx"];
+// A browser's name, as Settings says it: one chosen by its program by that program's name.
+const browserName = c => c === "custom" ? (SETTINGS && SETTINGS.browser_name) || tr("The browser you chose") : BROWSER_NAMES[c];
 function showBrowserInUse() {   // what the chosen browser really is on this computer (issue #20)
   const chosen = $("#setBrowser").value, used = ((SETTINGS && SETTINGS.browsers) || {})[chosen];
+  $("#browserPathRow").hidden = chosen !== "custom";
   $("#browserInUse").textContent = !used ? ""
-    : chosen && used !== chosen ? `${BROWSER_NAMES[chosen]} isn't installed on this computer, so Hoard signs in with its own browser.`
-    : `Hoard signs in with ${BROWSER_NAMES[used]}.`;
+    : chosen === "custom" && used !== chosen ? tr("Choose its program: its .exe, or a Mac's .app. Until then, Hoard signs in with its own browser.")
+    : chosen && used !== chosen ? tr("{0} isn't installed on this computer, so Hoard signs in with its own browser.", browserName(chosen))
+    : tr("Hoard signs in with {0}.", browserName(used));
+}
+// Offer Brave, Vivaldi and Opera where they're installed (or chosen), and put the chosen browser and its program in.
+function fillBrowser() {
+  const used = SETTINGS.browsers || {};
+  for (const c of FOUND_BROWSERS) {
+    const o = $(`#setBrowser option[value="${c}"]`);
+    if (o) o.hidden = used[c] !== c && SETTINGS.browser_channel !== c;
+  }
+  $("#setBrowser").value = SETTINGS.browser_channel;
+  const box = $("#setBrowserPath"), os = navigator.userAgent;
+  box.value = SETTINGS.browser_path || "";
+  box.placeholder = /Windows/.test(os) ? "C:\\Program Files\\Thorium\\Application\\thorium.exe"
+    : /Mac OS X|Macintosh/.test(os) ? "/Applications/Arc.app" : "/usr/bin/thorium-browser";
+  showBrowserInUse();
 }
 // Open Settings (or close it, when it's open and open isn't given), filled with the settings as they are.
 async function openSettings(open) {
@@ -2276,8 +2280,7 @@ function fillSettings() {   // the controls, as the settings are now
   fillApprise();
   $("#notifyRow").hidden = !DATA.can_notify;
   showUpdate();
-  $("#setBrowser").value = SETTINGS.browser_channel;
-  showBrowserInUse();
+  fillBrowser();
   $("#setRoutine").value = String(SETTINGS.routine_hours ?? 0);
   $("#setTextSize").value = String(SETTINGS.display.text_size);
   $("#setPause").checked = SETTINGS.display.pause_animations;
@@ -2872,8 +2875,8 @@ async function showAckText(name) {
   const r = await api(`/api/credits/license?name=${encodeURIComponent(name)}`);
   const data = await r.json();
   if (!r.ok) { toast(data.error || tr("That can't be done.")); return; }
-  pjDialog(`<p><b translate="no">${esc(name)}</b></p><pre class="ack-text" translate="no">${esc(data.text)}</pre>` +
-    `<div class="ask-row"><button class="primary" value="yes">${esc(tr("Close"))}</button></div>`, "wide");
+  askForm({ width: "wide", icon: "info", title: name, nameTitle: true, cancel: "", ok: tr("Close"),
+            blocks: [{ type: "pre", cls: "ack-text", text: data.text }] });
 }
 document.addEventListener("toggle", e => { if (e.target.id === "acks" && e.target.open) showAcks(); }, true);
 document.addEventListener("click", e => { const b = e.target.closest("[data-ack]"); if (b) showAckText(b.dataset.ack); });
@@ -2923,6 +2926,7 @@ function settingsPart(el) {
     case "setBackground": return { close_to_taskbar: el.checked };
     case "setNotify": return { notify_found: el.checked };
     case "setBrowser": return { browser_channel: el.value };
+    case "setBrowserPath": return { browser_path: el.value.trim() };
     case "setRoutine": return { routine_hours: Number(el.value) };
     case "setNewDays": return { new_days: Number(el.value) };
     case "setRetries": return { download_retries: Number(el.value) };
@@ -2964,7 +2968,7 @@ function savePart(part) {
     applyDisplay(SETTINGS.display);
     if ("display" in part) refitWindows();
     if (part.display && "colours" in part.display) fillColours();
-    if ("browser_channel" in part) showBrowserInUse();
+    if ("browser_channel" in part || "browser_path" in part) fillBrowser();
     if ("beta_updates" in part) showUpdate();   // a beta found earlier shows, or stops showing, as an update
     if ("file_rules" in part) drawFileRules();
     winNote("settingsPanel", "Saved", true);
@@ -3015,6 +3019,10 @@ function wireFileRules() {
 function wireAutosave() {
   wireFileRules();
   $("#setBrowser").addEventListener("change", showBrowserInUse);   // at once, before it's saved
+  $("#setBrowserBrowse").addEventListener("click", async () => {   // another Chromium browser: its program
+    const box = $("#setBrowserPath");
+    if (await browseInto(box, "file")) autosave(box);
+  });
   $("#settingsPanel").addEventListener("change", e => { if (e.target.matches("input, select, textarea")) autosave(e.target); });
   $("#setRootBrowse").addEventListener("click", async () => {
     if (SETTINGS && await browseInto($("#setRoot"))) autosave($("#setRoot"));
@@ -3205,47 +3213,24 @@ function taskCount(n) {
   const b = $("#tasksCount");
   if (b) { b.hidden = !n; b.textContent = n || ""; }
 }
-// A name for something new (a set): Hoard's own dialog, the name chosen, or "" when it's cancelled
-function askName(title, value = "", opts = {}) {   // opts: {list: a datalist's id, max: longest}
-  return new Promise(resolve => {
-    const d = document.createElement("dialog");
-    d.className = "ask";
-    d.innerHTML = `<form method="dialog"><p><label for="askName">${esc(tr(title))}</label></p>` +
-      `<p><input id="askName" maxlength="${opts.max || 60}"${opts.list ? ` list="${opts.list}"` : ""} style="width:100%;box-sizing:border-box"></p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("OK"))}</button></div></form>`;
-    document.body.appendChild(d);
-    const input = d.querySelector("input");
-    input.value = value;
-    // Enter is OK (a form's Enter goes to its first button, which is Cancel), but not while an input method is
-    // still putting a word together (Japanese, Korean)
-    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
-    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
-    d.showModal();
-    input.select();
-  });
+// A name for something new (a set), or a tag: Hoard's own pop-up, the name chosen, or "" when it's cancelled. opts:
+// {max: longest, hint: a line under the title, icon, ok: its button; suggest: [{name, count}] to choose from as you
+// type (your tags), create: whether a name that isn't one of them can be given, prefix: shown before each ("#");
+// fill: what goes in the title's {0}, {1}, put in once it's cut into its title and the line under it, so a name with a
+// colon in it ("Q&A: Test") stays whole}.
+function askName(title, value = "", opts = {}) {
+  const head = HoardUI.dialogs.heading(tr(title), true), fill = s => opts.fill ? tr(s, ...opts.fill) : s;
+  return HoardUI.dialogs.open({ kind: "text", inputId: "askName", title: fill(head.title), detail: opts.hint ? tr(opts.hint) : fill(head.detail),
+    paras: head.more.map(fill), value, max: opts.max || 60, icon: opts.icon || "pencil", ok: tr(opts.ok || "OK"),
+    suggest: opts.suggest || null, create: opts.create !== false, prefix: opts.prefix || "", norm, tr });
 }
 /* ---------- Bring in a KonoAsset library (issue #305): its data folder, what bringing it in would do, then Bring in
    or Cancel. Hoard only reads KonoAsset's folder; what it brings in is a task (Tasks), and bringing in again adds only
    what's new. */
 // Ask for a folder: a box for its path, and Browse in Hoard's window. Its path, or "" when cancelled.
 function askFolder(title, hint, value = "") {
-  return new Promise(resolve => {
-    const d = document.createElement("dialog");
-    d.className = "ask ask-folder";
-    d.innerHTML = `<form method="dialog"><p><label for="askFolder">${esc(tr(title))}</label></p>` +
-      (hint ? `<p class="muted">${esc(tr(hint))}</p>` : "") +
-      `<p class="ask-field"><input id="askFolder" maxlength="1000" spellcheck="false">` +
-      `<button class="ghost" type="button" data-browse${canPick() ? "" : " hidden"}>${esc(tr("Browse…"))}</button></p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Next"))}</button></div></form>`;
-    document.body.appendChild(d);
-    const input = d.querySelector("input");
-    input.value = value;
-    input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); d.close("yes"); } });
-    d.querySelector("[data-browse]").addEventListener("click", () => browseInto(input));
-    d.addEventListener("close", () => { const v = d.returnValue === "yes" ? input.value.trim() : ""; d.remove(); resolve(v); }, { once: true });
-    d.showModal();
-    input.focus();
-  });
+  return HoardUI.dialogs.open({ kind: "folder", inputId: "askFolder", title: tr(title), detail: hint ? tr(hint) : "",
+    value, max: 1000, icon: "folder", ok: tr("Next"), browse: canPick() ? input => browseInto(input) : null, norm, tr });
 }
 // What bringing in a KonoAsset library would do (/api/konoasset/preview), in words.
 function konoSummary(s) {
@@ -3258,7 +3243,7 @@ function konoSummary(s) {
   if (s.left_out) lines.push(tr("Left out, with no files and not in your library: {0} ({1}).", s.left_out, s.left_out_names.join(", ")));
   return lines.join("\n\n");
 }
-// The Menu's Bring in from KonoAsset...: choose its data folder, see what it would do, then bring it in.
+// Settings' Bring in from KonoAsset...: choose its data folder, see what it would do, then bring it in.
 async function konoBringIn(path = "") {
   path = await askFolder("KonoAsset's data folder", "The folder with metadata, data and images in it. KonoAsset's Settings say where it is. Hoard only reads it.", path);
   if (!path) return;
@@ -4065,30 +4050,28 @@ async function pjBackupsDelete(paths) {
 // Move the backups chosen to another folder (copied and checked first).
 async function pjBackupsMove(paths) {
   if (!paths.length) { toast(tr("Choose the backups first.")); return; }
-  const shown = pjDialog(`<p>${esc(tr(paths.length === 1 ? "Move {0} backup to another folder, a drive with more room say? It's copied, checked, and only then deleted here." : "Move {0} backups to another folder, a drive with more room say? Each is copied, checked, and only then deleted here.", paths.length))}</p>` +
-    `<div class="pj-field"><label for="pjBkTo">${esc(tr("Move them to"))}</label><input id="pjBkTo" value="${esc(PJ.backups.moved_to || "")}" placeholder="E:\\Old backups" translate="no">` +
-    `<button type="button" class="ghost sm" data-browse>${esc(tr("Browse…"))}</button></div>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Move"))}</button></div>`);
-  const dlg = [...document.querySelectorAll("dialog.pj-dlg")].pop();
-  const browse = dlg && dlg.querySelector("[data-browse]");
-  if (browse) { browse.hidden = !canPick(); browse.addEventListener("click", () => browseInto(dlg.querySelector("#pjBkTo"))); }
-  const res = await shown;
+  const res = await askForm({ cls: "pj-dlg", icon: "archive", ok: tr("Move"),
+    ...titled(tr(paths.length === 1 ? "Move {0} backup to another folder, a drive with more room say? It's copied, checked, and only then deleted here."
+      : "Move {0} backups to another folder, a drive with more room say? Each is copied, checked, and only then deleted here.", paths.length)),
+    blocks: [{ type: "field", id: "pjBkTo", label: tr("Move them to"), value: PJ.backups.moved_to || "", placeholder: "E:\\Old backups", browse: true }] });
   if (!res.ok) return;
-  const to = res.dlg.querySelector("#pjBkTo").value.trim();
+  const to = res.fields.pjBkTo.trim();
   if (!to) { toast(tr("Choose a folder to move them to, by its full path.")); return; }
   pjRun("/api/vpm/backups/move", { paths, to });
 }
 // ---- dialogs: choosing packages, choosing products, and the changes before they're made
-function pjDialog(html, cls = "") {
-  return new Promise(resolve => {
-    const dlg = document.createElement("dialog");
-    dlg.className = `ask pj-dlg ${cls}`;
-    dlg.innerHTML = `<form method="dialog">${html}</form>`;
-    document.body.appendChild(dlg);
-    dlg.addEventListener("close", () => { const v = dlg.returnValue; resolve({ ok: v === "yes", value: v, dlg }); setTimeout(() => dlg.remove(), 0); }, { once: true });
-    dlg.showModal();
-  });
-}
+/* A form in Hoard's pop-up (ui/Dialog.svelte): its title, and its blocks (text, headings, preformatted text, lists,
+   boxes, ticks, lists of ticks or of choices, columns), in steps when it has them. Resolves {ok, value, fields}:
+   fields has each box's text, each tick's true or false, each list of ticks' which are ticked, by their ids. */
+const askForm = spec => HoardUI.dialogs.open({ kind: "form", tr, norm, browse: canPick() ? browseInto : null, cancel: tr("Cancel"), ...spec });
+// A choice from a list in Hoard's pop-up: the value of the row chosen, or of another button, or "".
+const askChoice = spec => HoardUI.dialogs.open({ kind: "pick", tr, norm, cancel: tr("Cancel"), ...spec });
+// A question's own title and what follows it (dialogs.heading), for a form's title and the line under it.
+const titled = text => { const h = HoardUI.dialogs.heading(text); return { title: h.title, detail: h.detail }; };
+// A set to choose in a list: its name, what's in it, and its picture (the one you chose, else its first product's), or
+// its letters on its colour.
+const setRow = (s, sub) => { const pic = s.cover || ((s.items || []).find(i => i.pic) || {}).pic;
+  return { value: s.id, name: s.name, sub, pic: pic ? keyed(pic) : "", letters: initials(s.name), hue: hue(s.name) }; };
 // A package's versions there are to choose from (newest first), for this Unity: [{version, pre}]
 async function pjVersions(name, unityVersion, keep = "") {
   const pre = !!(PJ.data.settings || {}).prerelease;
@@ -4100,23 +4083,13 @@ async function pjVersions(name, unityVersion, keep = "") {
 async function pjChooseVersion(name, label, current, unityVersion) {
   const list = await pjVersions(name, unityVersion, current);
   if (!list.some(v => v.version !== current)) { toast(tr("No other version of {0} works with this project's Unity.", label)); return ""; }
-  const dlgP = pjDialog(`<p><b translate="no">${esc(label)}</b> <span class="muted" translate="no">${esc(name)}</span></p>` +
-    `<p class="hint">${esc(tr("Choose the version to install. An older one replaces the one it has, and the packages it needs change to match."))}</p>` +
-    (list.length > 12 ? `<p><input type="search" id="pjVerFind" placeholder="${esc(tr("Find a version"))}" aria-label="${esc(tr("Find a version"))}" style="width:100%;box-sizing:border-box"></p>` : "") +
-    `<ul class="pj-picklist pj-vers" role="radiogroup" aria-label="${esc(tr("Versions"))}">${list.map(v => `<li data-hay="${esc(v.version)}"><label class="check">` +
-      `<input type="radio" name="pjVer" value="${esc(v.version)}"${v.version === current ? " checked" : ""}> <span translate="no">${esc(v.version)}</span>` +
-      (v.version === current ? ` <span class="pj-tag">${esc(tr("Installed now"))}</span>` : "") +
-      (v.pre ? ` <span class="pj-tag warn">${esc(tr("Prerelease"))}</span>` : "") + `</label></li>`).join("")}</ul>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Use this version"))}</button></div>`, "wide");
-  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
-  const find = dlg.querySelector("#pjVerFind");
-  if (find) find.addEventListener("input", () => {
-    const q = find.value.trim();
-    for (const li of dlg.querySelectorAll(".pj-vers li")) li.hidden = !!q && !li.dataset.hay.includes(q);
-  });
-  (dlg.querySelector(".pj-vers input:checked") || {}).scrollIntoView?.({ block: "nearest" });
-  const res = await dlgP;
-  const picked = res.ok ? (res.dlg.querySelector(".pj-vers input:checked") || {}).value || "" : "";
+  const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: label, detail: name, nameTitle: true, keep: [name], ok: tr("Use this version"),
+    blocks: [{ type: "text", tone: "hint", text: tr("Choose the version to install. An older one replaces the one it has, and the packages it needs change to match.") },
+             { type: "radios", id: "pjVer", cls: "pj-picklist pj-vers", label: tr("Versions"), value: current,
+               find: list.length > 12 ? tr("Find a version") : "", findId: "pjVerFind",
+               items: list.map(v => ({ value: v.version, label: v.version, tags: [v.version === current && { text: tr("Installed now") },
+                                                                                v.pre && { text: tr("Prerelease"), warn: true }].filter(Boolean) })) }] });
+  const picked = res.ok ? res.fields.pjVer : "";
   return picked === current ? "" : picked;
 }
 // What to put in of one product: its .unitypackage files and VPM packages, each with a tick
@@ -4188,51 +4161,24 @@ async function pickAdd(list) {
 const PJ_VARIANTS = [["Quest", /quest|android/i], ["PC", /(^|[^a-z])pc([^a-z]|$)|windows|desktop/i]];
 // Which variant a package's name says it is (PC, Quest...), or "".
 const pjVariant = name => (PJ_VARIANTS.find(([, re]) => re.test(name)) || [""])[0];
-const pjBreaks = name => esc(name).replace(/([._/-])/g, "$1<wbr>");   // (a long name breaks after a dot, never mid-word)
 // Ask which of a product's packages a project needs, then which packages they need: two steps when it needs both.
 async function pjChooseContents(product) {
   const many = product.contents.filter(c => c.kind === "unitypackage").length > 1, needs = product.suggested.length > 0;
-  // A step's heading, with the product's name.
-  const head = step => `<p><span class="pj-stepno">${esc(step)}</span><b translate="no">${esc(product.name)}</b></p>`;
-  const dlgP = pjDialog(`<div class="pj-step" data-step="1">` + head(needs ? tr("Step {0} of {1}: its packages", 1, 2) : tr("Its packages")) +
-      (many ? `<p class="hint">${esc(tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant)."))}</p>` : "") +
-      `<p class="pj-allnone"><button type="button" class="linkish" data-all="1">${esc(tr("Select all"))}</button>` +
-      `<button type="button" class="linkish" data-all="0">${esc(tr("Select none"))}</button></p>` +
-      `<ul class="pj-picklist pj-contents">${product.contents.map((c, i) => {
+  // What a package is, how big it is, and the file it's in.
+  const kindOf = c => [tr(c.kind === "unitypackage" ? "Unity package" : "VPM package"), c.size && sizeText(c.size), c.member && c.file].filter(Boolean).join(" · ");
+  const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: product.name, nameTitle: true, ok: tr("Put these in"), steps: [
+    { label: needs ? tr("Step {0} of {1}: its packages", 1, 2) : tr("Its packages"), blocks: [
+      ...(many ? [{ type: "text", tone: "hint", text: tr("It has more than one package: choose the ones this project needs (one for PC, say, not every variant).") }] : []),
+      { type: "checks", id: "pjContents", cls: "pj-picklist pj-contents", allNone: true, required: true, items: product.contents.map(c => {
         const v = pjVariant(c.member || c.label);
-        return `<li><label class="check"><input type="checkbox" value="${i}"${many && c.kind === "unitypackage" ? "" : " checked"}> ` +
-          `<span class="pj-c"><span translate="no">${pjBreaks(c.label)}</span>${v ? ` <span class="pj-tag" translate="no">${esc(v)}</span>` : ""}` +
-          `<span class="muted">${esc(c.kind === "unitypackage" ? tr("Unity package") : tr("VPM package"))}${c.size ? ` · ${esc(sizeText(c.size))}` : ""}` +
-          `${c.member ? ` · <span translate="no">${pjBreaks(c.file)}</span>` : ""}</span></span></label></li>`;
-      }).join("")}</ul>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
-      (needs ? `<button type="button" class="primary" data-step-go="2">${esc(tr("Next"))}</button>`
-        : `<button class="primary" value="yes">${esc(tr("Put these in"))}</button>`) + `</div></div>` +
-    (needs ? `<div class="pj-step" data-step="2" hidden>` + head(tr("Step {0} of {1}: what it needs", 2, 2)) +
-      pjNeedsList(product.suggested, "It needs these too, from their own repositories:") + pjAlready(product.already || []) +
-      `<div class="ask-row"><button type="button" class="ghost" data-step-go="1">${esc(tr("Back"))}</button>` +
-      `<button class="primary" value="yes">${esc(tr("Put these in"))}</button></div></div>` : ""), "wide");
-  const dlg = document.querySelector("dialog.pj-dlg:last-of-type");
-  // The packages' ticks.
-  const boxes = () => [...dlg.querySelectorAll(".pj-contents input")];
-  // Next only once a package is ticked.
-  const ready = () => { dlg.querySelector('[data-step="1"] .primary').disabled = !boxes().some(b => b.checked); };
-  dlg.addEventListener("change", ready);
-  dlg.addEventListener("click", e => {
-    const all = e.target.closest("[data-all]"), go = e.target.closest("[data-step-go]");
-    if (all) { for (const b of boxes()) b.checked = all.dataset.all === "1"; ready(); }
-    if (go) {
-      for (const st of dlg.querySelectorAll(".pj-step")) st.hidden = st.dataset.step !== go.dataset.stepGo;
-      dlg.querySelector(".pj-step:not([hidden]) .primary").focus();
-    }
-  });
-  ready();
-  const pick = await dlgP;
-  if (!pick.ok) return null;
-  const ticked = [...pick.dlg.querySelectorAll("input[type=checkbox]:checked")];
-  const picks = ticked.filter(b => !b.dataset.sugg).map(b => product.contents[+b.value]).map(c =>
+        return { label: c.label, tags: v ? [{ text: v }] : [], sub: kindOf(c), keep: [c.member && c.file], checked: !(many && c.kind === "unitypackage") };
+      }) }] },
+    ...(needs ? [{ label: tr("Step {0} of {1}: what it needs", 2, 2),
+                   blocks: [...pjNeeds(product.suggested, "It needs these too, from their own repositories:"), ...pjAlready(product.already || [])] }] : [])] });
+  if (!res.ok) return null;
+  const picks = product.contents.filter((c, i) => res.fields.pjContents[i]).map(c =>
     ({ key: product.key, kind: c.kind, file: c.file, member: c.member, label: c.label, product: product.name }));
-  const sugg = ticked.filter(b => b.dataset.sugg).map(b => product.suggested[+b.dataset.sugg]);
+  const sugg = product.suggested.filter((s, i) => (res.fields.pjSugg || [])[i]);
   return { picks, suggested: sugg };
 }
 // What products need (/api/vpm/product), as the project stands: what it has already (or New project's form has) isn't
@@ -4245,15 +4191,13 @@ function pjSplitNeeds(product, have) {
   product.already = already;
   return product;
 }
-// The packages a product needs, each to tick, with where it comes from.
-const pjNeedsList = (list, heading) => list.length ? `<p class="hint">${esc(tr(heading))}</p><ul class="pj-picklist">${list.map((s, i) =>
-  `<li><label class="check"><input type="checkbox" data-sugg="${i}" checked> <span translate="no">${pjBreaks(s.package)}</span>` +
-  (s.repo && !s.repo_added ? ` <span class="muted">(${esc(tr("adds the repository {0}", s.repo))})</span>`
-    : s.in_repo ? ` <span class="muted">(${trHTML("from {0}", `<span translate="no">${esc(s.in_repo)}</span>`)})</span>` : "") +
-  `</label></li>`).join("")}</ul>` : "";
-// The packages a product needs that the project has already.
-const pjAlready = list => list.length ? `<p class="hint pj-already">${trHTML("Already in the project: {0}.",
-  `<span translate="no">${esc(listed(list.map(s => s.package + (s.in_project ? " " + s.in_project : ""))))}</span>`)}</p>` : "";
+// The packages products need, each to tick (pjSugg), with where it comes from: as a form's blocks.
+const pjNeeds = (list, heading) => list.length ? [{ type: "text", tone: "hint", text: tr(heading) },
+  { type: "checks", id: "pjSugg", cls: "pj-picklist", sugg: true, items: list.map(s => ({ label: s.package, checked: true, keep: [s.repo, s.in_repo],
+    sub: s.repo && !s.repo_added ? `(${tr("adds the repository {0}", s.repo)})` : s.in_repo ? `(${tr("from {0}", s.in_repo)})` : "" })) }] : [];
+// The packages they need that the project has already: as a form's block.
+const pjAlready = list => { const names = list.map(s => s.package + (s.in_project ? " " + s.in_project : ""));
+  return list.length ? [{ type: "text", tone: "hint", text: tr("Already in the project: {0}.", listed(names)), keep: names }] : []; };
 // ---- products into a project from the selection bar and right-click, on both pages: Put in a project..., and New
 // project with these... What's put in of each is all its packages, unless it has several to choose from (a PC and a
 // Quest one, say), when it asks; what they need (lilToon, Modular Avatar...) comes with a tick to leave it out.
@@ -4297,13 +4241,12 @@ async function putInProject(list) {
     return;
   }
   const order = [...projects.filter(p => p.favorite), ...projects.filter(p => !p.favorite)];
-  const res = await pjDialog(`<p><b>${esc(tr("Put in a project"))}</b></p>` +
-    `<ul class="pj-picklist">${order.map(p => `<li><button class="linkish" value="${esc(p.path)}" translate="no">${esc(p.name)}</button> ` +
-      `<span class="muted">${esc(pjKind(p.type))}${p.unity ? ` · <span translate="no">Unity ${esc(p.unity)}</span>` : ""}</span></li>`).join("")}</ul>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
-    `<button class="ghost" value="new">${esc(tr("New project with these..."))}</button></div>`, "wide");
-  if (res.value === "new") return newProjectWith(list);
-  const project = projects.find(p => p.path === res.value);
+  const value = await askChoice({ cls: "pj-dlg", icon: "package", title: tr("Put in a project"),
+    groups: [{ title: "", items: order.map(p => ({ value: p.path, name: p.name, sub: [pjKind(p.type), p.unity && "Unity " + p.unity].filter(Boolean).join(" · ") })) }],
+    buttons: [{ label: tr("New project with these..."), value: "new" }] });
+  if (value === "new") return newProjectWith(list);
+
+  const project = projects.find(p => p.path === value);
   if (project) await pjPutIn(project, list);
 }
 // These products into a project: what's in each (asked when one has several to choose from), shown before it's put
@@ -4311,13 +4254,12 @@ async function putInProject(list) {
 async function pjPutIn(project, list) {
   const got = await pjPicksFor(list, { path: project.path });
   if (!got || !got.picks.length) return false;
-  const ok = await pjDialog(`<p><b>${esc(tr("Put these in {0}?", project.name))}</b></p>` +
-    `<ul class="pj-picklist">${got.picks.map(x => `<li><b translate="no">${esc(x.product)}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span></li>`).join("")}</ul>` +
-    pjNeedsList(got.suggested, "They need these too, from their own repositories:") + pjAlready(got.already) +
-    `<p class="hint">${esc(tr("Nothing already in the project is replaced."))}</p>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Put them in"))}</button></div>`, "wide");
+  const ok = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: tr("Put these in {0}?", project.name), keep: [project.name], ok: tr("Put them in"),
+    blocks: [{ type: "list", cls: "pj-picklist", items: got.picks.map(x => ({ name: x.product, sub: x.label || x.file, subTranslate: false })) },
+             ...pjNeeds(got.suggested, "They need these too, from their own repositories:"), ...pjAlready(got.already),
+             { type: "text", tone: "hint", text: tr("Nothing already in the project is replaced.") }] });
   if (!ok.ok) return false;
-  const sugg = [...ok.dlg.querySelectorAll("input[data-sugg]:checked")].map(b => got.suggested[+b.dataset.sugg]);
+  const sugg = got.suggested.filter((s, i) => (ok.fields.pjSugg || [])[i]);
   const extra = await pjAddSuggested(sugg);
   if (extra.length) await pjShowChanges({ path: project.path, add: extra.map(name => ({ name })) });
   return pjRun("/api/vpm/preload", { path: project.path, picks: got.picks });
@@ -4356,15 +4298,17 @@ async function pjShowChanges(body) {
   if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return false; }
   const c = r.data;
   if (!c.install.length && !c.remove.length) { toast(tr("Nothing needs changing.")); return false; }
-  const res = await pjDialog(`<p><b>${esc(tr("These changes will be made"))}</b></p>` +
-    (c.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it first if you can."))}</p>` : "") +
-    (c.install.length ? `<p>${esc(tr("Installed"))}</p><ul class="pj-picklist">${c.install.map(x => `<li><b translate="no">${esc(x.label)}</b> <span class="muted" translate="no">${esc(x.version)} · ${esc(x.from)}</span></li>`).join("")}</ul>` : "") +
-    (c.remove.length ? `<p>${esc(tr("Removed"))}</p><ul class="pj-picklist">${c.remove.map(x => `<li><span translate="no">${esc(x.name)}</span> <span class="muted">${esc(tr(PJ_WHY[x.reason] || ""))}</span></li>`).join("")}</ul>` : "") +
-    (c.conflicts.length ? `<p class="pj-warn">${esc(tr("Not every package's needs can be met at once:"))}</p><ul class="pj-picklist">${c.conflicts.map(x => `<li translate="no">${esc(x.name)}` +
-      (x.with.length ? ` ← ${esc(x.with.filter(Boolean).join(", "))}` : "") + `</li>`).join("")}</ul>` +
-      (c.conflicts.some(x => x.unlocked.length) ? `<p class="hint">${esc(tr("A package the project had of its own, with the same name, is replaced."))}</p>` : "") : "") +
-    (c.legacy.length ? `<p>${esc(tr("Old files these packages replace, deleted:"))}</p><ul class="pj-picklist" translate="no">${c.legacy.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : "") +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Make the changes"))}</button></div>`, "wide");
+  const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "package", title: tr("These changes will be made"), ok: tr("Make the changes"), blocks: [
+    ...(c.open_in_unity ? [{ type: "text", tone: "warn", text: tr("Unity has this project open. Close it first if you can.") }] : []),
+    ...(c.install.length ? [{ type: "heading", text: tr("Installed") },
+      { type: "list", cls: "pj-picklist", items: c.install.map(x => ({ name: x.label, sub: `${x.version} · ${x.from}`, subTranslate: false })) }] : []),
+    ...(c.remove.length ? [{ type: "heading", text: tr("Removed") },
+      { type: "list", cls: "pj-picklist", items: c.remove.map(x => ({ name: x.name, sub: tr(PJ_WHY[x.reason] || "") })) }] : []),
+    ...(c.conflicts.length ? [{ type: "text", tone: "warn", text: tr("Not every package's needs can be met at once:") },
+      { type: "list", cls: "pj-picklist", items: c.conflicts.map(x => ({ name: x.name + (x.with.length ? " ← " + x.with.filter(Boolean).join(", ") : "") })) },
+      ...(c.conflicts.some(x => x.unlocked.length) ? [{ type: "text", tone: "hint", text: tr("A package the project had of its own, with the same name, is replaced.") }] : [])] : []),
+    ...(c.legacy.length ? [{ type: "text", text: tr("Old files these packages replace, deleted:") },
+      { type: "list", cls: "pj-picklist", items: c.legacy.map(x => ({ name: x })) }] : [])] });
   if (!res.ok) return false;
   return pjRun("/api/vpm/apply", body);
 }
@@ -4554,15 +4498,14 @@ async function pjGitAct(act, b, path) {
   const done = async (r, said) => { if (!r.ok) toast(r.data.error || tr("That can't be done.")); else if (said) toast(said); await pjGitLoad(path); return r.ok; };
   if (act === "gitclone") {   // a project from a Git address: copied into your projects folder, then on the list
     const where = (PJ.data.settings || {}).projects_folder || "";
-    const res = await pjDialog(`<p><b>${esc(tr("Get a project from a Git address"))}</b></p>` +
-      `<p class="hint">${esc(tr("Copies the repository, its files and history, into a new folder, and puts it on the list. Opening it in Unity lets the VPM resolver restore its packages."))}</p>` +
-      `<div class="pj-field"><label for="pjCloneUrl">${esc(tr("Address"))}</label><input id="pjCloneUrl" spellcheck="false" autocomplete="off" placeholder="https://github.com/you/project.git" translate="no"></div>` +
-      `<div class="pj-field"><label for="pjCloneName">${esc(tr("Its folder's name"))}</label><input id="pjCloneName" spellcheck="false" autocomplete="off" translate="no"></div>` +
-      `<p class="hint">${esc(tr("In {0}", where))}</p>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Get it"))}</button></div>`);
+    const res = await askForm({ cls: "pj-dlg", icon: "git", title: tr("Get a project from a Git address"), ok: tr("Get it"),
+      detail: tr("Copies the repository, its files and history, into a new folder, and puts it on the list. Opening it in Unity lets the VPM resolver restore its packages."),
+      blocks: [{ type: "field", id: "pjCloneUrl", label: tr("Address"), placeholder: "https://github.com/you/project.git", max: 2000 },
+               { type: "field", id: "pjCloneName", label: tr("Its folder's name"), max: 255 },
+               { type: "text", tone: "hint", text: tr("In {0}", where), keep: [where] }] });
     if (!res.ok) return;
-    const url = res.dlg.querySelector("#pjCloneUrl").value.trim();
-    const name = res.dlg.querySelector("#pjCloneName").value.trim() || url.replace(/[\\/]+$/, "").split(/[\\/:]/).pop().replace(/\.git$/, "");
+    const url = res.fields.pjCloneUrl.trim();
+    const name = res.fields.pjCloneName.trim() || url.replace(/[\\/]+$/, "").split(/[\\/:]/).pop().replace(/\.git$/, "");
     if (!url) return;
     return pjRun("/api/vpm/git/clone", { url, name, location: where });
   }
@@ -4577,30 +4520,28 @@ async function pjGitAct(act, b, path) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { toast(d.error || tr("That can't be done.")); return; }
     const parent = d.where && d.where.parent;
-    const files = d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b>: ${esc(tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:"))}</p>` +
-      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.exists ? f.add.join("\n") : f.text)}</pre>`).join("");
-    // Some of the project's folders and files, as a list.
-    const list = xs => xs.length ? `<ul class="pj-plan-list" translate="no">${xs.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="none">${esc(tr("None here."))}</p>`;
-    const res = await pjDialog(`<p><b>${esc(tr("Set up Git for {0}?", pjNamed(path)))}</b></p>` +
-      `<p>${esc(tr("It changes only the project's folder: its ignore rules are written first, then Git starts keeping its history there. Nothing is committed yet, and nothing goes online."))}</p>` +
-      `<p>${esc(tr("Kept: the project's own files, as VRChat recommends. Left out: what Unity makes again, and the VPM packages the resolver restores when the project is opened in Unity."))}</p>` +
-      `<div class="pj-plan-cols"><div><h4>${esc(tr("Kept, for example"))}</h4>${list(d.examples.kept)}</div><div><h4>${esc(tr("Left out, for example"))}</h4>${list(d.examples.left_out)}</div></div>` +
-      (files || `<p>${esc(tr("Its ignore rules have everything already."))}</p>`) +
-      `<p class="hint">${esc(tr("A copy of it made from Git (on another computer, say) opens without its VPM packages: Unity's resolver offers to restore them."))}</p>` +
-      (parent ? `<p class="pj-warn">${esc(tr("This project is inside another Git repository ({0}): it would have a repository of its own inside that one.", parent))}</p>` +
-        `<label class="check"><input type="checkbox" id="pjGitNested"> ${esc(tr("Set it up inside that repository anyway"))}</label>` : "") +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Set up Git"))}</button></div>`, "wide");
+    const files = d.plan.flatMap(f => [{ type: "text", strong: true, text: `${f.path}: ${tr(f.exists ? "these lines are added at its end (it's never replaced):" : "a new file, with:")}`, keep: [f.path] },
+                                       { type: "pre", cls: "pj-diff-text pj-plan", text: f.exists ? f.add.join("\n") : f.text }]);
+    const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "git", title: tr("Set up Git for {0}?", pjNamed(path)), keep: [pjNamed(path), parent], ok: tr("Set up Git"), blocks: [
+      { type: "text", text: tr("It changes only the project's folder: its ignore rules are written first, then Git starts keeping its history there. Nothing is committed yet, and nothing goes online.") },
+      { type: "text", text: tr("Kept: the project's own files, as VRChat recommends. Left out: what Unity makes again, and the VPM packages the resolver restores when the project is opened in Unity.") },
+      { type: "columns", cls: "pj-plan-cols", cols: [{ heading: tr("Kept, for example"), items: d.examples.kept, none: tr("None here.") },
+                                                   { heading: tr("Left out, for example"), items: d.examples.left_out, none: tr("None here.") }] },
+      ...(files.length ? files : [{ type: "text", text: tr("Its ignore rules have everything already.") }]),
+      { type: "text", tone: "hint", text: tr("A copy of it made from Git (on another computer, say) opens without its VPM packages: Unity's resolver offers to restore them.") },
+      ...(parent ? [{ type: "text", tone: "warn", text: tr("This project is inside another Git repository ({0}): it would have a repository of its own inside that one.", parent) },
+                    { type: "check", id: "pjGitNested", label: tr("Set it up inside that repository anyway") }] : [])] });
     if (!res.ok) return;
-    const nested = !!(parent && res.dlg.querySelector("#pjGitNested").checked);
+    const nested = !!(parent && res.fields.pjGitNested);
     if (parent && !nested) { toast(tr("It's inside another repository: tick the box to set it up anyway.")); return; }
     return done(await apiPost("/api/vpm/git/init", { path, nested }), tr("Git is set up. Choose what to commit first, and Stage it."));
   }
   if (act === "gitignore") {
     const r = await api(`/api/vpm/git/plan?path=${encodeURIComponent(path)}`, { cache: "no-store" });
     const d = await r.json().catch(() => ({ plan: [] }));
-    const res = await pjDialog(`<p><b>${esc(tr("Add these to its ignore rules?"))}</b></p>` + d.plan.map(f => `<p><b translate="no">${esc(f.path)}</b></p>` +
-      `<pre class="pj-diff-text pj-plan" translate="no">${esc(f.add.join("\n"))}</pre>`).join("") +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add them"))}</button></div>`);
+    const res = await askForm({ cls: "pj-dlg", width: "wide", icon: "git", title: tr("Add these to its ignore rules?"), ok: tr("Add them"),
+      blocks: d.plan.flatMap(f => [{ type: "text", strong: true, text: f.path, translate: false },
+                                   { type: "pre", cls: "pj-diff-text pj-plan", text: f.add.join("\n") }]) });
     return res.ok ? done(await apiPost("/api/vpm/git/ignore", { path })) : undefined;
   }
   if (act === "gitstage" || act === "gitunstage") {
@@ -4821,7 +4762,7 @@ async function pjAct(b) {
   }
   if (act === "rename") {   // its folder, where it is (issue #290): the list and Hoard's notes follow it
     const was = pjNamed(path);
-    const name = (await askName(tr("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was), was, { max: 255 })).trim();
+    const name = (await askName("Rename {0}: its folder is renamed, and the list and Hoard's notes on it follow it. Unity Hub's list and its backups keep the old name.", was, { max: 255, fill: [was] })).trim();
     if (!name || name === was) return;
     const r = await apiPost("/api/vpm/rename", { path, name });
     if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
@@ -4850,13 +4791,12 @@ async function pjAct(b) {
     return loadProjects();
   }
   if (act === "backup") {
-    const res = await pjDialog(`<p>${esc(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path)))}</p>` +
-      `<label class="check"><input type="checkbox" id="pjLeaveOut"> ${esc(tr("Leave out packages from repositories (they're downloaded again when it's opened)"))}</label>` +
-      (pjGitOf(path) ? `<p class="hint">${esc(tr("Its .git folder is left out: it can be most of a project."))}</p>` +
-        `<label class="check"><input type="checkbox" id="pjBundle"> ${esc(tr("Put its Git history in, as a bundle (its commits, branches and tags in one file; not Git LFS files)"))}</label>` : "") +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Back up"))}</button></div>`);
-    const bundle = res.dlg.querySelector("#pjBundle");
-    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.dlg.querySelector("#pjLeaveOut").checked, git_bundle: !!(bundle && bundle.checked) });
+    const res = await askForm({ cls: "pj-dlg", icon: "archive", ok: tr("Back up"),
+      ...titled(tr("Back up {0}? Everything but what Unity makes again by itself goes into a zip, in your backups folder.", pjNamed(path))), keep: [pjNamed(path)],
+      blocks: [{ type: "check", id: "pjLeaveOut", label: tr("Leave out packages from repositories (they're downloaded again when it's opened)") },
+               ...(pjGitOf(path) ? [{ type: "text", tone: "hint", text: tr("Its .git folder is left out: it can be most of a project.") },
+                                    { type: "check", id: "pjBundle", label: tr("Put its Git history in, as a bundle (its commits, branches and tags in one file; not Git LFS files)") }] : [])] });
+    if (res.ok) pjRun("/api/vpm/backup", { path, leave_out_packages: res.fields.pjLeaveOut, git_bundle: !!res.fields.pjBundle });
     return;
   }
   if (act === "repair") return pjShowChanges({ path, repair: true });
@@ -4899,10 +4839,9 @@ async function pjAct(b) {
     const r = await api("/api/sets", { cache: "no-store" });
     const sets = r.ok ? ((await r.json()).sets || []).filter(s => s.items.some(i => i.download != null)) : [];
     if (!sets.length) { toast(tr("None of your sets has anything downloaded in it yet.")); return; }
-    const res = await pjDialog(`<p><b>${esc(tr("Put in a set"))}</b></p><ul class="pj-picklist">${sets.map(s =>
-      `<li><button class="linkish" value="${esc(s.id)}" translate="no">${esc(s.name)}</button> <span class="muted">${esc(tr(s.items.length === 1 ? "{0} product" : "{0} products", s.items.length))}</span></li>`).join("")}</ul>` +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button></div>`);
-    const set = sets.find(s => s.id === res.value);
+    const value = await askChoice({ cls: "pj-dlg", icon: "sets", title: tr("Put in a set"), find: sets.length > 8 ? tr("Find a set") : "",
+      groups: [{ title: "", items: sets.map(s => setRow(s, tr(s.items.length === 1 ? "{0} product" : "{0} products", s.items.length))) }] });
+    const set = sets.find(s => s.id === value);
     if (!set) return;
     for (const item of set.items.filter(i => i.download != null)) {
       const product = await pjProductContents(item.key);
@@ -4979,20 +4918,14 @@ async function pjAct(b) {
 }
 // Delete a project from this computer: only with its name typed, backed up first unless you untick it; a task
 async function pjDelete(p) {
-  const shown = pjDialog(`<p><b>${esc(tr("Delete {0} from this computer?", p.name))}</b></p>` +
-    `<p>${esc(tr("Its folder, and everything in it, is deleted:"))} <span translate="no">${esc(p.path)}</span></p>` +
-    `<label class="check"><input type="checkbox" id="pjDelBackup" checked> ${esc(tr("Back it up first, into your backups folder"))}</label>` +
-    `<p class="hint">${esc(tr("Without a backup, it can't be restored."))}</p>` +
-    `<p><label for="pjDelName">${esc(tr("Type its name to delete it: {0}", p.name))}</label></p>` +
-    `<p><input id="pjDelName" autocomplete="off" spellcheck="false" translate="no" style="width:100%;box-sizing:border-box"></p>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button>` +
-    `<button class="primary danger" value="yes" id="pjDelGo" disabled>${esc(tr("Delete it"))}</button></div>`);
-  const dlg = [...document.querySelectorAll("dialog.pj-dlg")].pop(), name = dlg.querySelector("#pjDelName");
-  name.addEventListener("input", () => { dlg.querySelector("#pjDelGo").disabled = name.value.trim() !== p.name; });
-  name.focus();
-  const res = await shown;
-  if (!res.ok || name.value.trim() !== p.name) return;
-  if (await pjRun("/api/vpm/delete-project", { path: p.path, confirm: p.name, backup: res.dlg.querySelector("#pjDelBackup").checked })) {
+  const res = await askForm({ cls: "pj-dlg", icon: "trash", tone: "warn", danger: true, title: tr("Delete {0} from this computer?", p.name), keep: [p.name, p.path],
+    ok: tr("Delete it"), okId: "pjDelGo", blocks: [
+      { type: "text", text: `${tr("Its folder, and everything in it, is deleted:")} ${p.path}` },
+      { type: "check", id: "pjDelBackup", checked: true, label: tr("Back it up first, into your backups folder") },
+      { type: "text", tone: "hint", text: tr("Without a backup, it can't be restored.") },
+      { type: "field", id: "pjDelName", label: tr("Type its name to delete it: {0}", p.name), mustBe: p.name, max: 255 }] });
+  if (!res.ok || res.fields.pjDelName.trim() !== p.name) return;
+  if (await pjRun("/api/vpm/delete-project", { path: p.path, confirm: p.name, backup: res.fields.pjDelBackup })) {
     PJ.view = "list"; PJ.project = null;
     drawProjects();
   }
@@ -5135,26 +5068,10 @@ async function addToAnotherSet(list) {
     const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
     sets = r && r.ok ? (await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
   }
-  // A set's tile to choose (its picture, name and counts), and a group of them under a heading.
-  const tile = s => `<button class="slot settile" value="${esc(s.id)}" data-name="${esc(norm(s.name))}"><span class="art">${setArt(s)}</span>` +
-    `<span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(setCounts(s).text)}</span></button>`;
-  // (a group with none in it isn't shown)
-  const group = (title, some) => some.length ? `<h4>${esc(tr(title))}</h4><div class="setpick-grid">${some.map(tile).join("")}</div>` : "";
-  const shown = pjDialog(`<p><b>${esc(tr("Add to which set?"))}</b></p>` +
-    `<p><input type="search" class="setpick-find" placeholder="${esc(tr("Find a set"))}" aria-label="${esc(tr("Find a set"))}"></p>` +
-    `<div class="setpick">${group("Your sets", sets.filter(s => !isWish(s) && !s.from_link))}` +
-    group("Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)) + group("Wishlists", sets.filter(isWish)) + `</div>` +
-    `<div class="ask-row"><button class="ghost" value="no">${esc(tr("Cancel"))}</button></div>`, "wide setpick-dlg");
-  const dlg = [...document.querySelectorAll(".setpick-dlg")].pop();
-  const find = dlg.querySelector(".setpick-find");
-  find.addEventListener("input", () => {   // (by its name, as you type: a group with none left is put away)
-    const words = norm(find.value).split(/\s+/).filter(Boolean);
-    for (const b of dlg.querySelectorAll(".settile")) b.hidden = !words.every(w => b.dataset.name.includes(w));
-    for (const g of dlg.querySelectorAll(".setpick-grid")) g.previousElementSibling.hidden = g.hidden = !g.querySelector(".settile:not([hidden])");
-  });
-  find.addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // (not the form's first button)
-  find.focus();
-  const { value } = await shown;
+  const value = await askChoice({ title: tr("Add to which set?"), icon: "sets", find: tr("Find a set"),
+    detail: tr(items.length === 1 ? "1 product" : "{0} products", items.length),
+    groups: [["Your sets", sets.filter(s => !isWish(s) && !s.from_link)], ["Sets you added from a link", sets.filter(s => !isWish(s) && s.from_link)],
+             ["Wishlists", sets.filter(isWish)]].map(([title, some]) => ({ title: tr(title), items: some.map(s => setRow(s, setCounts(s).text)) })) });
   const s = sets.find(x => x.id === value);
   if (!s) return;
   if (!await ask(tr(items.length === 1 ? "Add it to {0}?" : "Add {1} products to {0}?", s.name, items.length), tr("Add"))) return;
@@ -5193,18 +5110,13 @@ function mixRoll() {
     if (item) { MIX.picks.push({ slot: s.tag, label: s.tag, item }); taken.add(item.tag_key); }
   }
 }
-// Mix and match's dialog: each pick, with a tick to keep it, and Pick again.
+// Mix and match's picks: each one, with a tick to keep it; and whether clothes share a tag with the avatar.
 function mixHTML() {
-  return `<h3>${esc(tr("Mix and match"))}</h3>` +
-    `<p class="hint">${esc(tr("An outfit from what you own, picked at random. Keep the picks you like, and pick the rest again."))}</p>` +
-    `<ul class="mixlist">${MIX.picks.map(p => `<li><span class="mixart">${T.art(p.item)}</span><span class="mixtext">` +
+  return `<ul class="mixlist">${MIX.picks.map(p => `<li><span class="mixart">${T.art(p.item)}</span><span class="mixtext">` +
       `<small>${esc(p.label)}</small><b translate="no">${esc(p.item.name)}</b><span class="muted" translate="no">${esc(p.item.creator || "")}</span></span>` +
       `<label class="check"><input type="checkbox" data-mixhold="${esc(p.slot)}"${MIX.held.has(p.slot) ? " checked" : ""}> ${esc(tr("Keep"))}</label></li>`).join("")}</ul>` +
     `<label class="check"><input type="checkbox" id="mixFit"${MIX.fit ? " checked" : ""}> ${esc(tr("Only clothes that share a tag with the avatar"))}</label>` +
-    ((MIX.unfit || []).length ? `<p class="hint">${esc(tr("Nothing in {0} shares a tag with this avatar, so that pick is from all of them.", MIX.unfit.join(", ")))}</p>` : "") +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Close"))}</button>` +
-    `<button class="ghost" type="button" data-mix="again">${esc(tr("Pick again"))}</button>` +
-    `<button class="primary" value="yes">${esc(tr("Make a set of them"))}</button></div>`;
+    ((MIX.unfit || []).length ? `<p class="hint">${esc(tr("Nothing in {0} shares a tag with this avatar, so that pick is from all of them.", MIX.unfit.join(", ")))}</p>` : "");
 }
 // Mix and match: an outfit picked at random from what you own (or how to tag for it, when there's nothing to pick).
 async function mixAndMatch() {
@@ -5215,21 +5127,21 @@ async function mixAndMatch() {
   }
   MIX.picks = []; MIX.held = new Set();
   mixRoll();
-  const dlg = document.createElement("dialog");
-  dlg.className = "ask mixdlg";
-  dlg.innerHTML = `<form method="dialog">${mixHTML()}</form>`;
-  document.body.appendChild(dlg);
+  const box = document.createElement("div");
+  box.className = "mixbody";
   // Draw the picks again.
-  const redraw = () => { dlg.querySelector("form").innerHTML = mixHTML(); };
-  dlg.addEventListener("click", e => { if (e.target.closest("[data-mix=again]")) { e.preventDefault(); mixRoll(); redraw(); } });
-  dlg.addEventListener("change", e => {
+  const redraw = () => { box.innerHTML = mixHTML(); };
+  box.addEventListener("change", e => {
     const hold = e.target.closest("[data-mixhold]");
     if (hold) { hold.checked ? MIX.held.add(hold.dataset.mixhold) : MIX.held.delete(hold.dataset.mixhold); return; }
     if (e.target.id === "mixFit") { MIX.fit = e.target.checked; mixRoll(); redraw(); }
   });
-  const result = await new Promise(resolve => { dlg.addEventListener("close", () => resolve(dlg.returnValue), { once: true }); dlg.showModal(); });
-  dlg.remove();
-  if (result === "yes") await addToSet(MIX.picks.map(p => p.item), "new");
+  redraw();
+  const res = await HoardUI.dialogs.open({ kind: "host", cls: "mixdlg", icon: "shuffle", title: tr("Mix and match"), content: box, tr,
+    detail: tr("An outfit from what you own, picked at random. Keep the picks you like, and pick the rest again."),
+    cancel: tr("Close"), ok: tr("Make a set of them"),
+    buttons: [{ label: tr("Pick again"), attrs: { "data-mix": "again" }, act: () => { mixRoll(); redraw(); } }] });
+  if (res.ok) await addToSet(MIX.picks.map(p => p.item), "new");
 }
 async function takeOutOfSet(list) {   // from the set that's open
   const s = setById(state.set), items = keysOf(list.filter(Boolean));
@@ -5517,14 +5429,9 @@ document.addEventListener("keydown", e => {
 async function markPhoto(s, n) {
   const url = s.photos[n];
   let marks = ((s.marks || {})[url] || []).map(m => [...m]), placing = null;
-  const d = document.createElement("dialog");
-  d.className = "ask pmark-dlg";
-  d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Mark products on this photo"))}</b></p>` +
-    `<p class="hint">${esc(tr("Choose a product, then click where it is on the photo. A chosen mark moves with the arrow keys, and Delete takes it off."))}</p>` +
-    `<div class="pm-body"><div class="setphoto-pic pm-edit"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}"></div>` +
-    `<ol class="pm-list"></ol></div><p class="pm-status" role="status" aria-live="polite"></p>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Save"))}</button></div></form>`;
-  document.body.appendChild(d);
+  const d = document.createElement("div");   // (what's in Hoard's pop-up, drawn here)
+  d.innerHTML = `<div class="pm-body"><div class="setphoto-pic pm-edit"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}"></div>` +
+    `<ol class="pm-list"></ol></div><p class="pm-status" role="status" aria-live="polite"></p>`;
   const pic = d.querySelector(".pm-edit"), list = d.querySelector(".pm-list"), status = d.querySelector(".pm-status");
   const rows = s.items;   // (your own, in Local, can be marked too; they aren't shared)
   // A place on the photo, as a whole number from 0 to 1000.
@@ -5575,10 +5482,9 @@ async function markPhoto(s, n) {
     else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); marks = marks.filter(x => x !== m); draw(); }
   });
   draw();
-  const yes = await new Promise(resolve => {
-    d.addEventListener("close", () => { resolve(d.returnValue === "yes"); d.remove(); }, { once: true });
-    d.showModal();
-  });
+  const { ok: yes } = await HoardUI.dialogs.open({ kind: "host", cls: "pmark-dlg", width: "huge", icon: "pin", content: d, tr,
+    title: tr("Mark products on this photo"), ok: tr("Save"), cancel: tr("Cancel"),
+    detail: tr("Choose a product, then click where it is on the photo. A chosen mark moves with the arrow keys, and Delete takes it off.") });
   if (yes && await changeSets({ action: "marks", id: s.id, photo: url, marks })) toast(tr("Saved what's marked on the photo."));
 }
 // Start changing a set's note and photos (none saved yet: as they are).
@@ -5803,16 +5709,10 @@ async function openShortLink(text) {
 // A set's link to share (issue #162: only a short link, as a set's own long link was too long to pass around): made
 // here, then copied, opened, updated (which keeps it {days} more days, by hand) or deleted
 function showShare(s, got) {
-  const d = document.createElement("dialog");
-  d.className = "ask share";
+  const d = document.createElement("div");   // (what's in Hoard's pop-up, drawn here)
   const left = got.left_out ? `<p class="hint">${esc(tr(got.left_out === 1 ? "1 product isn't included: your own packages (Local) and hidden products stay on this computer."
     : "{0} products aren't included: your own packages (Local) and hidden products stay on this computer.", got.left_out))}</p>` : "";
-  d.innerHTML = `<form method="dialog"><p><b translate="no">${esc(s.name)}</b></p>` +
-    `<p>${esc(tr(got.count === 1 ? "Anyone with this link can see the product in this set, where to buy it, and your note and photos."
-      : "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.", got.count))} ` +
-    `${esc(tr("To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link."))}</p>` + left +
-    `<section class="shortlink" aria-label="${esc(tr("Short link"))}"></section>` +
-    `<div class="ask-row"><button class="ghost" value="no">Close</button></div></form>`;
+  d.innerHTML = left + `<section class="shortlink" aria-label="${esc(tr("Short link"))}"></section>`;
   const box = d.querySelector(".shortlink");
   // Draw the short link (or why there's none, and splitting the set so each part fits).
   const drawShort = () => {
@@ -5837,7 +5737,7 @@ function showShare(s, got) {
         `<div class="ask-row"><button class="primary" type="button" data-short="make">Make a short link</button></div>`;
   };
   drawShort();
-  document.body.appendChild(d);
+  const control = {};   // (closes it from here, once the set is split)
   d.addEventListener("click", async e => {
     const c = e.target.closest("[data-copy]"), act = e.target.closest("[data-short]");
     if (c) {
@@ -5860,7 +5760,7 @@ function showShare(s, got) {
       const r = await apiPost("/api/sets", { action: "split", id: s.id });
       act.disabled = false;
       if (!r.ok) { toast(r.data.error || "That set couldn't be split."); return; }
-      d.close();
+      control.close("no");
       toast(tr("Made {0} sets from {1}, each small enough to share: share each one from its tile.", r.data.made.length, s.name));
       await T.reload();
       return;
@@ -5876,9 +5776,11 @@ function showShare(s, got) {
     toast(tr(was ? "Updated the short link. It works until {0}." : "Made a short link. It works until {0}.", day(got.short.expires)));
     box.querySelector("input").select();
   });
-  d.addEventListener("close", () => d.remove(), { once: true });
-  d.showModal();
-  (box.querySelector("input") || box.querySelector("button") || d.querySelector('button[value="no"]')).focus();   // (nothing to do: Close)
+  HoardUI.dialogs.open({ kind: "host", cls: "share", width: "mid", icon: "link", title: s.name, nameTitle: true, content: d, control, tr,
+    detail: tr(got.count === 1 ? "Anyone with this link can see the product in this set, where to buy it, and your note and photos."
+      : "Anyone with this link can see the {0} products in this set, where to buy each one, and your note and photos.", got.count) + " " +
+      tr("To add the set to their own Hoard, they choose Add a shared set in Sets and paste the link."),
+    cancel: tr("Close"), ok: "" });   // (its link's own buttons, and Close; the keyboard starts on the link, or on Make a short link)
 }
 // Share a set: its code, and a short link to it.
 async function shareSet(s) {
@@ -6022,20 +5924,10 @@ const WISH_STORES = ["booth", "gumroad", "jinxxy", "payhip"];
 async function readWishlists(only, list) {
   let stores = only;
   if (!stores) {
-    const d = document.createElement("dialog");
-    d.className = "ask";
-    d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Read my wishlists"))}</b></p>` +
-      `<p class="hint">${esc(tr("Hoard opens each store's page in its signed-in window and reads your lists, with each product's price. A wishlist read before is brought up to date."))}</p>` +
-      WISH_STORES.map(st => `<p><label class="check"><input type="checkbox" value="${st}" checked> ${esc(STORE_NAMES[st])}</label></p>`).join("") +
-      `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Read them"))}</button></div></form>`;
-    document.body.appendChild(d);
-    stores = await new Promise(resolve => {
-      d.addEventListener("close", () => {
-        const got = d.returnValue === "yes" ? [...d.querySelectorAll("input:checked")].map(x => x.value) : [];
-        d.remove(); resolve(got);
-      }, { once: true });
-      d.showModal();
-    });
+    const res = await askForm({ icon: "heart", title: tr("Read my wishlists"), ok: tr("Read them"),
+      detail: tr("Hoard opens each store's page in its signed-in window and reads your lists, with each product's price. A wishlist read before is brought up to date."),
+      blocks: [{ type: "checks", id: "wishStores", required: true, items: WISH_STORES.map(st => ({ label: STORE_NAMES[st], checked: true })) }] });
+    stores = res.ok ? WISH_STORES.filter((st, i) => res.fields.wishStores[i]) : [];
     if (!stores.length) return;
   }
   const r = await apiPost("/api/wishlists/read", list ? { stores, list } : { stores });
@@ -6126,20 +6018,10 @@ function wireSets() {
 // Add products by link: store pages pasted, one a line; Hoard reads each one's public page (its name, creator, price
 // and picture) and adds it to the set or wishlist, so a list of your own can hold what you don't own yet
 async function addByLinks(s) {
-  const d = document.createElement("dialog");
-  d.className = "ask";
-  d.innerHTML = `<form method="dialog"><p><b>${esc(tr("Add products by link"))}</b></p>` +
-    `<p class="hint">${esc(tr("Paste the links of products on Booth, Gumroad, Jinxxy, Payhip or itch.io, one a line. Hoard reads each product's page, as anyone can see it, for its name, creator, price and picture."))}</p>` +
-    `<p><textarea id="addLinks" rows="6" translate="no" style="width:100%;box-sizing:border-box" placeholder="https://booth.pm/en/items/..."></textarea></p>` +
-    `<div class="ask-row"><button class="ghost" value="no" formnovalidate>${esc(tr("Cancel"))}</button><button class="primary" value="yes">${esc(tr("Add them"))}</button></div></form>`;
-  document.body.appendChild(d);
-  const links = await new Promise(resolve => {
-    d.addEventListener("close", () => {
-      const got = d.returnValue === "yes" ? d.querySelector("textarea").value.split(/\s+/).map(x => x.trim()).filter(Boolean) : [];
-      d.remove(); resolve(got);
-    }, { once: true });
-    d.showModal();
-  });
+  const res = await askForm({ icon: "link", title: tr("Add products by link"), ok: tr("Add them"),
+    detail: tr("Paste the links of products on Booth, Gumroad, Jinxxy, Payhip or itch.io, one a line. Hoard reads each product's page, as anyone can see it, for its name, creator, price and picture."),
+    blocks: [{ type: "field", id: "addLinks", label: tr("Links"), rows: 6, placeholder: "https://booth.pm/en/items/..." }] });
+  const links = res.ok ? res.fields.addLinks.split(/\s+/).map(x => x.trim()).filter(Boolean) : [];
   if (!links.length) return;
   toast(tr(links.length === 1 ? "Reading the product's page..." : "Reading the {0} products' pages...", links.length));
   const done = await changeSets({ action: "add-links", id: s.id, links: links.slice(0, 30) });

@@ -25,6 +25,7 @@ from .paths import documents_dir
 
 FORMAT = {"format": "hoard-backup", "version": 1}
 MAX_BYTES = 64 * 1024 * 1024
+# (never browser_path: a program on one computer, chosen there in Settings, never by restoring a backup)
 SETTINGS = ("browser_channel", "offline_images", "store_tags", "file_rules", "ask_files", "check_for_updates", "beta_updates", "close_to_taskbar",
             "notify_found", "apprise_events", "routine_hours", "download_retries", "keep_previous", "new_days", "display",
             "request_delay", "payhip_shops", "stores")

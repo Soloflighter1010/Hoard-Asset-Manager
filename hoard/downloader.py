@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from . import storage
 
+import asyncio
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -401,37 +403,43 @@ def _file_size(path: Path) -> int | None:
         return None
 
 
+START_SECONDS = 30   # at least this long for the browser to start writing a download (a busy computer's can be slow)
+
+
 def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> None:
     """Wait for a download the browser is making to end, saying how far it's got.
 
     Saving a browser download waits for it to finish, with no time limit and no way for Stop to reach it. So a
     download the store stopped sending without hanging up would hold up the whole job (and every job after it)
-    for ever. Here, a download that gets no bigger for stall_s seconds is cancelled and raised as a failure, which
-    is tried again like any other; and Stop cancels it at once. Returns when the file is complete or the browser
-    has given up on it (saving it then says which)."""
+    for ever. Here, a download whose file gets no bigger for stall_s seconds once the browser has started writing
+    it, or whose file hasn't appeared after stall_s (START_SECONDS at least), is cancelled and raised as a failure,
+    which is tried again like any other; and Stop cancels it at once. Returns when the browser has finished with it:
+    complete, or given up on (saving it then says which). Playwright is asked that without waiting for its answer
+    (_finished); a browser slow to start writing the file is never taken for one that gave up on it."""
     where = browser_download_file(dl)
     if where is None:
         return
     stall_s = egress.STALL_SECONDS if stall_s is None else stall_s
     part = where.with_name(where.name + ".crdownload")
+    finished = _finished(dl)
     size, seen, ended = -1, False, False
     began = moved = said = time.monotonic()
     report = Transfer(fname)
     try:
         while True:
             done, growing = _file_size(where), _file_size(part)
-            if done is not None and growing is None:
-                ended = True   # complete
+            if growing is None and (done is not None or seen) or finished is not None and finished.done():
+                ended = True   # complete, or the browser gave up on it (and deleted what it had): saving it says which
                 return
             now = time.monotonic()
-            if growing is None and (seen or now - began >= 5):   # (or it was over before its file appeared)
-                ended = True   # the browser gave up on it (and deleted what it had): saving it says why
-                return
             if growing is not None:
                 seen = True
                 if growing != size:
                     size, moved = growing, now
-            if now - moved >= stall_s:
+            elif now - began >= max(stall_s, START_SECONDS):
+                raise RuntimeError(f"the download stalled: the browser hadn't started writing it after "
+                                   f"{max(stall_s, START_SECONDS):.0f} s")
+            if seen and now - moved >= stall_s:   # counted from its file appearing
                 raise RuntimeError(f"the download stalled: nothing more came in for {stall_s:.0f} s")
             if now - said >= egress.PROGRESS_EVERY:
                 said = now
@@ -443,6 +451,23 @@ def wait_for_browser_download(dl, fname: str, stall_s: float | None = None) -> N
                 dl.cancel()
             except Exception:
                 pass
+
+
+def _finished(dl):
+    """Whether the browser has finished with a download (complete, or given up on), asked of Playwright without
+    waiting for its answer: the question is put in Playwright's queue, answered while the page waits (_pause), and
+    .done() on what's returned says whether it has been. None when it can't be asked (a Playwright whose insides
+    aren't as this one's), when only the browser's file tells how the download is going."""
+    try:
+        impl = dl._impl_obj
+        loop, ask = impl._loop, impl._artifact.failure
+    except Exception:
+        return None
+    if not isinstance(loop, asyncio.AbstractEventLoop) or loop.is_closed() or not inspect.iscoroutinefunction(ask):
+        return None
+    task = loop.create_task(ask())
+    task.add_done_callback(lambda t: t.cancelled() or t.exception())   # (its error, if any, is saving's to say)
+    return task
 
 
 def _pause(dl, seconds: float) -> None:

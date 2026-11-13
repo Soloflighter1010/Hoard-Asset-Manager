@@ -210,8 +210,9 @@ class DeletingRemovedDownloads(IsolatedTestCase):
             finally:
                 srv.jobs.busy.release()
                 srv.jobs.kick()
-            for _ in range(100):
-                if not srv.jobs.state["running"] and not srv.jobs.state["queue"]:
+            for _ in range(100):   # until the job has ended and freed the runner (its state says so a moment before)
+                if not srv.jobs.state["running"] and not srv.jobs.state["queue"] and srv.jobs.busy.acquire(blocking=False):
+                    srv.jobs.busy.release()
                     break
                 time.sleep(0.05)
             self.assertFalse(self.folder.exists())
@@ -1794,7 +1795,7 @@ class SetupAssistant(IsolatedTestCase):
             with self.subTest(choice=choice, installed=sorted(installed)):
                 job = jobs.Jobs({**config.load_config(), "browser_channel": choice, "automated_sign_in": True}, lib)
                 said, out = [], io.StringIO()
-                with mock.patch("hoard.browser.channel_installed", lambda channel: channel in installed), \
+                with mock.patch("hoard.browser.channel_installed", lambda channel, cfg=None: channel in installed), \
                         mock.patch.object(jobs, "reachable", lambda store: True), \
                         mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
                         mock.patch.object(jobs, "launch", launch), \
@@ -2027,8 +2028,8 @@ class SetupAssistant(IsolatedTestCase):
         from unittest import mock
         from hoard import browser, setup
         cfg = {**config.load_config(), "browser_channel": "chrome"}
-        with mock.patch.object(browser, "channel_installed", lambda channel: False), \
-                mock.patch.object(setup, "channel_installed", lambda channel: False):
+        with mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: False), \
+                mock.patch.object(setup, "channel_installed", lambda channel, cfg=None: False):
             self.assertEqual(browser.use_channel(cfg), "chromium")
             with mock.patch.object(setup, "own_browser_installed", lambda: False):
                 st = setup.browser_status(cfg)
@@ -2037,8 +2038,8 @@ class SetupAssistant(IsolatedTestCase):
             with mock.patch.object(setup, "own_browser_installed", lambda: True):
                 st = setup.browser_status(cfg)
                 self.assertEqual((st["ready"], st["name"]), (True, "Hoard's own browser"))
-        with mock.patch.object(browser, "channel_installed", lambda channel: True), \
-                mock.patch.object(setup, "channel_installed", lambda channel: True):
+        with mock.patch.object(browser, "channel_installed", lambda channel, cfg=None: channel != "custom"), \
+                mock.patch.object(setup, "channel_installed", lambda channel, cfg=None: channel != "custom"):
             self.assertEqual(browser.use_channel(cfg), "chrome", "installed: the one you chose")
             self.assertEqual(setup.browser_status(cfg)["name"], "Google Chrome")
 

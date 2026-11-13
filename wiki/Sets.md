@@ -110,8 +110,9 @@ under **Sets you added from a link** (5.2.0 beta 2; ones added before then stay 
   [Library](Library#products-for-adults)) is marked 18+, on its tile and its page, until the last of them is taken
   out; it can't be taken off by hand before then. Its viewer is asked whether they're 18 or older before anything
   is shown. Under 18, they see the set without its products for adults and without your photos. The answer is kept
-  in a cookie in their own browser, for that page alone, for a year, so they aren't asked each time, and **Change
-  your answer** forgets it. Hoard never asks anyone for ID, and the answer is sent nowhere: see
+  in a cookie in their own browser, for that page alone: 18 or older for a year, so they aren't asked each time,
+  and under 18 until they close the browser, so they're asked again next time. A set shown without its
+  products for adults says so in a box at the top, and **Change your answer** forgets the answer. Hoard never asks anyone for ID, and the answer is sent nowhere: see
   [Security and privacy](Security-and-Privacy).
 
 ### Short links
