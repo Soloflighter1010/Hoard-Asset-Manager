@@ -507,7 +507,7 @@ def quit_when_done(srv, patience: float = 120.0) -> None:
         time.sleep(0.25)
     if srv.jobs.state.get("running"):
         from .browser import end_browsers
-        end_browsers()
+        end_browsers(wait=True)   # (one left on its folder too, before Hoard goes)
     if srv.quit_app:
         srv.quit_app()
 
@@ -520,7 +520,7 @@ def quit_now(srv) -> None:
     for jobs in _lanes(srv):
         jobs.clear_queue()
         jobs.cancel()
-    end_browsers()
+    end_browsers(wait=True)   # (one left on its folder too, before Hoard goes)
     if srv.quit_app:
         srv.quit_app()
 

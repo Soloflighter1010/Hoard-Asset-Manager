@@ -237,13 +237,11 @@ def _remove_signin(path: Path, seconds: float = 10.0) -> None:
     while True:
         try:
             _remove_tree(path)
-            return
-        except FileNotFoundError:
-            return
-        except OSError:
-            if time.monotonic() >= deadline:
-                return   # (the caller says so, finding it still there)
-            time.sleep(0.5)
+        except OSError:   # (a file held a moment longer, or one the browser deleted as this went: tried again)
+            pass
+        if not path.exists() or time.monotonic() >= deadline:
+            return   # (one still there: the caller says so)
+        time.sleep(0.5)
 
 
 def _remove_tree(path: Path) -> None:
@@ -518,7 +516,7 @@ def note_signin_browser(cfg: dict, store: str) -> None:
     """Note that this store's sign-in works with the browser Hoard uses now (it was just made with it, or read)."""
     try:
         _made_with_file(cfg, store).write_text(json.dumps(_browser_of(cfg)), "utf-8")
-    except OSError:
+    except (OSError, SigninsUnprotected):
         pass
 
 
@@ -527,7 +525,7 @@ def signin_browser(cfg: dict, store: str) -> dict | None:
     it wasn't noted (a sign-in from before 5.2.0 beta 8 not read since, or no sign-in)."""
     try:
         made = json.loads(_made_with_file(cfg, store).read_text("utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, SigninsUnprotected):   # (a sign-in folder that can't be used says so where it's used)
         return None
     if not isinstance(made, dict) or made.get("channel") not in (*NAMED, *FOUND, "custom", "chromium"):
         return None
@@ -548,9 +546,19 @@ def for_signin(cfg: dict, store: str) -> dict:
 def made_with_another(cfg: dict, store: str) -> str | None:
     """The name of the browser this store's sign-in was made with, when that isn't the one Hoard uses now."""
     made = signin_browser(cfg, store)
-    if not made or made == _browser_of(cfg) or not profile_dir(cfg, store).exists():
+    try:
+        if not made or made == _browser_of(cfg) or not profile_dir(cfg, store).exists():
+            return None
+    except SigninsUnprotected:
         return None
     return browser_name(made["channel"], {**cfg, "browser_path": made.get("program", "")})
+
+
+def start_afresh(p, cfg: dict, store: str) -> str | None:
+    """Before signing in to a store whose sign-in was made with another browser: sign out of it with that one, so
+    the browser chosen now starts afresh (and its sign-in is noted as its own). What signing out said, or None when
+    there was nothing to do."""
+    return sign_out(p, cfg, store) if made_with_another(cfg, store) else None
 
 
 def _key_args(cfg: dict) -> list[str]:
@@ -607,7 +615,13 @@ def _launch(p, cfg: dict, profile: Path, headless: bool, timeout: float | None =
                            "browser in Settings, under Browser for store sign-ins.") from e
     finally:
         with _open_lock:
-            _starting.pop(starting, None)
+            ended_starting = _starting.pop(starting, None) is None   # (Force stop took it off the list, and ended it)
+    if ended_starting:   # it finished starting just as it was ended: its driver is gone, so it's never used or closed
+        try:
+            _ended.add(ctx)
+        except TypeError:
+            pass
+        raise RuntimeError("The store's browser was ended (Force stop) as it started.")
     _track(ctx, profile=profile)
     _tabs_from_a_tab(ctx, browser_name(channel, cfg))
     return ctx
@@ -712,11 +726,12 @@ def _end_driver(pid: int) -> bool:
         return False
 
 
-def end_browsers() -> int:
+def end_browsers(wait: bool = False) -> int:
     """End every store browser Hoard has open or is starting, and Playwright's driver for it. Every call waiting on
     one then fails at once ("Connection closed"), so a job stuck on a browser that stopped answering (or that never
     finished starting) can finish. A browser still on its folder a moment later (one that doesn't quit when Playwright
-    lets go of it) is ended as well. Returns how many were ended."""
+    lets go of it) is ended as well: in the background, or, with wait (Hoard closing), before this returns. Returns how
+    many were ended."""
     with _open_lock:
         found = list(_open.items())
         _open.clear()
@@ -749,22 +764,40 @@ def end_browsers() -> int:
     # driver's pipe closes is ended by its process, as its folder's lock names it (in the background: a request
     # asking for Force stop doesn't wait on it)
     left = [(profile, pid) for profile, pid in profiles if pid]
-    if left:
+    if left and wait:
+        end_left_behind(left)
+    elif left:
         threading.Thread(target=end_left_behind, args=(left,), name="Ending browsers left behind", daemon=True).start()
     return ended
 
 
 def _lock_pid(profile: Path) -> int | None:
     """The browser on this folder, by its process, as Chromium names it in the folder's lock (macOS, Linux); None on
-    Windows, for none, or for another computer's."""
+    Windows, for none, for another computer's, and for a process that isn't a browser started on this folder (a lock
+    left behind by a browser that ended can name a process that's another program's by now)."""
     if os.name == "nt" or not _profile_in_use(profile):
         return None
     try:
         import socket
         host, _, pid = os.readlink(profile / "SingletonLock").rpartition("-")
-        return int(pid) if host == socket.gethostname() and pid.isdigit() and int(pid) > 1 else None
+        pid = int(pid) if host == socket.gethostname() and pid.isdigit() and int(pid) > 1 else None
     except (OSError, ValueError):
         return None
+    return pid if pid and _started_on(pid, profile) else None
+
+
+def _started_on(pid: int, profile: Path) -> bool:
+    """Was this process started on this folder (its command line names it, as Hoard and Playwright start a
+    browser)? False when that can't be told."""
+    wanted = f"--user-data-dir={profile}"
+    try:
+        if sys.platform.startswith("linux"):
+            return wanted in Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", "replace").split("\0")
+        said = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(pid)], capture_output=True, text=True,
+                              timeout=5).stdout
+        return re.search(r"(^|\s)" + re.escape(wanted) + r"(\s|$)", said.strip()) is not None   # (a path with spaces)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return False
 
 
 def _let_go(profile: Path, seconds: float, pid: int | None = None) -> bool:
@@ -1073,6 +1106,7 @@ def check_saved_signin(cfg: dict, store: str) -> None:
             note_signin_browser(cfg, store)
         return
     _remove_tree(target)
+    _made_with_file(cfg, store).unlink(missing_ok=True)
     raise SigninsUnprotected(
         f"Your {store_label(store)} sign-in was saved without your keyring's protection (the keyring may be locked), so "
         "Hoard deleted it. Unlock your keyring and sign in again.")
@@ -1139,9 +1173,14 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
                 "(Settings, API keys), so do that if you're done with it.")
     if not target.exists():
         _made_with_file(cfg, store).unlink(missing_ok=True)
+        from . import kept_pages
+        kept_pages.forget(store)
         return f"{label}: no saved sign-in."
     if online is None:
         online = reachable(store)
+    # made with a browser that isn't installed any more, it can't be read: the store isn't told, and that's said (the
+    # browser chosen now would find itself signed out, and say the store had confirmed it)
+    gone = made_with_another(cfg, store) if for_signin(cfg, store) is cfg else None
     lock = ProfileLock(target)
     lock.acquire()
     try:
@@ -1152,11 +1191,13 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
             count = (_cookie_rows(target, "SELECT COUNT(*) FROM cookies") or [(0,)])[0][0]
         except CookiesInUse:   # a browser still has it open; deleting the folder below says so if it can't
             count = None
-        remote = _end_store_session(p, cfg, target, store) if online else None
+        remote = _end_store_session(p, cfg, target, store) if online and not gone else None
         end_left_behind([target])
         _remove_signin(target)
         if not target.exists():
             _made_with_file(cfg, store).unlink(missing_ok=True)
+            from . import kept_pages
+            kept_pages.forget(store)   # (a page kept for a report goes with the sign-in)
     finally:
         lock.release()
     if target.exists():
@@ -1177,6 +1218,9 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
                 ctx.close()
     said = (f"{label}: deleted the saved sign-in ({count} {'cookie' if count == 1 else 'cookies'}, plus the store's site data)."
             if count is not None else f"{label}: deleted the saved sign-in and the store's site data.")
+    if gone:
+        return said + (f" It was made with {gone}, which isn't installed any more, so {label} wasn't told; sign out on "
+                       "its website to end that session.")
     if remote:
         return said + f" {label} also confirmed you're signed out."
     if remote is None:
