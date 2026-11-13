@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.2.0-beta.8
 
 - **A report about a store that couldn't be read has the page Hoard saw.** When a store's library page isn't what
   Hoard's reader knows, or a read comes back empty, Hoard opens the page again straight away and keeps its layout:
