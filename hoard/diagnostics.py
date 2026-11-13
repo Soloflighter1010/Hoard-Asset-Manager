@@ -831,6 +831,11 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
             "job": _job_summary(effective_job, sanitizer),
         }
         report["recent_incidents"] = [_export_incident(x, sanitizer) for x in _recent_incidents()[-MAX_EXPORTED_INCIDENTS:]]
+        # a store page that couldn't be read, as Hoard kept it: its shape only (kept_pages), the report's store's or
+        # every store's
+        from . import kept_pages
+        pages = kept_pages.kept(str(given_context.get("store") or "")[:40] or None)   # (only a store's name is one)
+        report["store_pages"] = [{**info, "file": f"store-page-{info.get('store')}.html"} for info, _page in pages]
 
         files: dict[str, str] = {
             "README.txt": (
@@ -845,6 +850,8 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
         }
         if previous:   # the launch before
             files["application-old-log.txt"] = old_log_text or "[log unavailable]"
+        for info, page in pages:
+            files[f"store-page-{info.get('store')}.html"] = page
         diagnostic = job.get("diagnostic") if isinstance(job, dict) else None
         if isinstance(diagnostic, dict):
             files["incident.txt"] = _incident_text(diagnostic, sanitizer)
@@ -857,6 +864,9 @@ def create_support_report(cfg: dict, lib, job: dict | None = None, notes: str = 
         os.replace(tmp_dir / "report.zip", final_path)
 
         preview = files["report.txt"][:MAX_PREVIEW_CHARS]
+        for info, page in pages:   # (how each page begins, to look at before sharing it)
+            preview += f"\nHow store-page-{info.get('store')}.html begins:\n{page[:1500]}\n"
+        preview = preview[:MAX_PREVIEW_CHARS + 1600 * len(pages)]
         return {"ok": True, "id": report_id, "filename": filename, "path": str(final_path),
                 "preview": preview, "folder": str(target_dir), "file_count": len(files)}
     finally:
@@ -910,6 +920,16 @@ def _human_report(report: dict) -> str:
         lines.append(f"{store}: {status}, {count} items in library{error}")
         if info.get("error"):
             lines.append(f"  error: {info['error']}")
+    for page in report.get("store_pages") or []:
+        found = page.get("found") or {}
+        said = (f"the reader found {found['items']} items" if "items" in found
+                else "the page's data was there" if found.get("page_data") else "the reader found nothing")
+        why = "came back empty" if page.get("problem") == "empty" else "failed on the page"
+        lines += ["", f"Store page: {page.get('store')}", "-" * (12 + len(str(page.get("store")))),
+                  f"Kept {page.get('when')} with Hoard {page.get('hoard')}, after a read that {why}; {said}.",
+                  f"Address: {page.get('address')}",
+                  f"{page.get('file')} is its layout only: every word, number, address and value in it is replaced "
+                  "(letters with x, digits with 0), so it doesn't say what you bought or who you are."]
     if report.get("notes"):
         lines += ["", "User notes", "----------", report["notes"]]
     lines += ["", "Privacy", "-------", "This report was sanitized locally. No report data was uploaded by Hoard."]

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **A report about a store that couldn't be read has the page Hoard saw.** When a store's library page isn't what
+  Hoard's reader knows, or a read comes back empty, Hoard opens the page again straight away and keeps its layout:
+  every tag, and the store's own names for its parts, with every word, number, address and value replaced (letters
+  with x, digits with 0), so nothing in it says what you bought or who you are. **Create report** puts it in the
+  report, and the report's preview shows how it begins. Before, a report said a store's read had failed but not
+  what the store showed, which is what a fix needs when a store changes its page. The layout is kept on your
+  computer until that store reads fine again or you sign out of it, and nothing is uploaded.
 - **Changing the browser no longer breaks the stores you're signed in to.** A store's sign-in is kept by the browser
   that made it, and another browser can't always use it: on a Mac and on Linux each browser keeps its own key to
   its sign-ins, Chrome on Windows ties its sign-ins to itself, and a browser on an older Chromium may refuse a

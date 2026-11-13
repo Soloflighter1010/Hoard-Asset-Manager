@@ -245,6 +245,11 @@ The easiest way is to let Hoard prepare the technical details for you:
 
 1. Reproduce the problem if you can.
 2. Choose **Create support report** in **Settings**, or use the **Create report** button shown next to a failed store or download.
+   When a store's library couldn't be read (its page wasn't what Hoard knows) or came back empty, Hoard opened
+   the page again straight away and kept its layout, and the report has it: every tag and the store's own names
+   for them, with every word, number, address and value replaced (letters with x, digits with 0), so it doesn't
+   say what you bought or who you are. That's what a fix needs when a store changes its page. It's kept on your
+   computer until that store reads fine again or you sign out of it.
 3. Read the report preview, then save it. Hoard builds the ZIP on your computer and sanitizes it before it is exported; nothing is uploaded automatically.
 4. [Open an issue](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues) and attach the ZIP. It is still a public issue, so review the ZIP yourself before sharing it.
 

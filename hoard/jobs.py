@@ -15,6 +15,7 @@ from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, 
                       browser_name, check_saved_signin, chosen_channel, for_signin, launch, made_with_another,
                       note_signin_browser, sign_out, signin_browser, signins_root, use_channel)
 from .safety import store_link
+from . import kept_pages
 from .tags import tag_key
 from .setup import browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
@@ -1240,6 +1241,7 @@ class Jobs:
                 label = STORES[store]["label"]
                 self._set(task="logout", store=store, message=f"Signing out of {label}")
                 done = sign_out(p, self.cfg, store)
+                kept_pages.forget(store)   # (a page kept for a report goes with the sign-in)
                 # The list of what that account owns goes too, so whoever signs in next never sees it.
                 # Downloaded files stay where they are.
                 forgot = self.lib.clear_store(store, "Signed out. " + done.split(": ", 1)[-1])
@@ -1254,6 +1256,14 @@ class Jobs:
             self._set(message="Signed out of every store. Each store's row in Stores says what was done.")
         else:
             self._set(message="Signed out. " + done.split(": ", 1)[-1])
+
+    def _keep_store_page(self, ctx, store: str, problem: str) -> None:
+        """A read that failed on the store's page (or found nothing there) keeps that page's shape for a report:
+        opened again in the same browser, with every word, number and address blanked (see kept_pages)."""
+        if ctx is None or self._forced or self.stop.is_set():
+            return
+        self._set(message=f"{STORES[store]['label']}: noting how its page is laid out, for a report")
+        kept_pages.capture(ctx, self.cfg, store, problem)
 
     def _refresh(self, stores: list[str], skip_imported: bool = False, quick: bool = False) -> list[str]:
         """Read each store's purchases and save them, keeping the old list when a read fails or comes back empty.
@@ -1317,6 +1327,7 @@ class Jobs:
                         if not items and before:
                             from .stores import health
                             health.record(store, "library", "empty")
+                            self._keep_store_page(ctx, store, "empty")
                             self.lib.set_error(store, f"Found no items this time (last time: {before}), so the old list was kept. "
                                                       f"Try again, or run the command: debug {store}")
                         else:
@@ -1337,6 +1348,7 @@ class Jobs:
                                 self.lib.set_error(store, payhip_unread_note(shops_unread))
                                 some_shops = True
                             refreshed.append(store)
+                            kept_pages.forget(store)   # (it reads fine: a page kept from a failure goes)
                     except NotLoggedIn as e:
                         self.lib.set_error(store, (
                             f"{str(e).rstrip('.')}. Choose Sign in to add an API key from itch.io." if store == "itch"
@@ -1352,6 +1364,8 @@ class Jobs:
                         if not self._forced:   # (its browser was closed by Force stop: not the store's fault)
                             self.lib.set_error(store, unreachable_message(store, error=e) if is_network_error(e)
                                                else f"Couldn't read the library: {plain_error(e)}")
+                            if not is_network_error(e):
+                                self._keep_store_page(ctx, store, "layout")
                 finally:
                     if ctx:
                         ctx.close()

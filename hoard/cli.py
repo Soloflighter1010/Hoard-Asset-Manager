@@ -14,11 +14,12 @@ from .config import clean_payhip_shop, load_config, payhip_shops, root_dir, save
 from .downloader import build_catalog, cmd_probe, cmd_sync, cmd_verify, file_rules, remembered_files
 from .jobs import Jobs
 from . import itch, vault
-from .library import (BOOTH_JS, DOWNLOADABLE, GR_LIBRARY, IMPORTABLE, JX_CARDS_JS, JX_INVENTORY,
+from .library import (BOOTH_JS, DOWNLOADABLE, IMPORTABLE, JX_CARDS_JS,
                       Library, PAYHIP_SHOP_JS, STORES, import_saved_pages, open_sign_in_pages, saved_pages_in)
 from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 
 from .safety import scrub
+from .kept_pages import library_address, reader_summary
 from .app import run_app, self_test
 from .server import serve
 from .setup import install_browser, migrate_from
@@ -61,22 +62,6 @@ def cmd_refresh(cfg, stores):
 SENSITIVE_NOTE = ("These files were saved with --raw: they're the pages exactly as your store showed them, with your "
                   "purchases, account name or email address, and possibly signed download links or license keys. "
                   "Only share them with someone you trust, and delete them when you're done.\n")
-
-
-def reader_summary(parsed) -> dict:
-    """What the reader found, without the purchases themselves: how many items, and how often each field was filled."""
-    if isinstance(parsed, list):
-        items = parsed
-    elif isinstance(parsed, dict):
-        items = parsed.get("cards") or parsed.get("items") or []
-    else:
-        items = []
-    fields: dict = {}
-    for item in items:
-        for k, v in (item.items() if isinstance(item, dict) else ()):
-            fields[k] = fields.get(k, 0) + (1 if v not in (None, "", [], {}) else 0)
-    files = sum(len(i.get("files") or []) for i in items if isinstance(i, dict))
-    return {"items": len(items), "fields_filled": fields, **({"files": files} if files else {})}
 
 
 def cmd_itch_key(cfg) -> None:
@@ -129,10 +114,7 @@ def cmd_debug(cfg, store, raw: bool = False):
     with _playwright()() as p:
         ctx = launch(p, cfg, False, store)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        shops = payhip_shops(cfg)
-        url = {"booth": "https://accounts.booth.pm/library", "gumroad": GR_LIBRARY, "jinxxy": JX_INVENTORY,
-               "payhip": (shops[0] + "/b-account") if shops else "https://payhip.com/"}[store]
-        page.goto(url, wait_until="domcontentloaded")
+        page.goto(library_address(cfg, store) or "https://payhip.com/", wait_until="domcontentloaded")
         settle(page, 2000)
         page.mouse.wheel(0, 4000)
         page.wait_for_timeout(1500)
