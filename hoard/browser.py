@@ -1,6 +1,7 @@
 """Store sign-ins and the browser Hoard drives to read stores."""
 from __future__ import annotations
 
+import json
 import os
 import plistlib
 import re
@@ -227,6 +228,22 @@ class ProfileLock:
             except OSError:
                 pass
             self.fh = None
+
+
+def _remove_signin(path: Path, seconds: float = 10.0) -> None:
+    """Delete a store's sign-in folder, trying again for a few seconds while it can't be: on Windows a browser that
+    has just ended (or a virus scan of what it wrote) holds its files a moment longer."""
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            _remove_tree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            if time.monotonic() >= deadline:
+                return   # (the caller says so, finding it still there)
+            time.sleep(0.5)
 
 
 def _remove_tree(path: Path) -> None:
@@ -477,6 +494,65 @@ def use_channel(cfg: dict) -> str:
     return channel if channel == "chromium" or channel_installed(channel, cfg) else "chromium"
 
 
+# ----------------------------------------------------------------------------- the browser a sign-in was made with
+#
+# A store's sign-in is a browser's own folder, and one browser can't always use another's: on a Mac and on Linux each
+# keeps its own key to the sign-ins it saves (in the Keychain or the keyring), Chrome on Windows ties its own to
+# itself, and a browser on an older Chromium may refuse a folder a newer one has used. So each sign-in keeps
+# the browser it was made with: Hoard reads and signs out with that one while it's installed, and signing in to that
+# store again moves it to the browser chosen now (starting afresh, after signing out with the old one).
+
+def _made_with_file(cfg: dict, store: str) -> Path:
+    """Where the browser a store's sign-in works with is noted: beside its folder, as its lock is."""
+    profile = profile_dir(cfg, store)
+    return profile.parent / (profile.name + ".browser")
+
+
+def _browser_of(cfg: dict) -> dict:
+    """The browser Hoard uses now, as a sign-in notes it: its choice, and the program of one chosen by it."""
+    channel = use_channel(cfg)
+    return {"channel": channel, **({"program": cfg.get("browser_path") or ""} if channel == "custom" else {})}
+
+
+def note_signin_browser(cfg: dict, store: str) -> None:
+    """Note that this store's sign-in works with the browser Hoard uses now (it was just made with it, or read)."""
+    try:
+        _made_with_file(cfg, store).write_text(json.dumps(_browser_of(cfg)), "utf-8")
+    except OSError:
+        pass
+
+
+def signin_browser(cfg: dict, store: str) -> dict | None:
+    """The browser this store's sign-in was made with ({"channel"}, and "program" for one chosen by it), or None when
+    it wasn't noted (a sign-in from before 5.2.0 beta 8 not read since, or no sign-in)."""
+    try:
+        made = json.loads(_made_with_file(cfg, store).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(made, dict) or made.get("channel") not in (*NAMED, *FOUND, "custom", "chromium"):
+        return None
+    return {"channel": made["channel"], **({"program": str(made.get("program") or "")} if made["channel"] == "custom" else {})}
+
+
+def for_signin(cfg: dict, store: str) -> dict:
+    """The settings to open this store's sign-in with: with the browser it was made with while that one is installed
+    (it may not be the one chosen now), otherwise as they are."""
+    made = signin_browser(cfg, store)
+    if not made or made == _browser_of(cfg):
+        return cfg
+    theirs = {**cfg, "browser_channel": made["channel"], "browser_path": made.get("program", cfg.get("browser_path", ""))}
+    # (Hoard's own is taken as there, as use_channel takes it: Set up Hoard installs it)
+    return theirs if made["channel"] == "chromium" or channel_installed(made["channel"], theirs) else cfg
+
+
+def made_with_another(cfg: dict, store: str) -> str | None:
+    """The name of the browser this store's sign-in was made with, when that isn't the one Hoard uses now."""
+    made = signin_browser(cfg, store)
+    if not made or made == _browser_of(cfg) or not profile_dir(cfg, store).exists():
+        return None
+    return browser_name(made["channel"], {**cfg, "browser_path": made.get("program", "")})
+
+
 def _key_args(cfg: dict) -> list[str]:
     """The switches that make Chromium encrypt a profile's sign-ins with this computer's keyring (Linux only: Windows
     and macOS always use theirs). The same for Hoard's own window and a plain sign-in window, so each can read what
@@ -495,10 +571,14 @@ def _key_args(cfg: dict) -> list[str]:
         "config.json; sign-ins are then protected only by your user account's folder permissions.")
 
 
-def _launch(p, cfg: dict, profile: Path, headless: bool):
-    """Start Chromium on a profile with the strongest cookie protection this computer offers."""
+def _launch(p, cfg: dict, profile: Path, headless: bool, timeout: float | None = None):
+    """Start Chromium on a profile with the strongest cookie protection this computer offers. timeout: the most
+    seconds to wait for it to start (Playwright's own limit, 3 minutes, otherwise). Force stop ends it while it's
+    starting, too."""
     kwargs = dict(user_data_dir=str(profile), headless=headless, accept_downloads=True,
                   viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
+    if timeout:
+        kwargs["timeout"] = timeout * 1000
     args = _key_args(cfg)
     if args:
         kwargs["args"] = args
@@ -512,6 +592,11 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
         kwargs["channel"] = channel
     else:
         kwargs["executable_path"] = channel_path(channel, cfg)
+    # Playwright hands the browser over only once its first tab is open, so one that never opens it (or stops
+    # answering as it starts) would keep a job waiting up to Playwright's limit: Force stop ends one starting, too
+    starting = object()
+    with _open_lock:
+        _starting[starting] = (p, profile)
     try:
         ctx = p.chromium.launch_persistent_context(**kwargs)
     except Exception as e:
@@ -520,8 +605,45 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
         said = str(e).strip().splitlines()[0][:200]
         raise RuntimeError(f"{browser_name(channel, cfg)} couldn't be started for Hoard ({said}). Choose another "
                            "browser in Settings, under Browser for store sign-ins.") from e
-    _track(ctx)
+    finally:
+        with _open_lock:
+            _starting.pop(starting, None)
+    _track(ctx, profile=profile)
+    _tabs_from_a_tab(ctx, browser_name(channel, cfg))
     return ctx
+
+
+NO_NEW_TAB = "Failed to open a new tab"   # what a browser says when it won't open a tab another program asks for
+
+
+def _tabs_from_a_tab(ctx, name: str) -> None:
+    """Some browsers built on Chromium won't open a tab when Hoard asks for one (Vivaldi was seen to: "Failed to open
+    a new tab"). For those, a new tab is opened from one that's open, as a link opening in a new tab would be; if
+    that doesn't work either, it says to choose another browser."""
+    try:
+        real_new_page = ctx.new_page
+    except AttributeError:   # (a stand-in)
+        return
+
+    def new_page(*args, **kwargs):
+        """A new tab: asked for, or opened from one already open when the browser won't open one when asked."""
+        try:
+            return real_new_page(*args, **kwargs)
+        except Exception as e:
+            if NO_NEW_TAB not in str(e):
+                raise
+            refused = e
+        opener = next((page for page in ctx.pages if not page.is_closed()), None)
+        if opener is not None:
+            try:
+                with ctx.expect_page(timeout=15000) as opened:
+                    opener.evaluate("() => { window.open('about:blank', '_blank'); }")
+                return opened.value
+            except Exception:
+                pass
+        raise RuntimeError(f"{name} wouldn't open a tab for Hoard ({NO_NEW_TAB.lower()}). Choose another browser in "
+                           "Settings, under Browser for store sign-ins.") from refused
+    ctx.new_page = new_page
 
 
 # ----------------------------------------------------------------------------- browsers that stop answering
@@ -531,18 +653,20 @@ def _launch(p, cfg: dict, profile: Path, headless: bool):
 # and Stop, which a job notices between steps, could never reach it. end_browsers() ends every browser Hoard has
 # open, from any thread, so everything waiting on one fails at once and the job can finish.
 
-_open: dict = {}              # each browser Hoard has open -> what to do after it's ended (its sign-in's lock)
+_open: dict = {}              # each browser Hoard has open -> {"cleanup": what to do after it's ended (its sign-in's
+                              # lock), "profile": the folder it's open on}
+_starting: dict = {}          # each browser being started -> (its Playwright, the folder it's starting on)
 _ended = weakref.WeakSet()    # browsers ended by force: closing one of those again can wait for ever (each is let
                               # go with the browser itself, so a long-running Hoard doesn't keep them all)
 _open_lock = threading.Lock()
 
 
-def _track(ctx, cleanup=None) -> None:
+def _track(ctx, cleanup=None, profile: Path | None = None) -> None:
     """Keep a browser on the list of those open, so it can be ended from any thread. Closing it again after it was ended
     by force does nothing."""
     try:
         with _open_lock:
-            _open[ctx] = cleanup
+            _open[ctx] = {"cleanup": cleanup, "profile": profile}
         real_close = ctx.close
     except (TypeError, AttributeError):   # not a browser Playwright started (a stand-in)
         return
@@ -574,15 +698,34 @@ def _driver_pid(ctx) -> int | None:
         return None
 
 
+def _end_driver(pid: int) -> bool:
+    """End a Playwright driver, and on Windows everything it started (the browser too); elsewhere a browser ends when
+    its driver's pipe closes, or, for one that doesn't, end_left_behind ends it."""
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            os.kill(pid, signal.SIGKILL)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def end_browsers() -> int:
-    """End every store browser Hoard has open, and Playwright's driver for it. Every call waiting on one then fails
-    at once ("Connection closed"), so a job stuck on a browser that stopped answering can finish. Returns how many
-    were ended."""
+    """End every store browser Hoard has open or is starting, and Playwright's driver for it. Every call waiting on
+    one then fails at once ("Connection closed"), so a job stuck on a browser that stopped answering (or that never
+    finished starting) can finish. A browser still on its folder a moment later (one that doesn't quit when Playwright
+    lets go of it) is ended as well. Returns how many were ended."""
     with _open_lock:
         found = list(_open.items())
         _open.clear()
-    ended, pids = 0, set()
-    for ctx, cleanup in found:
+        starting = list(_starting.values())
+        _starting.clear()
+    ended, pids, profiles = 0, set(), []
+    for ctx, kept in found:
+        if kept.get("profile"):   # (its browser, named now: one started on the folder later is never ended for it)
+            profiles.append((kept["profile"], _lock_pid(kept["profile"])))
         try:
             _ended.add(ctx)
         except TypeError:   # (a stand-in that can't be weakly held: never closed twice anyway)
@@ -590,21 +733,63 @@ def end_browsers() -> int:
         pid = _driver_pid(ctx)
         if pid and pid not in pids:
             pids.add(pid)
+            ended += _end_driver(pid)
+        if kept.get("cleanup"):
             try:
-                if sys.platform == "win32":   # the driver and everything it started: the browser too
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15,
-                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-                else:                         # the browser ends when its driver's pipe closes
-                    os.kill(pid, signal.SIGKILL)
-                ended += 1
-            except (OSError, subprocess.SubprocessError):
-                pass
-        if cleanup:
-            try:
-                cleanup()
+                kept["cleanup"]()
             except Exception:
                 pass
+    for p, profile in starting:
+        profiles.append((profile, _lock_pid(profile)))
+        pid = _driver_pid(p)   # (a Playwright's driver is found as a browser's is)
+        if pid and pid not in pids:
+            pids.add(pid)
+            ended += _end_driver(pid)
+    # On Windows the driver was ended with everything it started. Elsewhere a browser that doesn't quit when its
+    # driver's pipe closes is ended by its process, as its folder's lock names it (in the background: a request
+    # asking for Force stop doesn't wait on it)
+    left = [(profile, pid) for profile, pid in profiles if pid]
+    if left:
+        threading.Thread(target=end_left_behind, args=(left,), name="Ending browsers left behind", daemon=True).start()
     return ended
+
+
+def _lock_pid(profile: Path) -> int | None:
+    """The browser on this folder, by its process, as Chromium names it in the folder's lock (macOS, Linux); None on
+    Windows, for none, or for another computer's."""
+    if os.name == "nt" or not _profile_in_use(profile):
+        return None
+    try:
+        import socket
+        host, _, pid = os.readlink(profile / "SingletonLock").rpartition("-")
+        return int(pid) if host == socket.gethostname() and pid.isdigit() and int(pid) > 1 else None
+    except (OSError, ValueError):
+        return None
+
+
+def _let_go(profile: Path, seconds: float, pid: int | None = None) -> bool:
+    """Wait (at most seconds) until no browser is on this folder (or, given pid, until that one isn't). True when
+    none is."""
+    deadline = time.monotonic() + seconds
+    while _profile_in_use(profile) if pid is None else _lock_pid(profile) == pid:
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.2)
+    return True
+
+
+def end_left_behind(profiles, grace: float = 3.0) -> None:
+    """A browser still on one of these folders (after its driver was ended, or left behind) is ended: given grace
+    seconds to quit as it should, then asked to, then, 3 seconds later, made to. profiles: folders, or (folder,
+    process) pairs, when only that browser is to be ended (a browser started on the folder since is left alone)."""
+    for item in profiles:
+        profile, pid = item if isinstance(item, tuple) else (item, None)
+        if _let_go(profile, grace, pid):
+            continue
+        end_profile_browser(profile, pid=pid)
+        if not _let_go(profile, 3.0, pid):
+            end_profile_browser(profile, hard=True, pid=pid)
+            _let_go(profile, 3.0, pid)
 
 
 _migrated = False
@@ -683,22 +868,23 @@ def _migrate_old_signins(p, cfg: dict) -> None:
 
 
 def launch_context(p, cfg: dict, headless: bool, store: str):
-    """Open Hoard's browser with one store's saved sign-in. Close it with ctx.close()."""
+    """Open Hoard's browser with one store's saved sign-in: the browser it was made with, while that one is
+    installed (see for_signin). Close it with ctx.close()."""
     _migrate_old_signins(p, cfg)
     target = profile_dir(cfg, store)
     lock = ProfileLock(target)
     lock.acquire()
     try:
         _lock_down(target)
-        ctx = _launch(p, cfg, target, headless)
+        ctx = _launch(p, for_signin(cfg, store), target, headless)
     except BaseException:
         lock.release()
         raise
     ctx.on("close", lambda _ctx: lock.release())
     pace.count_requests(ctx)   # (what its pages ask Jinxxy for counts toward Jinxxy's limit: issue #262)
     with _open_lock:
-        if ctx in _open:
-            _open[ctx] = lock.release   # ended by force, it never says it closed: its sign-in is let go then
+        if ctx in _open:   # ended by force, it never says it closed: its sign-in is let go then
+            _open[ctx]["cleanup"] = lock.release
     return ctx
 
 
@@ -718,17 +904,17 @@ def browser_program(p, cfg: dict) -> str:
     return str(path)
 
 
-def end_profile_browser(profile: Path) -> None:
-    """End the browser running on this profile, if one is (Force stop of a sign-in). Only a browser on this
-    computer, on this exact profile, is ended."""
+def end_profile_browser(profile: Path, hard: bool = False, pid: int | None = None) -> None:
+    """End the browser running on this profile, if one is (Force stop of a sign-in, or one left behind). Only a
+    browser on this computer, on this exact profile, is ended; given pid, only while it's that one. hard: at once,
+    not asked to quit (on Windows it always is)."""
     if not _profile_in_use(profile):
         return
     try:
         if os.name != "nt":
-            host, _, pid = os.readlink(profile / "SingletonLock").rpartition("-")
-            import socket
-            if host == socket.gethostname() and pid.isdigit() and int(pid) > 1:
-                os.kill(int(pid), signal.SIGTERM)
+            on_it = _lock_pid(profile)
+            if on_it and (pid is None or on_it == pid):
+                os.kill(on_it, signal.SIGKILL if hard else signal.SIGTERM)
         else:   # the browser's processes are the ones started with this profile (passed in the environment, unquoted)
             script = ("$p = '--user-data-dir=' + $env:HOARD_PROFILE; Get-CimInstance Win32_Process | "
                       "Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) } | "
@@ -879,9 +1065,12 @@ class SignInWindow:
 
 
 def check_saved_signin(cfg: dict, store: str) -> None:
-    """After signing in: make sure the saved sign-in really is encrypted, or delete it and say why."""
+    """After signing in: make sure the saved sign-in really is encrypted, or delete it and say why. One that is
+    kept notes the browser it was made with."""
     target = profile_dir(cfg, store)
     if cfg.get("allow_unprotected_signins") or not unprotected_cookie_count(target):
+        if target.exists():
+            note_signin_browser(cfg, store)
         return
     _remove_tree(target)
     raise SigninsUnprotected(
@@ -896,9 +1085,11 @@ def _signed_out_page(page) -> bool:
 
 
 def _end_store_session(p, cfg: dict, profile: Path, store: str) -> bool:
-    """Ask the store to end the session (best effort). True when the store then shows this browser as signed out."""
+    """Ask the store to end the session (best effort), with the browser the sign-in was made with: another may not
+    be able to read it, and would see itself as signed out already. True when the store then shows this browser as
+    signed out."""
     try:
-        ctx = _launch(p, cfg, profile, headless=True)
+        ctx = _launch(p, for_signin(cfg, store), profile, headless=True, timeout=45)
     except Exception:
         return False
     try:
@@ -947,18 +1138,25 @@ def sign_out(p, cfg: dict, store: str, online: bool | None = None) -> str:
         return (f"{label}: deleted the saved API key. It still works until you delete it on itch.io too "
                 "(Settings, API keys), so do that if you're done with it.")
     if not target.exists():
+        _made_with_file(cfg, store).unlink(missing_ok=True)
         return f"{label}: no saved sign-in."
     if online is None:
         online = reachable(store)
     lock = ProfileLock(target)
     lock.acquire()
     try:
+        # no Hoard program has it (that's the lock): a browser still on it was left behind (one that didn't quit when
+        # Hoard let go of it, or a sign-in window's), and would keep its files, or hand the one started below to itself
+        end_left_behind([target], grace=0)
         try:
             count = (_cookie_rows(target, "SELECT COUNT(*) FROM cookies") or [(0,)])[0][0]
         except CookiesInUse:   # a browser still has it open; deleting the folder below says so if it can't
             count = None
         remote = _end_store_session(p, cfg, target, store) if online else None
-        _remove_tree(target)
+        end_left_behind([target])
+        _remove_signin(target)
+        if not target.exists():
+            _made_with_file(cfg, store).unlink(missing_ok=True)
     finally:
         lock.release()
     if target.exists():
