@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.2.0-beta.9
+
+- **Hoard can read your stores with Vivaldi.** Signing in with Vivaldi worked, but reading a store then waited 3
+  minutes, or until Force stop: Vivaldi's own interface doesn't start when another program drives it, so it never
+  opened its first tab.
+  Hoard now starts it for reading with `--disable-vivaldi`, as the plain Chromium window, on the same profile and its
+  sign-ins. Signing in still opens Vivaldi as you know it.
+- **A browser that doesn't finish starting is given up on after 90 seconds**, with what to do (choose another browser
+  in Settings), where Hoard used to wait 3 minutes. That's any browser Hoard starts by its program: Brave, Vivaldi,
+  Opera, Opera GX and one you chose.
+- **A task you Force stop says it was stopped.** Force stop while a store's browser was starting said "Vivaldi
+  couldn't be started for Hoard (Connection closed while reading from the driver)", as if the browser had failed.
+
 ## 5.2.0-beta.8
 
 - **A report about a store that couldn't be read has the page Hoard saw.** When a store's library page isn't what

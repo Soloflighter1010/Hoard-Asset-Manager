@@ -654,6 +654,9 @@ class Jobs:
                                                        store=self.state.get("store"), include_traceback=False)
             self._set(message=str(e), error=str(e), diagnostic=diagnostic)
         except Exception as e:
+            if self._forced:   # (Force stop ended what it waited on: what that says is only its being ended)
+                self._set(message="Stopped.")
+                return
             why = browser_problem(e) or f"Stopped: {e}"
             diagnostic = diagnostics.record_exception(e, area="job", task=self.state.get("task"),
                                                        store=self.state.get("store"), include_traceback=True)

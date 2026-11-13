@@ -579,15 +579,30 @@ def _key_args(cfg: dict) -> list[str]:
         "config.json; sign-ins are then protected only by your user account's folder permissions.")
 
 
+FOUND_START_SECONDS = 90   # how long a browser found or chosen by its program has to open its first tab for Hoard
+
+
+def driven_switches(channel: str, cfg: dict) -> list[str]:
+    """What a browser needs to be driven by Hoard, beyond Playwright's own switches. Vivaldi's own interface doesn't
+    start under a program driving it: it never opens its first tab, so Playwright waits for it until it gives up
+    (a tester saw it; Puppeteer does the same). Started with --disable-vivaldi it's the plain Chromium window, on the
+    same profile and its sign-ins. Its sign-in window, which Hoard doesn't drive, is Vivaldi as you know it."""
+    program = (channel_path(channel, cfg) or "") if channel == "custom" else ""
+    return ["--disable-vivaldi"] if channel == "vivaldi" or "vivaldi" in Path(program).name.lower() else []
+
+
 def _launch(p, cfg: dict, profile: Path, headless: bool, timeout: float | None = None):
     """Start Chromium on a profile with the strongest cookie protection this computer offers. timeout: the most
-    seconds to wait for it to start (Playwright's own limit, 3 minutes, otherwise). Force stop ends it while it's
-    starting, too."""
+    seconds to wait for it to start (otherwise Playwright's own limit, 3 minutes; FOUND_START_SECONDS for a browser
+    started by its program). Force stop ends it while it's starting, too."""
     kwargs = dict(user_data_dir=str(profile), headless=headless, accept_downloads=True,
                   viewport={"width": 1400, "height": 950}, ignore_default_args=WEAK_KEY_SWITCHES)
+    channel = use_channel(cfg)
+    by_program = not (channel == "chromium" or channel in NAMED)
+    timeout = timeout or (FOUND_START_SECONDS if by_program else None)
     if timeout:
         kwargs["timeout"] = timeout * 1000
-    args = _key_args(cfg)
+    args = _key_args(cfg) + driven_switches(channel, cfg)
     if args:
         kwargs["args"] = args
     # Always named, "chromium" too: without it, Playwright starts a different program when there's no window, its
@@ -595,8 +610,7 @@ def _launch(p, cfg: dict, profile: Path, headless: bool, timeout: float | None =
     # sign-in window (with the real Keychain) then couldn't be read, so every store said "Not signed in" after
     # you'd signed in (issue #33). Named, it's the same Chromium with or without a window. The rest of the Chromium
     # family (Brave, Vivaldi, Opera, one you chose) is started by its program, the same one either way.
-    channel = use_channel(cfg)
-    if channel == "chromium" or channel in NAMED:
+    if not by_program:
         kwargs["channel"] = channel
     else:
         kwargs["executable_path"] = channel_path(channel, cfg)
@@ -608,11 +622,19 @@ def _launch(p, cfg: dict, profile: Path, headless: bool, timeout: float | None =
     try:
         ctx = p.chromium.launch_persistent_context(**kwargs)
     except Exception as e:
+        with _open_lock:
+            stopped = starting not in _starting   # (Force stop took it off the list, and ended it)
+        if stopped:   # what it says is only its connection being cut: not the browser's fault
+            raise RuntimeError("The store's browser was ended (Force stop) as it started.") from e
         if "executable_path" not in kwargs or not str(e).strip():
             raise
+        name = browser_name(channel, cfg)
+        if type(e).__name__ == "TimeoutError" or "Timeout" in str(e):
+            raise RuntimeError(f"{name} didn't open its first tab for Hoard within {timeout:.0f} seconds, so it couldn't "
+                               "be used. Choose another browser in Settings, under Browser for store sign-ins.") from e
         said = str(e).strip().splitlines()[0][:200]
-        raise RuntimeError(f"{browser_name(channel, cfg)} couldn't be started for Hoard ({said}). Choose another "
-                           "browser in Settings, under Browser for store sign-ins.") from e
+        raise RuntimeError(f"{name} couldn't be started for Hoard ({said}). Choose another browser in Settings, under "
+                           "Browser for store sign-ins.") from e
     finally:
         with _open_lock:
             ended_starting = _starting.pop(starting, None) is None   # (Force stop took it off the list, and ended it)
