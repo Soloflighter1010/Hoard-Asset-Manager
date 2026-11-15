@@ -1,6 +1,7 @@
-# Architecture roadmap implementation
+# Architecture implementation notes
 
-This branch implements the code foundations in #315 and its linked issues. The
+The current plan is [the Hoard roadmap](../ROADMAP.md). This document records
+implementation evidence for #315 and its linked issues, rather than a separate plan. The
 table separates implemented behavior from evidence that still needs a native
 machine or CI run. It is not a claim that every acceptance criterion is complete.
 
