@@ -543,6 +543,21 @@ class Apply(Case):
         (source / "package.json").write_text(json.dumps({"name": name, "version": version}))
         return Info(pkg(name, version), folder=source)
 
+    def test_dependency_only_change_is_verified_after_save(self):
+        from hoard.vpm import api
+        name = "com.anatawa12.package"
+        project = self.project({name: "1.0.0"})
+        changes = resolve.Changes()
+        changes.add_to_dependencies(name, DependencyRange.parse("2.0.0"))
+        service = api.Service.__new__(api.Service)
+        service.settings = lambda: type("S", (), {"folder": self.root / "vcc"})()
+        with mock.patch.object(resolve, "apply", lambda *a: None), \
+                mock.patch.object(api, "log", lambda *a: None), \
+                self.assertRaisesRegex(api.ProjectsError, "requested dependency range wasn't saved"):
+            service._apply(project, changes)
+        resolve.apply(project, changes, self.root / "vcc")
+        self.assertEqual(resolve.not_applied(project.folder, changes), [])
+
     def test_what_a_change_means_to_do_and_whether_it_did(self):
         """Issue #335: a change says each package's version now and the one it gets, and is read back once it's made:
         what isn't as it should be is named (and the task fails), never ended as done."""
