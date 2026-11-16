@@ -11,7 +11,8 @@ from pathlib import Path
 
 from tests.isolation import IsolatedTestCase
 from hoard.storage import Database, DatabaseIntegrityError, FILES
-from hoard.tags import tag_key
+# Raw name fixtures must not consult another test's live default database.
+from hoard.tags import legacy_tag_key as tag_key
 
 KEY = b"test metadata key, never a secret"
 

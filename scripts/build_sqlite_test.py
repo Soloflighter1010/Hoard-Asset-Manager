@@ -15,6 +15,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import importlib.util
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +28,7 @@ def main():
     parser.add_argument("--shell", type=Path, required=True, help="released, compatible Tauri Hoard.exe")
     parser.add_argument("--shell-ref", default="v5.2.0-beta.9")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--resume-stage", type=Path, help="retry an existing local stage without deleting compiler outputs")
     args = parser.parse_args()
     python, shell = args.python.resolve(), args.shell.resolve()
     if not python.is_file() or not shell.is_file():
@@ -36,38 +38,81 @@ def main():
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     short = commit[:7]
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
-    stage = (ROOT / ".atlas" / ("sqlite-build-" + stamp)).resolve()
+    stage = (args.resume_stage or ROOT / ".atlas" / ("sqlite-build-" + stamp)).resolve()
+    if not stage.is_relative_to(ROOT):
+        parser.error("Keep the stage inside the workspace")
+    if args.resume_stage:
+        version = re.search(r'__version__ = "([^"]+)"', (stage / "hoard" / "__init__.py").read_text("utf-8")).group(1)
+        if "+sqlite.local." not in version:
+            parser.error("Resume requires a generated SQLite local build stage")
+        short = version.rsplit(".", 1)[1]
+        commit = subprocess.check_output(["git", "rev-parse", short], cwd=ROOT, text=True).strip()
     output = (args.output or ROOT / "dist" / ("Hoard-SQLite-local-" + short)).resolve()
-    if not stage.is_relative_to(ROOT) or not output.is_relative_to(ROOT):
-        parser.error("Keep the stage and output inside the workspace")
-    if stage.exists() or output.exists():
+    if not output.is_relative_to(ROOT):
+        parser.error("Keep the output inside the workspace")
+    if output.exists() or (stage.exists() and not args.resume_stage):
         parser.error("Stage/output already exists; choose a fresh output rather than overwriting a build")
-    stage.mkdir(parents=True)
-    files = subprocess.check_output(["git", "ls-files", "-z", "--", "hoard", "packaging", "scripts/build_nuitka.py",
-                                     "CHANGELOG.md", "LICENSE"], cwd=ROOT).decode("utf-8").split("\0")
-    for name in filter(None, files):
-        source, target = ROOT / name, stage / name
-        if source.is_symlink() or not target.resolve().is_relative_to(stage):
-            raise RuntimeError("Build inputs must be ordinary tracked workspace files")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-    init = stage / "hoard" / "__init__.py"
-    original = init.read_text("utf-8")
-    base = re.search(r'__version__ = "([^"]+)"', original).group(1)
-    version = base + "+sqlite.local." + short
-    init.write_text(original.replace(f'__version__ = "{base}"', f'__version__ = "{version}"'), "utf-8", newline="\n")
-    storage = stage / "hoard" / "storage.py"
-    text = storage.read_text("utf-8")
-    needle = 'return os.environ.get("HOARD_METADATA", "").strip().lower() == "sqlite"'
-    if text.count(needle) != 1:
-        raise RuntimeError("Review the SQLite activation boundary before updating this build recipe")
-    storage.write_text(text.replace(needle, 'return os.environ.get("HOARD_METADATA", "sqlite").strip().lower() == "sqlite"'),
-                       "utf-8", newline="\n")
+    if not args.resume_stage:
+        stage.mkdir(parents=True)
+        files = subprocess.check_output(["git", "ls-files", "-z", "--", "hoard", "packaging", "scripts/build_nuitka.py",
+                                         "CHANGELOG.md", "LICENSE"], cwd=ROOT).decode("utf-8").split("\0")
+        for name in filter(None, files):
+            source, target = ROOT / name, stage / name
+            if source.is_symlink() or not target.resolve().is_relative_to(stage):
+                raise RuntimeError("Build inputs must be ordinary tracked workspace files")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        init = stage / "hoard" / "__init__.py"
+        original = init.read_text("utf-8")
+        base = re.search(r'__version__ = "([^"]+)"', original).group(1)
+        version = base + "+sqlite.local." + short
+        init.write_text(original.replace(f'__version__ = "{base}"', f'__version__ = "{version}"'), "utf-8", newline="\n")
+        storage = stage / "hoard" / "storage.py"
+        text = storage.read_text("utf-8")
+        needle = 'return os.environ.get("HOARD_METADATA", "").strip().lower() == "sqlite"'
+        if text.count(needle) != 1:
+            raise RuntimeError("Review the SQLite activation boundary before updating this build recipe")
+        storage.write_text(text.replace(needle, 'return os.environ.get("HOARD_METADATA", "sqlite").strip().lower() == "sqlite"'),
+                           "utf-8", newline="\n")
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     env["NUITKA_CACHE_DIR"] = str(ROOT / ".atlas" / "nuitka-cache")
+    # Store Python can read its protected import libraries, while the native
+    # linker cannot. Copy only those libraries to the private workspace.
+    prefix = subprocess.check_output([str(python), "-c", "import sys; print(sys.base_prefix)"], text=True).strip()
+    if os.name == "nt" and "windowsapps" in prefix.lower():
+        link_libs = ROOT / ".atlas" / "python-link-libs"
+        link_libs.mkdir(parents=True, exist_ok=True)
+        subprocess.run([str(python), "-c",
+                        "from pathlib import Path; import sys,shutil; "
+                        "[shutil.copy2(p,Path(sys.argv[1])/p.name) for p in (Path(sys.base_prefix)/'libs').glob('*.lib')]",
+                        str(link_libs)], check=True)
+        import ctypes
+        buffer = ctypes.create_unicode_buffer(32768)
+        if not ctypes.windll.kernel32.GetShortPathNameW(str(link_libs), buffer, len(buffer)):
+            raise OSError("Cannot make the workspace import libraries accessible to the linker")
+        env["LDFLAGS"] = (env.get("LDFLAGS", "") + " -L" + buffer.value).strip()
     print(f"Compiling {version}; stage: {stage}", flush=True)
-    subprocess.run([str(python), str(stage / "scripts" / "build_nuitka.py")], cwd=stage, env=env, check=True)
+    if args.resume_stage:
+        spec = importlib.util.spec_from_file_location("local_nuitka", stage / "scripts" / "build_nuitka.py")
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        command = builder.command()
+        subprocess.run(command, cwd=stage, env=env, check=True)
+        import apprise
+        dist = stage / "build" / "nuitka" / "hoard_shell.dist"
+        server = stage / "build" / "nuitka" / "server"
+        if not dist.resolve().is_relative_to(stage) or not server.resolve().is_relative_to(stage):
+            raise RuntimeError("Compiled output must remain in its generated stage")
+        for folder in ("plugins", "attachment", "config"):
+            shutil.copytree(Path(apprise.__file__).parent / folder, dist / "apprise" / folder, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        if server.exists():
+            shutil.copytree(dist, server, dirs_exist_ok=True)
+        else:
+            dist.rename(server)
+    else:
+        subprocess.run([str(python), str(stage / "scripts" / "build_nuitka.py")], cwd=stage, env=env, check=True)
     server = stage / "build" / "nuitka" / "server"
     exe = server / "hoard-server.exe"
     # Prove the compiled default without setting HOARD_METADATA or touching a user home.
