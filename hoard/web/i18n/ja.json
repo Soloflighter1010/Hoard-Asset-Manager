@@ -2589,5 +2589,11 @@
  "Find a set or wishlist": "セットやウィッシュリストを検索",
  "{0} matching sets and wishlists": "一致するセットとウィッシュリスト: {0}",
  "Sort sets and wishlists": "セットとウィッシュリストの並べ替え",
- "Saved order": "保存順"
+ "Saved order": "保存順",
+ "Add placeholder...": "プレースホルダーを追加...",
+ "Placeholder asset": "プレースホルダーアセット",
+ "Replace with a product in this set": "このセット内の商品に置き換える",
+ "Choose a product": "商品を選択",
+ "Replace placeholder": "プレースホルダーを置き換える",
+ "Describe the placeholder asset": "プレースホルダーアセットの説明"
 }

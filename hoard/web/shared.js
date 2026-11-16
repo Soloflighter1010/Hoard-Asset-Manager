@@ -5342,6 +5342,7 @@ function setHead(s) {
     `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
     s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
     `<button class="ghost sm" data-setx="exportjson">${esc(tr("Export JSON"))}</button>`,
+    `<button class="ghost sm" data-setx="addplaceholder">${esc(tr("Add placeholder..."))}</button>`,
     `<button class="linkish" data-setx="rename">${esc(tr("Rename"))}</button>`,
     `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
@@ -5646,13 +5647,14 @@ function setExtraTile(s, i) {
   const buy = !i.owned && !i.local ? storeUrl(i.store, i.url) || away : "";
   const href = i.download != null ? `/downloads#open=${+i.download}`   // (Hoard's own pages, or the store's, checked)
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
-  const what = i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
+  const what = i.placeholder ? tr("Placeholder asset") : i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
   const price = !i.owned && !i.local ? priceHTML(i) : "";
   const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}${i.adult ? ADULT_MARK : ""}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
   return `<div class="slot ext${buy ? " wanted" : ""}${i.adult ? " adult" : ""}">` +
     (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
+    (i.placeholder ? `<label>${esc(tr("Replace with a product in this set"))}<select data-placeholdertarget><option value="">${esc(tr("Choose a product"))}</option>${s.items.filter(x => !x.placeholder).map(x => `<option value="${esc(x.key)}">${esc(x.name)}</option>`).join("")}</select></label><button class="ghost sm" data-setx="resolveplaceholder" data-key="${esc(i.key)}">${esc(tr("Replace placeholder"))}</button>` : "") +
     (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +
     `<button class="ext-out" data-setx="out" data-key="${esc(i.key)}" title="${esc(tr(isWish(s) ? "Take it off this wishlist" : "Take it out of the set"))}" ` +
@@ -5928,6 +5930,16 @@ async function setAct(e) {
     return;
   }
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
+  if (act === "addplaceholder") {
+    const name = await askName("Describe the placeholder asset");
+    if (name) await changeSets({action: "placeholder-add", id: s.id, name});
+    return;
+  }
+  if (act === "resolveplaceholder") {
+    const target = b.closest(".slot").querySelector("[data-placeholdertarget]").value;
+    if (target) await changeSets({action: "placeholder-resolve", id: s.id, key: b.dataset.key, target});
+    return;
+  }
   if (act === "wclear") {   // a wishlist's price range
     Object.assign(WISH, { min: "", max: "" });
     for (const x of document.querySelectorAll("#setView input[data-wish]")) x.value = "";

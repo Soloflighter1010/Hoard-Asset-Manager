@@ -2589,5 +2589,11 @@
  "Find a set or wishlist": "세트 또는 위시리스트 찾기",
  "{0} matching sets and wishlists": "일치하는 세트 및 위시리스트 {0}개",
  "Sort sets and wishlists": "세트 및 위시리스트 정렬",
- "Saved order": "저장된 순서"
+ "Saved order": "저장된 순서",
+ "Add placeholder...": "자리 표시자 추가...",
+ "Placeholder asset": "자리 표시자 에셋",
+ "Replace with a product in this set": "이 세트의 제품으로 교체",
+ "Choose a product": "제품 선택",
+ "Replace placeholder": "자리 표시자 교체",
+ "Describe the placeholder asset": "자리 표시자 에셋 설명"
 }

@@ -32,6 +32,9 @@ def _sets_view(self) -> dict:
                 left_out = True
                 continue
             i, a, p = lib.get(key), dl.get(key), known.get(key) or {}
+            placeholder = (s.get("placeholders") or {}).get(key)
+            if placeholder:
+                i, a, p = None, None, {"store": "local", "name": placeholder}
             store = (i or {}).get("store") or p.get("store") or (str(a["store"]).lower() if a else "")
             if i and i.get("thumbnail"):
                 pic = "/thumb/" + app.quote(i["key"], safe=":")
@@ -48,7 +51,7 @@ def _sets_view(self) -> dict:
                          "creator": (i or a or p).get("creator") or "",
                          "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                          "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
-                         "local": store == "local", "mark": mark,
+                         "local": store == "local", "placeholder": bool(placeholder), "mark": mark,
                          # for adults (hoard/adult.py): as its store, tags or you say, or whoever shared the set
                          "adult": bool(adult.why(key, name=(i or a or p).get("name") or "", marks=marks,
                                                  tags=[*((i or {}).get("store_tags") or []), *mine.get(key, [])],
@@ -375,7 +378,7 @@ ROUTES = [
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
-    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('dependencies', 'array'), ('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('target', 'string'), ('dependencies', 'array'), ('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

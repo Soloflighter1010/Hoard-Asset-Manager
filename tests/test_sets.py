@@ -87,6 +87,20 @@ class Store(IsolatedTestCase):
         self.store.change({"action": "dependencies", "id": made, "dependencies": []})
         self.assertNotIn("dependencies", self.store.load()["sets"][0])
 
+    def test_placeholder_json_round_trip_and_resolution_keeps_position(self):
+        made = self.store.change({"action": "create", "name": "Planned", "items": [RUSK]})["made"]
+        self.store.change({"action": "placeholder-add", "id": made, "name": "Hair to make"})
+        original = self.store.load()["sets"][0]
+        key = next(iter(original["placeholders"]))
+        restored = self.store.import_json(self.store.export_json(made))["sets"][-1]
+        self.assertEqual(restored["placeholders"], {key: "Hair to make"})
+        self.store.change({"action": "add", "id": made, "items": [HOODIE]})
+        resolved = self.store.change({"action": "placeholder-resolve", "id": made, "key": key, "target": HOODIE})["sets"][0]
+        self.assertEqual(resolved["items"], [RUSK, HOODIE])
+        self.assertNotIn("placeholders", resolved)
+        with self.assertRaises(ValueError):
+            self.store.change({"action": "placeholder-resolve", "id": made, "key": key, "target": "missing"})
+
     def test_what_cant_be_done(self):
         for body in ({"action": "create", "name": "  "}, {"action": "rename", "id": "nope", "name": "x"},
                      {"action": "explode", "id": "x"}, {"action": "create", "name": 7}):

@@ -269,3 +269,14 @@ Use **Find a set or wishlist** to filter tiles by name. The matching count updat
 as you type. Clear the search to show all entries again. **Sort sets and wishlists**
 can show names alphabetically or restore the saved order; it does not change the
 contents of any set.
+
+## Placeholder assets
+
+Use **Add placeholder...** for an asset you plan to make, find or add locally.
+Give it a short description. Once the real asset exists, add it to the set, choose
+it in the placeholder's **Replace with a product in this set** list, and select
+**Replace placeholder**. The real product takes the placeholder's position without
+a duplicate entry. Remove works for placeholders too.
+
+Placeholders are included in JSON exports. Like other Local entries, they stay
+out of shared-set links and are not downloadable products.

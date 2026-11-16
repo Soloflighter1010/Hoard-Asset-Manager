@@ -390,8 +390,13 @@ class SetStore:
             for k in s.get("items") if isinstance(s.get("items"), list) else []:
                 if isinstance(k, str) and TAG_KEY_RX.match(k) and k not in items:
                     items.append(k)
+            placeholders = s.get("placeholders") if isinstance(s.get("placeholders"), dict) else {}
             wish = s.get("kind") == "wishlist"
             one = {"id": s["id"], "name": name, "items": items[:MAX_WISH_ITEMS if wish else MAX_ITEMS]}
+            planned = {k: clean_name(v) for k, v in placeholders.items()
+                       if k in one["items"] and k.startswith("local:planned") and clean_name(v)}
+            if planned:
+                one["placeholders"] = planned
             if wish:   # a wishlist (issue #158); read from a store's list ("source"), when it was read last
                 one["kind"] = "wishlist"
                 src = s.get("source") if isinstance(s.get("source"), dict) else {}
@@ -553,6 +558,21 @@ class SetStore:
                     remember(s, items)
                 elif action == "remove":
                     s["items"] = [k for k in s["items"] if k not in items]
+                elif action == "placeholder-add":
+                    name = clean_name(body.get("name"))
+                    if not name:
+                        raise ValueError("Give the set a name.")
+                    if len(s["items"]) >= MAX_ITEMS:
+                        raise ValueError(f"A set holds up to {MAX_ITEMS} products.")
+                    key = "local:planned" + secrets.token_hex(8)
+                    s["items"].append(key)
+                    s.setdefault("placeholders", {})[key] = name
+                elif action == "placeholder-resolve":
+                    key, target = body.get("key"), body.get("target")
+                    if key not in s.get("placeholders", {}) or target not in s["items"] or target in s.get("placeholders", {}):
+                        raise ValueError("Choose a product already added to this set.")
+                    s["items"] = [target if k == key else k for k in s["items"] if k != target]
+                    s["placeholders"].pop(key)
                 elif action == "dependencies":
                     s["dependencies"] = clean_dependencies(body.get("dependencies"))
                 elif action == "note":
@@ -714,7 +734,7 @@ class SetStore:
             known, made, inside = s.get("products") or {}, [], set(s["items"])
             for n, keys in enumerate(parts, 1):
                 one = {"id": secrets.token_hex(4), "name": part_name(s["name"], n, len(parts)),
-                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks", "dependencies") if s.get(k)},
+                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks", "dependencies", "placeholders") if s.get(k)},
                        "products": {k: known[k] for k in keys if k in known}}
                 if s.get("kind") == "wishlist":
                     one["kind"] = "wishlist"
