@@ -26,7 +26,7 @@ from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, clean_text, fetch_public, inert_html, is_video_address, offline_page, remember_sealed, safe_url, seal, store_link
 from .storage import seal_status as check_seal, read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
-from .tags import TagMatcher, TagStore, clean_tag, product_type, tag_key
+from .tags import TagMatcher, TagStore, clean_tag, key_resolver, product_type, tag_key
 
 
 from .stores import adapters
@@ -340,6 +340,11 @@ class Library:
                 why = ("was changed by something other than Hoard" if status == "changed"
                        else "was saved by Hoard on another computer")
                 note = f"Hoard's saved list {why}, so its links and images are hidden until you refresh."
+                recovery = storage.recovery_notice(path)
+                if recovery:
+                    note = ("Hoard could not authenticate its saved metadata. Links and images are hidden until you refresh. "
+                            "Automatic checks and project updates are off; review settings before enabling them. "
+                            f"The original metadata is preserved as {recovery['backup']}.")
                 for info in self.data["stores"].values():
                     info["error"] = note
                 print(note, flush=True)
@@ -437,8 +442,8 @@ class Library:
     def forget_products(self, keys: set) -> int:
         """Delete these products (by product key) from the list, with their cached pictures. Returns how many."""
         with self.lock:
-            gone = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) in keys]
-            self.data["items"] = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) not in keys]
+            gone = [i for i in self.data["items"] if tag_key(i["store"], i["name"], i.get("id")) in keys]
+            self.data["items"] = [i for i in self.data["items"] if tag_key(i["store"], i["name"], i.get("id")) not in keys]
             for store in {i["store"] for i in gone}:
                 info = self.data["stores"].get(store)
                 if isinstance(info, dict):
@@ -540,10 +545,11 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=fro
     groups: dict[str, list] = {}
     out = []
     matcher = TagMatcher(tagdata["tags"])
+    resolve_key = key_resolver()
     for n, (i, ts) in enumerate(zip(items, suggestions), 1):
         if progress:
             progress(n)
-        key = tag_key(i["store"], i["name"])
+        key = resolve_key(i["store"], i["name"], i.get("id"))
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
@@ -1009,5 +1015,5 @@ def public_pages(path: Path | None = None) -> dict[str, str]:
         if page:
             if i.get("url"):
                 found.setdefault(i["url"], page)
-            found.setdefault(tag_key(i["store"], i["name"]), page)
+            found.setdefault(tag_key(i["store"], i["name"], i.get("id")), page)
     return found

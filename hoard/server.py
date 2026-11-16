@@ -635,7 +635,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         rules, kept = file_rules(srv.cfg), remembered_files(srv.cfg)   # what's left out, unticked to begin with (#225)
         out = lambda store, key, names: sorted({n for n in names if n in kept.get(key, ()) or ruled_out(rules, store, n)})  # noqa: E731
         for i in srv.lib.snapshot()[0]:
-            key = tag_key(i["store"], i["name"])
+            key = tag_key(i["store"], i["name"], i.get("id"))
             if i["store"] not in DOWNLOADABLE or out_of_view(key):
                 continue
             known.setdefault(key, {"key": key, "store": i["store"], "name": i["name"], "creator": i.get("creator") or "",
@@ -805,7 +805,7 @@ class Handler(BaseHTTPRequestHandler):
         hidden = MarkStore().keys("hidden")
         if not hidden or self._unlocked():
             return []
-        names = {i["name"] for i in self.server.lib.snapshot()[0] if tag_key(i["store"], i["name"]) in hidden}
+        names = {i["name"] for i in self.server.lib.snapshot()[0] if tag_key(i["store"], i["name"], i.get("id")) in hidden}
         return sorted((n for n in names if len(n) >= 3), key=len, reverse=True)
 
     def _json(self, obj, status=200, compress: bool = False):

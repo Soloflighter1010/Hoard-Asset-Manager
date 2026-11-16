@@ -18,7 +18,7 @@ def _sets_view(self) -> dict:
     hidden = set() if unlocked else set(marks["hidden"])
     lib = {}
     for i in srv.lib.snapshot()[0]:
-        lib.setdefault(app.tag_key(i["store"], i["name"]), i)
+        lib.setdefault(app.tag_key(i["store"], i["name"], i.get("id")), i)
     dl = {}
     for a in srv.index(stale_ok=True)["assets"]:
         dl.setdefault(a["tag_key"], a)

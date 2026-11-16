@@ -126,6 +126,8 @@ jobs:
         run: python scripts/build_nuitka.py
       - name: Check the server has everything it needs
         run: build/nuitka/server/hoard-server self-test
+      - name: Check compiled SQLite recovery and JSON compatibility
+        run: python scripts/check_storage_compat.py --legacy-root . --current-sidecar "build/nuitka/server/hoard-server${{ runner.os == 'Windows' && '.exe' || '' }}"
       - name: The Tauri CLI (its lockfile's, every file hash-checked)
         working-directory: shell
         run: npm ci --ignore-scripts --no-audit --no-fund

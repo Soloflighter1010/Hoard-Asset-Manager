@@ -18,7 +18,7 @@ work; they do not promise release dates or rank the new requests.
 - [ ] [#322](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/322) — Store adapters and health checks: finish the store-specific branches in shared modules before adding stores.
 - [ ] [#324](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/324) — Choose one desktop shell using cross-platform measurements and tester results; Mac signing remains outstanding.
 - [ ] [#320](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/320) — SQLite metadata and stable product IDs: implemented behind an opt-in flag, not enabled by default.
-- [ ] [#348](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/348) — Resolve rollback compatibility, recovery, sealing cost and identity collisions before enabling SQLite. Scheduled after the desktop transition settles.
+- [ ] [#348](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/348) — JSON compatibility, recovery, sealing cost and identity collisions are addressed in PR #365. Native packaged validation and beta activation remain, after the desktop transition settles.
 
 Implementation evidence and reproduction commands live in [the architecture implementation notes](docs/ROADMAP-315.md).
 

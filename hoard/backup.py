@@ -59,7 +59,7 @@ def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:
     tags = TagStore().load()
     for field in ("items", "excluded"):
         tags[field] = {k: v for k, v in tags[field].items() if k not in out}
-    items = [i for i in items if tag_key(i["store"], i["name"]) not in out]
+    items = [i for i in items if tag_key(i["store"], i["name"], i.get("id")) not in out]
     counts = {}
     for i in items:
         counts[i["store"]] = counts.get(i["store"], 0) + 1

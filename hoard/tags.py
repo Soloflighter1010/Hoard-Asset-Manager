@@ -94,7 +94,7 @@ def tags_file() -> Path:
     return data_dir() / "tags.json"
 
 
-def tag_key(store: str, name: str) -> str:
+def legacy_tag_key(store: str, name: str) -> str:
     """How both tools identify a product for tagging: its store and its name, without versions or [labels]."""
     s = unicodedata.normalize("NFKC", name or "").lower()
     core = re.sub(r"【[^】]*】|\[[^\]]*\]|\([^)]*\)", " ", s)
@@ -104,6 +104,19 @@ def tag_key(store: str, name: str) -> str:
     if not key:  # a name made only of symbols
         key = "x" + hashlib.sha1(s.encode(), usedforsecurity=False).hexdigest()[:16]
     return f"{store.lower()}:{key[:300]}"
+
+
+def tag_key(store: str, name: str, product_id=None) -> str:
+    """Use a distinct known product key in SQLite; retain legacy keys for JSON."""
+    legacy = legacy_tag_key(store, name)
+    return storage.product_reference(store, name, product_id, legacy) if storage.enabled() else legacy
+
+
+def key_resolver():
+    """Resolve a list against one consistent identity snapshot, without per-item SQL."""
+    if storage.enabled():
+        return storage.database().reference_resolver()
+    return lambda store, name, product_id=None: legacy_tag_key(store, name)
 
 
 def clean_tag(value) -> str:

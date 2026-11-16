@@ -744,9 +744,9 @@ def dl__jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: 
     key = dl.urlparse(url).path.rstrip("/").split("/")[-1]
     name = (info.get("name") or key).strip()
     creator = (info.get("creator") or "Unknown Creator").strip()
-    if not chosen and dl.skip_product(args, "jinxxy", name, creator):   # (a chosen item was picked by its page, not its name)
+    if not chosen and dl.skip_product(args, "jinxxy", name, creator, key):   # (a chosen item was picked by its page, not its name)
         return
-    if dl.removed_product("jinxxy", name, report) or man.away(key, f"Jinxxy: {name}", report):
+    if dl.removed_product("jinxxy", name, report, key) or man.away(key, f"Jinxxy: {name}", report):
         return
     rec = man.record(key, creator, name)
     is_new_asset = not rec["files"]

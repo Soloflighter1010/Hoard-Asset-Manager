@@ -136,15 +136,15 @@ class Report:
                     log(f"  - {line}")
 
 
-def skip_product(args, store: str, name: str, creator: str) -> bool:
+def skip_product(args, store: str, name: str, creator: str, product_id=None) -> bool:
     """Is this product outside what was asked for: --only (a name or creator), or keys (products chosen on the
     Downloads page, by tag_key)? Or one you chose to always skip (issue #107), unless it's chosen by name now?"""
     if args.only and args.only.lower() not in f"{name} {creator}".lower():
         return True
     keys = getattr(args, "keys", None)
     if keys:
-        return tag_key(store, name) not in keys
-    return tag_key(store, name) in (getattr(args, "skip", None) or ())
+        return tag_key(store, name, product_id) not in keys
+    return tag_key(store, name, product_id) in (getattr(args, "skip", None) or ())
 
 
 DIRECT_STORES = ("jinxxy", "gumroad")   # stores whose products can be opened one by one, from the library
@@ -168,8 +168,8 @@ def direct_targets(library_items: list[dict], stores: list[str], only: str | Non
             chosen = [i for i in mine if i.get("key") in items]
         elif keys:
             wanted = {k for k in keys if k.startswith(store + ":")}
-            chosen = [i for i in mine if tag_key(store, i.get("name") or "") in wanted]
-            if {tag_key(store, i.get("name") or "") for i in chosen} != wanted:
+            chosen = [i for i in mine if tag_key(store, i.get("name") or "", i.get("id")) in wanted]
+            if {tag_key(store, i.get("name") or "", i.get("id")) for i in chosen} != wanted:
                 continue   # a chosen product the library doesn't have (by that name): read the store in full
         else:
             chosen = [i for i in mine if only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower()]
@@ -187,14 +187,14 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
     in your library, when its page names it differently (a chosen Jinxxy item's)."""
     log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
     if getattr(args, "listing", False):   # what's there to choose from (issue #225), and not an update either way
-        entry = report.listed.setdefault(tag_key(store, name), {"store": store, "name": name, "creator": creator, "files": []})
+        entry = report.listed.setdefault(tag_key(store, name, rec.get("library_id") or rec.get("key")), {"store": store, "name": name, "creator": creator, "files": []})
         if also:   # (the same list, under the name it was asked for by)
-            report.listed.setdefault(tag_key(store, also), entry)
+            report.listed.setdefault(tag_key(store, also, rec.get("library_id") or rec.get("key")), entry)
         if file not in entry["files"] and len(entry["files"]) < 500:
             entry["files"].append(file)
         return
     if rec.get("files") and not deleted_here:
-        report.available.append({"store": store, "key": tag_key(store, name), "name": name, "creator": creator,
+        report.available.append({"store": store, "key": tag_key(store, name, rec.get("library_id") or rec.get("key")), "name": name, "creator": creator,
                                  "file": file, "kind": "changed" if changed else "new"})
 
 
@@ -254,7 +254,7 @@ def remembered_files(cfg: dict) -> dict[str, set]:
             if isinstance(k, str) and 0 < len(k) <= 400 and isinstance(v, list)}
 
 
-def left_out(args, report: Report, store: str, name: str, file: str, *also: str) -> bool:
+def left_out(args, report: Report, store: str, name: str, file: str, *also: str, product_id=None) -> bool:
     """A file left out of this download. First what you chose for it now (args.files: {tag_key: {"shown": the files
     listed, "chosen": the ones ticked}}): only a file that was listed and unticked is left out, and one you ticked is
     downloaded whatever a rule says. Then a file you left out of the product before (args.remembered), and then one
@@ -264,7 +264,7 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str)
     updates see every file."""
     if getattr(args, "dry_run", False):
         return False
-    keys = [tag_key(store, n) for n in (name, *also) if n]
+    keys = [tag_key(store, n, product_id) for n in (name, *also) if n]
     chosen = getattr(args, "files", None)
     pick = next((chosen[k] for k in keys if k in chosen), None) if isinstance(chosen, dict) else None
     label = STORES[store]["label"] if store in STORES else store
@@ -665,9 +665,9 @@ def distinct_name(name: str, fid: str, rec: dict, offered: set) -> str:
     return folder + slash + tagged
 
 
-def removed_product(store: str, name: str, report: "Report") -> bool:
+def removed_product(store: str, name: str, report: "Report", product_id=None) -> bool:
     """True (and noted in the report) for a product you removed from your library: it isn't downloaded."""
-    if tag_key(store, name) in _removed_keys():
+    if tag_key(store, name, product_id) in _removed_keys():
         report.skipped.append(f"{STORES[store]['label']}: {name} - removed from your library, so not downloaded")
         return True
     return False
@@ -909,7 +909,7 @@ def download_by_clicking(ctx, page, url: str, rec: dict, folder: Path, store: st
         old = rec["files"].get(k)
         if old and rel_to_path(folder, old["path"]).exists():
             continue
-        if left_out(args, report, store.lower(), name, label or k, listed_name or ""):
+        if left_out(args, report, store.lower(), name, label or k, listed_name or "", product_id=rec.get("library_id") or rec.get("key")):
             continue
         if args.dry_run:
             would_get(args, report, store.lower(), rec, name, creator, label or k, False, old is not None, listed_name)
@@ -1147,14 +1147,14 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     matcher = TagMatcher(tagdata["tags"])
     for a, ts in zip(assets, toks):
         folder = f"{a['store']}/{a['folder']}"
-        key = tag_key(a["store"], a["name"])
+        key = tag_key(a["store"], a["name"], a.get("library_id") or a.get("key"))
         mine = TagStore.tags_for(tagdata, key, a["name"], matcher)
         a_tags = sorted((ts & tags) - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
         url = store_link(a["store"], a.get("url"))
         # its public page, for a credits list: the download's own link is often the buyer's (Jinxxy's inventory, a
         # Gumroad download page), so the library's page for it, else that link when it's public
-        page = None if a["store"] == "Local" else (pages.get(url or "") or pages.get(tag_key(a["store"], a["name"]))
+        page = None if a["store"] == "Local" else (pages.get(url or "") or pages.get(tag_key(a["store"], a["name"], a.get("library_id") or a.get("key")))
                                                    or product_link(a["store"].lower(), url))
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
                         "url": url, **({"page": page} if page else {}), "variants": a.get("variants"), "added": added,
@@ -1185,7 +1185,7 @@ def delete_downloaded_files(cfg: dict, root: Path, keys: set) -> dict:
     for _base, store, sdir in library_store_dirs(cfg, root):
         manifest = Manifest(sdir)
         for rec in manifest.assets.values():
-            if tag_key(store, rec.get("name") or "") not in keys or rec.get("location"):
+            if tag_key(store, rec.get("name") or "", rec.get("library_id") or rec.get("key")) not in keys or rec.get("location"):
                 continue   # (a Local item listed where it is: its files are yours, never deleted here)
             try:
                 folder = rel_to_path(sdir, rec["folder"])
@@ -1266,7 +1266,7 @@ def move_product(cfg: dict, root: Path, key: str, to: int, progress=None, commit
     for base, store, sdir in library_store_dirs(cfg, root):
         manifest = Manifest(sdir)
         for k, rec in manifest.assets.items():
-            if tag_key(store, rec.get("name") or "") == key and rec.get("files"):
+            if tag_key(store, rec.get("name") or "", rec.get("library_id") or rec.get("key")) == key and rec.get("files"):
                 found = (base, store, sdir, manifest, k, rec)
                 break
         if found:
@@ -1443,7 +1443,7 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
     dest_root = edits_root(cfg, root)
     for _base, store, sdir in library_store_dirs(cfg, root):
         for rec in Manifest(sdir).assets.values():
-            if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
+            if tag_key(store, rec.get("name") or "", rec.get("library_id") or rec.get("key")) != key or not rec.get("files"):
                 continue
             try:
                 folder = record_folder(sdir, rec)
@@ -1571,7 +1571,7 @@ def check_integrity(root: Path, stop=None, progress=None, others=(), fresh_since
                 break
             if not rec.get("files") or rec.get("location"):
                 continue   # (a Local item listed where it is: your own working folder, yours to change)
-            if tag_key(store_ids.get(store, store.lower()), rec.get("name") or "") in leave_out:
+            if tag_key(store_ids.get(store, store.lower()), rec.get("name") or "", rec.get("library_id") or rec.get("key")) in leave_out:
                 continue   # (one you removed: not yours to keep track of now)
             result["products"] += 1
             say(f"Checking {store}: {rec.get('name')}")
@@ -1671,7 +1671,7 @@ def resolve_problem(root: Path, others, problem: dict, action: str) -> dict:
         target.unlink(missing_ok=True)   # (an empty file: nothing to keep)
     manifest.save()
     _drop_problem(problem)
-    return {"key": tag_key(store, rec.get("name") or ""), "store": store, "name": rec.get("name") or "",
+    return {"key": tag_key(store, rec.get("name") or "", rec.get("library_id") or rec.get("key")), "store": store, "name": rec.get("name") or "",
             "file": chosen_name(store, fkey, f)}
 
 

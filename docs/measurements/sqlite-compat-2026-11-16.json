@@ -1,0 +1,62 @@
+{
+  "recorded_on": "2026-11-16",
+  "platform": "Windows",
+  "python": "3.13",
+  "implementation": "PR #365",
+  "older_source_packages": [
+    {
+      "tag": "v5.1.4",
+      "artifact": "Hoard-5.1.4.zip",
+      "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.1.4/Hoard-5.1.4.zip",
+      "sha256": "a629da745f7cb3eb7934ca4fca3d62438ac72489d26811635d0f3f9a3d703989",
+      "published_checksum_verified": true,
+      "settings_and_library_read": "passed",
+      "legacy_edits_imported_on_sqlite_reopen": "passed",
+      "distinct_notes_retained": "passed"
+    },
+    {
+      "tag": "v5.2.0-beta.4",
+      "artifact": "Hoard-5.2.0-beta.4.zip",
+      "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.4/Hoard-5.2.0-beta.4.zip",
+      "sha256": "94fb214916cfdf91246373b2e6be2c81a44caaf4f8c2587cd39375f2b246a5f9",
+      "published_checksum_verified": true,
+      "settings_and_library_read": "passed",
+      "legacy_edits_imported_on_sqlite_reopen": "passed",
+      "distinct_notes_retained": "passed"
+    }
+  ],
+  "released_source_sidecar": {
+    "tag": "v5.2.0-beta.9",
+    "artifact": "Hoard-5.2.0-beta.9.zip",
+    "sha256": "ccdaaf380cf76c748955cf5426b6836bda270c68e468418d5101fd4d71587688",
+    "published_checksum_verified": true,
+    "mode": "JSON mirrors, HOARD_METADATA unset",
+    "open_authentication_settings_setup_library_close": "passed"
+  },
+  "current_source_sidecar": {
+    "mode": "HOARD_METADATA=sqlite",
+    "open_authentication_settings_setup_library_close": "passed",
+    "distinct_product_keys": "passed",
+    "lost_and_foreign_key_startup_and_visible_refresh_notice": "passed"
+  },
+  "native_installer_and_window": "not tested",
+  "macos_linux_runtime": "not tested",
+  "default_sqlite_activation": false,
+  "limits": [
+    "Source ZIPs and source/compiled sidecar protocols were exercised; native Tauri windows and installer execution were not.",
+    "Each release ran separately with disposable app-data/download folders. No installed app or real user data was changed.",
+    "Default activation remains gated by native packaged cross-platform checks and the desktop transition."
+  ],
+  "released_compiled_windows_sidecar": {
+    "tag": "v5.2.0-beta.9",
+    "artifact": "Hoard-5.2.0-beta.9-windows-setup.exe",
+    "sha256": "ca92365b58005e7e57374f941236d7c3f3adc0f0e34e9c02b7c3502bb1f03aa8",
+    "published_checksum_verified": true,
+    "extracted_without_installing": true,
+    "mode": "JSON mirrors, HOARD_METADATA unset",
+    "open_authentication_settings_setup_library_close": "passed",
+    "executable": "server/hoard-server.exe",
+    "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.9/Hoard-5.2.0-beta.9-windows-setup.exe"
+  },
+  "compiled_current_platform_matrix": "Wired into Check; results pending for this change."
+}

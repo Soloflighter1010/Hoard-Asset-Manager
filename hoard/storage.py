@@ -43,6 +43,10 @@ class DatabaseIntegrityError(RuntimeError):
     """Metadata changed outside Hoard; never replace it with empty defaults."""
 
 
+class DatabaseSealError(DatabaseIntegrityError):
+    """A recognized database cannot be authenticated; app startup may quarantine it."""
+
+
 def _json(value) -> str:
     """Canonical JSON makes seals independent of indentation and dictionary order."""
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -51,12 +55,13 @@ def _json(value) -> str:
 class Database:
     """One serialized SQLite connection; nested operations use rollback savepoints."""
 
-    def __init__(self, home: Path, key: bytes):
+    def __init__(self, home: Path, key: bytes, *, recover: bool = False):
         self.home, self.path, self.key = home, home / "metadata.sqlite3", key
         self.lock, self.depth = metadata_lock, 0
         self._dirty_documents = set()
         self._identity_dirty = False
         self._syncing_mirrors = False
+        self._reference_history = {}
         home.mkdir(parents=True, exist_ok=True)
         if self.path.is_symlink():
             raise DatabaseIntegrityError("Hoard's metadata database must not be a symbolic link.")
@@ -78,14 +83,28 @@ class Database:
                 self._migrate_v1()
                 version = 1
             if version == 1:
-                self._migrate_v2()
+                try:
+                    self._migrate_v2()
+                except DatabaseSealError:
+                    if not recover:
+                        raise
+                    self._recover()
+                    self._migrate_v2()
             self.connection.execute("BEGIN")
-            self._verify()
+            try:
+                self._verify()
+            except DatabaseSealError:
+                self.connection.execute("ROLLBACK")
+                if not recover:
+                    raise
+                self._recover()
+            else:
+                self.connection.execute("COMMIT")
             self._external_version = self.connection.execute("PRAGMA data_version").fetchone()[0]
-            self.connection.execute("COMMIT")
             self._finish_legacy_files()
             if self.connection.execute("PRAGMA user_version").fetchone()[0] == 2:
                 self._import_legacy_changes()
+                self._prepare_projection()
                 try:
                     self._flush_mirrors()
                 except OSError:
@@ -95,6 +114,10 @@ class Database:
             raise
         if os.name == "posix":
             os.chmod(self.path, 0o600)
+
+    def _recover(self):
+        from .storage_recovery import recover
+        recover(self)
 
     def _migrate_v1(self):
         """Import every known document before committing version 1; rename only after commit."""
@@ -387,6 +410,8 @@ class Database:
 
     def _verify(self):
         """Authenticate full contents at open and after another connection commits."""
+        from .storage_recovery import validate_schema
+        validate_schema(self.connection)
         row = self.connection.execute("SELECT value FROM metadata WHERE key='seal'").fetchone()
         valid = row and hmac.compare_digest(str(row[0]), self._fingerprint().hex())
         if valid and self.connection.execute("PRAGMA user_version").fetchone()[0] == 2:
@@ -400,7 +425,7 @@ class Database:
             identity = self.connection.execute("SELECT value FROM metadata WHERE key='identity_seal'").fetchone()
             valid = valid and count == len(expected) and identity and hmac.compare_digest(identity[0], self._identity_fingerprint())
         if not valid:
-            raise DatabaseIntegrityError("Hoard's metadata changed outside Hoard. Keep metadata.sqlite3 and restore a known backup; the legacy .pre-sqlite-v1 files have not been overwritten.")
+            raise DatabaseSealError("Hoard's metadata changed outside Hoard. Keep metadata.sqlite3 and restore a known backup; the legacy .pre-sqlite-v1 files have not been overwritten.")
 
     def _check_external(self):
         """Another connection's commit invalidates trust even while this Hoard stays open."""
@@ -415,6 +440,7 @@ class Database:
         """Commit all participating documents together; an inner failure rolls back its savepoint."""
         with self.lock:
             depth = self.depth
+            history_before = self._reference_history.copy()
             self.connection.execute("BEGIN IMMEDIATE" if depth == 0 else f"SAVEPOINT hoard_{depth}")
             self.depth += 1
             try:
@@ -426,6 +452,7 @@ class Database:
                 else:
                     self.connection.execute(f"RELEASE hoard_{depth}")
             except BaseException:
+                self._reference_history = history_before
                 self._identity_maps = None
                 if depth == 0:
                     self.connection.execute("ROLLBACK")
@@ -489,7 +516,7 @@ class Database:
         preserving the previous metadata instead of attaching it to a wrong item.
         """
         self._identity_dirty = True
-        from .tags import tag_key
+        from .tags import legacy_tag_key as tag_key
         items = library.get("items", []) if isinstance(library, dict) else []
         items = [i for i in items if isinstance(i, dict) and isinstance(i.get("store"), str)
                  and isinstance(i.get("id"), (str, int)) and isinstance(i.get("name"), str)]
@@ -510,19 +537,86 @@ class Database:
             candidates = by_name.get((store, name, creator), []) if follow_names and name_counts[(store, name, creator)] == 1 else []
             uid = previous[0] if previous else alias[0][0] if len(alias) == 1 else candidates.pop() if len(candidates) == 1 else store + ":" + sid
             self.connection.execute("INSERT INTO products VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET store_id=excluded.store_id, name_key=excluded.name_key, creator=excluded.creator", (uid, store, sid, name, creator))
-            for reference in ("id:" + store + ":" + sid, "name:" + name):
+            for reference in ("id:" + store + ":" + sid, "name:" + name, "title:" + store + ":" + self._title(item["name"])):
                 self.connection.execute("INSERT OR IGNORE INTO aliases VALUES (?, ?)", (reference, uid))
+        self._reserve_projections()
+
+    def _reserve_projections(self):
+        # Reserve permanent, valid tag keys for every colliding store identity.
+        # Legacy shared annotations remain ambiguous instead of choosing a product.
+        products = self.connection.execute("SELECT uid,store,name_key FROM products").fetchall()
+        counts = collections.Counter(name for _, _, name in products)
+        public = dict(self.connection.execute("SELECT substr(alias,8),uid FROM aliases WHERE alias LIKE 'public:%'"))
+        assigned = set(public.values())
+        reserved = {name for _, _, name in products} | set(public)
+        reserved.update(r[0] for r in self.connection.execute("SELECT substr(alias,6) FROM aliases WHERE alias LIKE 'name:%'"))
+        for uid, store, name in products:
+            if uid in assigned or (counts[name] == 1 and public.get(name, uid) == uid):
+                continue
+            salt = 0
+            while True:
+                seed = uid if salt == 0 else f"{uid}#{salt}"
+                key = store + ":x" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+                if key not in reserved:
+                    break
+                salt += 1
+            self.connection.execute("INSERT INTO aliases VALUES (?, ?)", ("public:" + key, uid))
+            self.connection.execute("INSERT OR IGNORE INTO aliases VALUES (?, ?)", ("name:" + key, uid))
+            public[key] = uid
+            assigned.add(uid)
+            reserved.add(key)
         self._identity_maps = None
 
     def _maps(self):
         """Cache identity lookups for repeated tag/mark reads in the same database generation."""
         if getattr(self, "_identity_maps", None) is None:
             names = dict(self.connection.execute("SELECT uid,name_key FROM products"))
+            names.update((uid, key) for key, uid in self.connection.execute("SELECT substr(alias,8),uid FROM aliases WHERE alias LIKE 'public:%'"))
             aliases = dict(self.connection.execute("SELECT substr(alias,6),min(uid) FROM aliases WHERE alias LIKE 'name:%' GROUP BY alias HAVING count(*)=1"))
+            aliases.update((key, uid) for key, uid in self.connection.execute("SELECT substr(alias,8),uid FROM aliases WHERE alias LIKE 'public:%'"))
+            self._reference_ids = dict(self.connection.execute("SELECT substr(alias,4),min(uid) FROM aliases WHERE alias LIKE 'id:%' GROUP BY alias HAVING count(*)=1"))
+            self._reference_titles = dict(self.connection.execute("SELECT substr(alias,7),min(uid) FROM aliases WHERE alias LIKE 'title:%' GROUP BY alias HAVING count(*)=1"))
             self._identity_maps = aliases, names
         return self._identity_maps
 
-    def _references(self, name: str, value, *, encode: bool):
+    @staticmethod
+    def _title(name):
+        import unicodedata
+        return unicodedata.normalize("NFKC", name or "").casefold()
+
+    def product_reference(self, store, name, product_id, legacy):
+        with self._reading():
+            aliases, names = self._maps()
+            uid = self._reference_ids.get(f"{store.lower()}:{product_id}") if product_id is not None else None
+            uid = uid or self._reference_titles.get(store.lower() + ":" + self._title(name))
+            return names.get(uid or aliases.get(legacy), legacy)
+
+    def reference_resolver(self):
+        """One verified identity snapshot for a whole rendered library."""
+        from .tags import legacy_tag_key
+        with self._reading():
+            aliases, names = self._maps()
+            ids, titles = self._reference_ids, self._reference_titles
+        def resolve(store, name, product_id=None):
+            uid = ids.get(f"{store.lower()}:{product_id}") if product_id is not None else None
+            uid = uid or titles.get(store.lower() + ":" + self._title(name))
+            legacy = legacy_tag_key(store, name)
+            return names.get(uid or aliases.get(legacy), legacy)
+        return resolve
+
+    def _prepare_projection(self):
+        if self._metadata_json("identity_projection", None) == 1:
+            return
+        with self.transaction():
+            row = self.connection.execute("SELECT body,trust FROM documents WHERE name='library.json'").fetchone()
+            if row and row[1] not in {"foreign", "changed"}:
+                self._identify(json.loads(row[0]))
+            self._reserve_projections()
+            self._identity_dirty = True
+            self._dirty_documents.update(r[0] for r in self.connection.execute("SELECT name FROM documents WHERE name IN ('tags.json','marks.json','sets.json','asset-updates.json','config.json')"))
+            self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('identity_projection', '1')")
+
+    def _references(self, name: str, value, *, encode: bool, historical: bool = False):
         """Keep product references as ids internally, projecting names for existing APIs/exports."""
         if name not in {"tags.json", "marks.json", "sets.json", "asset-updates.json", "config.json"} or not isinstance(value, dict):
             return value
@@ -533,8 +627,21 @@ class Database:
             if not isinstance(key, str):
                 return key
             if encode:
-                return "product:" + aliases[key] if key in aliases else key
-            return names.get(key[8:], key) if key.startswith("product:") else key
+                uid = aliases.get(key)
+                if historical and uid is None:
+                    uid = self._reference_history.get((name, key))
+                if uid:
+                    if name == "config.json":
+                        self._reference_history.setdefault((name, key), uid)
+                    return "product:" + uid
+                return key
+            if key.startswith("product:"):
+                uid = key[8:]
+                projected = names.get(uid, key)
+                if name == "config.json":
+                    self._reference_history.setdefault((name, projected), uid)
+                return projected
+            return key
 
         def mapping(values):
             """Translate dictionary keys without dropping unrelated fields."""
@@ -572,7 +679,7 @@ class Database:
     def current_references(self, name: str, value):
         """Resolve a live document's old names through stable ids after a refresh renamed a product."""
         with self._reading():
-            return self._references(name, self._references(name, value, encode=True), encode=False)
+            return self._references(name, self._references(name, value, encode=True, historical=True), encode=False)
 
     def stamp(self, name: str):
         """A logical revision for existing read caches, independent of SQLite file timestamps."""
@@ -602,10 +709,9 @@ class Database:
 def enabled() -> bool:
     """Whether private metadata is kept in SQLite. Off unless HOARD_METADATA=sqlite.
 
-    Rollout is held back by sealing-key recovery and ambiguous product-name
-    projection. Current JSON mirrors support returning to older releases. Until
-    the remaining blockers are resolved, every
-    document stays the JSON file it was, read and written as before.
+    Recovery, distinct identity projection and current JSON mirrors are in place.
+    Default activation waits for native packaged cross-platform validation and
+    the desktop transition to settle. Without the opt-in, metadata stays JSON.
     """
     return os.environ.get("HOARD_METADATA", "").strip().lower() == "sqlite"
 
@@ -621,7 +727,7 @@ def database() -> Database:
     home = data_dir().absolute()
     with _instances_lock:
         if home not in _instances:
-            _instances[home] = Database(home, integrity_key())
+            _instances[home] = Database(home, integrity_key(), recover=True)
         return _instances[home]
 
 
@@ -646,6 +752,10 @@ def transaction():
         return
     with database().transaction() as db:
         yield db
+
+
+def product_reference(store, name, product_id, legacy):
+    return database().product_reference(store, name, product_id, legacy)
 
 
 def current_references(name: str, value):
@@ -730,6 +840,15 @@ def seal_status(value, path: Path | None = None) -> str:
     return check_file(value, path)
 
 
+def recovery_notice(path: Path):
+    """Verified recovery details for the library's visible refresh notice."""
+    if not managed(path):
+        return None
+    db = database()
+    with db._reading():
+        return db._metadata_json("recovery", None)
+
+
 def archive_document(path: Path) -> Path:
     """Keep a damaged logical document as a diagnostic file before removing it from the database."""
     if not managed(path):
@@ -762,7 +881,7 @@ def remove(path: Path, *, missing_ok: bool = False):
 
 def identify_local(records: dict):
     """Bind Local metadata to its manifest id; identical names never merge separate Local items."""
-    from .tags import tag_key
+    from .tags import legacy_tag_key as tag_key
     if not enabled():   # (JSON files know a product by its name, as they always have)
         return
     db = database()

@@ -18,7 +18,7 @@ def _visible_projects(self) -> list[dict]:
     hidden = app.MarkStore().keys("hidden")
     if not hidden:
         return found
-    return [{**p, "assets": [a for a in p["assets"] if app.tag_key(a["store"], a["name"]) not in hidden]} for p in found]
+    return [{**p, "assets": [a for a in p["assets"] if app.tag_key(a["store"], a["name"], a.get("store_id")) not in hidden]} for p in found]
 
 
 def _vpm_logged(self, path: str, handle, arg):

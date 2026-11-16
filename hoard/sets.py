@@ -625,7 +625,7 @@ class SetStore:
             for p in products:
                 clean = clean_product(p)
                 if clean:
-                    key = tag_key(clean["store"], clean["name"])
+                    key = tag_key(clean["store"], clean["name"], clean.get("id"))
                     known[key] = clean
                     s["items"] = list(dict.fromkeys(s["items"] + [key]))
             most = MAX_WISH_ITEMS if s.get("kind") == "wishlist" else MAX_ITEMS
@@ -684,7 +684,7 @@ class SetStore:
                     clean = clean_product(p)
                     if not clean:
                         continue
-                    k = tag_key(clean["store"], clean["name"])
+                    k = tag_key(clean["store"], clean["name"], clean.get("id"))
                     if k in products:
                         continue
                     old = before.get(k) or {}
@@ -925,7 +925,7 @@ def from_code(text) -> dict:
                            "thumbnail": row[5], "adult": row[6] in (1, True)})
         if not p or p["store"] not in STORES:
             continue
-        key = tag_key(p["store"], p["name"])
+        key = tag_key(p["store"], p["name"], p.get("id"))
         row_keys[n] = key
         if key not in products:
             items.append(key)
@@ -952,7 +952,7 @@ def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:
     data = data if data is not None else SetStore().load()
     folders: dict[str, list[str]] = {}
     for e in catalog:
-        folders.setdefault(tag_key(e["store"], e["name"]), []).append(e["folder"])
+        folders.setdefault(tag_key(e["store"], e["name"], e.get("id")), []).append(e["folder"])
     out = []
     for s in data["sets"]:
         if s.get("kind") == "wishlist":   # what you want, not a set to import together (Hoard for Unity's Import set)
