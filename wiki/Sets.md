@@ -262,3 +262,10 @@ requirement per line (up to 30, each up to 120 characters). These requirements
 apply to the whole set, such as a shader, tool or SDK. They are displayed together
 in the set details and included in shared sets and JSON exports. They are
 informational; listing a dependency does not install it in a project.
+
+## Finding sets and wishlists
+
+Use **Find a set or wishlist** to filter tiles by name. The matching count updates
+as you type. Clear the search to show all entries again. **Sort sets and wishlists**
+can show names alphabetically or restore the saved order; it does not change the
+contents of any set.

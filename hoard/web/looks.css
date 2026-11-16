@@ -648,3 +648,6 @@ html[data-app-view="downloads"] [data-app-view="library"] { display: none !impor
 :root .grid .slot.glow-back:not([aria-current="true"]) .art { animation: found-pulse .7s ease-in-out, found-fade 1.1s ease-in .7s forwards; }
 @keyframes found-pulse { 50% { box-shadow: 0 0 0 5px var(--gold), 0 0 56px 22px color-mix(in srgb, var(--gold) 85%, transparent); } }
 @keyframes found-fade { to { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; } }
+
+/* Search keeps nonmatching set tiles out of the visual and keyboard layout. */
+.settile[hidden] { display: none !important; }

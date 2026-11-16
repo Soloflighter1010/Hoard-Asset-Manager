@@ -4395,6 +4395,17 @@ async function pjGitDiff(path, file, staged, ref) {
 }
 // The Source control tab: Git missing, a project not set up, or a repository's branch, changes, commits and remotes.
 function pjGitHTML(p) {
+  const guide = `<details class="card pj-git-guide"><summary>${esc(tr("New to source control?"))}</summary>` +
+    `<p>${esc(tr("Git records checkpoints of your project on this computer. A commit saves a checkpoint; saving files in Unity alone does not make one."))}</p>` +
+    `<ol><li>${esc(tr("Review Changes and choose the files you want to keep in the next checkpoint."))}</li>` +
+    `<li>${esc(tr("Stage prepares those files for the next commit. Unstage removes them from that selection and keeps your edits."))}</li>` +
+    `<li>${esc(tr("Write a short message, then Commit to save the staged files in local history."))}</li></ol>` +
+    `<p>${esc(tr("A branch is a separate line of checkpoints. Switching branches can change the files in your project."))}</p>` +
+    `<p>${esc(tr("A remote is another copy of the repository. Fetch checks for new checkpoints; Pull brings them into your files; Push sends your committed checkpoints there. Uncommitted edits are not pushed."))}</p>` +
+    `<p>${esc(tr("For an independent recovery copy, use project backups too. Git only records files included in commits."))}</p></details>`;
+  return guide + pjGitBody(p);
+}
+function pjGitBody(p) {
   const g = PJG.for === p.path ? PJG.data : null;
   if (!g) { pjGitLoad(p.path); return `<p class="none">${esc(tr("Reading its source control..."))}</p>`; }
   // A link to a site (Git's, Git LFS's), opened in your browser.
@@ -5241,10 +5252,27 @@ const ADULT_MARK = '<span class="adult-mark" translate="no" aria-hidden="true">1
 function setTile(s) {
   const c = setCounts(s);
   // (an Adult set, issue #337: one with a product for adults in it, marked 18+ as they are)
-  return `<button class="slot settile${s.adult ? " adult" : ""}" data-setopen="${esc(s.id)}" aria-label="${esc(tr("{0}: {1}", s.name, c.text) + (s.adult ? ", " + tr("for adults (18+)") : ""))}">` +
+  return `<button class="slot settile${s.adult ? " adult" : ""}" data-setopen="${esc(s.id)}" data-setname="${esc(s.name.toLocaleLowerCase())}" aria-label="${esc(tr("{0}: {1}", s.name, c.text) + (s.adult ? ", " + tr("for adults (18+)") : ""))}">` +
     `<span class="art">${setArt(s)}${s.adult ? ADULT_MARK : ""}${linkMark(s)}<i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">${esc(s.name)}</span><span class="cr">${esc(c.text)}</span></button>`;
 }
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
+let SET_SEARCH = "", SET_SORT = "saved";
+function filterSetTiles() {
+  const query = SET_SEARCH.trim().toLocaleLowerCase();
+  let shown = 0;
+  for (const tile of document.querySelectorAll("#setView [data-setname]")) {
+    tile.hidden = !tile.dataset.setname.includes(query);
+    if (!tile.hidden) shown++;
+  }
+  const result = document.querySelector("#setSearchResult");
+  if (result) { result.hidden = !query; result.textContent = tr("{0} matching sets and wishlists", shown); }
+}
+document.addEventListener("input", e => {
+  if (e.target.matches("#setSearch")) { SET_SEARCH = e.target.value; filterSetTiles(); }
+});
+document.addEventListener("change", e => {
+  if (e.target.matches("#setSort")) { SET_SORT = e.target.value; drawSets(); }
+});
 function setsRoot() {
   const top = `<div class="row sets-top"><button class="primary sm" data-setx="new">New set</button>` +
     `<button class="ghost sm" data-setx="importjson">${esc(tr("Import JSON..."))}</button>` +
@@ -5255,13 +5283,17 @@ function setsRoot() {
   // your own sets, then the ones you added from someone's link (issue #258), then your wishlists
   const plain = SETS.sets.filter(s => !isWish(s) && !s.from_link), added = SETS.sets.filter(s => !isWish(s) && s.from_link);
   const wishes = SETS.sets.filter(isWish);
+  if (SET_SORT === "name") for (const group of [plain, added, wishes]) group.sort((a, b) => a.name.localeCompare(b.name));
   const sets = (plain.length ? `<div class="grid setgrid">${plain.map(setTile).join("")}</div>`
     : `<p class="none">No sets yet. A set groups products you use together, such as an avatar,
     its outfits and the shaders they need, downloaded or not. Make one here, or choose products in the Library or Downloads and
     use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`) +
     (added.length ? `<h3 class="setmore-h added-h">${esc(tr("Sets you added from a link"))} <span class="n">${added.length.toLocaleString()}</span></h3>` +
       `<div class="grid setgrid">${added.map(setTile).join("")}</div>` : "");
-  return top + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
+  const search = `<label class="row">${esc(tr("Find a set or wishlist"))}<input id="setSearch" type="search" value="${esc(SET_SEARCH)}" aria-label="${esc(tr("Find a set or wishlist"))}"></label><p id="setSearchResult" class="hint" role="status" hidden></p>`;
+  queueMicrotask(filterSetTiles);
+  const sort = `<label class="row">${esc(tr("Sort sets and wishlists"))}<select id="setSort"><option value="saved"${SET_SORT === "saved" ? " selected" : ""}>${esc(tr("Saved order"))}</option><option value="name"${SET_SORT === "name" ? " selected" : ""}>${esc(tr("Name"))}</option></select></label>`;
+  return top + search + sort + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
     `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
     `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
     `<button class="ghost sm" data-setx="newwish">${esc(tr("New wishlist"))}</button></div>` +

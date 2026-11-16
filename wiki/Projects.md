@@ -262,3 +262,11 @@ there (`vcc.liteDb`) and never writes to it. Favourites, folders and tags, when 
 each from your library are Hoard's own, in `vpm-projects.json`, with which backups count as old and where you last moved
 some; presets are in `vpm-presets.json` (see
 [Where Hoard keeps things](Where-Hoard-Keeps-Things)).
+
+## Learning source control
+
+Open **New to source control?** in a project’s Source control tab for a short guide
+to local checkpoints, staging files, commits, branches and remote synchronization.
+Review files, stage the ones you want, write a message, then commit. Push sends
+committed history to a configured remote; saving a file alone does not upload it.
+Use project backups as well when you need an independent recovery copy.
