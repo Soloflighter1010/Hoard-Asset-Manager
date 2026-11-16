@@ -86,6 +86,32 @@ class Placing(Temp):
         self.assertEqual((p / "Assets/Taken.cs").read_text(), "mine")
         self.assertFalse((p / "Assets/Creator/Textures/hoodie.png").exists(), "its GUID is already in the project")
 
+    def test_managed_baseline_detects_local_asset_and_meta_edits(self):
+        from hoard.vpm import managed
+        p = self.project()
+        result = unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(p, result.baselines)
+        record = managed.load(p)[G2]
+        self.assertTrue(managed.unchanged(p, record))
+        asset = p / record["path"]
+        original = asset.read_bytes()
+        asset.write_bytes(b"my edited prefab")
+        self.assertFalse(managed.unchanged(p, record))
+        asset.write_bytes(original)
+        Path(str(asset) + ".meta").write_text("edited metadata")
+        self.assertFalse(managed.unchanged(p, record))
+        self.assertIsNone(managed.safe_file(p, "Assets/../outside.txt"))
+        self.assertIsNone(managed.safe_file(p, "Packages/asset.txt"))
+
+    def test_existing_file_without_meta_is_never_overwritten_or_adopted(self):
+        p = self.project()
+        target = p / "Assets/Existing.txt"
+        target.write_bytes(b"my file without a meta")
+        result = unitypackage.place(p, io.BytesIO(make_unitypackage({G1: ("Assets/Existing.txt", b"replacement")})), {})
+        self.assertEqual(result.skipped_taken, 1)
+        self.assertEqual(target.read_bytes(), b"my file without a meta")
+        self.assertEqual(result.baselines, {})
+
     def test_bad_packages_place_nothing(self):
         for name, raw in (("traversal", b"Assets/../../evil.txt"), ("absolute", b"/etc/evil"),
                           ("banned", b"Assets/a:b.txt"), ("dot", b"Assets/./x")):
@@ -260,6 +286,8 @@ class Library(Temp):
         picks = [(a, c) for c in preload.contents(a)]
         done = preload.apply(p, picks, new_project=True)
         self.assertEqual(done["placed"], 3)
+        from hoard.vpm import managed
+        self.assertTrue(managed.unchanged(p, managed.load(p)[G2]))
         self.assertEqual(done["failed"][0]["what"], "Product: com.creator.tool", "the package with an escaping file isn't added")
         self.assertFalse((p / "Packages" / "com.creator.tool").exists())
         good = self.zipped({"tool/package.json": json.dumps({"name": "com.creator.tool", "version": "1.2.0",

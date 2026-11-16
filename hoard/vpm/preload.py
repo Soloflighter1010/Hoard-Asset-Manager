@@ -246,6 +246,8 @@ def apply(project: Path, picks: list[tuple[dict, dict]], new_project: bool, lock
                 if log:
                     log(f"Putting {label} in the project")
                 r = unitypackage.place_file(project, path, entry.get("member"), existing)
+                from . import managed
+                managed.record(project, r.baselines, asset.get("tag_key") or "")
                 done["placed"] += r.placed
                 done["already_there"] += r.skipped_same
                 done["in_the_way"] += r.skipped_taken
