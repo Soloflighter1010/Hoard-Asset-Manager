@@ -371,9 +371,18 @@ def post_api_wishlists_import(self, path, body, query):
 
 
 
+def get_api_wishlists_rates(self, path, body, query):
+    from .. import exchange
+    try:
+        return self._json(exchange.latest())
+    except ValueError as e:
+        return self._json({"error": str(e)}, 503)
+
+
 METHODS = {'_sets_view': _sets_view, '_add_links': _add_links, '_set_code': _set_code, '_short_view': _short_view, '_share_set': _share_set, '_share_parts': _share_parts, '_split_set': _split_set, '_shorten_set': _shorten_set, '_unshorten_set': _unshorten_set}
 
 ROUTES = [
+    Route('GET', '/api/wishlists/rates', get_api_wishlists_rates, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/sets', get_api_sets, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),

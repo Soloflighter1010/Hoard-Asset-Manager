@@ -2595,5 +2595,11 @@
  "Replace with a product in this set": "이 세트의 제품으로 교체",
  "Choose a product": "제품 선택",
  "Replace placeholder": "자리 표시자 교체",
- "Describe the placeholder asset": "자리 표시자 에셋 설명"
+ "Describe the placeholder asset": "자리 표시자 에셋 설명",
+ "Convert prices to": "가격 환산 통화",
+ "Original prices": "원래 가격",
+ "No rate for this currency. Original prices are shown.": "이 통화의 환율이 없습니다. 원래 가격을 표시합니다.",
+ "Exchange rates are unavailable. Original prices are still shown.": "환율을 사용할 수 없습니다. 원래 가격은 계속 표시됩니다.",
+ "Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.": "{0} 날짜의 Frankfurter 기준 환율에 따른 추정치입니다. 결제 가격과 수수료는 다를 수 있습니다.",
+ "Using older cached rates.": "이전에 저장된 환율을 사용 중입니다."
 }

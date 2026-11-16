@@ -2595,5 +2595,11 @@
  "Replace with a product in this set": "このセット内の商品に置き換える",
  "Choose a product": "商品を選択",
  "Replace placeholder": "プレースホルダーを置き換える",
- "Describe the placeholder asset": "プレースホルダーアセットの説明"
+ "Describe the placeholder asset": "プレースホルダーアセットの説明",
+ "Convert prices to": "価格の換算先",
+ "Original prices": "元の価格",
+ "No rate for this currency. Original prices are shown.": "この通貨のレートはありません。元の価格を表示します。",
+ "Exchange rates are unavailable. Original prices are still shown.": "為替レートを取得できません。元の価格を表示します。",
+ "Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.": "{0}のFrankfurter参考レートによる概算です。決済価格や手数料は異なる場合があります。",
+ "Using older cached rates.": "以前に保存したレートを使用しています。"
 }

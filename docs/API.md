@@ -154,6 +154,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/api/vpm/updates` | key | no | — | object |
 | GET | `/api/vpm/versions` | key | no | — | object |
 | POST | `/api/wishlists/import` | key | yes | `files: array` | object |
+| GET | `/api/wishlists/rates` | key | no | — | object |
 | POST | `/api/wishlists/read` | key | yes | `stores: array`, `list: string` | object |
 | GET | `/downloads` | public | no | — | text/html |
 | GET | `/files/*` | key | no | — | application/octet-stream |

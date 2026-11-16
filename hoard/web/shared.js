@@ -5212,9 +5212,32 @@ const isWish = s => s.kind === "wishlist";
 const cheaper = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount < i.was.amount;
 // Whether a wishlist's product costs more than it did.
 const dearer = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount > i.was.amount;
+const WISH_FX = { target: "", data: null, error: "" };
+function convertedPrice(price) {
+  const fx = WISH_FX, rates = fx.data && fx.data.rates;
+  if (!price || !fx.target || !rates || !rates[fx.target]) return null;
+  if (price.amount === 0) return 0;
+  return rates[price.currency] ? price.amount * rates[fx.target] / rates[price.currency] : null;
+}
+document.addEventListener("change", async e => {
+  if (!e.target.matches("[data-wishconvert]")) return;
+  WISH_FX.target = e.target.value; WISH_FX.error = "";
+  if (WISH_FX.target) {
+    try {
+      const r = await api("/api/wishlists/rates", {cache: "no-store"});
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error);
+      WISH_FX.data = data;
+      if (!data.rates[WISH_FX.target]) WISH_FX.error = tr("No rate for this currency. Original prices are shown.");
+    } catch (error) { WISH_FX.data = null; WISH_FX.error = tr("Exchange rates are unavailable. Original prices are still shown."); }
+  }
+  setViewShown = null; drawSets();
+});
 function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
   if (!i.price) return "";
-  return `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
+  const amount = convertedPrice(i.price);
+  const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(new Intl.NumberFormat(document.documentElement.lang, {style:"currency",currency:WISH_FX.target}).format(amount))}</span>`;
+  return estimate + `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
     (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
 }
 // What a set (or wishlist) has: how many downloaded, owned but not downloaded, and still to buy, in words.
@@ -5602,7 +5625,9 @@ function wishBar(s) {
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   // A price field.
   const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
-  return !curs.length ? "" : `<div class="wishbar">` +
+  const conversion = `<label>${esc(tr("Convert prices to"))}<select data-wishconvert><option value="">${esc(tr("Original prices"))}</option>${[...new Set(["USD","EUR","GBP","JPY","KRW","CAD","AUD","CHF","CNY",...curs.filter(c => /^[A-Z]{3}$/.test(c))])].map(c => `<option value="${c}"${WISH_FX.target === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>` +
+    (WISH_FX.error ? `<p role="status">${esc(WISH_FX.error)}</p>` : WISH_FX.target && WISH_FX.data ? `<p class="hint">${esc(tr("Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.", WISH_FX.data.date))}${WISH_FX.data.stale ? " " + esc(tr("Using older cached rates.")) : ""}</p>` : "");
+  return !curs.length ? "" : conversion + `<div class="wishbar">` +
     (`<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
       num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
       (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`

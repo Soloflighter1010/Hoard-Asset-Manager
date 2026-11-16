@@ -280,3 +280,14 @@ a duplicate entry. Remove works for placeholders too.
 
 Placeholders are included in JSON exports. Like other Local entries, they stay
 out of shared-set links and are not downloadable products.
+
+## Wishlist currency estimates
+
+Choose **Convert prices to** in a wishlist to show estimated prices beside the
+original amounts. Choosing a currency requests public reference rates from
+[Frankfurter](https://frankfurter.dev/v1/); no product names, prices or account
+information are sent. Rates are cached for an hour during the app session. The
+rate date is shown; if a later refresh fails, older cached rates are marked.
+If no rate is available, the original price stays visible. **Original prices**
+turns estimates off. Price-range filters still use the selected original currency.
+Checkout prices, taxes and payment-provider fees can differ from these estimates.
