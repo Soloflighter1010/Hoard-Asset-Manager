@@ -200,8 +200,9 @@ source sidecar and the compiled Windows sidecar extracted from its checksum-veri
 JSON mirrors. The installer was extracted with portable tools from [the official 7-Zip downloads](https://www.7-zip.org/download.html); no archive tool was installed. The current SQLite sidecar passed the same protocol before and after losing `integrity.key`.
 Desktop tests additionally open a stand-in window after both key loss and a foreign key.
 The existing Check build matrix now runs `--current-sidecar` against its newly compiled Windows/macOS/Linux
-servers, checking JSON/SQLite round trips and both lost/foreign keys. Those new CI checks must pass; wiring
-them into the matrix is not evidence that every platform has already passed.
+servers, checking JSON/SQLite round trips and both lost/foreign keys. These checks, compiled self-tests and
+app packaging passed on all four targets in [Check run 531](https://github.com/Soloflighter1010/Hoard-Asset-Manager/actions/runs/43816987488).
+That workflow failed in separate documentation/wiki/isolation tests; native window interaction remains untested.
 
 Reproduce after extracting those source ZIPs into the following directories:
 

@@ -58,5 +58,14 @@
     "executable": "server/hoard-server.exe",
     "url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/v5.2.0-beta.9/Hoard-5.2.0-beta.9-windows-setup.exe"
   },
-  "compiled_current_platform_matrix": "Wired into Check; results pending for this change."
+  "compiled_current_platform_matrix": {
+    "run_url": "https://github.com/Soloflighter1010/Hoard-Asset-Manager/actions/runs/43816987488",
+    "commit": "548a493898fde4a4033115540fc72ec6c3acf702",
+    "windows_x86_64": "passed",
+    "linux_x86_64": "passed",
+    "macos_apple_silicon": "passed",
+    "macos_intel": "passed",
+    "checks": "compiled self-test; SQLite/JSON round trip; lost/foreign-key recovery; native build and packaging",
+    "overall_workflow": "failed in separate documentation/wiki/isolation test shards; build matrix passed"
+  }
 }
