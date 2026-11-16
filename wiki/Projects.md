@@ -270,3 +270,21 @@ to local checkpoints, staging files, commits, branches and remote synchronizatio
 Review files, stage the ones you want, write a message, then commit. Push sends
 committed history to a configured remote; saving a file alone does not upload it.
 Use project backups as well when you need an independent recovery copy.
+
+## Keep a project up to date
+
+In a project's details, **Keep this project up to date** offers **Off** (the
+default), **Packages only**, **Assets only**, or **Assets and packages**. Hoard
+checks hourly while it is open. Existing tasks take priority, and project changes
+wait until Unity is closed. Results and failures appear in Tasks.
+
+Package updates use your repositories and stop for conflicts. Asset updates check
+for newer downloads first and replace only managed Unity-package files whose
+content and metadata still match Hoard's import record. Local edits stay yours.
+Disabling the option also prevents queued project updates from applying changes.
+
+Older imports are tracked only when their asset and metadata exactly match the
+selected package; different files need manual review. Updates with newly added
+assets, changed package filenames or unsupported archive/package types also need
+manual review; Hoard will not partially apply a package with missing new assets.
+Files removed from a package are retained. Keep project backups as well.

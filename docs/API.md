@@ -106,6 +106,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/api/vpm/about` | key | no | — | object |
 | POST | `/api/vpm/add-project` | key | yes | — | object |
 | POST | `/api/vpm/apply` | key | yes | — | object |
+| POST | `/api/vpm/auto-update` | key | yes | `path: string`, `mode: string` | object |
 | POST | `/api/vpm/backup` | key | yes | — | object |
 | POST | `/api/vpm/backups` | key | yes | — | object |
 | POST | `/api/vpm/backups/delete` | key | yes | — | object |

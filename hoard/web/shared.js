@@ -3642,6 +3642,20 @@ async function openProject(path) {
   drawProjects();
 }
 // One project: open it in Unity, its packages (to update, add or remove), its report, and backing it up.
+document.addEventListener("change", async e => {
+  if (!e.target.matches("#pjAutoUpdate") || !PJ.project) return;
+  const project = PJ.project, mode = e.target.value;
+  e.target.disabled = true;
+  try {
+    const r = await apiPost("/api/vpm/auto-update", {path: project.path, mode});
+    if (!r.ok) { toast(r.data.error); e.target.value = project.auto_update || "off"; }
+    else project.auto_update = r.data.mode;
+  } finally { e.target.disabled = false; }
+});
+function pjAutoUpdate(p) {
+  return `<div class="card"><label>${esc(tr("Keep this project up to date"))} <select id="pjAutoUpdate">${[["off",tr("Off")],["packages",tr("Packages only")],["assets",tr("Assets only")],["both",tr("Assets and packages")]].map(([value,label]) => `<option value="${value}"${(p.auto_update || "off") === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>` +
+    `<p class="hint">${esc(tr("Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results."))}</p></div>`;
+}
 function pjProject() {
   const p = PJ.project;
   const editors = p.editors || [];
@@ -3677,7 +3691,7 @@ function pjProject() {
     report: () => pjReport(p.report),
     git: () => pjGitHTML(p) };   // (issues #296 to #299)
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
-    `<p class="pj-facts">${pjChips(p)}</p>` +
+    `<p class="pj-facts">${pjChips(p)}</p>` + pjAutoUpdate(p) +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
     `<div class="row">${unity}<button class="ghost sm" data-pj="folder">${esc(tr("Open folder"))}</button>` +
     `<button class="ghost sm" data-pj="backup">${esc(tr("Back up"))}</button>` +

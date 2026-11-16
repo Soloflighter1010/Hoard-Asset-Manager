@@ -17,7 +17,7 @@ from pathlib import Path
 from .. import loading
 from ..common import log
 from ..safety import DataFileError
-from . import backup, environment, git, imports, listing, logbook, presets, repos, resolve, templates, unity
+from . import autoupdate, backup, environment, git, imports, listing, logbook, presets, repos, resolve, templates, unity
 from .logbook import Warn
 from .manifest import valid_name
 from .preload import apply as put_in
@@ -204,7 +204,7 @@ class Service:
                 "type_name": TYPE_NAMES.get(p.project_type(), "Unknown"), "editor": unity.editor_for(p.unity, editors),
                 "editors": editors, "open_in_unity": p.unity_running(), "packages": packages,
                 "needs_repair": resolve.needs_repair(p), "preloaded": state.get("preloaded") or [],
-                "favorite": bool(state.get("favorite"))}
+                "favorite": bool(state.get("favorite")), "auto_update": autoupdate.preference(path)}
 
     def _package_row(self, coll, p, name, version, have, own, show_pre, folder=None) -> dict:
         """A package as the project's page lists it: its version, a newer one if there is, where it comes from."""
@@ -330,6 +330,12 @@ class Service:
         if op in ("git-fetch", "git-pull", "git-push", "git-clone"):
             return self._git_task(op, what)
         path = self.listed(what.get("path"))
+        if op == "auto-update":
+            if autoupdate.preference(path) == "off":
+                return "Automatic updates are off for this project."
+            if what.get("download_error"):
+                raise ProjectsError(what["download_error"])
+            return autoupdate.run(self, path, assets_by_key)
         if op in ("change", "preload"):
             self._fetch_missing()
         if op == "change":

@@ -540,6 +540,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
     def start_schedule(self) -> threading.Event:
         """Automatic syncs, while this server runs (the desktop app starts it). Set the returned event to stop."""
         self.schedule.register(self.scheduler, self._background_stop)
+        from .vpm import autoupdate
+        from .scheduler import PACKAGES
+        self.scheduler.add("project-auto-updates", "Keep projects up to date", lambda context: autoupdate.tick(self),
+                           delay=60, every=60, priority=PACKAGES)
         return self._background_stop
 
     def start_worker(self, name: str, target, *args) -> None:

@@ -5,6 +5,7 @@ import re
 import threading
 import time
 import requests
+from . import egress
 
 URL = "https://api.frankfurter.dev/v1/latest"
 _lock = threading.Lock()
@@ -36,7 +37,7 @@ def latest():
                 return {**_cache, "stale": True}
             raise ValueError("Exchange rates are unavailable. Original prices are still shown.")
         try:
-            with requests.get(URL, timeout=8, allow_redirects=False, stream=True) as response:
+            with egress.fetch(URL, timeout=8, stream=True) as response:
                 response.raise_for_status()
                 if response.status_code != 200:
                     raise ValueError("No exchange rates returned.")
@@ -49,7 +50,7 @@ def latest():
                 clean = validate(json.loads(content))
             _cache, _checked, _retry_after = clean, time.monotonic(), 0.0
             return {**clean, "stale": False}
-        except (requests.RequestException, ValueError, TypeError, AttributeError):
+        except (requests.RequestException, egress.UnsafeRequest, OSError, ValueError, TypeError, AttributeError):
             _retry_after = time.monotonic() + 60
             if _cache is not None:
                 return {**_cache, "stale": True}

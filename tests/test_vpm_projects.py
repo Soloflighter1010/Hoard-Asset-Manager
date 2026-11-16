@@ -176,6 +176,38 @@ class Placing(Temp):
             managed.replace_unchanged(p, wrong, "booth:product")
         self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), b"updated")
 
+    def test_managed_update_with_new_assets_requires_review_before_any_replacement(self):
+        from hoard.vpm import managed
+        p = self.project()
+        initial = unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(p, initial.baselines, "booth:product")
+        package = self.tmp / "new.unitypackage"
+        package.write_bytes(make_unitypackage({G2: (SAMPLE[G2][0], b"new prefab"), G4: ("Assets/New.txt", b"new dependency")}))
+        with mock.patch.object(UnityProject, "unity_running", return_value=False), self.assertRaisesRegex(ValueError, "review the new assets"):
+            managed.update_file(p, package, "booth:product")
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), SAMPLE[G2][1])
+        self.assertFalse((p / "Assets/New.txt").exists())
+
+    def test_legacy_import_is_adopted_only_when_content_and_metadata_match_package(self):
+        from hoard.vpm import managed
+        p = self.project()
+        unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        package = self.tmp / "old.unitypackage"
+        package.write_bytes(make_unitypackage(SAMPLE))
+        edited = p / SAMPLE[G3][0]
+        edited.write_bytes(b"my modified texture")
+        with mock.patch.object(UnityProject, "unity_running", return_value=False):
+            managed.update_file(p, package, "booth:product")
+        records = managed.load(p)
+        self.assertIn(G2, records)
+        self.assertNotIn(G3, records)
+        self.assertEqual(records[G2]["source"], "booth:product")
+        package.write_bytes(make_unitypackage({G2: (SAMPLE[G2][0], b"next version")}))
+        with mock.patch.object(UnityProject, "unity_running", return_value=False):
+            self.assertEqual(managed.update_file(p, package, "booth:product")["updated"], 1)
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), b"next version")
+        self.assertEqual(edited.read_bytes(), b"my modified texture")
+
     def test_existing_file_without_meta_is_never_overwritten_or_adopted(self):
         p = self.project()
         target = p / "Assets/Existing.txt"

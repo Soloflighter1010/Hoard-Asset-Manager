@@ -2601,5 +2601,15 @@
  "No rate for this currency. Original prices are shown.": "この通貨のレートはありません。元の価格を表示します。",
  "Exchange rates are unavailable. Original prices are still shown.": "為替レートを取得できません。元の価格を表示します。",
  "Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.": "{0}のFrankfurter参考レートによる概算です。決済価格や手数料は異なる場合があります。",
- "Using older cached rates.": "以前に保存したレートを使用しています。"
+ "Using older cached rates.": "以前に保存したレートを使用しています。",
+ "Keep this project up to date": "このプロジェクトを最新に保つ",
+ "Packages only": "パッケージのみ",
+ "Assets only": "アセットのみ",
+ "Assets and packages": "アセットとパッケージ",
+ "Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results.": "Hoard起動中に1時間ごとに確認し、Unityを閉じてから変更します。ローカルでの編集は保持します。以前のインポートはパッケージと完全に一致する場合だけ追跡します。結果はタスクに表示されます。",
+ "Off": "オフ",
+ "Keep projects up to date": "プロジェクトを最新に保つ",
+ "Projects: Keep {0} up to date": "プロジェクト: {0}を最新に保つ",
+ "Automatic updates are off for this project.": "このプロジェクトの自動更新はオフです。",
+ "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "自動更新: パッケージ変更{0}件、管理対象アセット更新{1}件。未追跡・編集済み・未対応の{2}件は変更しませんでした。"
 }

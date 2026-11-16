@@ -2601,5 +2601,15 @@
  "No rate for this currency. Original prices are shown.": "이 통화의 환율이 없습니다. 원래 가격을 표시합니다.",
  "Exchange rates are unavailable. Original prices are still shown.": "환율을 사용할 수 없습니다. 원래 가격은 계속 표시됩니다.",
  "Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.": "{0} 날짜의 Frankfurter 기준 환율에 따른 추정치입니다. 결제 가격과 수수료는 다를 수 있습니다.",
- "Using older cached rates.": "이전에 저장된 환율을 사용 중입니다."
+ "Using older cached rates.": "이전에 저장된 환율을 사용 중입니다.",
+ "Keep this project up to date": "이 프로젝트를 최신 상태로 유지",
+ "Packages only": "패키지만",
+ "Assets only": "에셋만",
+ "Assets and packages": "에셋 및 패키지",
+ "Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results.": "Hoard 실행 중 매시간 확인하며 Unity가 닫힐 때까지 변경을 기다립니다. 로컬 편집은 유지합니다. 이전 가져오기는 패키지와 정확히 일치할 때만 추적합니다. 결과는 작업에서 확인하세요.",
+ "Off": "끄기",
+ "Keep projects up to date": "프로젝트를 최신 상태로 유지",
+ "Projects: Keep {0} up to date": "프로젝트: {0} 최신 상태로 유지",
+ "Automatic updates are off for this project.": "이 프로젝트의 자동 업데이트가 꺼져 있습니다.",
+ "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "자동 업데이트: 패키지 변경 {0}개, 관리 에셋 업데이트 {1}개. 추적되지 않거나 수정되었거나 지원되지 않는 항목 {2}개는 유지했습니다."
 }

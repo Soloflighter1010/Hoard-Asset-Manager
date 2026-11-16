@@ -138,24 +138,37 @@ def replace_unchanged(project: Path, entries: dict, source: str) -> dict:
     import shutil
     recover(project)
     before = load(project)
+    from .unitypackage import project_guids
+    present = project_guids(project)
+    if any(entry["file"] is not None and guid not in present for guid, entry in entries.items()):
+        raise ValueError("This asset update adds files not in the project. Import it manually to review the new assets first.")
     after = dict(before)
     paths = {}
     skipped = 0
     for guid, entry in entries.items():
         old = before.get(guid)
-        if not source or not old or old.get("source") != source or old["path"] != entry["path"] or not unchanged(project, old) or entry["file"] is None:
+        if not source or entry["file"] is None or present.get(guid) != entry["path"] or (old and old.get("source") not in (None, "", source)):
             skipped += 1
             continue
         from .unitypackage import META_GUID
         match = META_GUID.search(entry["meta"])
         if match is None or match.group(1).decode() != guid:
             raise ValueError("The updated asset metadata has a different GUID.")
-        fresh = {"path": old["path"], "source": source, "sha256": digest(entry["file"]),
+        fresh = {"path": entry["path"], "source": source, "sha256": digest(entry["file"]),
                  "meta_sha256": hashlib.sha256(entry["meta"]).hexdigest()}
-        if old != fresh:
+        # Exact agreement with the selected package is evidence for an older import;
+        # a matching GUID or path on its own is never enough to adopt a file.
+        if unchanged(project, fresh):
             after[guid] = fresh
-            paths[guid] = old["path"]
+            continue
+        if not old or old.get("source") != source or old["path"] != entry["path"] or not unchanged(project, old):
+            skipped += 1
+            continue
+        after[guid] = fresh
+        paths[guid] = old["path"]
     if not paths:
+        if after != before:
+            write_file_safely(manifest_path(project), json.dumps({"version": 1, "files": after}, indent=1))
         return {"updated": 0, "skipped": skipped}
     root = _workspace(project)
     if root.exists():
