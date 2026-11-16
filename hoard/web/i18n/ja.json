@@ -2575,5 +2575,7 @@
  "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "このコンピューターには{0}がインストールされていないため、Hoardは専用のブラウザーをインストールしてから使います。",
  "Import JSON...": "JSONをインポート...",
  "Export JSON": "JSONをエクスポート",
- "That JSON file is too large.": "JSONファイルが大きすぎます。"
+ "That JSON file is too large.": "JSONファイルが大きすぎます。",
+ "Set dependencies": "セットの依存関係",
+ "One requirement per line, for the whole set.": "セット全体の要件を1行に1つ入力してください。"
 }

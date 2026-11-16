@@ -5299,7 +5299,7 @@ function wishFindHTML() {
 }
 // An open set's heading: where you are, its counts and its buttons.
 function setHead(s) {
-  const c = setCounts(s), saved = !!(s.note || s.photos.length), editing = !!(SETEDIT && SETEDIT.id === s.id);
+  const c = setCounts(s), saved = !!(s.note || s.photos.length || (s.dependencies || []).length), editing = !!(SETEDIT && SETEDIT.id === s.id);
   const open = editing || (setExtraOpen ?? saved);   // (issue #272: folded away while there's nothing in it)
   setExtraDrawnOpen = open;
   // the rest of what's done with it, gathered together and quieter than Share (issue #272)
@@ -5347,19 +5347,20 @@ function wishToolsNow() {
 let SETEDIT = null;   // {id, note, photos}: the set being edited, as it's being changed
 // A set's note and photos: as they're shared, with Edit; or being changed, with Save and Cancel.
 function setExtraHTML(s) {
-  const editing = SETEDIT && SETEDIT.id === s.id, saved = !!(s.note || s.photos.length);
+  const editing = SETEDIT && SETEDIT.id === s.id, saved = !!(s.note || s.photos.length || (s.dependencies || []).length);
   const photos = editing ? SETEDIT.photos : s.photos;
   // The photos' links (each with its × while they're being changed).
   const links = (list, out) => list.length ? `<ul class="setphotos">${list.map((u, n) => `<li><a href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">` +
     `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a>` +
     (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
   if (saved && !editing) {
-    return (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
+    return ((s.dependencies || []).length ? `<h3>${esc(tr("Set dependencies"))}</h3><ul>${s.dependencies.map(d => `<li translate="no">${esc(d)}</li>`).join("")}</ul>` : "") + (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
       (photos.length ? setPhotosHTML(s) : `<p class="none">${esc(tr("No photos."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
   }
   return `<textarea data-setnote maxlength="1000" rows="2" placeholder="${esc(tr("What it's for, or how to put it together. It's shared with the set."))}" ` +
       `aria-label="${esc(tr("Note for {0}", s.name))}">${esc(editing ? SETEDIT.note : s.note || "")}</textarea>` +
+    `<label>${esc(tr("Set dependencies"))}<textarea data-setdeps maxlength="4000" rows="3" placeholder="${esc(tr("One requirement per line, for the whole set."))}">${esc(editing ? SETEDIT.dependencies : (s.dependencies || []).join("\n"))}</textarea></label>` +
     links(photos, true) +
     `<p class="hint">${esc(tr("Photos to show off the set: links from Imgur, Gyazo, X, Bluesky, Reddit, Postimages, ImgBB, Discord, or a store's own pictures."))}</p>` +
     `<div class="row"><button class="ghost sm" data-setx="photo">Add a photo link...</button></div>` +
@@ -5490,7 +5491,8 @@ async function markPhoto(s, n) {
   if (yes && await changeSets({ action: "marks", id: s.id, photo: url, marks })) toast(tr("Saved what's marked on the photo."));
 }
 // Start changing a set's note and photos (none saved yet: as they are).
-const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", photos: [...s.photos] }; };
+const setEditStart = s => { if (!SETEDIT || SETEDIT.id !== s.id) SETEDIT = { id: s.id, note: s.note || "", dependencies: (s.dependencies || []).join("\n"), photos: [...s.photos] }; };
+document.addEventListener("input", e => { if (e.target.matches("#setView [data-setdeps]") && SETEDIT) SETEDIT.dependencies = e.target.value; });
 document.addEventListener("input", e => { if (e.target.matches("#setView [data-setnote]") && SETEDIT) SETEDIT.note = e.target.value; });
 // The set's products this page has no tile for: in the Library, ones not yours yet (and your own, which are in
 // Downloads); in Downloads, ones not downloaded. Each says where it is, or where to buy it.
@@ -5922,7 +5924,9 @@ async function setAct(e) {
   } else if (act === "save") {   // the note, then the photos, as they're changed (a photo link that's no good stays to fix)
     setEditStart(s);
     SETEDIT.note = $("#setView [data-setnote]").value;
+    SETEDIT.dependencies = $("#setView [data-setdeps]").value;
     const want = SETEDIT;
+    if (!await changeSets({ action: "dependencies", id: s.id, dependencies: want.dependencies.split("\n") })) return;
     if (want.note !== (s.note || "") && !await changeSets({ action: "note", id: s.id, note: want.note })) return;
     if (want.photos.join("\n") !== s.photos.join("\n") && !await changeSets({ action: "photos", id: s.id, photos: want.photos })) {
       SETEDIT = want; drawSets(); return;

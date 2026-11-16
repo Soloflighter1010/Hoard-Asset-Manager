@@ -59,7 +59,7 @@ def _sets_view(self) -> dict:
             block = {str(w).lower() for w in (srv.cfg.get("tags") or {}).get("blocklist", [])}
             for row, words in zip(rows, app.common_words([r["name"] for r in rows], 2, 0.5, block)):
                 row["words"] = sorted(words)
-        out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
+        out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "dependencies": s.get("dependencies", []), "photos": s.get("photos", []),
                     # where its products are on its photos (issue #346), only those shown
                     "marks": {u: [m for m in ms if m[0] not in hidden] for u, ms in (s.get("marks") or {}).items()},
                     "photo_p": [app.pic_for(u) for u in s.get("photos", [])],   # (each photo's address mark: /setphoto)
@@ -375,7 +375,7 @@ ROUTES = [
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
-    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('dependencies', 'array'), ('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

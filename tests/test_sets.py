@@ -68,6 +68,25 @@ class Store(IsolatedTestCase):
         self.assertNotIn("short", one)
         self.assertNotIn("picture", one)
 
+    def test_set_dependencies_persist_and_travel_with_the_set(self):
+        made = self.store.change({"action": "create", "name": "Requirements", "items": SHARED["items"]},
+                                 SHARED["products"].get)["made"]
+        self.store.change({"action": "dependencies", "id": made, "dependencies": ["lilToon", "VRCFury", "lilToon", ""]})
+        one = self.store.load()["sets"][0]
+        self.assertEqual(one["dependencies"], ["lilToon", "VRCFury"])
+        restored = self.store.import_json(self.store.export_json(made))
+        self.assertEqual(restored["sets"][-1]["dependencies"], one["dependencies"])
+        code, count = sets.share_code(one)
+        self.assertGreater(count, 0)
+        shared = sets.from_code(code)
+        self.assertEqual(shared["dependencies"], one["dependencies"])
+        imported = self.store.change({"action": "import", "code": code})
+        self.assertEqual(imported["sets"][-1]["dependencies"], one["dependencies"])
+        parts = self.store.split(made, [[RUSK], [HOODIE]])
+        self.assertTrue(all(x["dependencies"] == one["dependencies"] for x in parts["sets"] if x["id"] in parts["made"]))
+        self.store.change({"action": "dependencies", "id": made, "dependencies": []})
+        self.assertNotIn("dependencies", self.store.load()["sets"][0])
+
     def test_what_cant_be_done(self):
         for body in ({"action": "create", "name": "  "}, {"action": "rename", "id": "nope", "name": "x"},
                      {"action": "explode", "id": "x"}, {"action": "create", "name": 7}):

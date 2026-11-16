@@ -81,6 +81,13 @@ CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's 
 _lock = storage.metadata_lock
 
 
+def clean_dependencies(value) -> list[str]:
+    """At most 30 set-wide requirements, kept as plain text."""
+    if not isinstance(value, list):
+        return []
+    return list(dict.fromkeys(clean_text(x, 120) for x in value[:30] if isinstance(x, str) and clean_text(x, 120)))
+
+
 def sets_file() -> Path:
     """Where your sets and wishlists are kept."""
     return data_dir() / "sets.json"
@@ -392,6 +399,8 @@ class SetStore:
                     one["source"] = {"store": src["store"], "list": clean_text(src["list"], 60)}
                 if isinstance(s.get("read"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:]{8}Z", s["read"]):
                     one["read"] = s["read"]
+            if clean_dependencies(s.get("dependencies")):
+                one["dependencies"] = clean_dependencies(s["dependencies"])
             note = clean_note(s.get("note"))
             if note:
                 one["note"] = note
@@ -518,7 +527,7 @@ class SetStore:
                 one = {"id": made, "name": name,
                        "items": list(dict.fromkeys(given["items"] if given else items))[:MAX_ITEMS]}
                 if given:
-                    one.update({k: given[k] for k in ("note", "photos", "products", "marks") if given.get(k)}, from_link=True)
+                    one.update({k: given[k] for k in ("note", "photos", "products", "marks", "dependencies") if given.get(k)}, from_link=True)
                 else:
                     one.update(note=clean_note(body.get("note")), photos=body.get("photos") or [])
                     if body.get("kind") == "wishlist":   # one of your own, product by product (issue #158)
@@ -544,6 +553,8 @@ class SetStore:
                     remember(s, items)
                 elif action == "remove":
                     s["items"] = [k for k in s["items"] if k not in items]
+                elif action == "dependencies":
+                    s["dependencies"] = clean_dependencies(body.get("dependencies"))
                 elif action == "note":
                     s["note"] = clean_note(body.get("note"))
                 elif action == "photos":
@@ -703,7 +714,7 @@ class SetStore:
             known, made, inside = s.get("products") or {}, [], set(s["items"])
             for n, keys in enumerate(parts, 1):
                 one = {"id": secrets.token_hex(4), "name": part_name(s["name"], n, len(parts)),
-                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks") if s.get(k)},
+                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks", "dependencies") if s.get(k)},
                        "products": {k: known[k] for k in keys if k in known}}
                 if s.get("kind") == "wishlist":
                     one["kind"] = "wishlist"
@@ -739,7 +750,7 @@ def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_li
     if len(items) <= MAX_ITEMS and fits(_pack(s, [r for r in rows if r], [k for k, r in zip(items, rows) if r])):
         return [items] if items else []
     sized = {**s, "name": part_name(s.get("name", ""), 1, 1)}
-    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), s.get("marks"), items, rows,
+    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), s.get("marks"), s.get("dependencies"), items, rows,
                                       fits.__module__ + "." + fits.__qualname__], ensure_ascii=False).encode()).hexdigest()
     if seen in _parts_kept:
         return [list(p) for p in _parts_kept[seen]]
@@ -826,6 +837,8 @@ def _pack(s: dict, rows: list[list], keys: list[str] | None = None) -> str:
     doc = {"v": 1, "n": s.get("name", ""), "i": rows}
     if any(len(r) > 6 and r[6] for r in rows):   # a set with a product for adults in it: its viewer is asked first
         doc["a"] = 1
+    if clean_dependencies(s.get("dependencies")):
+        doc["r"] = clean_dependencies(s["dependencies"])
     if s.get("note"):
         doc["d"] = s["note"]
     if s.get("photos"):
@@ -908,7 +921,8 @@ def from_code(text) -> dict:
                 and 0 <= m[0] < len(given) and given[m[0]] and m[1] in row_keys:
             marks.setdefault(given[m[0]], []).append([row_keys[m[1]], m[2], m[3]])
     return {"name": name, "note": clean_note(doc.get("d")), "photos": photos, "items": items,
-            "products": products, "marks": clean_marks(marks, photos, items)}
+            "products": products, "marks": clean_marks(marks, photos, items),
+            **({"dependencies": clean_dependencies(doc["r"])} if clean_dependencies(doc.get("r")) else {})}
 
 
 def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:

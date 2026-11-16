@@ -113,7 +113,7 @@
       list.push({ item, x: m[2], y: m[3] });
       marks.set(url, list);
     }
-    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), photos, marks, items,
+    return { name: text(doc.n, 60) || "A shared set", note: note(doc.d), dependencies: [...new Set((Array.isArray(doc.r) ? doc.r.slice(0, 30) : []).map(x => text(x, 120)).filter(Boolean))], photos, marks, items,
              adult: doc.a === 1 || items.some(i => i.adult) };   // an Adult set: one with a product for adults in it
   }
 
@@ -199,8 +199,14 @@
     const stores = [...new Set(set.items.map(i => STORES[i.store]))];
     $("#setSummary").textContent = (set.items.length === 1 ? "1 product" : set.items.length + " products") + ", from " +
       (stores.length < 3 ? stores.join(" and ") : stores.slice(0, -1).join(", ") + " and " + stores[stores.length - 1]) + ".";
+    if (set.dependencies.length) {
+      $("#setNote").append(el("h3", {}, "Set dependencies"));
+      const list = el("ul", {});
+      for (const d of set.dependencies) list.append(el("li", {}, d));
+      $("#setNote").append(list);
+    }
     if (set.note) for (const line of set.note.split("\n")) $("#setNote").append(el("p", {}, line || " "));
-    $("#setNote").hidden = !set.note;
+    $("#setNote").hidden = !set.note && !set.dependencies.length;
     if (set.said) {   // an Adult set: what was answered, in a box that can't be missed, and a way to answer again
       const again = el("button", { class: "button ghost", type: "button", id: "ageAgain" }, "Change your answer");
       again.addEventListener("click", () => { keepAge(""); location.reload(); });

@@ -254,3 +254,11 @@ an imported set can be shared with a new link. Hidden products are omitted while
 the hidden library is locked. The JSON contains the exported notes and product
 information, so review it before sending it to someone else. Asset files themselves
 are not included.
+
+## Set dependencies
+
+Use **Edit** in a set's note and photos section to list **Set dependencies**, one
+requirement per line (up to 30, each up to 120 characters). These requirements
+apply to the whole set, such as a shader, tool or SDK. They are displayed together
+in the set details and included in shared sets and JSON exports. They are
+informational; listing a dependency does not install it in a project.

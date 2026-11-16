@@ -2575,5 +2575,7 @@
  "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저가 설치되면 그걸 써요.",
  "Import JSON...": "JSON 가져오기...",
  "Export JSON": "JSON 내보내기",
- "That JSON file is too large.": "JSON 파일이 너무 큽니다."
+ "That JSON file is too large.": "JSON 파일이 너무 큽니다.",
+ "Set dependencies": "세트 의존성",
+ "One requirement per line, for the whole set.": "세트 전체의 요구 사항을 한 줄에 하나씩 입력하세요."
 }
