@@ -284,7 +284,11 @@ class Sanitizing(IsolatedTestCase):
                 raise OSError("not there")
             return values[(key.path, name)], 4
         fake.QueryValueEx = query
-        with mock.patch.dict(sys.modules, {"winreg": fake}), mock.patch.object(diagnostics.platform, "system", lambda: "Windows"):
+        # The fake registry covers security policies only. Python's platform
+        # module also reads winreg on a cold uname cache, so keep unrelated OS
+        # probes out of this stand-in regardless of shuffled test order.
+        with mock.patch.dict(sys.modules, {"winreg": fake}), mock.patch.multiple(
+                diagnostics.platform, system=lambda: "Windows", release=lambda: "test-release", machine=lambda: "AMD64"):
             env = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))
             self.assertEqual(env["windows_security"], {"smart_app_control": "evaluation", "memory_integrity": "on"})
             values.clear()
