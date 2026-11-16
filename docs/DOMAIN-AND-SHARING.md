@@ -1,7 +1,8 @@
 # A Hoard domain and set-link hosting
 
 Research for #332, reviewed 15 November 2026. This is a recommendation, not a
-purchase, deployment or migration. Prices are USD and may change.
+purchase, deployment or migration. Prices are USD and may change. It builds on
+the [earlier issue recommendation](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/332#issuecomment-6803768547), adding current primary-source pricing and an API-compatibility inventory.
 
 ## Recommendation
 
@@ -84,9 +85,12 @@ A later migration issue should cover:
 1. Website, set viewer and static asset paths, including download/archive links.
 2. VCC listing `index.json`, package URLs, the `HOARD_REPO` constant in
    [vpm/api.py](../hoard/vpm/api.py), workflow-generated listing/security URLs,
-   wiki/docs, badges and the site build's domain configuration.
+   wiki/docs, badges and the site build's domain configuration. Preserve published
+   schema `$id` identifiers and keep old schema URLs available; a website move
+   does not require rewriting identifiers in existing catalog files.
 3. The share API address in both the app and viewer; temporarily allow old and
-   new viewer origins in the Worker. Keep using the same KV namespace so existing
+   new viewer origins in the Worker, and update `site/set.html`'s CSP connection
+   allowlist together with `site/set.js`. Keep using the same KV namespace so existing
    encrypted sets are not lost.
 4. Old website paths should continue working or redirect with their paths and
    queries preserved. Verify real browser fragment preservation with both long
