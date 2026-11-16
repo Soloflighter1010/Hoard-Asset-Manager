@@ -274,7 +274,8 @@ body.less-motion .brand.has-update svg, body.less-motion .brand .boxes { animati
 .chip:hover { color: var(--gold-text); }
 .chip[aria-pressed="true"] { background: var(--gold); color: var(--gold-ink); padding: 2px 8px; }
 .chip[aria-pressed="true"]::before, .chip[aria-pressed="true"] .n { color: inherit; opacity: .7; }
-.linkish { background: none; border: 0; padding: 0; color: var(--gold-text); text-decoration: underline; text-underline-offset: 3px; font-weight: 700; }
+.linkish { background: var(--ledge); border: 1px solid var(--seam); border-radius: 8px; padding: 5px 10px; color: var(--gold-text); text-decoration: none; font-weight: 700; }
+.linkish:hover:not(:disabled) { background: var(--stone); }
 .side .linkish { font-size: 13px; margin-top: 10px; }
 .find { width: 100%; height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); margin-bottom: 6px; }
 .find:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold); }

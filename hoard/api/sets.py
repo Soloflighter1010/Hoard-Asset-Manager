@@ -311,6 +311,17 @@ def post_api_sets(self, path, body, query):
             return self._json({"ok": True, **app.shortlinks.fetch(body.get("short"))})
         except app.shortlinks.ShortLinkError as e:
             return self._json({"error": str(e)}, 404 if isinstance(e, app.shortlinks.Gone) else 502)
+    if body.get("action") in ("export-json", "import-json"):
+        try:
+            store = app.sets.SetStore()
+            if body["action"] == "export-json":
+                hidden = app.MarkStore().keys("hidden") if not self._unlocked() else frozenset()
+                return self._json({"ok": True, "file": store.export_json(str(body.get("id", "")), hidden)})
+            data = store.import_json(body.get("file"))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.start_worker("Updating Unity catalog", app.rebuild_catalog_quietly, srv)
+        return self._json({"ok": True, "made": data["made"]})
     gone = None
     if body.get("action") == "delete":   # its short link goes with it, once the set has
         gone = next((x for x in app.sets.SetStore().load()["sets"] if x["id"] == body.get("id")), None)
@@ -364,7 +375,7 @@ ROUTES = [
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
-    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

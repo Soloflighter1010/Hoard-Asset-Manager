@@ -2572,5 +2572,8 @@
  "That path is too long.": "パスが長すぎます。",
  "{0} couldn't be started for Hoard ({1}). Choose another browser in Settings, under Browser for store sign-ins.": "{0}をHoard用に起動できませんでした({1})。設定の「ストアのサインインに使うブラウザー」で、ほかのブラウザーを選んでください。",
  "{0} isn't installed on this computer, so Hoard uses its own browser.": "このコンピューターには{0}がインストールされていないため、Hoardは専用のブラウザーを使います。",
- "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "このコンピューターには{0}がインストールされていないため、Hoardは専用のブラウザーをインストールしてから使います。"
+ "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "このコンピューターには{0}がインストールされていないため、Hoardは専用のブラウザーをインストールしてから使います。",
+ "Import JSON...": "JSONをインポート...",
+ "Export JSON": "JSONをエクスポート",
+ "That JSON file is too large.": "JSONファイルが大きすぎます。"
 }

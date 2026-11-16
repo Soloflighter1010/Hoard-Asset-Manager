@@ -432,6 +432,51 @@ class SetStore:
         """Write your sets."""
         write_file_safely(self.path, json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1))
 
+    def export_json(self, sid: str, hidden=frozenset()) -> dict:
+        """Portable local backup, without short-link credentials or machine-specific picture names."""
+        one = next((x for x in self.load()["sets"] if x["id"] == sid), None)
+        if one is None:
+            raise ValueError("That set isn't there anymore.")
+        one = dict(one)
+        one["items"] = [k for k in one["items"] if k not in hidden]
+        one = self.sanitize({"sets": [one]})["sets"][0]
+        cover = picture_file(one)
+        image = base64.b64encode(cover.read_bytes()).decode("ascii") if cover else None
+        for key in ("id", "short", "short_ended", "picture"):
+            one.pop(key, None)
+        return {"format": "hoard-set", "version": 1, "set": one, "image": image}
+
+    def import_json(self, raw) -> dict:
+        """Import as a new set; never overwrite an existing set or trust link credentials."""
+        if not isinstance(raw, dict) or raw.get("format") != "hoard-set" or type(raw.get("version")) is not int or raw["version"] != 1:
+            raise ValueError("Choose a Hoard set JSON file (version 1).")
+        given = raw.get("set")
+        if not isinstance(given, dict) or not isinstance(given.get("items"), list) or not clean_name(given.get("name")):
+            raise ValueError("That JSON file doesn't contain a named set and product list.")
+        limit = MAX_WISH_ITEMS if given.get("kind") == "wishlist" else MAX_ITEMS
+        if len(given["items"]) > limit or any(not isinstance(k, str) or not TAG_KEY_RX.fullmatch(k) for k in given["items"]):
+            raise ValueError("That JSON file contains too many products or invalid product keys.")
+        image = chosen_picture(raw["image"]) if raw.get("image") is not None else None
+        with _lock:
+            data = self.load()
+            if len(data["sets"]) >= MAX_SETS:
+                raise ValueError(f"Hoard keeps up to {MAX_SETS} sets.")
+            sid = secrets.token_hex(4)
+            one = {k: v for k, v in given.items() if k not in ("id", "short", "short_ended", "picture")}
+            one["id"] = sid
+            try:
+                one = self.sanitize({"sets": [one]})["sets"][0]
+            except (TypeError, ValueError, IndexError, AttributeError):
+                raise ValueError("That JSON file contains invalid set details.") from None
+            if image:
+                picture, kind = image
+                one["picture"] = f"{secrets.token_hex(4)}.{kind}"
+                pictures_dir().mkdir(parents=True, exist_ok=True)
+                write_file_safely(pictures_dir() / f"{sid}-{one['picture']}", picture)
+            data["sets"].append(one)
+            self._save(data)
+            return {**data, "made": sid}
+
     def change(self, body: dict, details=None, kept: set | frozenset = frozenset()) -> dict:
         """One change, from the page: {"action": "create", "name", "items"?, "note"?, "photos"?},
         {"action": "rename", "id", "name"}, {"action": "delete", "id"}, {"action": "add" or "remove", "id", "items"},

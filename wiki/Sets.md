@@ -241,3 +241,16 @@ Hoard for Unity's **Sets** pill doesn't list wishlists: they're what you want, n
 Sets and wishlists are in `sets.json` in Hoard's app-data folder (see [Where Hoard keeps things](Where-Hoard-Keeps-Things)), and in
 backups (**Settings**, **Backup**). A backup made while your hidden library is locked leaves hidden products out
 of every set.
+
+## JSON files
+
+Open a set or wishlist and choose **Export JSON** to save a portable file. Use
+**Import JSON...** in Sets and Wishlists to load one. Import always creates a new
+entry, leaving existing sets and lists unchanged.
+
+Files preserve product order, local product entries, notes, photos, photo marks,
+wishlist prices and the chosen cover picture. Short-link credentials are excluded;
+an imported set can be shared with a new link. Hidden products are omitted while
+the hidden library is locked. The JSON contains the exported notes and product
+information, so review it before sending it to someone else. Asset files themselves
+are not included.

@@ -28,6 +28,46 @@ class Store(IsolatedTestCase):
         self.store.change({"action": "delete", "id": made})
         self.assertEqual(self.store.load()["sets"], [])
 
+    def test_json_round_trip_and_hidden_products(self):
+        local = tag_key("Local", "My asset")
+        for kind in (None, "wishlist"):
+            made = self.store.change({"action": "create", "name": "Portable", "items": [RUSK, HOODIE, local],
+                                      "note": "My note", "kind": kind})["made"]
+            exported = self.store.export_json(made)
+            imported = self.store.import_json(json.loads(json.dumps(exported)))
+            original, restored = [x for x in imported["sets"] if x["id"] in (made, imported["made"])]
+            self.assertNotEqual(original["id"], restored["id"])
+            self.assertEqual({k: v for k, v in original.items() if k != "id"},
+                             {k: v for k, v in restored.items() if k != "id"})
+            self.assertEqual(self.store.export_json(made, {HOODIE})["set"]["items"], [RUSK, local])
+
+    def test_json_cover_picture_round_trip(self):
+        import base64
+        made = self.store.change({"action": "create", "name": "Cover", "items": []})["made"]
+        self.store.change({"action": "picture", "id": made, "image": base64.b64encode(PNG_4x3).decode()})
+        raw = self.store.export_json(made)
+        imported = self.store.import_json(raw)
+        one = next(x for x in imported["sets"] if x["id"] == imported["made"])
+        self.assertEqual(sets.picture_file(one).read_bytes(), PNG_4x3)
+
+    def test_json_import_rejects_invalid_data_without_changes(self):
+        before = self.store.load()
+        for raw in (None, {}, {"format": "hoard-set", "version": 2},
+                    {"format": "hoard-set", "version": 1, "set": {"name": "Broken", "items": [42]}},
+                    {"format": "hoard-set", "version": 1, "set": {"name": "Broken", "items": [], "photos": 42}}):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                self.store.import_json(raw)
+            self.assertEqual(self.store.load(), before)
+
+    def test_json_import_drops_machine_ids_and_short_credentials(self):
+        raw = {"format": "hoard-set", "version": 1, "set": {"id": "existing", "name": "Imported", "items": [],
+               "picture": "12345678.png", "short": {"token": "secret"}}}
+        made = self.store.import_json(raw)
+        one = made["sets"][0]
+        self.assertNotEqual(one["id"], "existing")
+        self.assertNotIn("short", one)
+        self.assertNotIn("picture", one)
+
     def test_what_cant_be_done(self):
         for body in ({"action": "create", "name": "  "}, {"action": "rename", "id": "nope", "name": "x"},
                      {"action": "explode", "id": "x"}, {"action": "create", "name": 7}):
@@ -636,6 +676,15 @@ class Tab(IsolatedTestCase):
                 return json.loads(r.read())
         except urllib.error.HTTPError as e:
             return {"status": e.code, **json.loads(e.read() or b"{}")}
+
+    def test_json_file_api_round_trip(self):
+        made = self.api("/api/sets", {"action": "create", "name": "From file", "items": [RUSK]})["made"]
+        exported = self.api("/api/sets", {"action": "export-json", "id": made})
+        self.assertTrue(exported["ok"])
+        imported = self.api("/api/sets", {"action": "import-json", "file": exported["file"]})
+        self.assertTrue(imported["ok"])
+        self.assertNotEqual(imported["made"], made)
+        self.assertEqual(self.api("/api/sets", {"action": "import-json", "file": {}})["status"], 400)
 
     def test_a_picture_follows_its_product_when_one_is_taken_out(self):
         """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved

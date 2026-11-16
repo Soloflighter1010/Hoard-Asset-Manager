@@ -5247,6 +5247,7 @@ function setTile(s) {
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
 function setsRoot() {
   const top = `<div class="row sets-top"><button class="primary sm" data-setx="new">New set</button>` +
+    `<button class="ghost sm" data-setx="importjson">${esc(tr("Import JSON..."))}</button>` +
     `<button class="ghost sm" data-setx="import">Add a shared set...</button>` +
     `<button class="ghost sm" data-setx="mix">${esc(tr("Mix and match..."))}</button></div>` +
     (SETS.hidden_left_out ? `<p class="hint">Hidden items are left out while your hidden library is locked.</p>` : "");
@@ -5308,6 +5309,7 @@ function setHead(s) {
     c.owned && `<button class="linkish" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>`,
     `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
     s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
+    `<button class="ghost sm" data-setx="exportjson">${esc(tr("Export JSON"))}</button>`,
     `<button class="linkish" data-setx="rename">${esc(tr("Rename"))}</button>`,
     `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
@@ -5844,6 +5846,26 @@ async function setAct(e) {
   if (open) { showSet(open.dataset.setopen); return; }
   const b = e.target.closest("[data-setx]"); if (!b) return;
   const act = b.dataset.setx;
+  if (act === "importjson") {
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files[0]; if (!file) return;
+      try {
+        if (file.size > 16000000) throw new Error(tr("That JSON file is too large."));
+        const done = await changeSets({ action: "import-json", file: JSON.parse(await file.text()) });
+        if (done && done.made) showSet(done.made);
+      } catch (error) { toast(error.message); }
+    };
+    input.click(); return;
+  }
+  if (act === "exportjson") {
+    const r = await apiPost("/api/sets", { action: "export-json", id: state.set });
+    if (!r.ok) { toast(r.data.error); return; }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(r.data.file, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = "hoard-set.json";
+    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  }
   if (act === "back") { showSet(""); return; }
   if (act === "new") {
     const name = await askName("Name the new set");
