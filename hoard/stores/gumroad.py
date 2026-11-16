@@ -536,3 +536,7 @@ def extract_page_json(text: str):
     return None
 
 LIBRARY_EXPORTS['extract_page_json'] = extract_page_json
+
+
+def chosen_name(key, record):
+    return record.get("label") or (record["path"].rsplit(".", 1)[0] if key.startswith("page-image:") else record["path"])

@@ -99,8 +99,7 @@ def sign_in_urls(cfg: dict, store: str) -> list[str]:
     your settings: a shop keeps its own buyer account, and a shop on its own address also asks payhip.com whether
     you're signed in to Payhip itself (its sign-in check, payhip.com/global-identity), which goes round in a loop
     when you aren't."""
-    shops = [s + "/b-account" for s in payhip_shops(cfg)] if store == "payhip" else []
-    return [STORES[store]["login"], *shops]
+    return adapters()[store].login_pages(cfg)
 
 
 def open_sign_in_pages(ctx, cfg: dict, store: str):
@@ -197,7 +196,7 @@ def _prepare_import(cfg: dict, store: str | None, filename: str, text: str, trus
     # as prep["base"]; a <base> tag here would be removed by inert_html along with any the page brought, so none
     # is added (earlier versions added one that was then always removed).
     # (Jinxxy's page came with its items' data in its scripts, read as data before they're taken out: issue #276)
-    data = jinxxy_data(jinxxy_ssr([t for _, t in script_tags(page_html) if "ApolloSSRDataTransport" in t])) if store == "jinxxy" else {}
+    data = adapters()[store].saved_data(page_html)
     return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images,
             "jinxxy_data": data}
 
@@ -369,8 +368,7 @@ class Library:
                     "error": clean_text(info.get("error"), 600) or None,
                     **{k: clean_text(info[k], 40) for k in ("refreshed", "updated", "first_read") if isinstance(info.get(k), str)},
                     **({"source": info["source"]} if info.get("source") in ("import", "refresh") else {}),
-                    **({"found_shops": [f for f in info["found_shops"][:200] if isinstance(f, str) and clean_payhip_shop(f) == f]}
-                       if store == "payhip" and isinstance(info.get("found_shops"), list) else {}),
+                    **adapters()[store].library_state(info),
                 }
         return out
 

@@ -173,8 +173,8 @@ def direct_targets(library_items: list[dict], stores: list[str], only: str | Non
                 continue   # a chosen product the library doesn't have (by that name): read the store in full
         else:
             chosen = [i for i in mine if only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower()]
-        link = "url" if store == "jinxxy" else "download_url"
-        if chosen and all(store_link(store, i.get(link)) for i in chosen):
+        from .stores import adapters
+        if chosen and all(store_link(store, adapters()[store].direct_link(i)) for i in chosen):
             out[store] = [dict(i) for i in chosen]
     return out
 
@@ -1678,13 +1678,9 @@ def resolve_problem(root: Path, others, problem: dict, action: str) -> dict:
 def chosen_name(store: str, fkey: str, f: dict) -> str:
     """The name a downloaded file is left out by (left_out's file), from its record: what its store called it when it
     was downloaded (a Jinxxy button's label, itch.io's name for it, Booth's), else its path."""
-    if f.get("label"):
-        return f["label"]
-    if store == "gumroad" and fkey.startswith("page-image:"):
-        return f["path"].rsplit(".", 1)[0]   # (a page's pictures are left out by their name before their type is known)
-    if "label" in f and store in ("jinxxy", "payhip"):
-        return fkey   # (a button with no words is left out by its key)
-    return f["path"]
+    from .stores import adapters
+    adapter = adapters().get(store)
+    return adapter.chosen_name(fkey, f) if adapter else f.get("label") or f["path"]
 
 
 def _drop_problem(problem: dict) -> None:

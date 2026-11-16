@@ -36,6 +36,18 @@ class Contract(IsolatedTestCase):
         with self.assertRaises(UnsupportedOperation):
             adapters()["payhip"].list_files({}, None, SimpleNamespace(), downloader.Report())
 
+    def test_store_policies_preserve_file_selection_and_login_behavior(self):
+        self.assertEqual(adapters()["jinxxy"].direct_link({"url": "product", "download_url": "other"}), "product")
+        self.assertEqual(adapters()["booth"].direct_link({"url": "product", "download_url": "download"}), "download")
+        for store in ("jinxxy", "payhip"):
+            self.assertEqual(downloader.chosen_name(store, "file-key", {"label": "", "path": "asset.zip"}), "file-key")
+        self.assertEqual(downloader.chosen_name("gumroad", "page-image:cover", {"path": "Cover.jpg"}), "Cover")
+        self.assertEqual(downloader.chosen_name("booth", "file-key", {"label": "", "path": "asset.zip"}), "asset.zip")
+        with mock.patch.object(library, "payhip_shops", return_value=["https://shop.example"]):
+            self.assertEqual(library.sign_in_urls({}, "payhip"), [library.STORES["payhip"]["login"], "https://shop.example/b-account"])
+        self.assertEqual(adapters()["booth"].library_state({"found_shops": ["private"]}), {})
+        self.assertEqual(adapters()["booth"].saved_data("no scripts"), {})
+
     def test_modes_preserve_selected_files_and_never_download_during_a_check(self):
         args = SimpleNamespace(keys={"booth:rusk"}, files={"booth:rusk": {"chosen": {"a.zip"}}}, dry_run=False)
         seen = []

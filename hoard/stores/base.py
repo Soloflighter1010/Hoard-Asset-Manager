@@ -122,3 +122,28 @@ class Adapter:
         from . import modules
         reader = getattr(modules()[self.key], "read_tags", None)
         return reader(page) if reader else []
+
+    def login_pages(self, cfg: dict) -> list[str]:
+        from . import modules
+        reader = getattr(modules()[self.key], "login_pages", None)
+        return reader(cfg) if reader else [lib.STORES[self.key]["login"]]
+
+    def saved_data(self, html: str) -> dict:
+        from . import modules
+        reader = getattr(modules()[self.key], "saved_data", None)
+        return reader(html) if reader else {}
+
+    def library_state(self, info: dict) -> dict:
+        from . import modules
+        reader = getattr(modules()[self.key], "library_state", None)
+        return reader(info) if reader else {}
+
+    def direct_link(self, item: dict):
+        from . import modules
+        reader = getattr(modules()[self.key], "direct_link", None)
+        return reader(item) if reader else item.get("download_url")
+
+    def chosen_name(self, key: str, record: dict) -> str:
+        from . import modules
+        reader = getattr(modules()[self.key], "chosen_name", None)
+        return reader(key, record) if reader else record.get("label") or record["path"]

@@ -1051,3 +1051,15 @@ STILL_JS = r"""() => {
 }"""
 
 LIBRARY_EXPORTS['STILL_JS'] = STILL_JS
+
+
+def saved_data(html):
+    return lib.jinxxy_data(lib.jinxxy_ssr([t for _, t in lib.script_tags(html) if "ApolloSSRDataTransport" in t]))
+
+
+def direct_link(item):
+    return item.get("url")
+
+
+def chosen_name(key, record):
+    return record.get("label") or (key if "label" in record else record["path"])
