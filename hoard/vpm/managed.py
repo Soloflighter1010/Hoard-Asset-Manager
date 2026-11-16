@@ -11,6 +11,7 @@ HASH = re.compile(r"[0-9a-f]{64}")
 
 
 def digest(path: Path) -> str:
+    """Hash file contents in bounded chunks for managed import baselines."""
     h = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1 << 20), b""):
@@ -19,6 +20,7 @@ def digest(path: Path) -> str:
 
 
 def safe_file(project: Path, relative: str) -> Path | None:
+    """Resolve a path under Assets without following links or escaping the project."""
     if not isinstance(relative, str) or not relative.startswith("Assets/") or "\\" in relative:
         return None
     parts = relative.split("/")
@@ -34,6 +36,7 @@ def safe_file(project: Path, relative: str) -> Path | None:
 
 
 def manifest_path(project: Path) -> Path:
+    """Locate the managed import record while rejecting links outside the project."""
     path = project
     for part in FILE.split("/"):
         path = path / part
@@ -45,6 +48,7 @@ def manifest_path(project: Path) -> Path:
 
 
 def load(project: Path) -> dict:
+    """Read valid managed asset baselines, ignoring malformed or unsafe records."""
     try:
         raw = read_json_file(manifest_path(project), 16 << 20)
     except (DataFileError, OSError, ValueError):
@@ -66,6 +70,7 @@ def load(project: Path) -> dict:
 
 
 def record(project: Path, files: dict, source: str = "") -> None:
+    """Merge imported file baselines with their source product and persist them."""
     if not files:
         return
     records = load(project)
@@ -74,6 +79,7 @@ def record(project: Path, files: dict, source: str = "") -> None:
 
 
 def unchanged(project: Path, entry: dict) -> bool:
+    """Check that both the asset and its metadata still match their recorded hashes."""
     path = safe_file(project, entry.get("path"))
     if path is None:
         return False
@@ -86,6 +92,7 @@ def unchanged(project: Path, entry: dict) -> bool:
 
 
 def _workspace(project: Path) -> Path:
+    """Locate the private update journal workspace without following directory links."""
     path = project
     for part in ("Library", ".hoard-managed-update"):
         path = path / part

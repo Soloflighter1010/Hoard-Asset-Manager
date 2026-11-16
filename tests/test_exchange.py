@@ -3,9 +3,10 @@ import json
 import unittest
 from unittest import mock
 from hoard import exchange
+from tests.isolation import IsolatedTestCase
 
 
-class Exchange(unittest.TestCase):
+class Exchange(IsolatedTestCase):
     def setUp(self):
         self.patch = mock.patch.multiple(exchange, _cache=None, _checked=0, _retry_after=0)
         self.patch.start()

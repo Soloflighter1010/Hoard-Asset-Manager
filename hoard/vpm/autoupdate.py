@@ -10,12 +10,14 @@ INTERVAL = 3600
 
 
 def preference(path):
+    """Read the project update mode, treating invalid or missing preferences as off."""
     entry = listing.load_state()["projects"].get(listing._key(str(path)), {})
     mode = entry.get("auto_update", "off") if isinstance(entry, dict) else "off"
     return mode if mode in MODES else "off"
 
 
 def configure(path, mode):
+    """Validate and save a project update mode while clearing stale queued phases."""
     if mode not in MODES:
         raise ValueError("Choose off, packages, assets or both.")
     listing.note(str(path), auto_update=mode, auto_pending=None, auto_checked=None)

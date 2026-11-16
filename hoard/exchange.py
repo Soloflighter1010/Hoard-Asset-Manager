@@ -15,6 +15,7 @@ _retry_after = 0.0
 
 
 def validate(raw):
+    """Validate dated EUR reference rates and discard unusable currency values."""
     if not isinstance(raw, dict) or raw.get("base") != "EUR" or not isinstance(raw.get("date"), str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw["date"]):
         raise ValueError("Invalid exchange rates.")
     rates = {"EUR": 1.0}

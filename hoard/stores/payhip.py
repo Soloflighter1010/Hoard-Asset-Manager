@@ -343,12 +343,15 @@ LIBRARY_EXPORTS['PayhipSignInLoop'] = PayhipSignInLoop
 
 
 def login_pages(cfg):
+    """Return the account pages of the configured Payhip shops."""
     return [lib.STORES[STORE.key]["login"], *[s + "/b-account" for s in lib.payhip_shops(cfg)]]
 
 
 def library_state(info):
+    """Preserve the validated shops discovered while reading the library."""
     return {"found_shops": [f for f in info["found_shops"][:200] if isinstance(f, str) and lib.clean_payhip_shop(f) == f]} if isinstance(info.get("found_shops"), list) else {}
 
 
 def chosen_name(key, record):
+    """Use the displayed file label, falling back to its Payhip file key."""
     return record.get("label") or (key if "label" in record else record["path"])

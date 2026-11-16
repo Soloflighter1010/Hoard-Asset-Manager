@@ -3652,10 +3652,12 @@ document.addEventListener("change", async e => {
     else project.auto_update = r.data.mode;
   } finally { e.target.disabled = false; }
 });
+// Save the chosen automatic project update mode and redraw project details.
 function pjAutoUpdate(p) {
   return `<div class="card"><label>${esc(tr("Keep this project up to date"))} <select id="pjAutoUpdate">${[["off",tr("Off")],["packages",tr("Packages only")],["assets",tr("Assets only")],["both",tr("Assets and packages")]].map(([value,label]) => `<option value="${value}"${(p.auto_update || "off") === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>` +
     `<p class="hint">${esc(tr("Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results."))}</p></div>`;
 }
+// Show a project with its packages, imported assets and update preferences.
 function pjProject() {
   const p = PJ.project;
   const editors = p.editors || [];
@@ -4419,6 +4421,7 @@ function pjGitHTML(p) {
     `<p>${esc(tr("For an independent recovery copy, use project backups too. Git only records files included in commits."))}</p></details>`;
   return guide + pjGitBody(p);
 }
+// Draw source-control status, actions and beginner guidance for this project.
 function pjGitBody(p) {
   const g = PJG.for === p.path ? PJG.data : null;
   if (!g) { pjGitLoad(p.path); return `<p class="none">${esc(tr("Reading its source control..."))}</p>`; }
@@ -5227,6 +5230,7 @@ const cheaper = i => i.was && i.price && i.was.currency === i.price.currency && 
 // Whether a wishlist's product costs more than it did.
 const dearer = i => i.was && i.price && i.was.currency === i.price.currency && i.price.amount > i.was.amount;
 const WISH_FX = { target: "", data: null, error: "" };
+// Format a wishlist estimate using the selected currency and cached reference rates.
 function convertedPrice(price) {
   const fx = WISH_FX, rates = fx.data && fx.data.rates;
   if (!price || !fx.target || !rates || !rates[fx.target]) return null;
@@ -5294,6 +5298,7 @@ function setTile(s) {
 }
 // Sets and Wishlists: its buttons, your sets' tiles and your wishlists'.
 let SET_SEARCH = "", SET_SORT = "saved";
+// Filter and sort set and wishlist tiles while updating their matching count.
 function filterSetTiles() {
   const query = SET_SEARCH.trim().toLocaleLowerCase();
   let shown = 0;
@@ -5310,6 +5315,7 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   if (e.target.matches("#setSort")) { SET_SORT = e.target.value; drawSets(); }
 });
+// Draw the sets and wishlists overview with search, sorting and import actions.
 function setsRoot() {
   const top = `<div class="row sets-top"><button class="primary sm" data-setx="new">New set</button>` +
     `<button class="ghost sm" data-setx="importjson">${esc(tr("Import JSON..."))}</button>` +

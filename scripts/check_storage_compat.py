@@ -40,6 +40,7 @@ print(json.dumps({"release": __version__, "settings_and_library": "passed", "leg
 
 
 def worker(phase, home):
+    """Seed or verify a disposable fixture in a fresh application process."""
     os.environ.update(HOARD_DATA_DIR=str(home), HOARD_METADATA="sqlite")
     sys.path.insert(0, str(ROOT))
     from hoard import config, library, paths, storage
@@ -70,6 +71,7 @@ def worker(phase, home):
 
 
 def request(origin, method, path, body=None, key=None):
+    """Make one authenticated sidecar API request and require a successful JSON response."""
     url = urlsplit(origin)
     conn = http.client.HTTPConnection(url.hostname, url.port, timeout=10)
     try:
@@ -86,6 +88,7 @@ def request(origin, method, path, body=None, key=None):
 
 
 def shell_check(root, home, *, sqlite=False, recovered=False, command=None):
+    """Exercise startup, authentication and clean shutdown through the real shell protocol."""
     env = {**os.environ, "HOARD_DATA_DIR": str(home), "HOARD_METADATA": "sqlite" if sqlite else "", "PYTHONPATH": str(root)}
     messages = queue.Queue()
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errors:
@@ -94,6 +97,7 @@ def shell_check(root, home, *, sqlite=False, recovered=False, command=None):
                                    text=True, encoding="utf-8", errors="replace",
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         def read():
+            """Forward marked protocol messages from sidecar output to the waiting test."""
             for line in process.stdout:
                 if line.startswith("\x1ehoard:"):
                     messages.put(json.loads(line[len("\x1ehoard:"):]))
@@ -140,6 +144,7 @@ def shell_check(root, home, *, sqlite=False, recovered=False, command=None):
 
 
 def current_shell_checks(root, home, command=None):
+    """Exercise a current sidecar before and after losing or replacing its sealing key."""
     shell_check(root, home, sqlite=True, command=command)
     for missing in (True, False):
         key_path = home / "integrity.key"
@@ -153,6 +158,7 @@ def current_shell_checks(root, home, command=None):
 
 
 def main():
+    """Run requested source and compiled compatibility checks in temporary homes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--legacy-root", type=Path, action="append", default=[])
     parser.add_argument("--shell-root", type=Path)
@@ -173,6 +179,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="hoard-storage-compat-") as folder:
             home = Path(folder) / "data"
             def current(phase):
+                """Run a fixture phase with the current source in a fresh interpreter."""
                 subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker", phase, "--home", str(home)],
                                cwd=ROOT, check=True, capture_output=True, text=True, encoding="utf-8", timeout=60)
             current("seed")

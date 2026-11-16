@@ -116,6 +116,7 @@ class Database:
             os.chmod(self.path, 0o600)
 
     def _recover(self):
+        """Preserve and quarantine recognized metadata that cannot be authenticated."""
         from .storage_recovery import recover
         recover(self)
 
@@ -189,10 +190,12 @@ class Database:
         # imported and lets a restart safely finish the same idempotent operation.
 
     def _metadata_json(self, key, default):
+        """Read an authenticated metadata value with a default for older databases."""
         row = self.connection.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
         return json.loads(row[0]) if row else default
 
     def _mirror_value(self, name, body, trust):
+        """Project legacy references and preserve trust when preparing a JSON mirror."""
         value = self._references(name, json.loads(body), encode=False)
         if trust == "sealed" and isinstance(value, dict):
             value = {k: v for k, v in value.items() if k != "integrity"}
@@ -341,6 +344,7 @@ class Database:
         return digest.digest()
 
     def _document_fingerprint(self, row) -> str:
+        """Authenticate one document including its name, revision and trust status."""
         digest = hmac.new(self.key, b"hoard-document-v2\0", hashlib.sha256)
         for value in row:
             data = str(value).encode("utf-8")
@@ -349,6 +353,7 @@ class Database:
         return digest.hexdigest()
 
     def _identity_fingerprint(self) -> str:
+        """Authenticate ordered product identities and aliases in bounded chunks."""
         digest = hmac.new(self.key, b"hoard-identities-v2\0", hashlib.sha256)
         for sql in ("SELECT uid,store,store_id,name_key,creator FROM products ORDER BY uid",
                     "SELECT alias,uid FROM aliases ORDER BY alias,uid"):
@@ -364,6 +369,7 @@ class Database:
         return digest.hexdigest()
 
     def _fingerprint(self) -> bytes:
+        """Authenticate the schema version and logical seal directory or legacy tables."""
         if self.connection.execute("PRAGMA user_version").fetchone()[0] == 1:
             return self._fingerprint_v1()
         digest = hmac.new(self.key, b"hoard-metadata-v2\0", hashlib.sha256)
@@ -544,6 +550,7 @@ class Database:
     def _reserve_projections(self):
         # Reserve permanent, valid tag keys for every colliding store identity.
         # Legacy shared annotations remain ambiguous instead of choosing a product.
+        """Assign permanent public keys without taking current or historical name aliases."""
         products = self.connection.execute("SELECT uid,store,name_key FROM products").fetchall()
         counts = collections.Counter(name for _, _, name in products)
         public = dict(self.connection.execute("SELECT substr(alias,8),uid FROM aliases WHERE alias LIKE 'public:%'"))
@@ -581,10 +588,12 @@ class Database:
 
     @staticmethod
     def _title(name):
+        """Normalize a full title without removing the numbers that distinguish products."""
         import unicodedata
         return unicodedata.normalize("NFKC", name or "").casefold()
 
     def product_reference(self, store, name, product_id, legacy):
+        """Resolve a known store identity or unambiguous title to its current public key."""
         with self._reading():
             aliases, names = self._maps()
             uid = self._reference_ids.get(f"{store.lower()}:{product_id}") if product_id is not None else None
@@ -598,6 +607,7 @@ class Database:
             aliases, names = self._maps()
             ids, titles = self._reference_ids, self._reference_titles
         def resolve(store, name, product_id=None):
+            """Resolve one item using the captured identity snapshot without further SQL."""
             uid = ids.get(f"{store.lower()}:{product_id}") if product_id is not None else None
             uid = uid or titles.get(store.lower() + ":" + self._title(name))
             legacy = legacy_tag_key(store, name)
@@ -605,6 +615,7 @@ class Database:
         return resolve
 
     def _prepare_projection(self):
+        """Upgrade authenticated identities and refresh affected compatibility mirrors once."""
         if self._metadata_json("identity_projection", None) == 1:
             return
         with self.transaction():
@@ -755,6 +766,7 @@ def transaction():
 
 
 def product_reference(store, name, product_id, legacy):
+    """Resolve a known store identity or unambiguous title to its current public key."""
     return database().product_reference(store, name, product_id, legacy)
 
 

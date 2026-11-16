@@ -372,6 +372,7 @@ def post_api_wishlists_import(self, path, body, query):
 
 
 def get_api_wishlists_rates(self, path, body, query):
+    """Serve public reference rates for optional wishlist price estimates."""
     from .. import exchange
     try:
         return self._json(exchange.latest())

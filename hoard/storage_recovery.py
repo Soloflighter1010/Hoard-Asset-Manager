@@ -40,6 +40,7 @@ def validate_schema(conn):
 
 
 def recover(db):
+    """Back up a recognized database and re-seal its data as quarantined, with automatic work disabled."""
     from .storage import DatabaseIntegrityError, DatabaseSealError, FILES, _json
     conn = db.connection
     conn.execute("BEGIN IMMEDIATE")

@@ -1054,12 +1054,15 @@ LIBRARY_EXPORTS['STILL_JS'] = STILL_JS
 
 
 def saved_data(html):
+    """Extract Jinxxy list metadata from an embedded saved-page payload."""
     return lib.jinxxy_data(lib.jinxxy_ssr([t for _, t in lib.script_tags(html) if "ApolloSSRDataTransport" in t]))
 
 
 def direct_link(item):
+    """Use the inventory page as the direct download target."""
     return item.get("url")
 
 
 def chosen_name(key, record):
+    """Use the displayed file label, falling back to its Jinxxy file key."""
     return record.get("label") or (key if "label" in record else record["path"])

@@ -539,4 +539,5 @@ LIBRARY_EXPORTS['extract_page_json'] = extract_page_json
 
 
 def chosen_name(key, record):
+    """Name extracted page images specially and otherwise use the saved filename."""
     return record.get("label") or (record["path"].rsplit(".", 1)[0] if key.startswith("page-image:") else record["path"])
