@@ -56,6 +56,7 @@ class Database:
         self.lock, self.depth = metadata_lock, 0
         self._dirty_documents = set()
         self._identity_dirty = False
+        self._syncing_mirrors = False
         home.mkdir(parents=True, exist_ok=True)
         if self.path.is_symlink():
             raise DatabaseIntegrityError("Hoard's metadata database must not be a symbolic link.")
@@ -83,6 +84,12 @@ class Database:
             self._external_version = self.connection.execute("PRAGMA data_version").fetchone()[0]
             self.connection.execute("COMMIT")
             self._finish_legacy_files()
+            if self.connection.execute("PRAGMA user_version").fetchone()[0] == 2:
+                self._import_legacy_changes()
+                try:
+                    self._flush_mirrors()
+                except OSError:
+                    _log.exception("SQLite is available, but legacy JSON mirrors could not be refreshed; retrying next open.")
         except BaseException:
             self.connection.close()
             raise
@@ -102,7 +109,7 @@ class Database:
                 path = self.home / name
                 if not path.exists():
                     continue
-                if path.is_symlink() or path.stat().st_size > 256 * 1024 * 1024:
+                if not path.is_file() or path.is_symlink() or path.stat().st_size > 256 * 1024 * 1024:
                     raise DatabaseIntegrityError(f"Cannot migrate {name}: not a regular bounded metadata file.")
                 data = path.read_bytes()
                 # Preserve the current document shape, including unknown fields
@@ -148,15 +155,134 @@ class Database:
         pending = json.loads(row[0]) if row else {}
         for name, digest in pending.items():
             path, aside = self.home / name, self.home / (name + ".pre-sqlite-v1")
-            if path.exists() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == digest:
-                if aside.exists():
-                    if hashlib.sha256(aside.read_bytes()).hexdigest() != digest:
+            if path.is_file() and not path.is_symlink() and hashlib.sha256(path.read_bytes()).hexdigest() == digest:
+                if aside.exists() or aside.is_symlink():
+                    if not aside.is_file() or aside.is_symlink() or hashlib.sha256(aside.read_bytes()).hexdigest() != digest:
                         raise DatabaseIntegrityError(f"A different migration backup already exists: {aside.name}")
-                    path.unlink()
+                    continue   # a current compatibility mirror must remain available
                 else:
                     path.rename(aside)
         # Keep the manifest itself: it documents exactly which originals were
         # imported and lets a restart safely finish the same idempotent operation.
+
+    def _metadata_json(self, key, default):
+        row = self.connection.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
+        return json.loads(row[0]) if row else default
+
+    def _mirror_value(self, name, body, trust):
+        value = self._references(name, json.loads(body), encode=False)
+        if trust == "sealed" and isinstance(value, dict):
+            value = {k: v for k, v in value.items() if k != "integrity"}
+            value["integrity"] = {"alg": "HMAC-SHA256", "key_id": hashlib.sha256(self.key).hexdigest()[:16],
+                                  "mac": hmac.new(self.key, _json(value).encode("utf-8"), hashlib.sha256).hexdigest()}
+        elif trust in {"foreign", "changed"} and isinstance(value, dict):
+            # Never turn quarantined links into an unsigned, apparently trusted
+            # old-release library. A deliberately foreign marker preserves its policy.
+            key_id = hashlib.sha256(self.key).hexdigest()[:16]
+            foreign_id = format(int(key_id[0], 16) ^ 1, "x") + key_id[1:]
+            value = {**value, "integrity": {"alg": "HMAC-SHA256", "key_id": foreign_id, "mac": "0" * 64}}
+        return _json(value).encode("utf-8")
+
+    def _import_legacy_changes(self):
+        """Bring back edits saved by a JSON-only release while SQLite was closed."""
+        self._syncing_mirrors = True
+        try:
+            with self.transaction():
+                hashes = self._metadata_json("mirror_hashes", None)
+                if hashes is None:
+                    return
+                pending = set(self._metadata_json("mirror_pending", []))
+                changes, invalid, imported_hashes = {}, set(), {}
+                for name in sorted(FILES):
+                    if name in pending:
+                        continue
+                    path = self.home / name
+                    if path.is_symlink() or (path.exists() and not path.is_file()):
+                        invalid.add(name)
+                        continue
+                    if not path.exists():
+                        continue   # missing mirrors never mean metadata deletion
+                    if path.stat().st_size > 256 * 1024 * 1024:
+                        invalid.add(name)
+                        continue
+                    data = path.read_bytes()
+                    digest = hashlib.sha256(data).hexdigest()
+                    if digest != hashes.get(name):
+                        try:
+                            changes[name] = json.loads(data)
+                            imported_hashes[name] = digest
+                        except (ValueError, UnicodeDecodeError):
+                            invalid.add(name)
+                            _log.warning("Legacy metadata %s is malformed; preserving it as a conflict copy.", name)
+                self._dirty_documents.update(invalid)
+                for name in sorted(changes, key=lambda n: (n != "library.json", n)):
+                    value = changes[name]
+                    trust = self._legacy_trust(value, self.home / name)
+                    if name == "library.json" and trust in {"changed", "foreign"}:
+                        self.connection.execute("INSERT INTO documents VALUES (?, ?, 1, ?) ON CONFLICT(name) DO UPDATE SET body=excluded.body,revision=documents.revision+1,trust=excluded.trust", (name, _json(value), trust))
+                        self._dirty_documents.add(name)
+                    else:
+                        self.write(name, value)
+                        self.connection.execute("UPDATE documents SET trust=? WHERE name=?", (trust, name))
+                if changes:
+                    # These exact bytes were imported, so replacing them is safe.
+                    # Later filesystem edits still become conflict copies.
+                    hashes.update(imported_hashes)
+                    self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('mirror_hashes', ?)", (_json(hashes),))
+                    _log.info("Imported %d metadata edits saved by a JSON-only release.", len(changes))
+        finally:
+            self._syncing_mirrors = False
+
+    def _flush_mirrors(self):
+        """After commit, refresh only changed JSON mirrors; a sealed pending list makes retries safe."""
+        if self._syncing_mirrors:
+            return
+        from .safety import write_file_safely
+        self._syncing_mirrors = True
+        try:
+            self.connection.execute("BEGIN IMMEDIATE")
+            self._check_external()
+            hashes = self._metadata_json("mirror_hashes", None)
+            initialized = hashes is not None
+            names = set(self._metadata_json("mirror_pending", []))
+            if hashes is None:
+                hashes = {}
+                names.update(r[0] for r in self.connection.execute("SELECT name FROM documents"))
+            names.update(name for name in hashes if name in FILES and
+                         (not (self.home / name).is_file() or (self.home / name).is_symlink()))
+            if not names and initialized:
+                self.connection.execute("ROLLBACK")
+                return
+            for name in sorted(names & FILES):
+                path = self.home / name
+                row = self.connection.execute("SELECT body,trust FROM documents WHERE name=?", (name,)).fetchone()
+                payload = self._mirror_value(name, *row) if row else None
+                if path.exists() or path.is_symlink():
+                    current = (hashlib.sha256(path.read_bytes()).hexdigest()
+                               if path.is_file() and not path.is_symlink() and path.stat().st_size <= 256 * 1024 * 1024
+                               else None)
+                    desired = hashlib.sha256(payload).hexdigest() if payload is not None else None
+                    if current is None or current not in (hashes.get(name), desired):
+                        import time
+                        aside = path.with_name(path.name + ".legacy-conflict-" + str(time.time_ns()))
+                        path.rename(aside)
+                        _log.warning("Preserved conflicting legacy metadata as %s.", aside.name)
+                if payload is None:
+                    path.unlink(missing_ok=True)
+                    hashes.pop(name, None)
+                else:
+                    write_file_safely(path, payload, root=self.home)
+                    hashes[name] = hashlib.sha256(payload).hexdigest()
+            self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('mirror_hashes', ?)", (_json(hashes),))
+            self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('mirror_pending', '[]')")
+            self._seal()
+            self.connection.execute("COMMIT")
+        except BaseException:
+            if self.connection.in_transaction:
+                self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._syncing_mirrors = False
 
     def _fingerprint_v1(self) -> bytes:
         """Seal all logical tables, including names, deletions, aliases and schema version."""
@@ -252,6 +378,9 @@ class Database:
                     self.connection.execute("INSERT OR REPLACE INTO document_seals VALUES (?, ?)", (name, self._document_fingerprint(row)))
             if self._identity_dirty:
                 self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('identity_seal', ?)", (self._identity_fingerprint(),))
+        if self.connection.execute("PRAGMA user_version").fetchone()[0] == 2 and self._dirty_documents:
+            pending = set(self._metadata_json("mirror_pending", [])) | self._dirty_documents
+            self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('mirror_pending', ?)", (_json(sorted(pending & FILES)),))
         self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('seal', ?)", (self._fingerprint().hex(),))
         self._dirty_documents.clear()
         self._identity_dirty = False
@@ -306,6 +435,11 @@ class Database:
                 raise
             finally:
                 self.depth -= 1
+            if depth == 0 and not self._syncing_mirrors:
+                try:
+                    self._flush_mirrors()
+                except OSError:
+                    _log.exception("SQLite committed, but legacy JSON mirrors could not be refreshed; pending writes will retry on next open.")
 
     @contextlib.contextmanager
     def _reading(self):
@@ -468,9 +602,9 @@ class Database:
 def enabled() -> bool:
     """Whether private metadata is kept in SQLite. Off unless HOARD_METADATA=sqlite.
 
-    The database is held back until it has a way back: an older Hoard opening a
-    migrated home finds no settings or library, and a home whose sealing key is
-    lost or was made on another computer doesn't open at all. Until then every
+    Rollout is held back by sealing-key recovery and ambiguous product-name
+    projection. Current JSON mirrors support returning to older releases. Until
+    the remaining blockers are resolved, every
     document stays the JSON file it was, read and written as before.
     """
     return os.environ.get("HOARD_METADATA", "").strip().lower() == "sqlite"

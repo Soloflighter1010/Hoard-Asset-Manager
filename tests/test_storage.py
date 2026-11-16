@@ -39,9 +39,184 @@ class Metadata(IsolatedTestCase):
         db = self.open()
         for name, value in values.items():
             self.assertEqual(db.read(name), value)
-            self.assertFalse((self.home / name).exists())
-            self.assertEqual(json.loads((self.home / (name + ".pre-sqlite-v1")).read_text()), value)
+            self.assertEqual(json.loads((self.home / name).read_text("utf-8")), value)
+            self.assertEqual(json.loads((self.home / (name + ".pre-sqlite-v1")).read_text("utf-8")), value)
         self.assertEqual(db.connection.execute("PRAGMA user_version").fetchone()[0], 2)
+
+    def test_mirrors_publish_only_committed_state_and_deletes_keep_migration_backups(self):
+        path = self.home / "config.json"
+        path.write_text('{"before": true}', encoding="utf-8")
+        db = self.open()
+        before = path.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "rollback"):
+            with db.transaction():
+                db.write("config.json", {"after": True})
+                self.assertEqual(path.read_bytes(), before)
+                raise RuntimeError("rollback")
+        self.assertEqual(path.read_bytes(), before)
+        with db.transaction():
+            db.write("config.json", {"committed": "日本語"})
+            with self.assertRaises(ValueError):
+                with db.transaction():
+                    db.write("routine.json", {"not_committed": True})
+                    raise ValueError()
+        self.assertEqual(json.loads(path.read_text("utf-8")), {"committed": "日本語"})
+        self.assertFalse((self.home / "routine.json").exists())
+        db.delete("config.json")
+        self.assertFalse(path.exists())
+        self.assertEqual(json.loads((self.home / "config.json.pre-sqlite-v1").read_text("utf-8")), {"before": True})
+
+    def test_old_release_edits_and_new_documents_are_imported_on_reopen(self):
+        db = self.open()
+        db.write("config.json", {"before": True})
+        db.write("tags.json", {"notes": {"booth:hoodie": "keep"}})
+        db.close()
+        (self.home / "config.json").write_text('{"legacy_edit": true}', encoding="utf-8")
+        (self.home / "routine.json").write_text('{"legacy_new": true}', encoding="utf-8")
+        reopened = self.open()
+        self.assertEqual(reopened.read("config.json"), {"legacy_edit": True})
+        self.assertEqual(reopened.read("routine.json"), {"legacy_new": True})
+        self.assertEqual(reopened.read("tags.json"), {"notes": {"booth:hoodie": "keep"}})
+
+    def test_empty_database_imports_first_document_from_old_release(self):
+        self.open().close()
+        (self.home / "config.json").write_text('{"legacy_new": true}', encoding="utf-8")
+        self.assertEqual(self.open().read("config.json"), {"legacy_new": True})
+
+    def test_missing_mirror_is_restored_but_malformed_edit_is_preserved(self):
+        db = self.open()
+        db.write("config.json", {"good": True})
+        db.write("routine.json", {"good": "also"})
+        db.close()
+        (self.home / "routine.json").unlink()
+        (self.home / "config.json").write_bytes(b"not valid JSON")
+        with self.assertLogs("hoard.storage", level="WARNING"):
+            reopened = self.open()
+        self.assertEqual(reopened.read("config.json"), {"good": True})
+        self.assertEqual(json.loads((self.home / "routine.json").read_text("utf-8")), {"good": "also"})
+        conflicts = list(self.home.glob("config.json.legacy-conflict-*"))
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0].read_bytes(), b"not valid JSON")
+
+    def test_failed_mirror_write_keeps_committed_database_and_retries_on_open(self):
+        db = self.open()
+        db.write("routine.json", {"before": True})
+        with mock.patch("hoard.safety.write_file_safely", side_effect=OSError("disk unavailable")):
+            with self.assertLogs("hoard.storage", level="ERROR"):
+                db.write("routine.json", {"after": True})
+        self.assertEqual(db.read("routine.json"), {"after": True})
+        self.assertEqual(json.loads((self.home / "routine.json").read_text("utf-8")), {"before": True})
+        self.assertIn("routine.json", db._metadata_json("mirror_pending", []))
+        db.close()
+        reopened = self.open()
+        self.assertEqual(json.loads((self.home / "routine.json").read_text("utf-8")), {"after": True})
+        self.assertEqual(reopened._metadata_json("mirror_pending", []), [])
+
+    def test_old_release_edit_during_pending_mirror_is_retained_as_conflict(self):
+        db = self.open()
+        db.write("routine.json", {"before": True})
+        with mock.patch("hoard.safety.write_file_safely", side_effect=OSError("disk unavailable")):
+            with self.assertLogs("hoard.storage", level="ERROR"):
+                db.write("routine.json", {"committed": True})
+        db.close()
+        (self.home / "routine.json").write_text('{"legacy_edit": true}', encoding="utf-8")
+        with self.assertLogs("hoard.storage", level="WARNING"):
+            reopened = self.open()
+        self.assertEqual(reopened.read("routine.json"), {"committed": True})
+        conflicts = list(self.home.glob("routine.json.legacy-conflict-*"))
+        self.assertEqual(json.loads(conflicts[0].read_text("utf-8")), {"legacy_edit": True})
+
+    def test_mirrors_keep_untrusted_library_quarantined_for_old_readers(self):
+        from hoard import safety
+        db = self.open()
+        db.close()
+        foreign = {"items": [{"store": "booth", "id": "1", "name": "Hoodie", "url": "https://example.com"}],
+                   "integrity": {"key_id": "another-install", "mac": "bad"}}
+        path = self.home / "library.json"
+        path.write_text(json.dumps(foreign), encoding="utf-8")
+        reopened = self.open()
+        self.assertEqual(reopened.trust("library.json"), "foreign")
+        mirror = json.loads(path.read_text("utf-8"))
+        with mock.patch.object(safety, "integrity_key", return_value=KEY):
+            self.assertEqual(safety.check_seal(mirror, path), "foreign")
+            from hoard.library import Library
+            self.assertIsNone(Library(path).data["items"][0]["url"])
+        self.assertEqual(reopened.connection.execute("SELECT count(*) FROM products").fetchone()[0], 0)
+
+    def test_settings_and_library_round_trip_through_json_mode(self):
+        from hoard import config, library, paths, storage
+        path = paths.data_dir() / "library.json"
+        cfg = config.load_config()
+        config.save_config({**cfg, "setup_done": True, "new_days": 11})
+        current = library.Library(path)
+        current.data = {"items": [library.item("booth", "1", name="Hoodie", url="https://booth.pm/en/items/1")],
+                        "stores": {"booth": {"count": 1}}}
+        current.save()
+        storage.close_all()
+        with mock.patch.dict(os.environ, {"HOARD_METADATA": ""}):
+            old_cfg = config.load_config()
+            self.assertTrue(old_cfg["setup_done"])
+            self.assertEqual(old_cfg["new_days"], 11)
+            old_library = library.Library(path)
+            self.assertEqual(old_library.data["items"][0]["url"], "https://booth.pm/en/items/1")
+            config.save_config({**old_cfg, "new_days": 23})
+            old_library.data["items"][0]["name"] = "Renamed Hoodie"
+            old_library.save()
+        self.assertEqual(config.load_config()["new_days"], 23)
+        updated = library.Library(path)
+        self.assertEqual(updated.data["items"][0]["name"], "Renamed Hoodie")
+        self.assertEqual(updated.data["items"][0]["url"], "https://booth.pm/en/items/1")
+
+    def test_directory_in_place_of_mirror_is_preserved_without_losing_database(self):
+        db = self.open()
+        db.write("routine.json", {"good": True})
+        db.close()
+        path = self.home / "routine.json"
+        path.unlink()
+        path.mkdir()
+        (path / "keep.txt").write_text("keep", encoding="utf-8")
+        with self.assertLogs("hoard.storage", level="WARNING"):
+            reopened = self.open()
+        self.assertEqual(reopened.read("routine.json"), {"good": True})
+        aside = next(self.home.glob("routine.json.legacy-conflict-*"))
+        self.assertEqual((aside / "keep.txt").read_text("utf-8"), "keep")
+        self.assertEqual(json.loads(path.read_text("utf-8")), {"good": True})
+
+    def test_partial_mirror_batch_retries_without_importing_partial_snapshots(self):
+        from hoard import safety
+        db = self.open()
+        db.write("config.json", {"before": True})
+        db.write("routine.json", {"before": True})
+        original = safety.write_file_safely
+        def fail_second(path, *args, **kwargs):
+            if path.name == "routine.json":
+                raise OSError("second mirror unavailable")
+            return original(path, *args, **kwargs)
+        with mock.patch.object(safety, "write_file_safely", side_effect=fail_second):
+            with self.assertLogs("hoard.storage", level="ERROR"):
+                with db.transaction():
+                    db.write("config.json", {"after": True})
+                    db.write("routine.json", {"after": True})
+        self.assertEqual(json.loads((self.home / "config.json").read_text("utf-8")), {"after": True})
+        self.assertEqual(json.loads((self.home / "routine.json").read_text("utf-8")), {"before": True})
+        db.close()
+        reopened = self.open()
+        for name in ("config.json", "routine.json"):
+            self.assertEqual(reopened.read(name), {"after": True})
+            self.assertEqual(json.loads((self.home / name).read_text("utf-8")), {"after": True})
+        self.assertEqual(list(self.home.glob("*.legacy-conflict-*")), [])
+
+    def test_sealed_mirror_is_valid_after_name_projection(self):
+        from hoard import safety
+        db = self.open()
+        product = {"store": "booth", "id": "1", "name": "Old Hoodie"}
+        db.write("library.json", {"items": [product]})
+        with mock.patch.object(safety, "integrity_key", return_value=KEY):
+            db.write("tags.json", safety.seal({"notes": {"booth:oldhoodie": "keep"}}))
+            db.write("library.json", {"items": [{**product, "name": "New Hoodie"}]})
+            mirror = json.loads((self.home / "tags.json").read_text("utf-8"))
+            self.assertEqual(safety.check_seal(mirror), "sealed")
+        self.assertEqual(mirror["notes"], {"booth:newhoodie": "keep"})
 
     def test_a_rename_keeps_tags_notes_marks_and_set_membership(self):
         db = self.open()
@@ -208,7 +383,7 @@ class Metadata(IsolatedTestCase):
 
 
 class OffByDefault(IsolatedTestCase):
-    """Until the database has a way back to an older Hoard, and a way to recover a home whose sealing key is lost,
+    """Until the database can recover a lost sealing key and project ambiguous product identities safely,
     private metadata stays the JSON files it was: nothing is moved, and no database is made."""
 
     def test_documents_stay_json_files(self):

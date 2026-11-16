@@ -4,13 +4,13 @@
 > used only when Hoard is started with `HOARD_METADATA=sqlite` (`storage.enabled()`), for development and testing.
 > It stays off until these are solved:
 >
-> - **No way back.** After migrating, an older Hoard (and the Tauri build, which shares the folder) finds no
->   settings or library and runs setup again; what it then saves is ignored by the newer one.
+> - **Older-release compatibility addressed.** Committed documents have current JSON mirrors; edits saved
+>   by a JSON-only release are imported at the next SQLite open. Run releases separately. See below.
 > - **No recovery.** A home whose `integrity.key` is lost, or that was copied to another computer, raises
 >   `DatabaseIntegrityError` before any window opens. JSON files with a foreign seal are still read.
 > - **Write cost addressed in schema v2.** Changed documents get individual seals and the root covers their
 >   authenticated directory. Identity rows are re-sealed when identities change. Small writes no longer re-hash
->   the library. Recovery, rollback compatibility and ambiguous identity projection still hold back the rollout.
+>   the library. Recovery and ambiguous identity projection still hold back the rollout.
 > - **One key, two products.** Products whose names make the same key ("Hair Pack 1", "Hair Pack 2") can come to
 >   share one entry when read back.
 >
@@ -33,8 +33,8 @@ The version 1 migration imports these logical documents:
 | Desktop and projects | window-place, vpm-projects, vpm-presets |
 | Integrity bookkeeping | sealed-files |
 
-These names previously ended in `.json`. They remain document identifiers; current SQLite writes still do not maintain
-legacy JSON mirrors. Explicit custom paths outside app-data
+These names end in `.json`. They remain document identifiers and current JSON mirrors are maintained for
+older releases during the compatibility window. Explicit custom paths outside app-data
 continue to use the legacy file reader/writer. Credentials, images, logs and the
 running-instance handshake are not database documents. Unity's project reports,
 download manifests and the exported `catalog.json`, `tags.json` and `asset.json`
@@ -49,6 +49,32 @@ moving any original. Only after commit are originals renamed to
 `<name>.json.pre-sqlite-v1`. A sealed import manifest makes those renames
 restartable without overwriting a different backup. Keep these files for the
 first release using SQLite; Hoard does not automatically delete them.
+
+After each outer transaction commits, Hoard writes current JSON copies of changed
+known documents using atomic file replacement. Nested or failed transactions never
+publish uncommitted state. A pending list is authenticated in the database commit;
+a second transaction records completed mirror hashes. If a mirror write fails,
+the database remains committed and usable, with the pending work retried on the
+next write or open. Mirrors are individually atomic, not one atomic snapshot across
+all files; after a crash, reopen SQLite once to finish pending mirrors before using
+an older release.
+
+An older JSON-only release can read these current files without finding an empty
+library or repeating setup. Close one release before starting the other. On the
+next SQLite open, edits and newly created known JSON documents are imported in one
+transaction, with the library processed first and original trust restrictions
+retained. Missing files are regenerated rather than treated as metadata deletions.
+Malformed files and conflicting edits during pending mirror work are kept as
+`<name>.json.legacy-conflict-<timestamp>` before current mirrors are restored.
+Symlinks and directories in place of mirrors are also preserved, not followed.
+A foreign/changed library mirror carries a foreign integrity marker so older
+readers continue hiding its links and pictures. Trusted mirrors are sealed again
+after product references are projected back to names.
+
+These copies support returning to a JSON-only release while keeping current
+settings and library. They are not a concurrent synchronization protocol between
+a running old release and a running SQLite release. Migration recovery copies
+remain unchanged; current mirrors and those original copies serve different purposes.
 
 To restore the pre-migration state, close Hoard, preserve the current database
 and its `integrity.key` together, move the database aside, and copy the recovery
@@ -115,17 +141,24 @@ not cross-machine timing assertions.
 
 | Library products | Repetitions | Small JSON write | Small SQLite write | Cold JSON open | Cold SQLite open |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1,000 | 5 | 0.60 ms | 2.52 ms | 0.013 s | 0.014 s |
-| 20,000 | 3 | 0.64 ms | 2.46 ms | 0.292 s | 0.291 s |
-| 50,000 | 5 | 0.59 ms | 2.34 ms | 0.742 s | 0.820 s |
+| 1,000 | 5 | 0.64 ms | 6.12 ms | 0.013 s | 0.019 s |
+| 20,000 | 5 | 0.62 ms | 6.53 ms | 0.317 s | 0.321 s |
+| 50,000 | 5 | 0.65 ms | 6.41 ms | 0.811 s | 0.932 s |
 
-Small SQLite writes retain a roughly 2 ms durability overhead over JSON here,
-but do not grow with library size. The documented earlier whole-database seal
+These measurements include current JSON mirrors and their durable retry bookkeeping.
+Small SQLite writes retain roughly 6 ms of overhead over JSON here, but do not
+grow with library size. Before mirrors, schema v2 measured 2.3–2.5 ms for these
+small writes; compatibility currently adds a second durable database transaction. The documented earlier whole-database seal
 cost was about 80 ms at 20,000 products; that historical figure was not rerun on
-this machine. The 50,000-product migration took 1.86 s and the database occupied
+this machine. The 50,000-product migration took 2.36 s and the database occupied
 26.0 MB, compared with 16.6 MB for JSON.
 
 Reproduce with `python scripts/benchmark_storage.py --products 50000 --repeats 5`.
 Storage tests additionally assert that a small write hashes only its changed
 document, while externally changed document bodies, missing seals, product rows
 and aliases still fail verification. SQLite remains opt-in.
+
+Compatibility tests exercise settings/library round trips through JSON mode, old-release edits and new documents,
+rollback isolation, failed and partially completed mirror batches, missing files, malformed conflicts and
+directories, and retaining the old readers' trust restrictions. They do not replace testing packaged historical
+releases or the Tauri build against a migrated fixture before beta rollout.
