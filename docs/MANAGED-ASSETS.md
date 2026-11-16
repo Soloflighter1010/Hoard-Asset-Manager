@@ -15,8 +15,14 @@ and packages outside Assets are not tracked for managed replacement. Invalid
 records and paths through symbolic links are excluded; both asset and metadata
 must match the recorded hashes before an asset qualifies as unchanged.
 
-The next steps are transactional replacement with interruption recovery, download
-coordination, per-project opt-in choices and scheduling that defers while Unity
-is open. Until those are implemented and tested, no automated replacement uses
+A replacement engine now reads downloaded Unity packages and checks that Unity is
+closed both before staging and before replacement. It replaces only files with
+matching source, path and unchanged hashes; it leaves untracked, moved and locally
+edited files alone. A journal and original file copies support rollback on failure
+and recovery after interruption. Recovery refuses to overwrite edits made after
+the interruption. Incoming metadata must keep the asset GUID.
+
+The next steps are download coordination, per-project opt-in choices and scheduling
+that defers while Unity is open. Until those are implemented and tested, no automated replacement uses
 this record. Old imports without a baseline require a deliberate migration flow;
 they cannot be assumed unchanged.

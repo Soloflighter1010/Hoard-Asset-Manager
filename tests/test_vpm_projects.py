@@ -103,6 +103,79 @@ class Placing(Temp):
         self.assertIsNone(managed.safe_file(p, "Assets/../outside.txt"))
         self.assertIsNone(managed.safe_file(p, "Packages/asset.txt"))
 
+    def test_managed_update_preserves_local_edits_and_rolls_back_on_failure(self):
+        from hoard.vpm import managed
+        p = self.project()
+        initial = unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(p, initial.baselines, "booth:product")
+        staging = self.tmp / "incoming"
+        staging.mkdir()
+        raw = make_unitypackage({G2: (SAMPLE[G2][0], b"new prefab"), G3: (SAMPLE[G3][0], b"new texture")})
+        entries = unitypackage._entries(io.BytesIO(raw), staging)
+        texture = p / SAMPLE[G3][0]
+        texture.write_bytes(b"my edited texture")
+        real_replace = os.replace
+        failed = False
+        def fail_metadata(src, dest):
+            nonlocal failed
+            if str(src).endswith(".newmeta") and not failed:
+                failed = True
+                raise OSError("simulated interrupted replacement")
+            return real_replace(src, dest)
+        with mock.patch.object(os, "replace", fail_metadata), self.assertRaises(OSError):
+            managed.replace_unchanged(p, entries, "booth:product")
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), SAMPLE[G2][1])
+        self.assertEqual(texture.read_bytes(), b"my edited texture")
+        result = managed.replace_unchanged(p, entries, "booth:product")
+        self.assertEqual(result, {"updated": 1, "skipped": 1})
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), b"new prefab")
+        self.assertEqual(texture.read_bytes(), b"my edited texture")
+        self.assertTrue(managed.unchanged(p, managed.load(p)[G2]))
+        self.assertEqual(managed.replace_unchanged(p, entries, "booth:other"), {"updated": 0, "skipped": 2})
+
+    def test_managed_recovery_refuses_edits_made_after_interruption(self):
+        from hoard.vpm import managed
+        p = self.project()
+        initial = unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(p, initial.baselines, "booth:product")
+        staging = self.tmp / "incoming"
+        staging.mkdir()
+        entries = unitypackage._entries(io.BytesIO(make_unitypackage({G2: (SAMPLE[G2][0], b"new prefab")})), staging)
+        real_replace = os.replace
+        def fail_metadata(src, dest):
+            if str(src).endswith(".newmeta"):
+                raise OSError("simulated interruption")
+            return real_replace(src, dest)
+        with mock.patch.object(os, "replace", fail_metadata), mock.patch.object(managed, "recover", side_effect=[False, RuntimeError("recovery interrupted")]), self.assertRaises(RuntimeError):
+            managed.replace_unchanged(p, entries, "booth:product")
+        target = p / SAMPLE[G2][0]
+        target.write_bytes(b"edited after crash")
+        with self.assertRaisesRegex(ValueError, "left it untouched"):
+            managed.recover(p)
+        self.assertEqual(target.read_bytes(), b"edited after crash")
+        target.write_bytes(b"new prefab")
+        self.assertTrue(managed.recover(p))
+        self.assertEqual(target.read_bytes(), SAMPLE[G2][1])
+        self.assertTrue(managed.unchanged(p, managed.load(p)[G2]))
+
+    def test_managed_package_update_waits_for_unity_and_rejects_wrong_guid(self):
+        from hoard.vpm import managed
+        p = self.project()
+        initial = unitypackage.place(p, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(p, initial.baselines, "booth:product")
+        package = self.tmp / "new.unitypackage"
+        package.write_bytes(make_unitypackage({G2: (SAMPLE[G2][0], b"updated")}))
+        with mock.patch.object(UnityProject, "unity_running", return_value=True), self.assertRaisesRegex(ValueError, "Close Unity"):
+            managed.update_file(p, package, "booth:product")
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), SAMPLE[G2][1])
+        with mock.patch.object(UnityProject, "unity_running", return_value=False):
+            self.assertEqual(managed.update_file(p, package, "booth:product"), {"updated": 1, "skipped": 0})
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), b"updated")
+        wrong = {G2: {"path": SAMPLE[G2][0], "file": package, "meta": b"guid: " + G1.encode() + b"\n"}}
+        with self.assertRaisesRegex(ValueError, "different GUID"):
+            managed.replace_unchanged(p, wrong, "booth:product")
+        self.assertEqual((p / SAMPLE[G2][0]).read_bytes(), b"updated")
+
     def test_existing_file_without_meta_is_never_overwritten_or_adopted(self):
         p = self.project()
         target = p / "Assets/Existing.txt"
