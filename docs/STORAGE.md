@@ -8,8 +8,9 @@
 >   settings or library and runs setup again; what it then saves is ignored by the newer one.
 > - **No recovery.** A home whose `integrity.key` is lost, or that was copied to another computer, raises
 >   `DatabaseIntegrityError` before any window opens. JSON files with a foreign seal are still read.
-> - **Cost of a write.** Every commit re-seals the whole database: about 80 ms for a small document beside a
->   20,000-product library, and growing with it.
+> - **Write cost addressed in schema v2.** Changed documents get individual seals and the root covers their
+>   authenticated directory. Identity rows are re-sealed when identities change. Small writes no longer re-hash
+>   the library. Recovery, rollback compatibility and ambiguous identity projection still hold back the rollout.
 > - **One key, two products.** Products whose names make the same key ("Hair Pack 1", "Hair Pack 2") can come to
 >   share one entry when read back.
 >
@@ -32,8 +33,8 @@ The version 1 migration imports these logical documents:
 | Desktop and projects | window-place, vpm-projects, vpm-presets |
 | Integrity bookkeeping | sealed-files |
 
-These names previously ended in `.json`. They remain document identifiers, not
-files written alongside the database. Explicit custom paths outside app-data
+These names previously ended in `.json`. They remain document identifiers; current SQLite writes still do not maintain
+legacy JSON mirrors. Explicit custom paths outside app-data
 continue to use the legacy file reader/writer. Credentials, images, logs and the
 running-instance handshake are not database documents. Unity's project reports,
 download manifests and the exported `catalog.json`, `tags.json` and `asset.json`
@@ -54,10 +55,16 @@ and its `integrity.key` together, move the database aside, and copy the recovery
 files back to their original names. The recovery files are the state at migration,
 not backups of later edits. Use Settings' Backup for current, portable backups.
 
-The database and its journal are private to the account. A logical HMAC-SHA256
-seal covers all documents, identity records, aliases, revisions, trust flags and
-the schema version. It is checked when opened, and again if another connection
-commits. Missing/changed rows or a removed seal stop access rather than becoming
+The database and its journal are private to the account. Schema v2 gives each
+document an HMAC-SHA256 seal over its name, body, revision and trust flag. A root
+seal authenticates the document-seal directory, metadata, schema version and an
+identity-table seal. Identity rows and aliases are re-sealed only when they
+change. Opening the database or observing another connection's commit verifies
+all document contents and identity rows against these seals; small writes only
+re-seal changed documents and the small root directory.
+
+An existing v1 database is fully authenticated before its seal format upgrades
+inside one transaction. Failed authentication does not upgrade or bless it. Missing/changed rows or a removed seal stop access rather than becoming
 empty defaults. A migrated document retains its original trust status: moving a
 foreign or altered library into SQLite does not authorize its links.
 
@@ -98,3 +105,27 @@ cold database open plus sanitization, and reports migration time separately.
 The initial Linux measurement was approximately 0.95 seconds for either reader,
 2.01 seconds for the one-time migration, 16.6 MB for JSON and 26.0 MB for SQLite.
 These are local measurements, not a timing assertion for shared CI machines.
+
+## Schema v2 write measurements
+
+A local Windows synthetic run (15 November 2026) produced these medians. The
+comparison uses a small sealed JSON write and a small SQLite document transaction;
+it does not weaken SQLite's `synchronous=FULL` durability. These are observations,
+not cross-machine timing assertions.
+
+| Library products | Repetitions | Small JSON write | Small SQLite write | Cold JSON open | Cold SQLite open |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 5 | 0.60 ms | 2.52 ms | 0.013 s | 0.014 s |
+| 20,000 | 3 | 0.64 ms | 2.46 ms | 0.292 s | 0.291 s |
+| 50,000 | 5 | 0.59 ms | 2.34 ms | 0.742 s | 0.820 s |
+
+Small SQLite writes retain a roughly 2 ms durability overhead over JSON here,
+but do not grow with library size. The documented earlier whole-database seal
+cost was about 80 ms at 20,000 products; that historical figure was not rerun on
+this machine. The 50,000-product migration took 1.86 s and the database occupied
+26.0 MB, compared with 16.6 MB for JSON.
+
+Reproduce with `python scripts/benchmark_storage.py --products 50000 --repeats 5`.
+Storage tests additionally assert that a small write hashes only its changed
+document, while externally changed document bodies, missing seals, product rows
+and aliases still fail verification. SQLite remains opt-in.

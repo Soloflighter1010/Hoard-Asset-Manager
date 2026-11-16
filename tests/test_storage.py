@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import os
 import sqlite3
 import tempfile
@@ -40,7 +41,7 @@ class Metadata(IsolatedTestCase):
             self.assertEqual(db.read(name), value)
             self.assertFalse((self.home / name).exists())
             self.assertEqual(json.loads((self.home / (name + ".pre-sqlite-v1")).read_text()), value)
-        self.assertEqual(db.connection.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(db.connection.execute("PRAGMA user_version").fetchone()[0], 2)
 
     def test_a_rename_keeps_tags_notes_marks_and_set_membership(self):
         db = self.open()
@@ -128,7 +129,7 @@ class Metadata(IsolatedTestCase):
     def test_external_changes_are_detected_without_restarting(self):
         db = self.open()
         db.write("tags.json", {"kept": True})
-        with sqlite3.connect(db.path) as other:
+        with closing(sqlite3.connect(db.path)) as other, other:
             other.execute("DELETE FROM documents WHERE name='tags.json'")
         with self.assertRaises(DatabaseIntegrityError):
             db.read("tags.json")
@@ -140,10 +141,62 @@ class Metadata(IsolatedTestCase):
         db.write("tags.json", {})
         with self.assertRaises(DatabaseIntegrityError):
             Database(self.home, b"a different key")
-        with sqlite3.connect(db.path) as other:
+        with closing(sqlite3.connect(db.path)) as other, other:
             other.execute("DELETE FROM metadata WHERE key='seal'")
         with self.assertRaises(DatabaseIntegrityError):
             Database(self.home, KEY)
+
+    def test_small_write_reseals_only_its_document_not_library_or_identities(self):
+        db = self.open()
+        db.write("library.json", {"items": [{"store": "booth", "id": str(n), "name": f"Product {n}"} for n in range(100)]})
+        fingerprint = db._document_fingerprint
+        with mock.patch.object(db, "_document_fingerprint", wraps=fingerprint) as document, mock.patch.object(db, "_identity_fingerprint", wraps=db._identity_fingerprint) as identities:
+            db.write("routine.json", {"last": 123})
+            self.assertEqual([c.args[0][0] for c in document.call_args_list], ["routine.json"])
+            identities.assert_not_called()
+        self.assertEqual(db.read("routine.json"), {"last": 123})
+
+    def test_authenticated_v1_upgrades_atomically_and_keeps_documents(self):
+        class Legacy(Database):
+            def _migrate_v2(self):
+                pass
+        legacy = Legacy(self.home, KEY)
+        legacy.write("tags.json", {"notes": {"booth:hoodie": "original"}})
+        self.assertEqual(legacy.connection.execute("PRAGMA user_version").fetchone()[0], 1)
+        legacy.close()
+        db = self.open()
+        self.assertEqual(db.connection.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(db.read("tags.json"), {"notes": {"booth:hoodie": "original"}})
+        self.assertEqual(db.connection.execute("SELECT count(*) FROM document_seals").fetchone()[0], 1)
+
+    def test_tampered_v1_is_not_upgraded_or_resealed(self):
+        class Legacy(Database):
+            def _migrate_v2(self):
+                pass
+        legacy = Legacy(self.home, KEY)
+        legacy.write("tags.json", {"original": True})
+        legacy.close()
+        with closing(sqlite3.connect(self.home / "metadata.sqlite3")) as other, other:
+            other.execute("UPDATE documents SET body='{}'")
+        with self.assertRaises(DatabaseIntegrityError):
+            Database(self.home, KEY)
+        with closing(sqlite3.connect(self.home / "metadata.sqlite3")) as other:
+            self.assertEqual(other.execute("PRAGMA user_version").fetchone()[0], 1)
+            self.assertIsNone(other.execute("SELECT name FROM sqlite_master WHERE name='document_seals'").fetchone())
+
+    def test_v2_verifies_document_bodies_and_identity_rows_even_when_root_is_unchanged(self):
+        for index, statement in enumerate(("UPDATE documents SET body='{}' WHERE name='library.json'",
+                                            "DELETE FROM document_seals WHERE name='library.json'",
+                                            "UPDATE products SET creator='tampered'",
+                                            "DELETE FROM aliases")):
+            with self.subTest(statement=statement):
+                db = Database(self.home / str(index), KEY)
+                self.addCleanup(db.close)
+                db.write("library.json", {"items": [{"store": "booth", "id": "1", "name": "Hoodie"}]})
+                with closing(sqlite3.connect(db.path)) as other, other:
+                    other.execute(statement)
+                with self.assertRaises(DatabaseIntegrityError):
+                    db.read("library.json")
 
     def test_failed_migration_leaves_every_original_in_place(self):
         (self.home / "tags.json").write_text('{"tags":{}}')

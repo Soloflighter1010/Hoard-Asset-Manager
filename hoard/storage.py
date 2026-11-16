@@ -21,7 +21,7 @@ from pathlib import Path
 
 from .paths import data_dir
 
-VERSION = 1
+VERSION = 2
 FILES = frozenset({
     "config.json", "library.json", "tags.json", "marks.json", "sets.json",
     "package-needs.json", "konoasset.json", "asset-updates.json", "routine.json",
@@ -54,6 +54,8 @@ class Database:
     def __init__(self, home: Path, key: bytes):
         self.home, self.path, self.key = home, home / "metadata.sqlite3", key
         self.lock, self.depth = metadata_lock, 0
+        self._dirty_documents = set()
+        self._identity_dirty = False
         home.mkdir(parents=True, exist_ok=True)
         if self.path.is_symlink():
             raise DatabaseIntegrityError("Hoard's metadata database must not be a symbolic link.")
@@ -73,6 +75,9 @@ class Database:
                 raise DatabaseIntegrityError("This metadata database needs a newer Hoard.")
             if version == 0:
                 self._migrate_v1()
+                version = 1
+            if version == 1:
+                self._migrate_v2()
             self.connection.execute("BEGIN")
             self._verify()
             self._external_version = self.connection.execute("PRAGMA data_version").fetchone()[0]
@@ -112,7 +117,7 @@ class Database:
                 for name, body in list(self.connection.execute("SELECT name,body FROM documents")):
                     self.connection.execute("UPDATE documents SET body=? WHERE name=?", (_json(self._references(name, json.loads(body), encode=True)), name))
             self.connection.execute("INSERT INTO metadata VALUES ('legacy_pending', ?)", (_json(pending),))
-            self.connection.execute(f"PRAGMA user_version={VERSION}")
+            self.connection.execute("PRAGMA user_version=1")
             self._seal()
             self.connection.execute("COMMIT")
         except BaseException:
@@ -153,7 +158,7 @@ class Database:
         # Keep the manifest itself: it documents exactly which originals were
         # imported and lets a restart safely finish the same idempotent operation.
 
-    def _fingerprint(self) -> bytes:
+    def _fingerprint_v1(self) -> bytes:
         """Seal all logical tables, including names, deletions, aliases and schema version."""
         digest = hmac.new(self.key, b"hoard-metadata-v1\0", hashlib.sha256)
         digest.update(str(self.connection.execute("PRAGMA user_version").fetchone()[0]).encode("ascii"))
@@ -186,14 +191,86 @@ class Database:
                 digest.update(data)
         return digest.digest()
 
+    def _document_fingerprint(self, row) -> str:
+        digest = hmac.new(self.key, b"hoard-document-v2\0", hashlib.sha256)
+        for value in row:
+            data = str(value).encode("utf-8")
+            digest.update(len(data).to_bytes(8, "big"))
+            digest.update(data)
+        return digest.hexdigest()
+
+    def _identity_fingerprint(self) -> str:
+        digest = hmac.new(self.key, b"hoard-identities-v2\0", hashlib.sha256)
+        for sql in ("SELECT uid,store,store_id,name_key,creator FROM products ORDER BY uid",
+                    "SELECT alias,uid FROM aliases ORDER BY alias,uid"):
+            digest.update(sql.encode("ascii"))
+            cursor = self.connection.execute(sql)
+            while True:
+                rows = cursor.fetchmany(1000)
+                if not rows:
+                    break
+                data = _json(rows).encode("utf-8")
+                digest.update(len(data).to_bytes(8, "big"))
+                digest.update(data)
+        return digest.hexdigest()
+
+    def _fingerprint(self) -> bytes:
+        if self.connection.execute("PRAGMA user_version").fetchone()[0] == 1:
+            return self._fingerprint_v1()
+        digest = hmac.new(self.key, b"hoard-metadata-v2\0", hashlib.sha256)
+        digest.update(str(self.connection.execute("PRAGMA user_version").fetchone()[0]).encode("ascii"))
+        for sql in ("SELECT key,value FROM metadata WHERE key != 'seal' ORDER BY key",
+                    "SELECT name,mac FROM document_seals ORDER BY name"):
+            data = _json(self.connection.execute(sql).fetchall()).encode("utf-8")
+            digest.update(len(data).to_bytes(8, "big"))
+            digest.update(data)
+        return digest.digest()
+
+    def _migrate_v2(self):
+        """Only upgrade an authenticated v1 database; all seals change atomically."""
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._verify()
+            self.connection.execute("CREATE TABLE document_seals (name TEXT PRIMARY KEY, mac TEXT NOT NULL)")
+            self.connection.execute("PRAGMA user_version=2")
+            self._dirty_documents = {r[0] for r in self.connection.execute("SELECT name FROM documents")}
+            self._identity_dirty = True
+            self._seal()
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def _seal(self):
-        """Write the logical-content seal inside the same transaction as the change."""
+        """Re-seal changed documents and a small directory of authenticated seals."""
+        if self.connection.execute("PRAGMA user_version").fetchone()[0] == 2:
+            for name in self._dirty_documents:
+                row = self.connection.execute("SELECT name,body,revision,trust FROM documents WHERE name=?", (name,)).fetchone()
+                if row is None:
+                    self.connection.execute("DELETE FROM document_seals WHERE name=?", (name,))
+                else:
+                    self.connection.execute("INSERT OR REPLACE INTO document_seals VALUES (?, ?)", (name, self._document_fingerprint(row)))
+            if self._identity_dirty:
+                self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('identity_seal', ?)", (self._identity_fingerprint(),))
         self.connection.execute("INSERT OR REPLACE INTO metadata VALUES ('seal', ?)", (self._fingerprint().hex(),))
+        self._dirty_documents.clear()
+        self._identity_dirty = False
 
     def _verify(self):
-        """Fail closed on external changes, including a removed row or removed seal."""
+        """Authenticate full contents at open and after another connection commits."""
         row = self.connection.execute("SELECT value FROM metadata WHERE key='seal'").fetchone()
-        if not row or not hmac.compare_digest(str(row[0]), self._fingerprint().hex()):
+        valid = row and hmac.compare_digest(str(row[0]), self._fingerprint().hex())
+        if valid and self.connection.execute("PRAGMA user_version").fetchone()[0] == 2:
+            expected = dict(self.connection.execute("SELECT name,mac FROM document_seals"))
+            count = 0
+            for document in self.connection.execute("SELECT name,body,revision,trust FROM documents"):
+                count += 1
+                if not hmac.compare_digest(expected.get(document[0], ""), self._document_fingerprint(document)):
+                    valid = False
+                    break
+            identity = self.connection.execute("SELECT value FROM metadata WHERE key='identity_seal'").fetchone()
+            valid = valid and count == len(expected) and identity and hmac.compare_digest(identity[0], self._identity_fingerprint())
+        if not valid:
             raise DatabaseIntegrityError("Hoard's metadata changed outside Hoard. Keep metadata.sqlite3 and restore a known backup; the legacy .pre-sqlite-v1 files have not been overwritten.")
 
     def _check_external(self):
@@ -264,9 +341,11 @@ class Database:
                 # have name references. Bind them once an unambiguous id exists.
                 for other, body in list(self.connection.execute("SELECT name,body FROM documents WHERE name IN ('tags.json','marks.json','sets.json','asset-updates.json','config.json')")):
                     self.connection.execute("UPDATE documents SET body=?, revision=revision+1 WHERE name=?", (_json(self._references(other, json.loads(body), encode=True)), other))
+                    self._dirty_documents.add(other)
             body = _json(self._references(name, value, encode=True))
             trust = "sealed" if isinstance(value, dict) and "integrity" in value else "unsealed"
             self.connection.execute("INSERT INTO documents VALUES (?, ?, 1, ?) ON CONFLICT(name) DO UPDATE SET body=excluded.body, revision=documents.revision+1, trust=excluded.trust", (name, body, trust))
+            self._dirty_documents.add(name)
 
     def _identify(self, library, *, follow_names: bool = True):
         """Follow store ids first, then unique old names when a store changes an id.
@@ -275,6 +354,7 @@ class Database:
         Creator names must also agree. Ambiguous legacy names remain unresolved,
         preserving the previous metadata instead of attaching it to a wrong item.
         """
+        self._identity_dirty = True
         from .tags import tag_key
         items = library.get("items", []) if isinstance(library, dict) else []
         items = [i for i in items if isinstance(i, dict) and isinstance(i.get("store"), str)
@@ -377,6 +457,7 @@ class Database:
         """Remove a logical document transactionally; legacy recovery copies stay untouched."""
         with self.transaction():
             self.connection.execute("DELETE FROM documents WHERE name=?", (name,))
+            self._dirty_documents.add(name)
 
     def close(self):
         """Release the connection when a server or test home finishes using it."""
@@ -564,3 +645,4 @@ def identify_local(records: dict):
                 db._identify({"items": changed}, follow_names=False)
                 for name, body in list(db.connection.execute("SELECT name,body FROM documents WHERE name IN ('tags.json','marks.json','sets.json','asset-updates.json','config.json')")):
                     db.connection.execute("UPDATE documents SET body=?,revision=revision+1 WHERE name=?", (_json(db._references(name, json.loads(body), encode=True)), name))
+                    db._dirty_documents.add(name)
