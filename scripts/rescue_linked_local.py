@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 
@@ -13,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hoard.app import InstanceLock
 from hoard.config import root_dir
-from hoard.paths import data_dir
-from hoard.safety import _is_link, check_seal, seal, write_file_safely
+from hoard.paths import data_dir, store_python
+from hoard.safety import _canonical, _is_link, write_file_safely
 
 
 def local_path(path: Path) -> Path:
@@ -34,7 +38,7 @@ def local_path(path: Path) -> Path:
     return path
 
 
-def read_record(path: Path):
+def read_record(path: Path, *, desktop=False):
     """Read a bounded metadata file and keep its exact bytes for the backup."""
     path = local_path(path)
     try:
@@ -43,11 +47,30 @@ def read_record(path: Path):
         return None, None
     if not stat.S_ISREG(info.st_mode) or info.st_size > 256 << 20:
         raise ValueError(f"Expected a regular Hoard metadata file: {path}")
-    original = path.read_bytes()
+    original = desktop_bytes(path) if desktop else path.read_bytes()
     value = json.loads(original)
     if not isinstance(value, dict):
         raise ValueError(f"Expected a JSON object in {path}")
     return original, value
+
+
+def desktop_bytes(path: Path) -> bytes:
+    """Read the actual desktop profile when Store Python redirects AppData."""
+    if not store_python():
+        return path.read_bytes()
+    command = "[Convert]::ToBase64String([IO.File]::ReadAllBytes($env:HOARD_RESCUE_READ_PATH))"
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+                            env={**os.environ, "HOARD_RESCUE_READ_PATH": str(path)}, capture_output=True,
+                            check=True, timeout=10)
+    return base64.b64decode(result.stdout.strip(), validate=True)
+
+
+def signed_record(value, key):
+    """Use the desktop profile's key and Hoard's existing JSON seal format."""
+    body = {name: item for name, item in value.items() if name != "integrity"}
+    return {**body, "integrity": {"alg": "HMAC-SHA256",
+                                 "key_id": hashlib.sha256(key).hexdigest()[:16],
+                                 "mac": hmac.new(key, _canonical(body), hashlib.sha256).hexdigest()}}
 
 
 def plan(root: Path):
@@ -95,14 +118,17 @@ def rescue(roots, apply=False):
     if not apply or not changes:
         return
     replacements = {}
-    key_path = local_path(data_dir() / "integrity.key")
+    key = None
     for path, (original, updated) in changes.items():
         info = updated.get("integrity")
         if info is not None:
             # Re-seal only data already authenticated by this Hoard installation.
-            if not key_path.is_file() or check_seal(json.loads(original)) != "sealed":
+            if key is None:
+                key = bytes.fromhex(desktop_bytes(local_path(data_dir() / "integrity.key")).decode("ascii").strip())
+            expected = signed_record(json.loads(original), key)["integrity"]
+            if len(key) != 32 or not isinstance(info, dict) or info.get("key_id") != expected["key_id"] or not hmac.compare_digest(str(info.get("mac")), expected["mac"]):
                 raise ValueError(f"Cannot authenticate {path}. Use the original Hoard profile and integrity key.")
-            updated = seal(updated)
+            updated = signed_record(updated, key)
         replacements[path] = json.dumps(updated, ensure_ascii=False, indent=2)
     for path, (original, _) in changes.items():
         if path.read_bytes() != original:
@@ -128,7 +154,7 @@ def main():
     try:
         roots = args.root
         if roots is None:
-            _, cfg = read_record(data_dir() / "config.json")
+            _, cfg = read_record(data_dir() / "config.json", desktop=True)
             if cfg is None:
                 raise ValueError("Hoard settings were not found. Pass --root with your downloads folder.")
             roots = [root_dir(cfg)]
@@ -146,7 +172,7 @@ def main():
         finally:
             lock.release()
         return 0
-    except (OSError, ValueError, TypeError, KeyError) as error:
+    except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
         print(f"Rescue stopped: {error}", file=sys.stderr)
         return 1
 
