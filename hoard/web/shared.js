@@ -3654,8 +3654,8 @@ document.addEventListener("change", async e => {
 });
 // Save the chosen automatic project update mode and redraw project details.
 function pjAutoUpdate(p) {
-  return `<div class="card"><label>${esc(tr("Keep this project up to date"))} <select id="pjAutoUpdate">${[["off",tr("Off")],["packages",tr("Packages only")],["assets",tr("Assets only")],["both",tr("Assets and packages")]].map(([value,label]) => `<option value="${value}"${(p.auto_update || "off") === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></label>` +
-    `<p class="hint">${esc(tr("Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results."))}</p></div>`;
+  return `<div class="pj-field pj-auto"><label for="pjAutoUpdate">${esc(tr("Keep this project up to date"))}</label><select id="pjAutoUpdate">${[["off",tr("Off")],["packages",tr("Packages only")],["assets",tr("Assets only")],["both",tr("Assets and packages")]].map(([value,label]) => `<option value="${value}"${(p.auto_update || "off") === value ? " selected" : ""}>${esc(label)}</option>`).join("")}</select></div>` +
+    `<p class="hint">${esc(tr("Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept. Older imports are tracked only when they exactly match the package. See Tasks for results."))}</p>`;
 }
 // Show a project with its packages, imported assets and update preferences.
 function pjProject() {
@@ -3693,12 +3693,12 @@ function pjProject() {
     report: () => pjReport(p.report),
     git: () => pjGitHTML(p) };   // (issues #296 to #299)
   return pjBack() + `<h3 class="pj-h" translate="no">${esc(p.name)}</h3><p class="meta" translate="no">${esc(p.path)}</p>` +
-    `<p class="pj-facts">${pjChips(p)}</p>` + pjAutoUpdate(p) +
+    `<p class="pj-facts">${pjChips(p)}</p>` +
     (p.open_in_unity ? `<p class="pj-warn">${esc(tr("Unity has this project open. Close it before changing packages, so nothing it has open is replaced under it."))}</p>` : "") +
     `<div class="row">${unity}<button class="ghost sm" data-pj="folder">${esc(tr("Open folder"))}</button>` +
     `<button class="ghost sm" data-pj="backup">${esc(tr("Back up"))}</button>` +
     `<button class="ghost sm" data-pj="forget">${esc(tr("Take off the list"))}</button>` +
-    `<button class="ghost sm danger" data-pj="delete">${esc(tr("Delete from this computer..."))}</button></div>` +
+    `<button class="ghost sm danger" data-pj="delete">${esc(tr("Delete from this computer..."))}</button></div>` + pjAutoUpdate(p) +
     `<nav class="pj-tabs pj-subs" aria-label="${esc(tr("This project"))}">${subs.map(([k, label]) =>
       `<button class="pj-tab" data-pj="sub" data-sub="${k}"${PJ.sub === k ? ' aria-current="page"' : ""}>${esc(label)}${k === "packages" ? ` <span class="n">${pk.length}</span>` : ""}</button>`).join("")}</nav>` +
     `<div class="pj-part">${part[PJ.sub]()}</div>`;
@@ -4411,7 +4411,7 @@ async function pjGitDiff(path, file, staged, ref) {
 }
 // The Source control tab: Git missing, a project not set up, or a repository's branch, changes, commits and remotes.
 function pjGitHTML(p) {
-  const guide = `<details class="card pj-git-guide"><summary>${esc(tr("New to source control?"))}</summary>` +
+  const guide = `<details class="pj-git-guide"><summary>${esc(tr("New to source control?"))}</summary>` +
     `<p>${esc(tr("Git records checkpoints of your project on this computer. A commit saves a checkpoint; saving files in Unity alone does not make one."))}</p>` +
     `<ol><li>${esc(tr("Review Changes and choose the files you want to keep in the next checkpoint."))}</li>` +
     `<li>${esc(tr("Stage prepares those files for the next commit. Unstage removes them from that selection and keeps your edits."))}</li>` +
@@ -5333,10 +5333,11 @@ function setsRoot() {
     use <strong>Sets</strong> in the selection bar. A set someone shares with you lists what it needs, and where to buy it.</p>`) +
     (added.length ? `<h3 class="setmore-h added-h">${esc(tr("Sets you added from a link"))} <span class="n">${added.length.toLocaleString()}</span></h3>` +
       `<div class="grid setgrid">${added.map(setTile).join("")}</div>` : "");
-  const search = `<label class="row">${esc(tr("Find a set or wishlist"))}<input id="setSearch" type="search" value="${esc(SET_SEARCH)}" aria-label="${esc(tr("Find a set or wishlist"))}"></label><p id="setSearchResult" class="hint" role="status" hidden></p>`;
+  const search = `<input id="setSearch" class="find" type="search" value="${esc(SET_SEARCH)}" placeholder="${esc(tr("Find a set or wishlist"))}" aria-label="${esc(tr("Find a set or wishlist"))}" autocomplete="off">`;
   queueMicrotask(filterSetTiles);
-  const sort = `<label class="row">${esc(tr("Sort sets and wishlists"))}<select id="setSort"><option value="saved"${SET_SORT === "saved" ? " selected" : ""}>${esc(tr("Saved order"))}</option><option value="name"${SET_SORT === "name" ? " selected" : ""}>${esc(tr("Name"))}</option></select></label>`;
-  return top + search + sort + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
+  const sort = `<label>${esc(tr("Sort"))} <select id="setSort" aria-label="${esc(tr("Sort sets and wishlists"))}"><option value="saved"${SET_SORT === "saved" ? " selected" : ""}>${esc(tr("Saved order"))}</option><option value="name"${SET_SORT === "name" ? " selected" : ""}>${esc(tr("Name"))}</option></select></label>`;
+  // (found as the creators are, and sorted as the shelf sorts: the pages' own field and dropdown)
+  return top + `<div class="setfind">${search}${sort}</div><p id="setSearchResult" class="hint" role="status" hidden></p>` + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
     `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
     `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
     `<button class="ghost sm" data-setx="newwish">${esc(tr("New wishlist"))}</button></div>` +
@@ -5384,8 +5385,8 @@ function setHead(s) {
     c.owned && `<button class="linkish" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>`,
     `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
     s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
-    `<button class="ghost sm" data-setx="exportjson">${esc(tr("Export JSON"))}</button>`,
-    `<button class="ghost sm" data-setx="addplaceholder">${esc(tr("Add placeholder..."))}</button>`,
+    `<button class="linkish" data-setx="exportjson">${esc(tr("Export JSON"))}</button>`,
+    `<button class="linkish" data-setx="addplaceholder">${esc(tr("Add placeholder..."))}</button>`,
     `<button class="linkish" data-setx="rename">${esc(tr("Rename"))}</button>`,
     `<button class="linkish danger" data-setx="delete">${esc(tr("Delete"))}</button>`].filter(Boolean);
   return `<nav class="crumbs" aria-label="${esc(tr("Where you are"))}"><button class="linkish" data-setx="back">${esc(tr("Sets and Wishlists"))}</button>` +
@@ -5430,7 +5431,7 @@ function setExtraHTML(s) {
     `${esc(new URL(u).hostname)}/…${esc(u.slice(-12))}</a>` +
     (out ? `<button class="untag" data-setx="unphoto" data-n="${n}" aria-label="${esc(tr("Take this photo out"))}">×</button>` : "") + `</li>`).join("")}</ul>` : "";
   if (saved && !editing) {
-    return ((s.dependencies || []).length ? `<h3>${esc(tr("Set dependencies"))}</h3><ul>${s.dependencies.map(d => `<li translate="no">${esc(d)}</li>`).join("")}</ul>` : "") + (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
+    return ((s.dependencies || []).length ? `<div class="setdeps"><h4>${esc(tr("Set dependencies"))}</h4><ul>${s.dependencies.map(d => `<li translate="no">${esc(d)}</li>`).join("")}</ul></div>` : "") + (s.note ? `<p class="setnote-full" translate="no">${esc(s.note)}</p>` : `<p class="none">${esc(tr("No note."))}</p>`) +
       (photos.length ? setPhotosHTML(s) : `<p class="none">${esc(tr("No photos."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="edit">${esc(tr("Edit"))}</button></div>`;
   }
@@ -5577,7 +5578,8 @@ function setMoreHTML(s) {
   const here = new Set(T.all().map(a => a.tag_key)), words = norm(state.q).split(/\s+/).filter(Boolean);
   const rest = s.items.filter(i => !here.has(i.key) && words.every(w => norm([i.name, i.creator, i.store].join(" ")).includes(w)));
   const groups = [[tr("In your library, not downloaded"), rest.filter(i => i.owned)], [tr("Not yours yet"), rest.filter(i => !i.owned && !i.local)],
-                  [tr("Your own packages (Local)"), rest.filter(i => !i.owned && i.local)]];
+                  [tr("Your own packages (Local)"), rest.filter(i => !i.owned && i.local && !i.placeholder)],
+                  [tr("Placeholders"), rest.filter(i => i.placeholder)]];
   return groups.filter(([, list]) => list.length).map(([title, list]) =>
     `<h3 class="setmore-h">${esc(title)} <span class="n">${list.length.toLocaleString()}</span></h3>` +
     `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>`).join("");
@@ -5645,14 +5647,14 @@ function wishBar(s) {
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   // A price field.
   const num = (k, hint, label) => `<input type="number" min="0" step="any" inputmode="decimal" data-wish="${k}" placeholder="${esc(hint)}" aria-label="${esc(label)}">`;
-  const conversion = `<label>${esc(tr("Convert prices to"))}<select data-wishconvert><option value="">${esc(tr("Original prices"))}</option>${[...new Set(["USD","EUR","GBP","JPY","KRW","CAD","AUD","CHF","CNY",...curs.filter(c => /^[A-Z]{3}$/.test(c))])].map(c => `<option value="${c}"${WISH_FX.target === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>` +
-    (WISH_FX.error ? `<p role="status">${esc(WISH_FX.error)}</p>` : WISH_FX.target && WISH_FX.data ? `<p class="hint">${esc(tr("Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.", WISH_FX.data.date))}${WISH_FX.data.stale ? " " + esc(tr("Using older cached rates.")) : ""}</p>` : "");
-  return !curs.length ? "" : conversion + `<div class="wishbar">` +
+  const conversion = `<label class="wish-price"><span class="wish-l">${esc(tr("Convert prices to"))}</span><select data-wishconvert><option value="">${esc(tr("Original prices"))}</option>${[...new Set(["USD","EUR","GBP","JPY","KRW","CAD","AUD","CHF","CNY",...curs.filter(c => /^[A-Z]{3}$/.test(c))])].map(c => `<option value="${c}"${WISH_FX.target === c ? " selected" : ""}>${c}</option>`).join("")}</select></label>`;
+  const said = (WISH_FX.error ? `<p class="hint" role="status">${esc(WISH_FX.error)}</p>` : WISH_FX.target && WISH_FX.data ? `<p class="hint">${esc(tr("Estimates using Frankfurter reference rates dated {0}. Checkout prices and fees may differ.", WISH_FX.data.date))}${WISH_FX.data.stale ? " " + esc(tr("Using older cached rates.")) : ""}</p>` : "");
+  return !curs.length ? "" : `<div class="wishbar">` + conversion +
     (`<div class="wish-price" role="group" aria-label="${esc(tr("Price range"))}"><span class="wish-l">${esc(tr("Price"))}</span>` +
       num("min", tr("From"), tr("Lowest price")) + `<span aria-hidden="true">–</span>` + num("max", tr("To"), tr("Highest price")) +
       (curs.length > 1 ? `<select data-wish="cur" aria-label="${esc(tr("Currency"))}">${curs.map(c => `<option value="${esc(c)}"${c === WISH.cur ? " selected" : ""} translate="no">${esc(c)}</option>`).join("")}</select>`
         : `<span translate="no">${esc(curs[0])}</span>`) +
-      `<button class="linkish" data-setx="wclear" hidden>${esc(tr("Clear"))}</button></div>`) + `</div>`;
+      `<button class="linkish" data-setx="wclear" hidden>${esc(tr("Clear"))}</button></div>`) + `</div>` + said;
 }
 // A wishlist's products in groups: to buy, owned and downloaded, each folded open or closed.
 function wishGroups(s) {
@@ -5688,18 +5690,18 @@ const BIN_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" str
 // A product in a set or wishlist: its store, whether you own it, and where to buy it when you don't.
 function setExtraTile(s, i) {
   const away = !i.owned && !i.local && !storeUrl(i.store, i.url) ? outsideUrl(i.elsewhere) : "";
-  const store = away ? new URL(away).hostname.replace(/^www\./, "") : STORE_NAMES[i.store] || (i.local ? "Local" : i.store);
+  const store = i.placeholder ? tr("Placeholder asset") : away ? new URL(away).hostname.replace(/^www\./, "") : STORE_NAMES[i.store] || (i.local ? "Local" : i.store);
   const buy = !i.owned && !i.local ? storeUrl(i.store, i.url) || away : "";
   const href = i.download != null ? `/downloads#open=${+i.download}`   // (Hoard's own pages, or the store's, checked)
     : i.owned && i.lib ? `/#store=Sets&set=${encodeURIComponent(s.id)}&open=${encodeURIComponent(i.lib)}` : buy;
-  const what = i.placeholder ? tr("Placeholder asset") : i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
+  const what = i.placeholder ? "" : i.download != null ? tr("Downloaded") : i.owned ? tr("In your library") : i.local ? tr("Not in Local now") : buy ? tr("Buy on {0}", store) : tr("No store link");
   const price = !i.owned && !i.local ? priceHTML(i) : "";
-  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${notch(i.store || "local", [])}${i.adult ? ADULT_MARK : ""}</span>` +
+  const inner = `<span class="art">${i.pic ? setPic(i.pic) : setPlaceholder(i.name, i.creator)}${i.placeholder ? "" : notch(i.store || "local", [])}${i.adult ? ADULT_MARK : ""}</span>` +
     `<span class="nm-t" translate="no">${esc(i.name)}</span><span class="cr" translate="no">${esc(i.creator ? tr("by {0}", i.creator) + " · " : "")}${esc(store)}</span>`;
-  return `<div class="slot ext${buy ? " wanted" : ""}${i.adult ? " adult" : ""}">` +
+  return `<div class="slot ext${buy ? " wanted" : ""}${i.placeholder ? " planned" : ""}${i.adult ? " adult" : ""}">` +
     (href === buy && buy ? `<a class="ext-main" href="${esc(safeUrl(buy))}" target="_blank" rel="noopener noreferrer">${inner}</a>`
       : href ? `<a class="ext-main" href="${esc(safeUrl(new URL(href, location.href).href))}">${inner}</a>` : `<span class="ext-main">${inner}</span>`) +
-    (i.placeholder ? `<label>${esc(tr("Replace with a product in this set"))}<select data-placeholdertarget><option value="">${esc(tr("Choose a product"))}</option>${s.items.filter(x => !x.placeholder).map(x => `<option value="${esc(x.key)}">${esc(x.name)}</option>`).join("")}</select></label><button class="ghost sm" data-setx="resolveplaceholder" data-key="${esc(i.key)}">${esc(tr("Replace placeholder"))}</button>` : "") +
+    (i.placeholder ? `<span class="ext-ph"><select data-placeholdertarget aria-label="${esc(tr("Replace with a product in this set"))}"><option value="">${esc(tr("Choose a product"))}</option>${s.items.filter(x => !x.placeholder).map(x => `<option value="${esc(x.key)}">${esc(x.name)}</option>`).join("")}</select><button class="ghost sm" data-setx="resolveplaceholder" data-key="${esc(i.key)}">${esc(tr("Replace placeholder"))}</button></span>` : "") +
     (price ? `<span class="ext-price">${price}</span>` : "") +
     `<span class="ext-row"><span class="ext-what">${esc(what)}${href === buy && buy ? `<span class="visually-hidden"> ${esc(tr("(opens in your browser)"))}</span>` : ""}</span>` +
     `<button class="ext-out" data-setx="out" data-key="${esc(i.key)}" title="${esc(tr(isWish(s) ? "Take it off this wishlist" : "Take it out of the set"))}" ` +

@@ -2611,5 +2611,7 @@
  "Keep projects up to date": "プロジェクトを最新に保つ",
  "Projects: Keep {0} up to date": "プロジェクト: {0}を最新に保つ",
  "Automatic updates are off for this project.": "このプロジェクトの自動更新はオフです。",
- "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "自動更新: パッケージ変更{0}件、管理対象アセット更新{1}件。未追跡・編集済み・未対応の{2}件は変更しませんでした。"
+ "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "自動更新: パッケージ変更{0}件、管理対象アセット更新{1}件。未追跡・編集済み・未対応の{2}件は変更しませんでした。",
+ "Placeholders": "プレースホルダー",
+ "Say what the placeholder is for.": "プレースホルダーが何のためのものか入力してください。"
 }

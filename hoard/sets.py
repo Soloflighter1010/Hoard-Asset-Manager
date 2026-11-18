@@ -561,7 +561,7 @@ class SetStore:
                 elif action == "placeholder-add":
                     name = clean_name(body.get("name"))
                     if not name:
-                        raise ValueError("Give the set a name.")
+                        raise ValueError("Say what the placeholder is for.")
                     if len(s["items"]) >= MAX_ITEMS:
                         raise ValueError(f"A set holds up to {MAX_ITEMS} products.")
                     key = "local:planned" + secrets.token_hex(8)
