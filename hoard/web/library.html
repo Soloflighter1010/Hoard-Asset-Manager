@@ -101,6 +101,7 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .bar-links { display: flex; align-items: center; gap: 4px 14px; flex: none; font-size: 13px; font-weight: 600; }
 .bar-links a, .bar-ver { color: var(--dust); text-decoration: none; white-space: nowrap; }
 .bar-links a:hover { color: var(--gold-text); text-decoration: underline; }
+.star-us svg.star { vertical-align: -2px; margin-right: 4px; color: var(--gold); }   /* (issue #380) */
 .bar-ver { font-variant-numeric: tabular-nums; }
 .bar-links .bar-upd { color: var(--gold-text); font-weight: 700; white-space: nowrap; }
 .bar[data-links="menu"] .bar-links { position: absolute; visibility: hidden; pointer-events: none; }
@@ -658,7 +659,12 @@ body.selecting.dl-both .imppanel { bottom: calc(108px + var(--dl-h, 0px)); }
 .setup .muted { color: var(--dust); font-size: 13.5px; }
 .setup .actions { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 26px; }
 .setup .setup-browser { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 6px; font-weight: 600; }
-.setup .setup-browser select { min-width: 220px; }
+/* issue #383: Next's nudge after 3 quiet minutes: a gentle shake, or with Reduce motion a ring for a moment */
+@keyframes setup-nudge { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+#setupNext.nudge { animation: setup-nudge .6s ease-in-out 1; }
+#setupNext.nudge-still { outline: 3px solid var(--gold); outline-offset: 3px; }
+.setup .setup-browser select { min-width: 240px; height: 38px; padding: 0 34px 0 14px; font-size: 15px; font-weight: 600; }   /* (as big as the setup's fields: #374) */
 .setup .status { display: flex; align-items: center; gap: 10px; margin: 14px 0; padding: 12px 14px; border-radius: 12px; background: var(--stone); font-weight: 700; }
 .setup .status::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); }
 .setup .status.ok::before { background: #4CC38A; }
@@ -1355,7 +1361,7 @@ body.less-motion .tour-try::before { animation: none; }
     <kbd aria-hidden="true">/</kbd>
   </div>
 <div class="bar-side bar-end">
-  <nav class="bar-links" aria-label="About Hoard"><span class="bar-ver" translate="no" id="version" title="The version of Hoard you have"></span><button class="linkish bar-upd" id="updateNote" hidden></button><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a></nav>
+  <nav class="bar-links" aria-label="About Hoard"><span class="bar-ver" translate="no" id="version" title="The version of Hoard you have"></span><button class="linkish bar-upd" id="updateNote" hidden></button><a class="star-us" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer" title="Star Hoard on GitHub: it helps others find it"><svg class="star" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 1.2l2.05 4.3 4.7.55-3.47 3.22.92 4.65L8 11.6l-4.2 2.32.92-4.65L1.25 6.05l4.7-.55z"/></svg>Star on GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=bug_report.yml" id="reportProblem">Report a problem</a></nav>
   <div class="tools">
     <div class="barmenu-wrap">
       <button id="menuBtn" class="ghost barmenu-btn" aria-expanded="false" aria-controls="barMenu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu<span class="warn-dot" id="menuDot" hidden></span></button>
@@ -1364,7 +1370,7 @@ body.less-motion .tour-try::before { animation: none; }
         <button id="storesBtn" class="stores-btn" aria-expanded="false" aria-controls="stores">Stores<span class="warn-dot" id="warnDot" hidden></span></button>
         <button id="rescan" title="Re-read what's on disk" data-app-view="downloads">Rescan</button>
 <button id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
-        <div class="barmenu-links" role="group" aria-label="About Hoard"><span class="barmenu-ver" translate="no" data-version></span><button class="barmenu-upd" data-update-note hidden></button><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer">GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><button data-report-problem>Report a problem</button></div>
+        <div class="barmenu-links" role="group" aria-label="About Hoard"><span class="barmenu-ver" translate="no" data-version></span><button class="barmenu-upd" data-update-note hidden></button><a class="star-us" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener noreferrer" title="Star Hoard on GitHub: it helps others find it"><svg class="star" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 1.2l2.05 4.3 4.7.55-3.47 3.22.92 4.65L8 11.6l-4.2 2.32.92-4.65L1.25 6.05l4.7-.55z"/></svg>Star us on GitHub</a><a href="https://discord.gg/psNsAGj75Q" target="_blank" rel="noopener noreferrer" translate="no">Discord</a><a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases" target="_blank" rel="noopener noreferrer" title="New versions of Hoard itself. Updates to your assets are in Downloads, under Asset updates.">Hoard updates</a><button data-report-problem>Report a problem</button></div>
       </div>
     </div>
     <button id="syncBtn" class="primary" title="Read what you own from your stores, then download anything new" data-app-view="library">Sync</button>

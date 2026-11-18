@@ -5254,7 +5254,7 @@ document.addEventListener("change", async e => {
 function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
   if (!i.price) return "";
   const amount = convertedPrice(i.price);
-  const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(new Intl.NumberFormat(document.documentElement.lang, {style:"currency",currency:WISH_FX.target}).format(amount))}</span>`;
+  const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>`;
   return estimate + `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
     (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
 }
@@ -5580,8 +5580,10 @@ function setMoreHTML(s) {
   const groups = [[tr("In your library, not downloaded"), rest.filter(i => i.owned)], [tr("Not yours yet"), rest.filter(i => !i.owned && !i.local)],
                   [tr("Your own packages (Local)"), rest.filter(i => !i.owned && i.local && !i.placeholder)],
                   [tr("Placeholders"), rest.filter(i => i.placeholder)]];
+  readSetPrices(s);   // (issue #384: the prices of what isn't yours yet, read in the background)
   return groups.filter(([, list]) => list.length).map(([title, list]) =>
     `<h3 class="setmore-h">${esc(title)} <span class="n">${list.length.toLocaleString()}</span></h3>` +
+    (list === groups[1][1] ? priceTotal(list, words.length > 0) : "") +
     `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>`).join("");
 }
 // A wishlist open: its products in two groups that fold away, what isn't yours yet and what is, in the page's sort,
@@ -5656,6 +5658,47 @@ function wishBar(s) {
         : `<span translate="no">${esc(curs[0])}</span>`) +
       `<button class="linkish" data-setx="wclear" hidden>${esc(tr("Clear"))}</button></div>`) + `</div>` + said;
 }
+// An amount of money in a currency, as this page's language writes it ("¥12,300", "$45.50", "$12"); a code Intl doesn't
+// know is written after the number.
+function money(amount, currency) {
+  const whole = Math.abs(amount - Math.round(amount)) < 0.005;   // ($12, as the store writes it, not $12.00)
+  try { return new Intl.NumberFormat(document.documentElement.lang || "en", { style: "currency", currency, ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}) }).format(amount); }
+  catch (e) { return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`; }
+}
+// Issue #381: what products not yours yet cost in all: per currency (or, with Convert prices to, one estimate in
+// that currency), and how many have no price. shown: whether a filter or search narrows them ("of those shown").
+function priceTotal(list, shown) {
+  const priced = list.filter(i => i.price && typeof i.price.amount === "number" && i.price.currency);
+  const none = list.length - priced.length;
+  if (!priced.length) return "";
+  const conv = priced.map(i => convertedPrice(i.price));
+  let text;
+  if (WISH_FX.target && conv.every(a => a != null)) text = "≈ " + money(conv.reduce((a, b) => a + b, 0), WISH_FX.target);
+  else {
+    const by = new Map();
+    for (const i of priced) by.set(i.price.currency, (by.get(i.price.currency) || 0) + i.price.amount);
+    text = [...by].sort((a, b) => b[1] - a[1]).map(([c, a]) => money(a, c)).join(" + ");
+  }
+  return `<p class="price-total"><span>${esc(shown ? tr("Total of those shown") : tr("Total"))}</span> <strong translate="no">${esc(text)}</strong>` +
+    (none ? ` <span class="hint">${esc(tr(none === 1 ? "1 without a price" : "{0} without a price", none))}</span>` : "") + `</p>`;
+}
+const PRICES_ASKED = new Set();   // (the sets whose prices this page has asked for)
+// Issue #384: a set's products not yours yet, priced from each one's public page (once a day at most, in the
+// background, as Add products by link reads a page); asked once a page per set, and the set drawn again when done.
+async function readSetPrices(s) {
+  if (isWish(s) || PRICES_ASKED.has(s.id) || !s.items.some(i => !i.owned && !i.local && !i.price && i.url)) return;
+  PRICES_ASKED.add(s.id);
+  const r = await apiPost("/api/sets/prices", { id: s.id });
+  if (!r.ok || !r.data.started) return;
+  for (let n = 0; n < 40; n++) {   // (each product's page a second or so apart: a set of 30 in under a minute)
+    await new Promise(ok => setTimeout(ok, 5000));
+    let now;   // (looked at quietly: the page is drawn again only once they're in, not every few seconds)
+    try { now = ((await (await api("/api/sets", { cache: "no-store" })).json()).sets || []).find(x => x.id === s.id); }
+    catch (e) { continue; }
+    if (!now) return;
+    if (now.priced !== s.priced) { await loadSets(); return; }
+  }
+}
 // A wishlist's products in groups: to buy, owned and downloaded, each folded open or closed.
 function wishGroups(s) {
   const shown = wishShown(s);
@@ -5663,7 +5706,9 @@ function wishGroups(s) {
   // One of a wishlist's groups.
   const group = (id, title, list) => {
     const open = (UI.sections || {})[`wish-${id}`] !== false;
+    const narrowed = !!(WISH.min || WISH.max || norm(state.q).trim() || state.creator || state.tags.size);
     return `<details class="wishgroup" data-fold="wish-${id}"${open ? " open" : ""}><summary>${esc(title)} <span class="n">${list.length.toLocaleString()}</span></summary>` +
+      (id === "buy" ? priceTotal(list, narrowed) : "") +
       (list.length ? `<div class="grid">${list.map(i => setExtraTile(s, i)).join("")}</div>` : `<p class="none">${esc(tr("Nothing here matches."))}</p>`) + `</details>`;
   };
   return group("buy", tr("Not yours yet"), shown.filter(i => !i.owned && !i.local)) + group("yours", tr("Yours already"), shown.filter(i => i.owned || i.local));
@@ -6041,10 +6086,21 @@ const WISH_STORES = ["booth", "gumroad", "jinxxy", "payhip"];
 async function readWishlists(only, list) {
   let stores = only;
   if (!stores) {
+    // only the stores you're signed in to (issue #372): reading one you aren't can only fail
+    const signed = await signedInStores();
+    const can = signed ? WISH_STORES.filter(st => signed[st]) : WISH_STORES;
+    const not = WISH_STORES.filter(st => !can.includes(st));
+    if (!can.length) {
+      await askForm({ icon: "heart", title: tr("Read my wishlists"), ok: tr("OK"), cancel: "",
+        detail: tr("You aren't signed in to a store with wishlists yet (Booth, Gumroad, Jinxxy or Payhip). Sign in to one in Stores, then read them."),
+        blocks: [] });
+      return;
+    }
     const res = await askForm({ icon: "heart", title: tr("Read my wishlists"), ok: tr("Read them"),
       detail: tr("Hoard opens each store's page in its signed-in window and reads your lists, with each product's price. A wishlist read before is brought up to date."),
-      blocks: [{ type: "checks", id: "wishStores", required: true, items: WISH_STORES.map(st => ({ label: STORE_NAMES[st], checked: true })) }] });
-    stores = res.ok ? WISH_STORES.filter((st, i) => res.fields.wishStores[i]) : [];
+      blocks: [{ type: "checks", id: "wishStores", required: true, items: can.map(st => ({ label: STORE_NAMES[st], checked: true })) },
+               ...(not.length ? [{ type: "text", tone: "hint", text: tr("Not signed in: {0}. Sign in to them in Stores to read their wishlists too.", listed(not.map(st => STORE_NAMES[st]))) }] : [])] });
+    stores = res.ok ? can.filter((st, i) => res.fields.wishStores[i]) : [];
     if (!stores.length) return;
   }
   const r = await apiPost("/api/wishlists/read", list ? { stores, list } : { stores });
@@ -6054,6 +6110,11 @@ async function readWishlists(only, list) {
   const done = await whenTaskEnds(list ? "quick-wishlist" : "wishlists");   // then they show as read, without opening them again
   await loadSets();
   if (done && done.message) toast(done.message);
+}
+// Which stores you're signed in to ({store: true/false}), as the library has them; null when that can't be told
+async function signedInStores() {
+  if (typeof DATA === "object" && DATA && DATA.signed_in) return DATA.signed_in;
+  try { return (await (await api("/api/library", { cache: "no-store" })).json()).signed_in || null; } catch (e) { return null; }
 }
 // Waits for a task (running or waiting its turn) to end, then gives how it went (Tasks' finished entry), or null
 async function whenTaskEnds(task, every = 1500) {

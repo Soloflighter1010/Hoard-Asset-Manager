@@ -116,6 +116,9 @@ code { font-size: .9em; background: var(--stone); padding: .1em .35em; border-ra
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
 .bar-tools { display: flex; gap: 8px; margin-left: auto; }
+/* Star us on GitHub (issue #380): a star before the words */
+.star-us svg.star { vertical-align: -2px; margin-right: 6px; color: var(--gold, currentColor); }
+.ghost.star-us svg.star { margin-right: 0; }   /* (the button's own gap spaces it) */
 .ghost, .primary {
   height: 38px; padding: 0 16px; border-radius: 10px; border: 0; font: 600 15px var(--body); line-height: 1;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; text-decoration: none;

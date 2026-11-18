@@ -431,6 +431,8 @@ class SetStore:
                     one["short_ended"] = ended
             if s.get("from_link") is True:   # added from someone's link (issue #258): shown apart from your own
                 one["from_link"] = True
+            if not wish and isinstance(s.get("priced"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:]{8}Z", s["priced"]):
+                one["priced"] = s["priced"]   # when its products' prices were read from their pages last (issue #384)
             out["sets"].append(one)
         return out
 
@@ -634,6 +636,23 @@ class SetStore:
             data = self.sanitize(data)
             self._save(data)
         return data
+
+    def put_prices(self, sid: str, prices: dict, when: str) -> None:
+        """Issue #384: the prices read for a set's products from their public pages ({product key: price}, each as
+        clean_price keeps it; None where none was found), and when they were read. A product the set no longer
+        holds is left out; one with no price found keeps the one it had."""
+        with _lock:
+            data = self.load()
+            s = next((x for x in data["sets"] if x["id"] == sid), None)
+            if s is None or s.get("kind") == "wishlist":
+                return
+            known = s.get("products") or {}
+            for key, price in prices.items():
+                clean = clean_price(price)
+                if key in s["items"] and key in known and clean:
+                    known[key]["price"] = clean
+            s["priced"] = when
+            self._save(self.sanitize(data))
 
     def set_short(self, sid: str, rec: dict | None) -> None:
         """Keep a set's short link (clean_short's shape), or forget it (None). Not one of change()'s: only Hoard's

@@ -2616,5 +2616,16 @@
  "Say what the placeholder is for.": "プレースホルダーが何のためのものか入力してください。",
  "Its drive isn't connected": "ドライブが接続されていません",
  "Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.": "フォルダーが今は接続されていないドライブかネットワーク共有にあるため、Hoardは読み込んでいません。接続すると、前と同じように表示されます。",
- "Its folder is on a drive that isn't connected now: {0}": "フォルダーが今は接続されていないドライブにあります:{0}"
+ "Its folder is on a drive that isn't connected now: {0}": "フォルダーが今は接続されていないドライブにあります:{0}",
+ "1 without a price": "価格のないもの1件",
+ "{0} without a price": "価格のないもの{0}件",
+ "Total": "合計",
+ "Total of those shown": "表示中の合計",
+ "Not signed in: {0}. Sign in to them in Stores to read their wishlists too.": "サインインしていません:{0}。それらのほしい物リストも読み込むには、ストアでサインインしてください。",
+ "You aren't signed in to a store with wishlists yet (Booth, Gumroad, Jinxxy or Payhip). Sign in to one in Stores, then read them.": "ほしい物リストのあるストア(Booth、Gumroad、Jinxxy、Payhip)にまだサインインしていません。ストアでサインインしてから読み込んでください。",
+ "{0}'s sign-in window opens when what Hoard is doing now is done (see Tasks). You can go on with setup meanwhile.": "{0}のサインインウィンドウは、Hoardが今していることが終わると開きます(タスクを参照)。その間もセットアップを続けられます。",
+ "Signed in to {0}. Hoard reads it when setup is finished.": "{0}にサインインしました。セットアップが終わるとHoardが読み込みます。",
+ "Star Hoard on GitHub: it helps others find it": "GitHubでHoardにスターを付ける:ほかの人がHoardを見つけやすくなります",
+ "Star on GitHub": "GitHubでスター",
+ "Star us on GitHub": "GitHubでスターを付ける"
 }

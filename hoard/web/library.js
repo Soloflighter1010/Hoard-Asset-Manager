@@ -332,7 +332,7 @@ function startPolling() {
         if (s.job.error) toast(s.job.error);
         else if (s.job.message && /^Signed out/.test(s.job.message)) toast(s.job.message);
         else toast(errs.length ? `Updated. ${errs.join(" and ")} need attention in Stores.` : "Hoard updated");
-        if (errs.length || s.job.error) openStores(true);
+        if ((errs.length || s.job.error) && $("#setup").hidden) openStores(true);   // (never over setup: issue #373)
       }
     } catch (e) { clearInterval(polling); polling = null; showJob(null); }
   }, 1000);
@@ -880,9 +880,29 @@ async function openSetup() {
   $("#setup").hidden = false;
   renderSetup();
 }
+const SETUP_NUDGE_MS = 180000;   // (3 minutes)
+// Issue #383: after 3 minutes with no key, click or pointer movement, Next shakes gently once, as a nudge that setup
+// is waiting (with Reduce motion, Hoard's or the system's, a ring shows for a moment instead). Never while a step is
+// busy (signing in, installing) or a pop-up is in front, and again only after another 3 quiet minutes.
+function armSetupNudge() {
+  clearTimeout(SETUP.nudge);
+  if ($("#setup").hidden) return;
+  SETUP.nudge = setTimeout(() => {
+    const next = $("#setupNext");
+    if (!next || $("#setup").hidden) return;
+    if (!SETUP.busy && !SETUP.watching && document.visibilityState === "visible" && !document.querySelector("dialog[open]")) {
+      const still = document.body.classList.contains("less-motion") || matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const kind = still ? "nudge-still" : "nudge";
+      next.classList.remove("nudge", "nudge-still"); void next.offsetWidth;   // (so it plays again)
+      next.classList.add(kind);
+      setTimeout(() => next.classList.remove(kind), still ? 2000 : 900);
+    }
+    armSetupNudge();
+  }, SETUP_NUDGE_MS);
+}
 // Close the setup assistant, following any sign-in it started.
 function closeSetup() {
-  $("#setup").hidden = true; clearTimeout(SETUP.timer);
+  $("#setup").hidden = true; clearTimeout(SETUP.timer); clearTimeout(SETUP.nudge);
   // A sign-in or browser install the assistant started keeps going once it's closed: the library page follows it
   // from here, so what it reads still shows up (in 2.8.4 nothing watched it any more, and the counts stayed 0).
   if (SETUP.watching) { SETUP.watching = false; startPolling(); }
@@ -1095,10 +1115,15 @@ const SETUP_WIRES = {
     for (const b of document.querySelectorAll("#setupBody [data-signin]")) {
       viewListen("library", b, "click", async () => {
         if (b.dataset.signin === "itch") { openItchKey(async () => { await setupStatus(); renderSetup(); }); return; }
-        const r = await apiPost("/api/login", { stores: [b.dataset.signin] });
+        // (refresh: false: the store isn't read straight after, so setup isn't held up while it is; Finish reads every
+        // store, issue #373)
+        const r = await apiPost("/api/login", { stores: [b.dataset.signin], refresh: false });
         if (!r.ok) { toast(r.data.error || "Signing in didn't start."); return; }
-        document.querySelectorAll("#setupBody [data-signin]").forEach(x => { x.disabled = true; });
-        $("#signinProgress").textContent = `Opening ${SETUP.st.stores[b.dataset.signin].label}'s sign-in window...`;
+        b.disabled = true;   // (only this store's: the others can be signed in to as well)
+        const name = SETUP.st.stores[b.dataset.signin].label;
+        $("#signinProgress").textContent = r.data.queued
+          ? tr("{0}'s sign-in window opens when what Hoard is doing now is done (see Tasks). You can go on with setup meanwhile.", name)
+          : tr("Opening {0}'s sign-in window...", name);
         $("#linkBox").hidden = false;
         pollSetup(st => { if (st.job && st.job.error) toast(st.job.error); renderSetup(); load(); },
                   job => { const p = $("#signinProgress"), l = $("#linkBox");
@@ -1168,6 +1193,7 @@ function renderSetup() {
   $("#setupNext").textContent = name === "welcome" ? "Start" : name === "done" ? "Finish" : "Next";
   (SETUP_WIRES[name] || (() => {}))(SETUP.st);
   $("#setupNext").focus();
+  armSetupNudge();
 }
 async function setupSave(name) {   // what leaving a step saves; false keeps you on the step
   let body = null;
@@ -1249,6 +1275,8 @@ function wireSetup() {
     } finally { SETUP.busy = false; }
   });
   viewListen("library", $("#setupBack"), "click", () => { SETUP.step = Math.max(0, SETUP.step - 1); renderSetup(); });
+  for (const kind of ["keydown", "pointerdown", "pointermove", "wheel"])   // (issue #383: what counts as input)
+    viewListen("library", $("#setup"), kind, armSetupNudge, { passive: true });
   viewListen("library", document, "keydown", e => { if (e.key === "Escape" && !$("#setup").hidden && !SETUP.firstRun && !document.querySelector("dialog[open]")) closeSetup(); });
   viewListen("library", $("#setupSkip"), "click", async () => {
     await apiPost("/api/setup/done", { done: true });

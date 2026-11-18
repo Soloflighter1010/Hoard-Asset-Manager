@@ -1056,3 +1056,70 @@ class Tab(IsolatedTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PricesOfASet(IsolatedTestCase):
+    """Issue #384: a set brought in from someone's link (a share code carries no prices) has the prices of the products
+    you don't own read from their public pages, in the background, at most once a day."""
+
+    def setUp(self):
+        import threading
+        from hoard import config, server
+        self.srv = server.AppServer(("127.0.0.1", 0), config.load_config(), lan=False)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def call(self, method, path, body=None):
+        import http.client
+        from hoard.safety import ACCESS_HEADER
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
+        c.request(method, path, body=json.dumps(body) if body is not None else None,
+                  headers={**({"Content-Type": "application/json"} if body is not None else {}), ACCESS_HEADER: self.srv.key})
+        r = c.getresponse()
+        data = json.loads(r.read() or b"{}")
+        c.close()
+        return r.status, data
+
+    def test_read_once_a_day_and_shown(self):
+        store = sets.SetStore()
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(json.dumps({"sets": [
+            {"id": "a1", "name": "Rusk", "items": [RUSK, HOODIE], "from_link": True,
+             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"},
+                          HOODIE: {"store": "booth", "name": "Hoodie for Rusk", "url": "https://booth.pm/ja/items/222"}}},
+            {"id": "w1", "name": "Wanted", "kind": "wishlist", "items": [RUSK],
+             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
+        read = []
+
+        def page(link, fetch):
+            read.append(link)
+            if link.endswith("/222"):
+                raise ValueError("no such page")
+            return {"price": {"text": "¥500", "amount": 500, "currency": "JPY"}}
+
+        with mock.patch("hoard.wishlists.from_product_page", page), mock.patch("hoard.common.pause", lambda s: None), \
+                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}))
+            self.assertEqual(read, ["https://booth.pm/ja/items/111", "https://booth.pm/ja/items/222"])
+            shown = next(s for s in self.call("GET", "/api/sets")[1]["sets"] if s["id"] == "a1")
+            self.assertRegex(shown["priced"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+            rows = {r["key"]: r for r in shown["items"]}
+            self.assertEqual(rows[RUSK]["price"], {"text": "¥500", "amount": 500.0, "currency": "JPY"})
+            self.assertNotIn("price", rows[HOODIE], "a page that couldn't be read leaves it without one")
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": False}), "once a day")
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "w1"}), (200, {"started": False}),
+                             "a wishlist's prices come from reading the wishlist")
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "nope"}), (200, {"started": False}))
+            self.assertEqual(len(read), 2)
+        self.assertNotIn("price", json.dumps(sets.from_code(sets.share_code(store.load()["sets"][0])[0])),
+                         "what's shared still carries no prices")
+
+    def test_a_date_that_isnt_one(self):
+        store = sets.SetStore()
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK], "priced": "2026-99-99T99:99:99Z",
+            "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
+        with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: {}), \
+                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}), "read again")

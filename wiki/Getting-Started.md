@@ -4,6 +4,8 @@ you can run it again any time from **Settings**, then **Set up Hoard again**.
 The first time, the assistant goes through to the end: it can't be skipped or closed, a step that isn't done
 (Hoard's browser not installed yet, no store picked) keeps you on it, and going on without signing in to any
 store, or without a Payhip shop, asks first. Run again from Settings, it can be skipped or closed at any step.
+Left for three minutes, **Next** gives a small shake to say the assistant is waiting (with **Reduce motion**, a ring
+shows around it for a moment instead).
 
 ## The setup assistant, step by step
 
@@ -31,7 +33,8 @@ store, or without a Payhip shop, asks first. Run again from Settings, it can be 
    this empty, save each shop's library page from your usual browser, and import them all from **Stores**
    afterwards. See [Stores](Stores#payhip).
 8. **Sign in to your stores.** Each store opens in Hoard's own window. Sign in there as usual, then close the
-   window, and Hoard reads what you own.
+   window. You can sign in to the next store, or go on, straight away: what you own is read when you choose
+   **Finish** (5.2.0). If Hoard is busy with something else, the window opens when that's done (see **Tasks**).
 9. **Where should downloads go?** A `Hoard` folder in your Documents unless you choose another. Pick a drive
    with room to spare: VRChat assets add up.
 10. **Get Hoard's news where you are** (5.2.0 beta 4, where Apprise is installed, as it is in Hoard's apps): choose

@@ -479,18 +479,20 @@ class Jobs:
     def start(self, task: str, stores: list[str], skip_imported: bool = False, only: str | None = None,
               scheduled: bool = False, keys: list[str] | None = None, queue: bool = True,
               items: list[str] | None = None, local: dict | None = None, move: dict | None = None,
-              files: dict | None = None, chosen: dict | None = None, project: dict | None = None) -> str | None:
+              files: dict | None = None, chosen: dict | None = None, project: dict | None = None,
+              then_refresh: bool = True) -> str | None:
         """Start a job in the background, or when one is running, queue it to start after (and after anything
         already waiting). Returns "started", "queued", or None: not started, because something is running and
         queue is False, the same job is already waiting, or the queue is full. items: the library items (by key) a
         download is for, when it's for chosen ones, so it can go straight to them. files: what a rescan, a take-out
         of Local or a deletion of downloaded files is for, when it waits its turn. chosen: of a download, the files
-        chosen of each product ({tag_key: [file names]}) when you left some out."""
+        chosen of each product ({tag_key: [file names]}) when you left some out. then_refresh: a sign-in reads the
+        store once its window is closed (the setup assistant's don't: Finish reads every store, issue #373)."""
         spec = {"task": task, "stores": list(stores), "skip_imported": skip_imported, "only": only,
                 "scheduled": scheduled, "keys": list(keys) if keys else None, "items": list(items) if items else None,
                 "local": dict(local) if local else None, "move": dict(move) if move else None,
                 "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None,
-                "project": dict(project) if project else None}
+                "project": dict(project) if project else None, "then_refresh": bool(then_refresh)}
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
                 self._launch(spec)
@@ -615,7 +617,7 @@ class Jobs:
         elif task in ("rescan-local", "remove-local", "delete-files"):
             target = lambda s: self._files(task, spec.get("files") or {})  # noqa: E731
         elif task == "login":
-            target = self._login_then_refresh
+            target = lambda s: self._login_then_refresh(s, refresh=spec.get("then_refresh", True))  # noqa: E731
         elif task == "logout":
             target = self._logout
         elif task == "wishlists":
@@ -1517,8 +1519,9 @@ class Jobs:
             self._set(message=why, error=why)
         self._set(task="quick-wishlist")
 
-    def _login_then_refresh(self, stores: list[str]) -> None:
-        """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store."""
+    def _login_then_refresh(self, stores: list[str], refresh: bool = True) -> None:
+        """Open a visible browser at a store's sign-in page, wait for the window to close, then refresh that store
+        (unless refresh is False: the setup assistant's sign-ins, which Finish reads, issue #373)."""
         store = stores[0]
         label = STORES[store]["label"]
         if store in NO_BROWSER:   # signs in with an API key, from the page (POST /api/itch-key), not a window
@@ -1562,6 +1565,9 @@ class Jobs:
             # nothing to read until you've added the shops you bought from: reading Payhip straight after would only
             # fail with "add your shops", which read as the sign-in failing (a tester's report)
             self._set(task="login", store=store, message=PAYHIP_SIGNED_IN_NO_SHOPS)
+            return
+        if not refresh:
+            self._set(task="login", store=store, message=f"Signed in to {label}. Hoard reads it when setup is finished.")
             return
         self._refresh([store])
 

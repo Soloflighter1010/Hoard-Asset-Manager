@@ -25,7 +25,9 @@ Open a set and it's a folder of its products. **Sets** above its name goes back 
 - **The rest** come after them, each with its picture and where it is. In the Library: **Not yours yet**, with
   **Buy on** its store (opens the product's page in your browser), and **Your own packages (Local)**. In Downloads,
   also **In your library, not downloaded**, which opens it in the Library. **Remove** takes one out of the set (or off the wishlist), once you've said so
-  (5.2.0).
+  (5.2.0). **Total** under **Not yours yet** says what they cost in all, and how many have no price (5.2.0).
+  A set added from someone's link has no prices in it (a link never carries them), so Hoard reads them from each
+  product's public page in the background when you open it, at most 30 products and once a day.
 
 A set also has **Share...**, **Download the N not downloaded** (every product of it that's yours and not downloaded,
 at once, as **Download** does in the Library), **New project with this set...**, **Choose a picture...**, **Rename** and **Delete** (deleting a set
@@ -194,8 +196,8 @@ From 4.4, the Sets tab has your **Wishlists** too, below your sets: what you'd l
 product costs. A wishlist is a set (you can share it, give it a picture, a note and photos), and the products
 already in your library show as yours.
 
-- **Read my wishlists...** reads them from the stores you choose, each in its own signed-in window, as a refresh
-  reads your library: Booth's loved items (all of them as one wishlist, and each list of them you made as one more),
+- **Read my wishlists...** reads them from the stores you choose (only those you're signed in to are offered; sign
+  in to the others in **Stores** first), each in its own signed-in window, as a refresh reads your library: Booth's loved items (all of them as one wishlist, and each list of them you made as one more),
   each of your Gumroad wishlists, your Jinxxy wishlist, likes and each of your lists, and the wishlists in each Payhip
   shop you've added. It runs as a task, in **Tasks**.
 - **Import saved wishlist pages...** reads wishlist pages you saved from your own browser instead (press Ctrl+S and
@@ -214,8 +216,9 @@ already in your library show as yours.
 - **New wishlist** makes one of your own, which you add products to as you would to a set, or with **Add products by
   link...**.
 
-An open wishlist (from 5.1) shows its products in two groups: **Not yours yet**, with what each costs, and **Yours
-already**. Click a group's heading to fold it away; it stays folded next time. From 5.1.1 they're in the order
+An open wishlist (from 5.1) shows its products in two groups: **Not yours yet**, with what each costs and their
+**Total** (5.2.0: one for each currency, or one estimate with **Convert prices to**; **Total of those shown** while a
+search, filter or price range narrows them), and **Yours already**. Click a group's heading to fold it away; it stays folded next time. From 5.1.1 they're in the order
 **Sort** says: **Name**, **Creator** (those with none last) or **Store**; **Recently added** keeps the wishlist's own
 order, as the store lists it.
 

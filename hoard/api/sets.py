@@ -68,7 +68,7 @@ def _sets_view(self) -> dict:
                     "photo_p": [app.pic_for(u) for u in s.get("photos", [])],   # (each photo's address mark: /setphoto)
                     "cover": f"/setcover/{s['id']}/{s['picture']}" if app.sets.picture_file(s) else None,
                     "short": (s.get("short") or {}).get("expires"), "short_ended": s.get("short_ended"),
-                    "items": rows, "from_link": s.get("from_link") is True,
+                    "items": rows, "from_link": s.get("from_link") is True, "priced": s.get("priced"),
                     "adult": any(r["adult"] for r in rows),   # an Adult set, while any product in it is (issue #337)
                     **({"kind": "wishlist", "source": s.get("source"), "read": s.get("read")} if s.get("kind") == "wishlist" else {})})
     return {"sets": out, "hidden_left_out": left_out, "viewer": app.sets.VIEWER, "photo_hosts": list(app.sets.PHOTO_HOSTS)}
@@ -380,6 +380,61 @@ def get_api_wishlists_rates(self, path, body, query):
         return self._json({"error": str(e)}, 503)
 
 
+PRICE_PAGES = 30          # a set's products priced from their pages at most, each time (issue #384)
+PRICE_EVERY = 24 * 3600   # a set's prices are read again at most once a day
+_pricing: set = set()     # the sets being priced now (one reader each)
+
+
+def _read_prices(sid: str, todo: list) -> None:
+    """Issue #384: each (product key, public page) of a set read for its price, as Add products by link reads a page
+    (wishlists.from_product_page: public, no sign-in, only the store's own site), a second apart, then kept."""
+    import time as _time
+    from .. import wishlists
+    from ..common import pause
+    prices = {}
+    try:
+        for n, (key, page) in enumerate(todo):
+            if n:
+                pause(1.0)
+            try:
+                prices[key] = wishlists.from_product_page(page, app.read_store_page).get("price")
+            except Exception as e:   # (one page that can't be read is left without a price)
+                print(f"Couldn't read the price of a product in a set: {type(e).__name__}", flush=True)
+        app.sets.SetStore().put_prices(sid, prices, _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()))
+    finally:
+        _pricing.discard(sid)
+
+
+def post_api_sets_prices(self, path, body, query):
+    """POST /api/sets/prices {id}: issue #384. The prices of a set's products you don't own, read from their public
+    pages in the background (PRICE_PAGES at most), at most once a PRICE_EVERY. {"started": bool}."""
+    import calendar
+    import time as _time
+    sid = body.get("id")
+    s = next((x for x in app.sets.SetStore().load()["sets"] if x["id"] == sid), None) if isinstance(sid, str) else None
+    if s is None or s.get("kind") == "wishlist" or sid in _pricing:
+        return self._json({"started": False})
+    try:
+        when = calendar.timegm(_time.strptime(s["priced"], "%Y-%m-%dT%H:%M:%SZ")) if s.get("priced") else 0
+    except ValueError:   # (a date that isn't one: read again)
+        when = 0
+    if _time.time() - when < PRICE_EVERY:
+        return self._json({"started": False})
+    owned = {app.tag_key(i["store"], i["name"], i.get("id")) for i in self.server.lib.snapshot()[0]}
+    known = s.get("products") or {}
+    todo = [(k, known[k]["url"]) for k in s["items"]
+            if k not in owned and known.get(k, {}).get("url") and known[k]["store"] in app.STORES][:PRICE_PAGES]
+    if not todo:
+        return self._json({"started": False})
+    _pricing.add(sid)
+    try:
+        self.server.start_worker("Reading prices", _read_prices, sid, todo)
+    except Exception:
+        _pricing.discard(sid)
+        raise
+    return self._json({"started": True})
+
+
 METHODS = {'_sets_view': _sets_view, '_add_links': _add_links, '_set_code': _set_code, '_short_view': _short_view, '_share_set': _share_set, '_share_parts': _share_parts, '_split_set': _split_set, '_shorten_set': _shorten_set, '_unshorten_set': _unshorten_set}
 
 ROUTES = [
@@ -389,6 +444,7 @@ ROUTES = [
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('target', 'string'), ('dependencies', 'array'), ('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets/prices', post_api_sets_prices, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

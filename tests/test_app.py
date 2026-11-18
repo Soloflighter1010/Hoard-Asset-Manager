@@ -1811,7 +1811,7 @@ class SetupAssistant(IsolatedTestCase):
                 self.assertEqual("isn't installed" in out.getvalue(), used != choice)
 
     def plain_sign_in(self, store="gumroad", cfg_extra=None, after_exit_in_use=0, link=None, installed=True, installs=None,
-                      forced=False):
+                      forced=False, refresh=True):
         """Sign in with the browser's own window (issue #21), against a stand-in for starting programs. Returns what
         was started, the messages, and whether the store was refreshed."""
         import contextlib
@@ -1861,8 +1861,16 @@ class SetupAssistant(IsolatedTestCase):
                 mock.patch.object(job, "_refresh", lambda stores: refreshed.append(stores)), \
                 mock.patch.object(job, "_set", lambda **kw: said.append(kw.get("message", ""))), \
                 contextlib.redirect_stdout(io.StringIO()):
-            job._login_then_refresh([store])
+            job._login_then_refresh([store], refresh=refresh)
         return started, said, refreshed, tmp / "sign-ins" / store, str(program)
+
+    def test_a_sign_in_from_setup_reads_the_store_at_finish(self):
+        """Issue #373: a sign-in from the setup assistant doesn't read the store once its window closes (that held
+        setup up until the whole store was read); Finish reads every store. From Stores, it's read straight after."""
+        _, said, refreshed, _, _ = self.plain_sign_in(refresh=False)
+        self.assertEqual(refreshed, [])
+        self.assertIn("Signed in to Gumroad. Hoard reads it when setup is finished.", said)
+        self.assertEqual(self.plain_sign_in()[2], [["gumroad"]])
 
     def test_signing_in_in_the_browsers_own_window(self):
         """Issue #21: Google, Discord and X refuse to sign in from a browser another program drives. So a sign-in
@@ -4554,6 +4562,11 @@ class BadInput(IsolatedTestCase):
                              "what isn't a name is left out")
             status, data = self.call("POST", "/api/login", {"stores": ["itch", "booth"]})
             self.assertEqual(status, 400, "itch.io signs in with a key, never a browser window")
+        started = []
+        with mock.patch.object(self.srv.jobs, "start", lambda task, stores, **kw: started.append(kw) or "queued"):
+            self.assertEqual(self.call("POST", "/api/login", {"stores": ["booth"], "refresh": False}), (202, {"ok": True, "queued": True}))
+            self.call("POST", "/api/login", {"stores": ["booth"]})
+            self.assertEqual([kw["then_refresh"] for kw in started], [False, True], "the setup assistant's sign-ins (#373)")
             self.assertEqual(self.call("POST", "/api/settings", {"stores": ["booth"]})[0], 400)
 
     def test_a_product_key_ends_where_it_ends(self):

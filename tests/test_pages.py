@@ -3385,7 +3385,7 @@ class WindowsTabsAndTasks(IsolatedTestCase):
           const middle = Math.abs((search.left + search.right) / 2 - (bar.left + bar.right) / 2);
           return { order, wide: search.width, over, sides, fit, middle, folded: document.querySelector('.bar').dataset.links === 'menu' };
         }"""
-        links = ["GitHub", "Discord", "Hoard updates", "Report a problem"]
+        links = ["Star on GitHub", "Discord", "Hoard updates", "Report a problem"]   # (issue #380: Star us on GitHub)
         seen, folded = set(), set()
         for path in ("", "downloads"):
             if path:
@@ -3414,7 +3414,7 @@ class WindowsTabsAndTasks(IsolatedTestCase):
                         self.assertEqual(got["sides"]["pages"], ["Library", "Downloads", "Local", "Sets and Wishlists", "Tasks", "Projects"])
                         if got["folded"]:   # (no room for them: in the Menu, with the version)
                             self.assertEqual(got["sides"]["links"], [])
-                            self.assertEqual(got["sides"]["menu"], [f"Hoard {version}", *links])
+                            self.assertEqual(got["sides"]["menu"], [f"Hoard {version}", "Star us on GitHub", *links[1:]])
                         else:
                             self.assertEqual(got["sides"]["links"], ["version", *links])
                             self.assertEqual(got["sides"]["menu"], [])
