@@ -95,7 +95,47 @@ def lib_fetch_gumroad(ctx, cfg, progress) -> list[dict]:
                           page=lib.gumroad_page(creator.get("profile_url"), lib.gumroad_permalink(prod)),
                           download_url=pur.get("download_url"), variants=variants,
                           archived=bool(pur.get("is_archived"))))
+    lib.gumroad_product_pages(ctx, items, cfg, progress)
     return items
+
+
+lib_GR_PAGE_VISITS = 150   # purchases whose download page is read for their product's page, at most, in one refresh
+
+
+def lib_gumroad_product_page(data, profile_url) -> str | None:
+    """A product's public page (<creator>.gumroad.com/l/<permalink>), from its purchase's download page data, which
+    says the product's permalink and its own address (props.purchase); None when it says neither."""
+    purchase = ((data or {}).get("props") or {}).get("purchase") if isinstance(data, dict) else None
+    if not isinstance(purchase, dict):
+        return None
+    permalink = lib.gumroad_permalink({"permalink": purchase.get("product_permalink"),
+                                       "long_url": purchase.get("product_long_url")})
+    return lib.gumroad_page(profile_url, permalink) if permalink else None
+
+
+def lib_gumroad_product_pages(ctx, items: list[dict], cfg: dict, progress) -> None:
+    """Each purchase's product page (what a set you share links to, and Hoard for Unity's credits), in place of its
+    creator's. Gumroad's library cards don't say a product's own page, but each purchase's download page does: one
+    a refresh found before (cfg["_known_pages"], from the library), else read from its download page with your
+    sign-in, at most GR_PAGE_VISITS in one refresh, with the usual pause between pages. One that can't be read keeps
+    its creator's page until a later refresh finds it."""
+    known = cfg.pop("_known_pages", None) or {}
+    for i in items:
+        i["page"] = i.get("page") or known.get(i["key"])
+    todo = [i for i in items if not i.get("page") and lib.store_link("gumroad", i.get("download_url"))][:lib.GR_PAGE_VISITS]
+    delay = float(cfg.get("request_delay", 0.8))
+    for n, i in enumerate(todo, 1):
+        progress(f"Product pages, {n} of {len(todo)}")
+        try:
+            r = ctx.request.get(i["download_url"], timeout=60000)
+            if "/login" in lib.urlparse(r.url).path:   # (signed out on the way: the rest wait for another refresh)
+                break
+            i["page"] = lib.gumroad_product_page(lib.extract_page_json(r.text()) if r.ok else None, i.get("creator_url"))
+        except Exception as e:   # (one page that won't open never stops the refresh; its address, which opens the
+            # purchase's files, never goes in the log)
+            print(f"Gumroad: couldn't read the product page of {i.get('name')!r}: {type(e).__name__}", flush=True)
+        if n < len(todo):
+            lib.pause(delay)
 
 
 dl_GR_BASE = "https://app.gumroad.com"
@@ -472,6 +512,9 @@ LIBRARY_EXPORTS = {
     'gumroad_page': lib_gumroad_page,
     'gumroad_permalink': lib_gumroad_permalink,
     'fetch_gumroad': lib_fetch_gumroad,
+    'GR_PAGE_VISITS': lib_GR_PAGE_VISITS,
+    'gumroad_product_page': lib_gumroad_product_page,
+    'gumroad_product_pages': lib_gumroad_product_pages,
 }
 
 DOWNLOADER_EXPORTS = {

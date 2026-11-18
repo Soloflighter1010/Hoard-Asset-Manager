@@ -82,6 +82,10 @@ person to sign in on this computer never sees what you bought. Your downloaded f
 
 - Hoard reads your library, including purchases you archived on Gumroad. Those start in your **Archive** (see
   [Your library](Library#archive-removed-and-hidden)); leave them out altogether in [Settings](Settings).
+- Each product's own page (what a [set you share](Sets#sharing-a-set) and Hoard for Unity's credits link to) comes
+  from its purchase's download page, because Gumroad's library names only the creator: a refresh reads the
+  download page of each purchase whose page it hasn't found yet, at most 150 in one refresh, with the usual pause
+  between pages, and keeps what it finds (5.2.0). Until then a product links to its creator's page.
 - A purchase with no download page (refunded, or a membership that ended) is skipped and listed in the
   summary. So are files Gumroad only streams.
 - Some creators put their product in the download page itself, as pictures (a set of PNG textures, say), with no
