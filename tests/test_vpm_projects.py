@@ -335,6 +335,12 @@ class ProjectList(Temp):
         listing.organize(project, folder="  Avatars <b>", tags=["Quest", "PC", "quest", "#", 5])
         (got,) = listing.projects()
         self.assertEqual((got["folder"], got["tags"], got["favorite"]), ("Avatars <b>", ["quest", "pc"], True))
+        self.assertEqual(got["packages"], [], "no vpm-manifest: none")
+        (Path(project) / "Packages" / "vpm-manifest.json").write_text(json.dumps({"dependencies": {
+            "com.vrchat.avatars": {"version": "3.7.0"}, "jp.lilxyzw.liltoon": {"version": "1.8.5"}},
+            "locked": {"com.vrchat.base": {"version": "3.7.0"}}}))
+        self.assertEqual(listing.projects()[0]["packages"], ["com.vrchat.avatars", "jp.lilxyzw.liltoon"],
+                         "issue #375: what it asks for itself, not what comes with them")
         listing.organize(project, tags=["winter"])
         self.assertEqual(listing.projects()[0]["folder"], "Avatars <b>", "the folder stays as it was")
         listing.organize(project, folder="", tags=[])
@@ -575,3 +581,152 @@ class Editors(Temp):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TakingOut(Temp):
+    """Issue #378: a product taken out of a project again: only the files Hoard put in for it, by its record of them,
+    and those you changed since only when you say so."""
+
+    def put_in(self) -> Path:
+        from hoard.vpm import imports, listing, managed
+        path = self.project()
+        (path / "Assets" / "Mine.prefab").write_bytes(b"the project's own")
+        placed = unitypackage.place(path, io.BytesIO(make_unitypackage(SAMPLE)))
+        managed.record(path, placed.baselines, "booth:hoodie")
+        listing.add_preloaded(str(path), [{"tag_key": "booth:hoodie", "name": "Hoodie", "creator": "Kitsu", "file": "h.unitypackage",
+                                           "kind": "unitypackage", "added": ["Assets/Creator", "Packages/com.kitsu.shader"]}])
+        imports.note(path, [{"store": "Booth", "name": "Hoodie", "creator": "Kitsu", "file": "h.unitypackage", "added": ["Assets/Creator"]},
+                            {"store": "Booth", "name": "Hat", "creator": "Kitsu", "file": "hat.unitypackage", "added": ["Assets/Hat"]}])
+        return path
+
+    def test_what_would_go_then_it_goes(self):
+        from hoard.vpm import managed
+        path = self.put_in()
+        (path / "Assets/Creator/Textures/hoodie.png").write_bytes(b"painted over")
+        self.assertEqual(managed.take_out_plan(path, "booth:hoodie"),
+                         {"unchanged": ["Assets/Creator/Hoodie.prefab"], "changed": ["Assets/Creator/Textures/hoodie.png"], "gone": 0})
+        self.assertEqual(managed.take_out_plan(path, "booth:hat"), {"unchanged": [], "changed": [], "gone": 0},
+                         "nothing recorded for it: nothing named")
+        done = managed.take_out(path, "booth:hoodie")
+        self.assertEqual((done["removed"], done["kept"]), (1, ["Assets/Creator/Textures/hoodie.png"]))
+        self.assertFalse((path / "Assets/Creator/Hoodie.prefab").exists())
+        self.assertFalse((path / "Assets/Creator/Hoodie.prefab.meta").exists())
+        self.assertTrue((path / "Assets/Creator/Textures/hoodie.png").exists(), "changed since: kept")
+        self.assertEqual(list(managed.load(path).values())[0]["path"], "Assets/Creator/Textures/hoodie.png", "and still recorded")
+        done = managed.take_out(path, "booth:hoodie", changed_too=True)
+        self.assertEqual((done["removed"], done["kept"]), (1, []))
+        self.assertFalse((path / "Assets/Creator").exists(), "the folders it leaves empty go too")
+        self.assertFalse((path / "Assets/Creator.meta").exists())
+        self.assertEqual((path / "Assets/Mine.prefab").read_bytes(), b"the project's own")
+        self.assertEqual(managed.load(path), {})
+
+    def test_the_task_and_the_lists(self):
+        import json as _json
+        from hoard.vpm import api, imports, listing
+        path = self.put_in()
+        self.vcc.mkdir()
+        (self.vcc / "settings.json").write_text(_json.dumps({"userProjects": [str(path)], "projectBackupPath": str(self.tmp / "Backups")}))
+        projects = api.Service()
+        with mock.patch.object(UnityProject, "unity_running", return_value=True):
+            self.assertTrue(projects.take_out_plan(str(path), "booth:hoodie")["open_in_unity"])
+            with self.assertRaises(api.ProjectsError):
+                projects._take_out(str(path), "booth:hoodie", backup_first=False, changed_too=False)
+        self.assertTrue((path / "Assets/Creator/Hoodie.prefab").exists(), "nothing done while Unity has it open")
+        with self.assertRaises(api.ProjectsError):
+            projects.take_out_plan(str(path), "booth:not-put-in")
+        plan = projects.take_out_plan(str(path), "booth:hoodie")
+        self.assertEqual((plan["name"], plan["packages"], plan["open_in_unity"]), ("Hoodie", ["com.kitsu.shader"], False))
+        with mock.patch.object(UnityProject, "unity_running", return_value=False):
+            said = projects._take_out(str(path), "booth:hoodie", backup_first=True, changed_too=False)
+        self.assertIn("Took Hoodie out of Project: 2 files deleted.", said)
+        self.assertIn("Its packages stay (com.kitsu.shader)", said)
+        self.assertEqual(len(list((self.tmp / "Backups").glob("Project-*.zip"))), 1, "backed up first")
+        self.assertEqual(listing.load_state()["projects"][listing._key(str(path))]["preloaded"], [])
+        log = _json.loads(path.joinpath(*imports.LOG_FILE).read_text("utf-8"))["imports"]
+        self.assertEqual([e["name"] for e in log], ["Hat"], "Hoard for Unity no longer shows it as in the project")
+        self.assertIn("**Hoodie**, by Kitsu (Booth): taken out", (path / imports.NOTE_NAME).read_text("utf-8"))
+
+
+class FromABackup(Temp):
+    """Issue #386: a new project from a backup: unpacked into a new folder (never over one that's there), its Git
+    history back, and on the list."""
+
+    def backed_up(self, git_history: bool):
+        from hoard.vpm import api, backup, git as vgit
+        path = self.project("Rusk")
+        (path / "Assets" / "a.txt").write_text("one")
+        (path / "Packages" / "vpm-manifest.json").write_text(json.dumps({"dependencies": {}, "locked": {}}))
+        self.vcc.mkdir()
+        (self.vcc / "settings.json").write_text(json.dumps({"userProjects": [str(path)], "projectBackupPath": str(self.tmp / "Backups")}))
+        history = None
+        if git_history:
+            import subprocess
+            def git(*args):
+                subprocess.run(["git", "-C", str(path), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", *args],
+                               check=True, capture_output=True)
+            git("init", "-q", "-b", "work")
+            git("add", "-A")
+            git("commit", "-q", "-m", "First")
+            history = self.tmp / "h.bundle"
+            self.assertTrue(vgit.bundle(path, history))
+        out = backup.back_up(path, self.tmp / "Backups", history=history)
+        return api.Service(), path, out
+
+    @unittest.skipUnless(shutil.which("git"), "needs Git")
+    def test_unpacked_with_its_history_and_listed(self):
+        import subprocess
+        from hoard.vpm import api, listing
+        service, path, out = self.backed_up(git_history=True)
+        said = service._from_backup({"backup": str(out), "name": "Rusk again", "location": str(self.tmp)})
+        dest = self.tmp / "Rusk again"
+        self.assertIn("Made Rusk again from", said)
+        self.assertIn("Its Git history is back, on work.", said)
+        self.assertEqual((dest / "Assets" / "a.txt").read_text(), "one")
+        self.assertFalse((dest / "git-history.bundle").exists(), "the bundle isn't left in the project")
+        self.assertFalse(any(self.tmp.glob(".Rusk again.bundle")), "nor beside it")
+        log = subprocess.run(["git", "-C", str(dest), "log", "--format=%s"], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(log.strip(), "First")
+        st = subprocess.run(["git", "-C", str(dest), "status", "--porcelain"], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(st.strip(), "", "its files as the last commit has them: no changes")
+        self.assertIn(str(dest), listing.shared_paths()[0])
+        self.assertEqual((path / "Assets" / "a.txt").read_text(), "one", "the original isn't touched")
+        with self.assertRaisesRegex(api.ProjectsError, "already"):
+            service._from_backup({"backup": str(out), "name": "Rusk", "location": str(self.tmp)})
+        with self.assertRaises(api.ProjectsError):   # (only a backup in your backups folder)
+            service._from_backup({"backup": str(self.tmp / "elsewhere.zip"), "name": "X", "location": str(self.tmp)})
+
+    def test_only_a_unity_project_and_only_inside_its_folder(self):
+        import zipfile
+        from hoard.vpm import api, backup
+        service, _, out = self.backed_up(git_history=False)
+        odd = out.with_name("Odd-2025-01-01T10-00-00.zip")
+        with zipfile.ZipFile(odd, "w") as zf:
+            zf.writestr("../escaped.txt", "out")
+            zf.writestr("C:/drive.txt", "out")
+            zf.writestr("notes.txt", "just a file")
+        done = backup.unpack(odd, self.tmp / "Odd")
+        self.assertEqual((done["files"], done["skipped"]), (1, 2))
+        self.assertFalse((self.tmp / "escaped.txt").exists())
+        self.assertEqual(sorted(p.name for p in (self.tmp / "Odd").iterdir()), ["notes.txt"])
+        with self.assertRaisesRegex(api.ProjectsError, "isn't of a Unity project"):
+            service._from_backup({"backup": str(odd), "name": "Odd 2", "location": str(self.tmp)})
+        self.assertFalse((self.tmp / "Odd 2").exists(), "nothing left behind")
+        self.assertFalse((self.tmp / "Odd 2.part").exists())
+
+    def test_a_git_folder_of_its_own_is_never_run_with_the_bundle(self):
+        """A backup with a .git folder in it (one made before a project was deleted) and a bundle: Git isn't run in that
+        .git (its settings could run programs), and the bundle isn't left behind."""
+        import zipfile
+        from hoard.vpm import git as vgit
+        service, _, out = self.backed_up(git_history=False)
+        both = out.with_name("Both-2025-01-01T10-00-00.zip")
+        with zipfile.ZipFile(out) as src, zipfile.ZipFile(both, "w") as zf:
+            for info in src.infolist():
+                zf.writestr(info, src.read(info))
+            zf.writestr(".git/config", "[core]\n\thooksPath = /somewhere/else\n")
+            zf.writestr("git-history.bundle", "not run")
+        with mock.patch.object(vgit, "restore_bundle", side_effect=AssertionError("Git was run")):
+            said = service._from_backup({"backup": str(both), "name": "Both", "location": str(self.tmp)})
+        self.assertNotIn("Git history", said)
+        self.assertTrue((self.tmp / "Both" / ".git" / "config").is_file())
+        self.assertFalse(any(self.tmp.glob(".Both.bundle")))

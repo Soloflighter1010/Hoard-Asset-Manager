@@ -213,3 +213,61 @@ def move(paths: list[Path], to: Path, stop=lambda: False) -> tuple[int, int, lis
         count += 1
         freed += size
     return count, freed, problems
+
+
+ROOM_SPARE = 256 << 20   # what's left free on a drive a backup is unpacked to, at least (issue #386)
+
+
+def _member(name: str) -> list[str] | None:
+    """A backup member's path as plain parts inside the project, or None for one that isn't (that starts at a root
+    or a drive, climbs out with .., or has an empty part)."""
+    rel = name.replace("\\", "/")
+    parts = rel.split("/")
+    if rel.startswith("/") or any(p in ("", ".", "..") or ":" in p for p in parts):
+        return None
+    return parts
+
+
+def unpack(backup_zip: Path, dest: Path) -> dict:
+    """Issue #386: a backup unpacked into dest, a new folder (never one that's there, so nothing is written over): its
+    files into dest + ".part" first, renamed when they're all out; a member that's a link, or whose path isn't a plain
+    one inside the project, is left out. Its Git history (BUNDLE_NAME) is set aside beside dest, for git to read. Stop
+    (checked on each file) or a failure leaves nothing behind. {"files": n, "skipped": n, "bundle": Path or None}."""
+    backup_zip, dest = Path(backup_zip), Path(dest)
+    part, bundle = dest.with_name(dest.name + ".part"), dest.with_name(f".{dest.name}.bundle")
+    if dest.exists() or part.exists():
+        raise ValueError("A folder with that name is already there.")
+    done = {"files": 0, "skipped": 0, "bundle": None}
+    try:
+        with zipfile.ZipFile(backup_zip) as zf:
+            infos = zf.infolist()
+            need = sum(i.file_size for i in infos)
+            free = shutil.disk_usage(next(p for p in [dest.parent, *dest.parent.parents] if p.exists())).free
+            if need + ROOM_SPARE > free:
+                raise ValueError(f"There isn't room for it there: it needs {need / (1 << 30):.1f} GB, and "
+                                 f"{free / (1 << 30):.1f} GB is free.")
+            part.mkdir(parents=True)
+            for info in infos:
+                if info.is_dir():
+                    continue
+                parts = _member(info.filename)
+                if parts is None or (info.external_attr >> 16) & 0o170000 == 0o120000:   # (a link: never made)
+                    done["skipped"] += 1
+                    continue
+                target = bundle if parts == [BUNDLE_NAME] else part.joinpath(*parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src, open(target, "xb") as out:
+                    shutil.copyfileobj(src, out, 1 << 20)
+                if target == bundle:
+                    done["bundle"] = bundle
+                    continue
+                done["files"] += 1
+                if done["files"] % 200 == 0:
+                    tick(f"Unpacking {backup_zip.name}: {done['files']:,} files")
+        os.replace(part, dest)
+    except BaseException:
+        shutil.rmtree(part, ignore_errors=True)
+        if bundle.exists():
+            bundle.unlink()
+        raise
+    return done

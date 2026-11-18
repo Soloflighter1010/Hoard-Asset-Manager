@@ -234,3 +234,65 @@ def update_file(project: Path, file: Path, source: str, member: str | None = Non
         if UnityProject.load(project).unity_running():
             raise ValueError("Close Unity before updating this project's assets.")
         return replace_unchanged(project, entries, source)
+
+
+def take_out_plan(project: Path, source: str) -> dict:
+    """Issue #378: what taking a product out of a project would delete, from the record of the files Hoard put in for
+    it (source: its tag key): {"unchanged": [paths], "changed": [paths changed since, kept unless you say], "gone":
+    how many are no longer there}. Only files in the record: nothing that was in the project before is ever named."""
+    project = Path(project)
+    out = {"unchanged": [], "changed": [], "gone": 0}
+    for entry in load(project).values():
+        if entry.get("source") != source:
+            continue
+        path = safe_file(project, entry["path"])
+        if path is None or not path.is_file():
+            out["gone"] += 1
+        else:
+            out["unchanged" if unchanged(project, entry) else "changed"].append(entry["path"])
+    out["unchanged"].sort()
+    out["changed"].sort()
+    return out
+
+
+def take_out(project: Path, source: str, changed_too: bool = False) -> dict:
+    """Issue #378: delete the files Hoard put in a project for a product (each with its .meta), those changed since only
+    when changed_too, then the folders that leaves empty (never Assets itself). The record forgets what's deleted or
+    gone; what's kept stays in it. {"removed": n, "kept": [paths], "folders": n}."""
+    project = Path(project)
+    records = load(project)
+    removed, kept, parents = 0, [], set()
+    for guid, entry in list(records.items()):
+        if entry.get("source") != source:
+            continue
+        path = safe_file(project, entry["path"])
+        if path is None or not path.is_file():
+            del records[guid]
+            continue
+        if not changed_too and not unchanged(project, entry):
+            kept.append(entry["path"])
+            continue
+        path.unlink()
+        meta = Path(str(path) + ".meta")
+        if meta.is_file() and not meta.is_symlink():
+            meta.unlink()
+        del records[guid]
+        removed += 1
+        parents.add(path.parent)
+    folders = 0
+    assets = (project / "Assets").resolve()
+    for folder in sorted(parents, key=lambda p: len(p.parts), reverse=True):
+        while folder.resolve() != assets and assets in folder.resolve().parents and not folder.is_symlink():
+            try:
+                if any(folder.iterdir()):
+                    break
+                folder.rmdir()
+            except OSError:
+                break
+            meta = folder.with_name(folder.name + ".meta")
+            if meta.is_file() and not meta.is_symlink():
+                meta.unlink()
+            folders += 1
+            folder = folder.parent
+    write_file_safely(manifest_path(project), json.dumps({"version": 1, "files": records}, indent=1))
+    return {"removed": removed, "kept": sorted(kept), "folders": folders}

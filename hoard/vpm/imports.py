@@ -137,3 +137,44 @@ def note(project, results: list[dict], log=None) -> None:
     except OSError as e:
         if log:
             log(Warn(f"Couldn't write {NOTE_NAME} ({e})"))
+
+
+def taken_out(project, product: dict, done: dict, log=None) -> None:
+    """Issue #378: a product taken out of the project. Its entries Hoard added to imports.json go (so Hoard for Unity
+    no longer shows it as in the project, unless files of it were kept); the list for you gets a section saying so.
+    product: {"store", "name", "creator"}; done: take_out()'s answer."""
+    project = Path(project)
+    now = time.gmtime()
+    path = project.joinpath(*LOG_FILE)
+    product = dict(product)
+
+    def its(e) -> bool:   # (one of its entries: by name, and by store whatever its case, "Booth" or "booth")
+        return (isinstance(e, dict) and e.get("via") == "hoard" and e.get("name") == _text(product.get("name"))
+                and str(e.get("store") or "").lower() == _text(product.get("store")).lower())
+    if path.is_file() and not done.get("kept"):
+        try:
+            doc = read_json_file(path, MAX_LOG)
+            if isinstance(doc, dict) and isinstance(doc.get("imports"), list):
+                left = [e for e in doc["imports"] if not its(e)]
+                product["store"] = next((e["store"] for e in doc["imports"] if its(e)), product.get("store"))
+                if len(left) != len(doc["imports"]):
+                    write_file_safely(path, json.dumps({**doc, "imports": left}, indent=2, ensure_ascii=False) + "\n")
+        except (OSError, DataFileError, ValueError) as e:
+            if log:
+                log(Warn(f"Couldn't take it off the project's list of imports ({e})"))
+    note_path = project / NOTE_NAME
+    if not note_path.is_file():
+        return
+    kept = done.get("kept") or []
+    lines = [f"## {time.strftime('%d %b %Y, %H:%M (UTC)', now)}", "",
+             f"**{_md(product.get('name'))}**" + (f", by {_md(product['creator'])}" if product.get("creator") else "") +
+             (f" ({_md(product['store'])})" if product.get("store") else "") + ": taken out",
+             f"- Deleted {int(done.get('removed') or 0):,} of its files that Hoard put in"]
+    if kept:
+        lines.append(f"- Kept {len(kept):,} you changed since: " + ", ".join(_code(k) for k in kept[:MAX_ADDED]) +
+                     (f" and {len(kept) - MAX_ADDED} more" if len(kept) > MAX_ADDED else ""))
+    try:
+        write_file_safely(note_path, note_path.read_text("utf-8") + "\n".join(lines) + "\n\n")
+    except OSError as e:
+        if log:
+            log(Warn(f"Couldn't write {NOTE_NAME} ({e})"))

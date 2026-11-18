@@ -1127,6 +1127,26 @@ def bundle(folder, out: Path) -> bool:
     return True
 
 
+def restore_bundle(folder, bundle: Path) -> str | None:
+    """Issue #386: a backup's Git history (its bundle) back in a project unpacked from it: every branch and tag, the
+    branch it was on as the current one, and the files left as the backup has them (what differs from the last commit
+    shows as changes, as it did). Returns that branch's name (None when it was on no branch)."""
+    folder, bundle = Path(folder), Path(bundle)
+    run(folder, ["init", "--quiet"], timeout=WRITE_TIMEOUT)
+    run(folder, ["fetch", "--quiet", "--update-head-ok", "--", str(bundle), "+refs/heads/*:refs/heads/*",
+                 "+refs/tags/*:refs/tags/*"], timeout=NETWORK_TIMEOUT)
+    heads = [line.split(" ", 1) for line in run(folder, ["bundle", "list-heads", str(bundle)]).out.splitlines() if " " in line]
+    head = next((sha for sha, ref in heads if ref == "HEAD"), None)
+    branch = next((ref for sha, ref in heads if sha == head and ref.startswith("refs/heads/")), None)
+    if branch:
+        run(folder, ["symbolic-ref", "HEAD", branch])
+    elif head:
+        run(folder, ["update-ref", "--no-deref", "HEAD", head])
+    run(folder, ["reset", "--quiet"], timeout=WRITE_TIMEOUT)   # (the index as the last commit; the files as they are)
+    trust(folder)
+    return branch[len("refs/heads/"):] if branch else None
+
+
 def clone_name(url: str) -> str:
     """The folder name a clone of this address gets by default: the last part of its path, without .git."""
     tail = re.split(r"[/:\\]", str(url).rstrip("/\\"))[-1]

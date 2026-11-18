@@ -973,6 +973,7 @@ function renderBulk() {
 // Do one of the selection's actions with what's selected.
 function runAction(item) {
   closeSelMenu();
+  if (item.free) return item.run();   // (one that isn't about the chosen products: a project's own, say)
   const chosen = chosenItems();
   if (!chosen.length) { toast("Select some items first."); return; }
   item.run(chosen);
@@ -3721,10 +3722,20 @@ function pjAddList(unityVersion, have) {
   if (!k || k.for !== pjPkgKey(unityVersion)) { pjLoadPkgs(unityVersion); return `<p class="none">${esc(tr("Reading the packages..."))}</p>`; }
   if (!k.list.length) return `<p class="none">${esc(tr("No packages yet: refresh the repositories first (Repositories, Refresh them all)."))}</p>`;
   const chosen = PJ.pick.size;
+  // issue #375: the packages your projects ask for most, first, in a group of their own (each once: not in its
+  // repository's group too); not those a project has already, nor VRChat's own that its template gives it
+  const used = pjPackagesUsed();
+  const most = k.list.filter(x => used.get(x.name) && !have.has(x.name) && !PJ_TEMPLATE_PACKAGES.has(x.name))
+    .sort((a, b) => used.get(b.name) - used.get(a.name) || coll.compare(a.label, b.label)).slice(0, PJ_MOST_USED);
+  const mostNames = new Set(most.map(x => x.name));
   // in groups by where they come from (a repository is usually one creator's): VRChat's own first, then yours by name,
   // then your package folders; each folds away, and stays as you left it
   const groups = new Map();
-  for (const x of k.list) { if (!groups.has(x.repo)) groups.set(x.repo, []); groups.get(x.repo).push(x); }
+  for (const x of k.list) {
+    if (mostNames.has(x.name)) continue;
+    if (!groups.has(x.repo)) groups.set(x.repo, []);
+    groups.get(x.repo).push(x);
+  }
   // VRChat's repository first, then the others, then folders.
   const rank = r => ({ vrchat: 0, repo: 1, folder: 2 })[groups.get(r)[0].source] ?? 1;
   // A package to tick (one the project has already can't be).
@@ -3732,17 +3743,30 @@ function pjAddList(unityVersion, have) {
     const on = PJ.pick.has(x.name), already = have.has(x.name);
     return `<li data-hay="${esc(norm([x.label, x.name, x.author, x.repo, x.description, ...(x.keywords || [])].join(" ")))}" data-name="${esc(x.name)}">` +
       `<label class="check"><input type="checkbox" value="${esc(x.name)}"${on ? " checked" : ""}${already ? " disabled" : ""}> <span><b translate="no">${esc(x.label)}</b> <span class="muted" translate="no">${esc(x.version)}</span>` +
-      (already ? ` <span class="pj-tag">${esc(tr("In it already"))}</span>` : "") + `<br>` +
+      (already ? ` <span class="pj-tag">${esc(tr("In it already"))}</span>` : "") +
+      (mostNames.has(x.name) ? ` <span class="pj-tag">${esc(tr(used.get(x.name) === 1 ? "In 1 of your projects" : "In {0} of your projects", used.get(x.name)))}</span>` : "") + `<br>` +
       `<span class="muted" translate="no">${esc(x.name)}${x.author ? ` · ${esc(x.author)}` : ""}</span>` +
       (x.description ? `<br><span class="pj-desc">${esc(x.description)}</span>` : "") + `</span></label>` +
       (on ? pjVerPick(x.name, x.label) : "") + `</li>`;
   };
   return `<div class="pj-top"><input type="search" id="pjPkFind" value="${esc(PJ.pkFind)}" placeholder="${esc(tr("Find a package"))}" aria-label="${esc(tr("Find a package"))}"></div>` +
+    (most.length ? `<details class="pj-repo pj-most" data-repo="${esc(PJ_MOST_GROUP)}"${PJ.repoShut.has(PJ_MOST_GROUP) ? "" : " open"}><summary><b>${esc(tr("Used most in your projects"))}</b> ` +
+      `<span class="n">${most.length}</span></summary><ul class="pj-picklist pj-rows pj-addlist">${most.map(row).join("")}</ul></details>` : "") +
     [...groups.keys()].sort((a, b) => rank(a) - rank(b) || coll.compare(a, b)).map(r =>
       `<details class="pj-repo" data-repo="${esc(r)}"${PJ.repoShut.has(r) ? "" : " open"}><summary><b translate="no">${esc(r)}</b> ` +
       `<span class="n">${groups.get(r).length}</span></summary><ul class="pj-picklist pj-rows pj-addlist">${groups.get(r).map(row).join("")}</ul></details>`).join("") +
     `<div class="pj-addbar"><span class="muted" id="pjChosen">${esc(tr(chosen === 1 ? "{0} chosen" : "{0} chosen", chosen))}</span>` +
     `<button class="primary sm" data-pj="addchosen"${chosen ? "" : " disabled"}>${esc(tr("Add the chosen packages"))}</button></div>`;
+}
+const PJ_MOST_USED = 8;   // (Add packages' Used most: at most this many, issue #375)
+const PJ_MOST_GROUP = "hoard:used-most";   // (its group's name for folding, as a repository's label never is)
+const PJ_TEMPLATE_PACKAGES = new Set(["com.vrchat.base", "com.vrchat.avatars", "com.vrchat.worlds"]);   // (a template's own)
+// Issue #375: how many of your projects ask for each package themselves (from the list's own reading of each
+// project's manifest), {name: count}
+function pjPackagesUsed() {
+  const used = new Map();
+  for (const p of (PJ.data && PJ.data.projects) || []) for (const n of p.packages || []) used.set(n, (used.get(n) || 0) + 1);
+  return used;
 }
 function pjVerPick(name, label) {   // which version of a ticked package: the newest, unless you choose another
   const versions = PJ.vers[name] || [], picked = PJ.pick.get(name) || "";
@@ -3794,13 +3818,13 @@ function pjItemsByKey() {
   return by;
 }
 // A product's tile in a report: its picture, name and creator, from your library when it's there.
-function pjTile(item, known, below) {
+function pjTile(item, known, below, attrs = "") {
   const name = item ? item.name : known.name || "", creator = item ? item.creator : known.creator || "";
   const fromKey = String(known.tag_key || "").split("/")[0];   // (one not in your library now: its store, from its key)
   const store = String((item || known).store || (STRIPE_STORES.includes(fromKey) ? fromKey : "local")).toLowerCase();
   const inner = `<span class="art">${item ? T.art(item) : setPlaceholder(name, creator)}${notch(store, [])}</span>` +
     `<span class="nm-t" translate="no">${esc(name)}</span><span class="cr" translate="no">${esc(creator)}</span>`;   // (as the Library's: #198)
-  return `<div class="slot ext pj-tile ${esc(store)}">` + (item ? `<button class="ext-main" data-pj="showitem" data-id="${esc(T.id(item))}">${inner}</button>`
+  return `<div class="slot ext pj-tile ${esc(store)}"${attrs}>` + (item ? `<button class="ext-main" data-pj="showitem" data-id="${esc(T.id(item))}">${inner}</button>`
     : `<span class="ext-main">${inner}</span>`) + (below ? `<span class="pj-below">${below}</span>` : "") + `</div>`;
 }
 // What went into a project from your library, newest first: a tile for each product, with its files and when beneath
@@ -3812,7 +3836,46 @@ function pjPutInTiles(pre) {
     `<details class="pj-files"><summary>${esc(tr(xs.length === 1 ? "1 package" : "{0} packages", xs.length))}` +
       `${xs[0].when ? ` · ${esc(ago(xs[0].when))}` : ""}</summary>` +
     xs.map(x => `<span class="pj-file" translate="no"${(x.added || []).length ? ` title="${esc(tr("Added:") + " " + x.added.join(", "))}"` : ""}>${esc(x.label || x.file)}</span>`).join("") +
-    `</details>`)).join("")}</div>`;
+    `</details><button class="ghost sm" data-pj="takeout" data-key="${esc(xs[0].tag_key)}">${esc(tr("Take out..."))}</button>`,   // (#378)
+    ` data-takeout="${esc(xs[0].tag_key)}"`)).join("")}</div>`;
+}
+// Issue #378: a product taken out of a project again. What would go is said first: the files Hoard put in for it (from
+// its record of them, so nothing that was in the project before is named), those you changed since kept unless you
+// tick them too; a backup first; never while Unity has the project open. Its packages stay: others may need them.
+async function pjTakeOut(path, key) {
+  const r = await apiPost("/api/vpm/take-out", { path, key });
+  if (!r.ok) { toast(r.data.error || tr("That can't be done.")); return; }
+  const p = r.data.plan, list = files => files.slice(0, 300).join("\n") + (files.length > 300 ? "\n" + tr("and {0} more", files.length - 300) : "");
+  if (p.open_in_unity) { toast(tr("Unity has this project open. Close it, then take the product out.")); return; }
+  if (!p.unchanged.length && !p.changed.length) {
+    await askForm({ icon: "info", title: tr("Take {0} out of this project?", p.name), ok: tr("OK"), cancel: "", blocks: [
+      { type: "text", text: tr("Hoard has no record of the files it put in for it (it went in before Hoard kept one), so it can't tell them from the project's own. Delete its folders in Unity instead.") }] });
+    return;
+  }
+  const res = await askForm({ cls: "pj-dlg", icon: "trash", tone: "warn", danger: true, title: tr("Take {0} out of this project?", p.name),
+    ok: tr("Take it out"), blocks: [
+      ...(p.unchanged.length ? [{ type: "text", text: tr(p.unchanged.length === 1 ? "1 file Hoard put in for it is deleted, with its .meta file:" : "{0} files Hoard put in for it are deleted, each with its .meta file:", p.unchanged.length) },
+                                { type: "pre", cls: "pj-diff-text pj-plan", text: list(p.unchanged) }] : []),
+      ...(p.changed.length ? [{ type: "text", tone: "warn", text: tr(p.changed.length === 1 ? "1 file you changed since is kept:" : "{0} files you changed since are kept:", p.changed.length) },
+                              { type: "pre", cls: "pj-diff-text pj-plan", text: list(p.changed) },
+                              { type: "check", id: "pjOutChanged", label: tr("Delete those too") }] : []),
+      ...(p.packages.length ? [{ type: "text", tone: "hint", text: tr("Its packages stay ({0}): remove them in Packages if nothing else needs them.", p.packages.join(", ")) }] : []),
+      { type: "check", id: "pjOutBackup", checked: true, label: tr("Back it up first, into your backups folder") }] });
+  if (!res.ok) return;
+  await pjRun("/api/vpm/take-out", { path, key, confirm: true, backup: res.fields.pjOutBackup, changed_too: !!res.fields.pjOutChanged });
+}
+// New project's From your library (issue #376): a tile for each product, as a project's own tab shows them, with
+// Leave out for the whole product on it; its files beneath, where it has several, each one left out on its own
+function pjPickTiles(picks) {
+  const items = pjItemsByKey(), by = new Map();
+  picks.forEach((x, i) => { if (!by.has(x.key)) by.set(x.key, []); by.get(x.key).push([x, i]); });
+  return `<div class="grid pj-tiles">${[...by].map(([key, xs]) => pjTile(items.get(key), { name: xs[0][0].product || "", tag_key: key },
+    (xs.length > 1
+      ? `<details class="pj-files"><summary>${esc(tr("{0} packages", xs.length))}</summary><span class="pj-chips">` +
+        xs.map(([x, i]) => `<button class="pill" data-pj="unpick" data-i="${i}" title="${esc(tr("Leave out"))}"><span translate="no">${esc(x.label || x.file)}</span><span aria-hidden="true">×</span></button>`).join("") +
+        `</span></details>`
+      : `<span class="pj-file" translate="no">${esc(xs[0][0].label || xs[0][0].file)}</span>`) +
+    `<button class="ghost sm" data-pj="unpickall" data-key="${esc(key)}">${esc(tr("Leave out"))}</button>`)).join("")}</div>`;
 }
 // What Hoard for Unity found in a project: its products, and the credits to give.
 function pjReport(p) {
@@ -3862,8 +3925,7 @@ function pjNew() {
     `<div class="row"><button class="ghost sm" data-pj="addpkg">${esc(tr("Add packages"))}</button></div>` +
     `<div id="pjSuggest"></div>` +
     `<h4>${esc(tr("From your library"))}</h4>` +
-    (f.picks.length ? `<ul class="pj-pre">${f.picks.map((x, i) => `<li><b translate="no">${esc(x.product || "")}</b> <span class="muted" translate="no">${esc(x.label || x.file)}</span> ` +
-      `<button class="linkish" data-pj="unpick" data-i="${i}">${esc(tr("Leave out"))}</button></li>`).join("")}</ul>` : `<p class="none">${esc(tr("Nothing yet."))}</p>`) +
+    (f.picks.length ? pjPickTiles(f.picks) : `<p class="none">${esc(tr("Nothing yet."))}</p>`) +
     `<div class="row"><button class="ghost sm" data-pj="addprod">${esc(tr("Add Assets"))}</button>` +
     `<button class="ghost sm" data-pj="addset">${esc(tr("Put in a set"))}</button></div>` +
     `<div class="row pj-go"><button class="ghost sm" data-pj="savepreset">${esc(tr("Save as a preset"))}</button>` +
@@ -3954,7 +4016,23 @@ async function pjLoadBackups() {
 function pjBackupRow(b) {
   return `<li class="pj-row pj-bk${b.old ? " old" : ""}"><label class="pj-main check"><input type="checkbox" class="pj-bkpick" value="${esc(b.path)}">` +
     `<span><b translate="no">${esc(b.project)}</b><span class="meta">${esc(whenDone(b.when))} · ${esc(sizeText(b.size))}</span></span></label>` +
-    `<span class="pj-what">${b.old ? esc(tr("Old")) : ""}</span></li>`;
+    `<span class="pj-what">${b.old ? esc(tr("Old")) : ""}</span>` +
+    `<button class="ghost sm" data-pj="bkproject" data-backup="${esc(b.path)}">${esc(tr("New project from this..."))}</button></li>`;   // (#386)
+}
+// Issue #386: a new project from a backup: a name (the project's, with the backup's date) and a folder (New projects
+// by default), then unpacked there as a task, with its Git history and packages; never over the original project or
+// any folder that's there.
+async function pjFromBackup(b) {
+  const where = (PJ.data.settings || {}).projects_folder || "";
+  const res = await askForm({ cls: "pj-dlg", icon: "archive", title: tr("New project from this backup"), ok: tr("Make it"), keep: [b.name],
+    detail: tr("Unpacks the backup into a new folder and puts it on the list, with its Git history when the backup has it, and installs its packages as it lists them. The project it was made from isn't touched."),
+    blocks: [{ type: "text", text: b.name, translate: false },
+             { type: "field", id: "pjBkName", label: tr("Its folder's name"), value: `${b.project} ${String(b.when).slice(0, 10)}`, max: 255 },
+             { type: "field", id: "pjBkWhere", label: tr("In the folder"), value: where, max: 1000 }] });
+  if (!res.ok) return;
+  const name = res.fields.pjBkName.trim(), location = res.fields.pjBkWhere.trim();
+  if (!name || !location) return;
+  if (await pjRun("/api/vpm/from-backup", { backup: b.path, name, location })) { PJ.view = "list"; drawProjects(); }
 }
 // ---- Logs, as ALCOM's Logs page and the Creator Companion's Logs tab have theirs: what Hoard did to your projects,
 // packages and repositories since it started, and what went wrong (hoard/vpm/logbook.py), oldest first, found by its
@@ -4679,7 +4757,7 @@ const pjGitOf = path => !!((PJ.data && PJ.data.projects || []).find(p => p.path 
 let afterSetMade = null;   // set by a page that shows sets, to show the new one
 // Do what one of Projects' buttons says.
 async function pjAct(b) {
-  const act = b.dataset.pj, row = b.closest("[data-path]"), path = row ? row.dataset.path : (PJ.project || {}).path;
+  const b0 = b, act = b.dataset.pj, row = b.closest("[data-path]"), path = row ? row.dataset.path : (PJ.project || {}).path;
   if (act.startsWith("git")) return pjGitAct(act, b, path);   // (the Source control tab)
   const f = PJ.form;
   if (act === "back") { PJ.view = "list"; PJ.project = null; return loadProjects(); }
@@ -4715,6 +4793,10 @@ async function pjAct(b) {
   if (act === "bkdelold" || act === "bkmoveold") {
     const old = (PJ.backups.backups || []).filter(x => x.old).map(x => x.path);
     return act === "bkdelold" ? pjBackupsDelete(old) : pjBackupsMove(old);
+  }
+  if (act === "bkproject") {   // a new project from this backup (#386)
+    const k = PJ.backups || {}, b = [...(k.backups || []), ...(k.moved || [])].find(x => x.path === b0.dataset.backup);
+    return b ? pjFromBackup(b) : undefined;
   }
   if (act === "bkdel" || act === "bkmove") {
     const chosen = [...document.querySelectorAll("#projectsBody .pj-bkpick:checked")].map(x => x.value);
@@ -4855,6 +4937,7 @@ async function pjAct(b) {
     return;
   }
   if (act === "delete") return pjDelete(PJ.project);
+  if (act === "takeout") return pjTakeOut(path, b.dataset.key);   // (a product out of the project again: #378)
   if (act === "unpkg") { delete f.packages[b.dataset.name]; return drawProjects(); }
   if (act === "sugg") {
     const names = await pjAddSuggested([{ package: b.dataset.name, repo: b.dataset.repo || null, repo_added: b.dataset.added === "true" }]);
@@ -4863,6 +4946,7 @@ async function pjAct(b) {
   }
   if (act === "addprod") return pjPickFromDownloads();   // (Downloads, in Select mode for this project)
   if (act === "unpick") { f.picks.splice(+b.dataset.i, 1); return drawProjects(); }
+  if (act === "unpickall") { f.picks = f.picks.filter(x => x.key !== b.dataset.key); return drawProjects(); }   // (a product's every file)
   if (act === "addset") {
     const r = await api("/api/sets", { cache: "no-store" });
     const sets = r.ok ? ((await r.json()).sets || []).filter(s => s.items.some(i => i.download != null)) : [];
@@ -5013,6 +5097,14 @@ function wireProjects() {
     e.preventDefault();
     PJ.busy = true;
     try { await pjAct(b); } finally { PJ.busy = false; }
+  });
+  win.addEventListener("contextmenu", e => {   // a product put in a project: Take out of this project... (#378)
+    const tile = e.target.closest("[data-takeout]");
+    if (!tile || !PJ.project) return;
+    e.preventDefault();
+    const path = PJ.project.path, key = tile.dataset.takeout;
+    openSelMenu([{ name: "", items: [{ label: "Take out of this project...", danger: true, free: true,
+                                       run: () => pjWhenFree(() => pjTakeOut(path, key)) }] }], null, { x: e.clientX, y: e.clientY });
   });
   win.addEventListener("input", e => { if (e.target.id === "pjGitMsg") PJG.msg = e.target.value; });   // (kept when it's drawn again)
   win.addEventListener("keydown", e => {

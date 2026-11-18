@@ -221,6 +221,24 @@ def _vpm_post(self, path: str, body: dict):
                 return self._json({"error": "Type the project's name to delete it."}, 400)
             srv.vpm.deletable(where)   # (said now when it can't be: Unity has it open, say)
             return self._vpm_job({"op": "delete", "path": where, "name": app.Path(where).name, "backup": body.get("backup") is not False})
+        if path == "/api/vpm/from-backup":   # a new project from a backup (issue #386): a task
+            backup_path = str(body.get("backup") or "")[:2000]
+            srv.vpm.backups_chosen([backup_path])   # (said now when it isn't one: never a file elsewhere)
+            name, location = str(body.get("name") or "").strip()[:255], str(body.get("location") or "").strip()[:1000]
+            problem, _ = vpm_templates.check_name(app.Path(location), name)
+            if problem or not app.Path(location).is_absolute():
+                return self._json({"error": problem or "Choose a folder for it, by its full path."}, 400)
+            return self._vpm_job({"op": "from-backup", "backup": backup_path, "name": name, "location": location})
+        if path == "/api/vpm/take-out":   # a product out of a project again (issue #378): what it would do, then a task
+            where = srv.vpm.listed(body.get("path"))
+            key = str(body.get("key") or "")[:400]
+            plan = srv.vpm.take_out_plan(where, key)
+            if body.get("confirm") is not True:
+                return self._json({"ok": True, "plan": plan})
+            if plan["open_in_unity"]:
+                return self._json({"error": "Unity has this project open. Close it, then take the product out."}, 409)
+            return self._vpm_job({"op": "take-out", "path": where, "name": app.Path(where).name, "key": key,
+                                  "backup": body.get("backup") is not False, "changed_too": body.get("changed_too") is True})
         if path == "/api/vpm/git/sync":   # fetch, pull or push: a task, as it talks to a remote (issue #298)
             where = srv.vpm.listed(body.get("path"))
             op = {"fetch": "git-fetch", "pull": "git-pull", "push": "git-push"}.get(str(body.get("op") or ""))
@@ -339,7 +357,7 @@ def get_api_vpm(self, path, body, query):
 
 
 def post_api_vpm_preview(self, path, body, query):
-    """POST /api/vpm/preview, /api/vpm/apply, /api/vpm/create, /api/vpm/preload, /api/vpm/backup, /api/vpm/refresh, /api/vpm/open, /api/vpm/add-project, /api/vpm/remove-project, /api/vpm/favorite, /api/vpm/organize, /api/vpm/rename, /api/vpm/git/init, /api/vpm/git/ignore, /api/vpm/git/stage, /api/vpm/git/unstage, /api/vpm/git/commit, /api/vpm/git/identity, /api/vpm/git/remote, /api/vpm/git/branch, /api/vpm/git/abort, /api/vpm/git/open-app, /api/vpm/git/app, /api/vpm/git/sync, /api/vpm/git/clone, /api/vpm/git/trust, /api/vpm/repos/add, /api/vpm/repos/remove, /api/vpm/settings, /api/vpm/check-name, /api/vpm/presets, /api/vpm/open-folder, /api/vpm/backups, /api/vpm/backups/settings, /api/vpm/backups/delete, /api/vpm/backups/move, /api/vpm/backups/show, /api/vpm/delete-project. Projects (hoard/vpm)"""
+    """POST /api/vpm/preview, /api/vpm/apply, /api/vpm/create, /api/vpm/preload, /api/vpm/backup, /api/vpm/refresh, /api/vpm/open, /api/vpm/add-project, /api/vpm/remove-project, /api/vpm/favorite, /api/vpm/organize, /api/vpm/rename, /api/vpm/git/init, /api/vpm/git/ignore, /api/vpm/git/stage, /api/vpm/git/unstage, /api/vpm/git/commit, /api/vpm/git/identity, /api/vpm/git/remote, /api/vpm/git/branch, /api/vpm/git/abort, /api/vpm/git/open-app, /api/vpm/git/app, /api/vpm/git/sync, /api/vpm/git/clone, /api/vpm/git/trust, /api/vpm/repos/add, /api/vpm/repos/remove, /api/vpm/settings, /api/vpm/check-name, /api/vpm/presets, /api/vpm/open-folder, /api/vpm/backups, /api/vpm/backups/settings, /api/vpm/backups/delete, /api/vpm/backups/move, /api/vpm/backups/show, /api/vpm/from-backup, /api/vpm/take-out, /api/vpm/delete-project. Projects (hoard/vpm)"""
     srv = self.server
     u = app.urlparse(self.path)
     return self._vpm_logged(path, self._vpm_post, body)
@@ -408,6 +426,8 @@ ROUTES = [
     Route('POST', '/api/vpm/backups/delete', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/vpm/backups/move', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/vpm/backups/show', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
+    Route('POST', '/api/vpm/from-backup', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('backup', 'string'), ('name', 'string'), ('location', 'string')), response='object'),
+    Route('POST', '/api/vpm/take-out', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('path', 'string'), ('key', 'string'), ('confirm', 'boolean'), ('backup', 'boolean'), ('changed_too', 'boolean')), response='object'),
     Route('POST', '/api/vpm/delete-project', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/projects/forget', post_api_projects_forget, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),
 ]

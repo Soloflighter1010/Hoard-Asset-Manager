@@ -264,7 +264,8 @@ PROJECTS = "projects"   # Projects' lane: its tasks run on a thread of their own
 PROJECT_WORK = {"auto-update": "Keep {0} up to date", "create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
                 "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}",
                 "delete": "Delete {0} from this computer", "git-fetch": "Fetch {0}", "git-pull": "Pull {0}",
-                "git-push": "Push {0}", "git-clone": "Get {0} from its Git address"}
+                "git-push": "Push {0}", "git-clone": "Get {0} from its Git address", "from-backup": "Make {0} from a backup",
+                "take-out": "Take a product out of {0}"}   # (issues #386 and #378)
 
 
 def describe_job(task: str, stores: list[str], only: str | None = None, keys: list | None = None,

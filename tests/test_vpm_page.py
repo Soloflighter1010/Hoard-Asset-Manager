@@ -668,7 +668,7 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertIn("for CON", page.locator("#bulkCount").inner_text())
         page.locator(".slot", has_text="Rusk").click()
         page.locator("#bulk [data-main]").click()
-        page.locator(".pj-pre", has_text="rusk.unitypackage").wait_for()
+        page.locator(".pj-tiles .pj-tile", has_text="rusk.unitypackage").wait_for()   # (a tile for it: issue #376)
         self.assertEqual(page.input_value("#pjName"), "CON")
         self.assertTrue(page.locator("#bulk").is_hidden(), "and choosing is over")
         # Hoard for Unity is in a new project unless you leave it out
@@ -678,6 +678,18 @@ class ProjectsPanel(IsolatedTestCase):
         # in groups by the repository they come from, each folding away
         group = page.locator(".pj-repo", has_text="Official")
         self.assertEqual(" ".join(group.locator("summary").inner_text().split()), "Official 2")
+        # issue #375: the projects ask only for VRChat's own (which a template gives), so there's no Used most
+        self.assertEqual(page.locator(".pj-most").count(), 0)
+        self.assertEqual(page.evaluate("PJ.data.projects.find(p => p.name === 'Rusk Avatar').packages"), ["com.vrchat.avatars"])
+        # one a project asks for itself comes first, in a group of its own, and isn't in its repository's too
+        page.evaluate("PJ_TEMPLATE_PACKAGES.delete('com.vrchat.avatars'); drawProjects()")
+        most = page.locator(".pj-most")
+        most.wait_for()
+        self.assertEqual(" ".join(most.locator("summary").inner_text().split()), "Used most in your projects 1")
+        self.assertIn("In 1 of your projects", most.inner_text())
+        self.assertEqual(" ".join(group.locator("summary").inner_text().split()), "Official 1")
+        page.evaluate("PJ_TEMPLATE_PACKAGES.add('com.vrchat.avatars'); drawProjects()")
+        page.locator(".pj-most").wait_for(state="detached")
         self.assertTrue(group.evaluate("d => d.open"))
         group.locator("summary").click()
         self.assertFalse(group.evaluate("d => d.open"))
@@ -768,6 +780,31 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertIn("rusk.unitypackage", tile.inner_text())
         self.assertIn("rusk-quest.unitypackage", tile.inner_text())
         self.assertEqual(tile.locator(".pj-file", has_text="rusk.unitypackage").first.get_attribute("title"), "Added: Assets/Rusk")
+        # issue #378: Take out... (a button, and on a right-click) says what would go first; with no record of the
+        # files Hoard put in for it, that it can't tell them from the project's own
+        self.assertEqual(tile.locator("[data-pj=takeout]").inner_text(), "Take out...")
+        tile.locator(".nm-t").click(button="right")
+        page.locator(".selmenu [role=menuitem]", has_text="Take out of this project...").click()
+        none = page.locator("dialog[open]", has_text="Take Rusk out of this project?")
+        none.wait_for()
+        self.assertIn("no record of the files", none.inner_text())
+        none.locator("button[value=yes]").click()
+        none.wait_for(state="detached")
+        from hoard.vpm import managed
+        placed = project / "Assets" / "Rusk" / "rusk.prefab"
+        placed.parent.mkdir(parents=True, exist_ok=True)
+        placed.write_text("prefab")
+        Path(str(placed) + ".meta").write_text("guid: 0")
+        managed.record(project, {"0" * 32: {"path": "Assets/Rusk/rusk.prefab", "sha256": managed.digest(placed),
+                                            "meta_sha256": managed.digest(Path(str(placed) + ".meta"))}}, key)
+        tile.locator("[data-pj=takeout]").click()
+        plan = page.locator("dialog.pj-dlg", has_text="Take Rusk out of this project?")
+        plan.wait_for()
+        self.assertIn("1 file Hoard put in for it is deleted, with its .meta file:", plan.inner_text())
+        self.assertIn("Assets/Rusk/rusk.prefab", plan.inner_text())
+        self.assertTrue(plan.locator("#pjOutBackup").is_checked(), "backed up first unless you say")
+        plan.locator("button[value=no]").click()
+        self.assertTrue(placed.exists(), "nothing is done by looking")
         # Escape, while choosing, goes back too
         page.click("[data-pj=addprod]")
         bar.locator("[data-main]").wait_for()
@@ -919,7 +956,7 @@ class ProjectsPanel(IsolatedTestCase):
         page.locator("#grid .slot", has_text="Rusk").first.click(button="right")
         page.locator(".selmenu [role=menuitem]", has_text="New project with these...").click()
         page.locator("#projectsWin #pjName").wait_for()
-        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "already in the new project")
+        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-tiles").inner_text(), "already in the new project")
 
     def test_a_new_project_with_a_set(self):
         """Issue #195: a set's right-click menu, and its own page, offer New project with this set..., which opens New
@@ -941,7 +978,13 @@ class ProjectsPanel(IsolatedTestCase):
         tile.click(button="right")
         page.locator(".selmenu [role=menuitem]", has_text="New project with this set...").click()
         page.locator("#projectsWin #pjName").wait_for()
-        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-pre").inner_text(), "the set's product, in it")
+        self.assertIn("rusk.unitypackage", page.locator("#projectsWin .pj-tiles").inner_text(), "the set's product, in it")
+        # issue #376: its tile, with Leave out a button on it, which takes the product out
+        tile = page.locator("#projectsWin .pj-tiles .pj-tile", has_text="Rusk")
+        self.assertEqual(tile.locator("button[data-pj=unpickall]").inner_text(), "Leave out")
+        tile.locator("button[data-pj=unpickall]").click()
+        page.locator("#projectsWin .pj-tiles").wait_for(state="detached")
+        self.assertIn("Nothing yet.", page.locator("#projectsWin").inner_text())
 
 
 if __name__ == "__main__":

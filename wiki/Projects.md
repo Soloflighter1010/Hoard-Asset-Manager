@@ -71,10 +71,13 @@ name, one already there).
 got it); click it to leave it out. **Add packages** opens a view of its own: every VPM package from your repositories
 that works in the project's Unity, in groups by the repository it comes from (VRChat's own first, your package folders
 last; each folds away, and what you find opens its group), to tick (with a version, if you'd rather not have the newest), then **Add the
-chosen packages**. **Add Assets** opens Downloads in **Select** mode, for this project: tick
+chosen packages**. **Used most in your projects** comes first (5.2.0): the packages your projects ask for most, with how
+many ask for each (not VRChat's own SDK, which the template gives). **Add Assets** opens Downloads in **Select** mode, for this project: tick
 the products you want, then **Add to project**, and you're back at the new project as you left it, with them in
 (**Cancel** goes back without them). A product with several packages (one for PC, one for Quest, a few variants)
-asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets).
+asks which this project needs. **Put in a set** puts in what's downloaded of one of your [sets](Sets). What's
+chosen shows as each product's library tile (5.2.0), with **Leave out** on it; a product with several packages lists
+them on its tile, each with a × to leave out just that one.
 What the products need ([What it needs](Downloads#the-downloads-view): lilToon, Poiyomi Toon, Modular Avatar, VRCFury,
 NDMF, Avatar Optimizer, the VRChat SDK) is offered beside them, to add with a click; the repository it comes from is
 added for you, unless a repository you have already gives it (one added in ALCOM or the Creator Companion too, under
@@ -125,6 +128,12 @@ what it found. From there:
   left as it is. **From your library** shows what Hoard has put in the project, each product as its library tile, with
   the files that went in and when (rest the pointer on a file for the folders it added); choose a tile to see the
   product in your library.
+- **Take a product out again** (5.2.0): **Take out...** on its tile, or right-click it. Hoard says first which files
+  it would delete: only those it put in for that product, from its own record of them, each with its `.meta` file,
+  and the folders that leaves empty. Files you changed since are kept unless you tick **Delete those too**. It's backed
+  up first unless you untick that, and it waits until Unity has the project closed. The project's lists of imports
+  say it was taken out. Packages it added stay (something else may need them): remove them in **Packages**. A product
+  put in before Hoard kept that record (before 5.2.0 beta 9) can't be taken out this way: delete its folders in Unity.
 - **What went in, and where.** Each time Hoard puts products in a project (making it, or later), it adds them to
   `Hoard imports.md`, beside the project's `Assets` folder: each product, its file, when, and the folders it added
   (or the package, in `Packages`), with anything left as it was because the project already had it. Unity doesn't
@@ -233,6 +242,10 @@ Selected** or **Move Selected**.
 - Only zips named as a backup is (`<project>-<date>T<time>.zip`, as Hoard and ALCOM name them), directly in your
   backups folder or the folder you moved them to, are ever listed, deleted or moved. Anything else there is left as it
   is.
+- **New project from this...** (5.2.0), on each backup, makes a new project from it: a name (the project's, with the
+  backup's date) and a folder (your projects folder), then it's unpacked there as a task and put on the list. It never
+  goes over the original project or any folder that's there. A backup with its Git history gets it back, on the
+  branch it was on, and the project's packages are installed as it lists them.
 
 ## Logs
 

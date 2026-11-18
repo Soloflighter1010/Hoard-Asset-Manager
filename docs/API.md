@@ -118,6 +118,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/vpm/create` | key | yes | — | object |
 | POST | `/api/vpm/delete-project` | key | yes | — | object |
 | POST | `/api/vpm/favorite` | key | yes | — | object |
+| POST | `/api/vpm/from-backup` | key | yes | `backup: string`, `name: string`, `location: string` | object |
 | GET | `/api/vpm/git` | key | no | — | object |
 | POST | `/api/vpm/git/abort` | key | yes | — | object |
 | POST | `/api/vpm/git/app` | key | yes | — | object |
@@ -153,6 +154,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/vpm/repos/add` | key | yes | — | object |
 | POST | `/api/vpm/repos/remove` | key | yes | — | object |
 | POST | `/api/vpm/settings` | key | yes | — | object |
+| POST | `/api/vpm/take-out` | key | yes | `path: string`, `key: string`, `confirm: boolean`, `backup: boolean`, `changed_too: boolean` | object |
 | GET | `/api/vpm/updates` | key | no | — | object |
 | GET | `/api/vpm/versions` | key | no | — | object |
 | POST | `/api/wishlists/import` | key | yes | `files: array` | object |
