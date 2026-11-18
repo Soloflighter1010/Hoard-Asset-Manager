@@ -24,6 +24,7 @@ import secrets
 import stat
 from pathlib import Path
 
+from . import reach
 from .common import log
 from .downloader import Manifest, STORE_DIRS, build_catalog, record_folder, valid_location
 from .downloads import IMAGE_EXT, PREVIEW_HINT
@@ -169,13 +170,19 @@ def added_sources(root: Path) -> set[str]:
     if not (sdir / "_manifest.json").is_file():
         return set()
     out = set()
-    for rec in Manifest(sdir).assets.values():
-        where = isinstance(rec, dict) and (rec.get("source") or rec.get("location"))
-        if where:
+    wheres = [str(w) for rec in Manifest(sdir).assets.values() if isinstance(rec, dict)
+              for w in [rec.get("source") or rec.get("location")] if w]
+    # one on a drive that isn't connected now (where it's listed, or where a copy came from) is taken as it was
+    # recorded: resolving it would wait on the drive
+    away = reach.away(w for w in wheres if os.path.isabs(w))
+    for where in wheres:
+        if where in away:
+            out.add(str(where))
+        else:
             try:   # as split() compares it: resolved (a mapped drive, a junction or a link to the same folder)
-                out.add(str(Path(str(where)).resolve()))
+                out.add(str(Path(where).resolve()))
             except (OSError, RuntimeError, ValueError):
-                out.add(str(where))
+                out.add(where)
     return out
 
 
@@ -306,8 +313,8 @@ def choose_picture(cfg: dict, root: Path, key: str, image) -> None:
         pictures_dir().mkdir(parents=True, exist_ok=True)
         write_file_safely(pictures_dir() / f"{key}.{kind}", data)
         write_file_safely(dest / f"_thumbnail.{kind}", data, root=sdir)
-    elif rec.get("location"):   # one of its own pictures again, as when it was added
-        try:
+    elif rec.get("location") and not reach.is_away(rec["location"]):   # one of its own pictures again, as when it was
+        try:                                                              # added (when its drive is connected)
             keep_picture(sdir, rec, record_folder(sdir, rec), key)
         except UnsafePath:
             pass
@@ -357,6 +364,8 @@ def rescan(cfg: dict, root: Path, key: str) -> dict:
     rec = find(manifest, key)
     if not rec.get("location"):
         raise ValueError("Only items listed where they are can be rescanned: a copy in Hoard only changes when you add it again.")
+    if reach.is_away(rec["location"]):
+        raise ValueError(f"Its folder is on a drive that isn't connected now: {rec['location']}")
     try:
         folder = record_folder(local_dir(root), rec)
     except UnsafePath:

@@ -2572,5 +2572,8 @@
  "That path is too long.": "경로가 너무 길어요.",
  "{0} couldn't be started for Hoard ({1}). Choose another browser in Settings, under Browser for store sign-ins.": "{0}을(를) Hoard용으로 시작할 수 없었어요({1}). 설정의 '스토어 로그인에 쓸 브라우저'에서 다른 브라우저를 골라 주세요.",
  "{0} isn't installed on this computer, so Hoard uses its own browser.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저를 써요.",
- "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저가 설치되면 그걸 써요."
+ "{0} isn't installed on this computer, so Hoard uses its own browser once it's installed.": "이 컴퓨터에 {0}이(가) 설치되어 있지 않아서 Hoard는 전용 브라우저가 설치되면 그걸 써요.",
+ "Its drive isn't connected": "드라이브가 연결되지 않았어요",
+ "Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.": "폴더가 지금 연결되지 않은 드라이브나 네트워크 공유에 있어서 Hoard가 읽지 않고 있어요. 연결하면 전처럼 보여요.",
+ "Its folder is on a drive that isn't connected now: {0}": "폴더가 지금 연결되지 않은 드라이브에 있어요: {0}"
 }

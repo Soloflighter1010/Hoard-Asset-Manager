@@ -125,10 +125,13 @@ and to a screen reader:
 - files of it are missing on disk (moved or deleted since they were downloaded);
 - the last [check of your downloads](Downloads#checking-your-downloads) found files of it changed;
 - a download of it didn't finish (a file failed): it's marked until a download of it goes through;
-- a product of your own in **Local**, listed where it is, whose folder isn't there any more.
+- a product of your own in **Local**, listed where it is, whose folder isn't there any more;
+- one whose folder is on a drive or a network share (a NAS) that isn't connected now. Hoard waits a few seconds at
+  most for such a drive, all of them at once, and then lists the rest of your library without it: nothing on it is
+  read until it's connected again, and its products, tags and places in sets are kept (5.2.0 beta 10).
 
-Its details list each, with what to do: download it again, deal with it in **Check downloads**, or take it out of
-Local and add it again from where it is now. Downloads has a **Problems** view of them all.
+Its details list each, with what to do: download it again, deal with it in **Check downloads**, take it out of
+Local and add it again from where it is now, or connect its drive. Downloads has a **Problems** view of them all.
 
 ## Choosing several at once
 

@@ -70,6 +70,8 @@ def contents(asset: dict) -> list[dict]:
     it's packed, when known; issue #199 shows it)."""
     folder = Path(asset["abs_folder"])
     out = []
+    if asset.get("away"):   # on a drive that isn't connected now (hoard/reach.py): nothing in it can be looked at
+        return out
     if asset.get("linked") or asset.get("store") == "Local":
         try:
             raw = json.loads((folder / "package.json").read_text("utf-8-sig")) if (folder / "package.json").is_file() else None

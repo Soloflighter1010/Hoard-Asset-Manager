@@ -201,6 +201,9 @@ def open_target(cfg: dict, rel: str) -> Path | None:
         found = local.by_folder(root, "/".join(parts[:3]))
         if not found or not found[1].get("location"):
             return None
+        from . import reach
+        if reach.is_away(found[1]["location"]):   # (its drive isn't connected now: asking it would wait on the drive)
+            return None
         from .downloader import record_folder
         try:
             folder = record_folder(local.local_dir(root), found[1])
@@ -699,9 +702,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         what's downloaded). If the downloads change during a rebuild, the next request rebuilds again."""
         root = str(root_dir(self.cfg))
         with self._index_lock:
-            if rescan:
+            back = self._drives_back()
+            if rescan or back:
                 self._wanted += 1
             target = self._wanted
+            if back and stale_ok and self._rebuild is None:   # (the library page takes it as it is: built again behind it)
+                threading.Thread(target=self.index, daemon=True, name="hoard-index").start()
         while True:
             with self._index_lock:
                 current = self._index if self._index is not None and self._index.get("root") == root else None
@@ -729,6 +735,14 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
                         self._index, self._built_for = fresh, goal
                     done, self._rebuild = self._rebuild, None
                 done.set()
+
+
+    def _drives_back(self) -> bool:
+        """Is a drive that wasn't connected when the index was built (hoard/reach.py) connected now? Asked without
+        waiting: what isn't known yet is known the next time, so a page is never kept waiting on a drive."""
+        from . import reach
+        gone = {a["abs_folder"] for a in (self._index or {}).get("assets", ()) if a.get("away")}
+        return bool(gone) and len(reach.away(gone, wait=0)) < len(gone)
 
 
 class Handler(BaseHTTPRequestHandler):

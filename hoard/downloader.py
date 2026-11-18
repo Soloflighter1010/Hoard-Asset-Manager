@@ -1,7 +1,7 @@
 """Keeping local copies: downloading from each store, the records of what's on disk, and the catalog files."""
 from __future__ import annotations
 
-from . import storage
+from . import reach, storage
 
 import asyncio
 import hashlib
@@ -1445,6 +1445,8 @@ def make_editable_copy(cfg: dict, root: Path, key: str) -> dict:
         for rec in Manifest(sdir).assets.values():
             if tag_key(store, rec.get("name") or "") != key or not rec.get("files"):
                 continue
+            if rec.get("location") and reach.is_away(rec["location"]):
+                continue   # (on a drive that isn't connected now: nothing of it to copy until it is)
             try:
                 folder = record_folder(sdir, rec)
             except UnsafePath:
