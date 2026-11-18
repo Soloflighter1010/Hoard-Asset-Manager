@@ -179,7 +179,7 @@ def plan(folder: Path, library_items: list[dict]) -> dict:
             continue
         product = by_booth.get(a["booth"]) if a["booth"] else None
         if product:
-            out["matched"].append({**a, "key": tag_key("booth", product["name"]), "product": product["name"]})
+            out["matched"].append({**a, "key": tag_key("booth", product["name"], product.get("id")), "product": product["name"]})
         elif _files_of(folder, a):
             out["local"].append({**a, "key": tag_key("local", a["name"])})
         else:
@@ -250,7 +250,7 @@ def _bring_in(cfg: dict, root: Path, folder: Path, library_items: list[dict], sa
                 result["left_out"].append(a["name"])
                 continue
             _picture(cfg, root, folder, a, rec["key"])
-            key = tag_key("local", rec["name"])
+            key = tag_key("local", rec["name"], rec.get("key"))
             result["local"] += 1
         else:
             result["matched"] += 1

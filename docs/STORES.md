@@ -65,3 +65,12 @@ pinned at Hoard 4.3.1. These are the newer ones, by where they're done:
 - **Each store's record** (issue #322): `stores/health.py`, from the results of
   what was done anyway. It sends nothing.
 - **Pacing**: `pace.py`, with each adapter's `requests_per_minute` (Jinxxy's 120).
+
+## Store policy hooks
+
+The adapter also owns login-page selection, saved-page embedded data, saved
+library status fields, direct-download links and the names used in file selection.
+Defaults cover stores without special behavior. Payhip supplies buyer-shop login
+pages and discovered shops; Jinxxy supplies embedded saved-page data and its
+product link; Gumroad supplies page-image selection names. Shared callers use
+these hooks without branching on store identity.

@@ -115,7 +115,7 @@ def problems(assets: list[dict], checked: dict | None = None, failed: dict | Non
     changed: dict[str, int] = {}
     for x in (checked or {}).get("problems") or []:
         if x.get("kind") == "changed" and x.get("name"):
-            k = tag_key(x["store"], x["name"])
+            k = tag_key(x["store"], x["name"], x.get("store_id"))
             changed[k] = changed.get(k, 0) + 1
     for k, n in changed.items():
         out.setdefault(k, []).append({"kind": "changed", "n": n})
@@ -130,6 +130,13 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
     number there ("@1/Booth/...") wherever the page names a place, and one in a folder that isn't among them isn't
     shown. progress: called with how many records are read (issue #200)."""
     libraries = libraries or [root]
+    identities = {}
+    from . import storage
+    if storage.enabled():
+        from .downloader import read_manifests
+        for base in libraries:
+            for record in read_manifests(base):
+                identities[(str(base), record["store"] + "/" + record["folder"])] = record.get("library_id") or record.get("key")
     assets, gone = [], 0
     for i, e in enumerate(catalog):
         if progress:
@@ -193,7 +200,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "abs_folder": str(folder),
             "linked": bool(linked),
             "note": e.get("note"),
-            "tag_key": tag_key(e["store"], e["name"]),
+            "tag_key": tag_key(e["store"], e["name"], identities.get((str(base), e["folder"]))),
             "tags": [],
             "suggested": e.get("suggested_tags", []),
             "types": sorted({Path(f).suffix.lower().lstrip(".") for f in e.get("files", []) if Path(f).suffix}),

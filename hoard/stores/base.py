@@ -122,3 +122,33 @@ class Adapter:
         from . import modules
         reader = getattr(modules()[self.key], "read_tags", None)
         return reader(page) if reader else []
+
+    def login_pages(self, cfg: dict) -> list[str]:
+        """Return the store-specific sign-in pages, or its standard login page."""
+        from . import modules
+        reader = getattr(modules()[self.key], "login_pages", None)
+        return reader(cfg) if reader else [lib.STORES[self.key]["login"]]
+
+    def saved_data(self, html: str) -> dict:
+        """Extract optional store metadata from a saved page."""
+        from . import modules
+        reader = getattr(modules()[self.key], "saved_data", None)
+        return reader(html) if reader else {}
+
+    def library_state(self, info: dict) -> dict:
+        """Keep additional validated library state owned by this store adapter."""
+        from . import modules
+        reader = getattr(modules()[self.key], "library_state", None)
+        return reader(info) if reader else {}
+
+    def direct_link(self, item: dict):
+        """Choose the saved link used to download a selected product directly."""
+        from . import modules
+        reader = getattr(modules()[self.key], "direct_link", None)
+        return reader(item) if reader else item.get("download_url")
+
+    def chosen_name(self, key: str, record: dict) -> str:
+        """Choose the store-specific filename shown in file selection."""
+        from . import modules
+        reader = getattr(modules()[self.key], "chosen_name", None)
+        return reader(key, record) if reader else record.get("label") or record["path"]

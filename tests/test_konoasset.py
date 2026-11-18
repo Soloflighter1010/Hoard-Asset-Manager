@@ -103,8 +103,11 @@ class BringingIn(IsolatedTestCase):
         done = self.bring_in(folder)
         self.assertEqual((done["matched"], done["local"], done["left_out"]), (1, 3, ["Lost Thing"]))
         data = tags.TagStore().load()
-        rusk, hoodie = tags.tag_key("booth", "Rusk"), tags.tag_key("local", "Winter Hoodie")
-        skin, bench = tags.tag_key("local", "Freckle Skin"), tags.tag_key("local", "Park Bench")
+        records = {rec["name"]: rec["key"] for rec in downloader.Manifest(local.local_dir(self.root)).assets.values()}
+        rusk = tags.tag_key("booth", "Rusk", "1001")
+        hoodie = tags.tag_key("local", "Winter Hoodie", records["Winter Hoodie"])
+        skin = tags.tag_key("local", "Freckle Skin", records["Freckle Skin"])
+        bench = tags.tag_key("local", "Park Bench", records["Park Bench"])
         self.assertEqual(data["items"][rusk], ["base", "kemono"], "matched by its BOOTH item")
         self.assertEqual(data["items"][hoodie], ["anko", "outerwear", "rusk", "winter"], "its category and avatars too")
         self.assertEqual(data["items"][bench], ["furniture", "prop"])

@@ -37,7 +37,7 @@ def copies(roots: list[Path], hidden: frozenset | set = frozenset(), min_size: i
             for rec in Manifest(sdir).assets.values():
                 if not rec.get("files") or rec.get("location"):
                     continue   # (a Local item listed where it is: your own folder, not Hoard's space)
-                if tag_key(store, rec.get("name") or "") in hidden:
+                if tag_key(store, rec.get("name") or "", rec.get("library_id") or rec.get("key")) in hidden:
                     continue
                 try:
                     folder = rel_to_path(sdir, rec["folder"])
