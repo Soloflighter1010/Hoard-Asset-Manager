@@ -4017,7 +4017,7 @@ function pjBackupRow(b) {
   return `<li class="pj-row pj-bk${b.old ? " old" : ""}"><label class="pj-main check"><input type="checkbox" class="pj-bkpick" value="${esc(b.path)}">` +
     `<span><b translate="no">${esc(b.project)}</b><span class="meta">${esc(whenDone(b.when))} · ${esc(sizeText(b.size))}</span></span></label>` +
     `<span class="pj-what">${b.old ? esc(tr("Old")) : ""}</span>` +
-    `<button class="ghost sm" data-pj="bkproject" data-backup="${esc(b.path)}">${esc(tr("New project from this..."))}</button></li>`;   // (#386)
+    `<span class="pj-acts"><button class="ghost sm" data-pj="bkproject" data-backup="${esc(b.path)}">${esc(tr("New project from this..."))}</button></span></li>`;   // (#386)
 }
 // Issue #386: a new project from a backup: a name (the project's, with the backup's date) and a folder (New projects
 // by default), then unpacked there as a task, with its Git history and packages; never over the original project or
