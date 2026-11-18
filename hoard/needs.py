@@ -344,7 +344,7 @@ def add_to_catalog(root: Path, catalog: list[dict], index: NeedsIndex | None = N
     for i, e in enumerate(catalog):
         base = Path(e["location"]) if e.get("location") else (Path(e["library"]) if e.get("library") else root) / e["folder"]
         assets.append({"id": i, "abs_folder": str(base), "files": [{"path": f} for f in e["files"]],
-                       "tag_key": tag_key(e["store"], e["name"]), "name": e["name"], "creator": e["creator"],
+                       "tag_key": tag_key(e["store"], e["name"], e.get("id")), "name": e["name"], "creator": e["creator"],
                        "store": e["store"], "catalog_folder": e["folder"]})
     for i, a in enumerate(assets):   # what code its packages hold, for Hoard for Unity's warning (issue #303)
         found = [c for c in (file_code(index.get(p)) for p, _a in package_files([a])) if c]

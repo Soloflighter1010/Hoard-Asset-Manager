@@ -17,6 +17,7 @@ window would show it unticked. A new project has nothing to collide with.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import os
 import re
 import shutil
@@ -40,6 +41,7 @@ class ImportResult:
         self.placed = 0
         self.skipped_same = 0        # the project already has that asset (by GUID)
         self.skipped_taken = 0       # another asset is where it would go
+        self.baselines: dict[str, dict] = {}
         self.paths: list[str] = []   # the top folders it went into, for the page
 
     def as_dict(self) -> dict:
@@ -203,6 +205,15 @@ def place(project: Path, stream, existing: dict | None = None) -> ImportResult:
                 result.skipped_taken += 1
                 continue
             meta = Path(str(path) + ".meta")
+            # A file with no readable .meta is still a user's file, never an empty slot.
+            if path.is_symlink() or meta.is_symlink() or (existing is not None and ((e["file"] is not None and path.exists()) or meta.exists())):
+                result.skipped_taken += 1
+                continue
+            baseline = None
+            if e["file"] is not None and rel.startswith("Assets/"):
+                from . import managed
+                baseline = {"path": rel, "sha256": managed.digest(e["file"]),
+                            "meta_sha256": hashlib.sha256(e["meta"]).hexdigest()}
             if e["file"] is None:
                 path.mkdir(parents=True, exist_ok=True)
             else:
@@ -212,6 +223,8 @@ def place(project: Path, stream, existing: dict | None = None) -> ImportResult:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(e["file"], path)
             meta.write_bytes(e["meta"])
+            if baseline is not None:
+                result.baselines[guid] = baseline
             result.placed += 1
             result.paths.append("/".join(rel.split("/")[:2]))
             if existing is not None:

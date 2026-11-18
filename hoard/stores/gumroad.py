@@ -85,7 +85,7 @@ def lib_fetch_gumroad(ctx, cfg, progress) -> list[dict]:
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         creator = prod.get("creator") or {}
         variants = (pur.get("variants") or "").strip() or None
-        dedupe = ((prod.get("name") or "").lower(), (creator.get("name") or "").lower(), variants)
+        dedupe = (prod.get("id") or pur.get("id") or ((prod.get("name") or "").lower(), (creator.get("name") or "").lower()), variants)
         if dedupe in seen:  # bought twice
             continue
         seen.add(dedupe)
@@ -221,7 +221,7 @@ def dl__gumroad_page_images(gr, content: dict, rec: dict, folder: dl.Path, name:
         if old and dl.rel_to_path(folder, old["path"]).exists():
             continue
         stem = f"Page images/{n:02d} {dl.safe_name(token, 40)}"
-        if dl.left_out(args, report, "gumroad", name, stem):
+        if dl.left_out(args, report, "gumroad", name, stem, product_id=rec.get("library_id") or rec.get("key")):
             continue
         if args.dry_run:
             dl.would_get(args, report, "gumroad", rec, name, creator, stem, False, old is not None)
@@ -282,7 +282,7 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
         prod, pur = card.get("product") or {}, card.get("purchase") or {}
         name = (prod.get("name") or "Untitled").strip()
         creator = ((prod.get("creator") or {}).get("name") or "Unknown Creator").strip()
-        if not chosen and dl.skip_product(args, "gumroad", name, creator):
+        if not chosen and dl.skip_product(args, "gumroad", name, creator, pur.get("id")):
             continue
         page_url = pur.get("download_url")
         if not page_url:
@@ -311,11 +311,11 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
         seen.add(key)
 
         variants = (pur.get("variants") or "").strip()
-        if dl.removed_product("gumroad", name, report) or man.away(key, f"Gumroad: {name}", report):
+        if dl.removed_product("gumroad", name, report, pur.get("id")) or man.away(key, f"Gumroad: {name}", report):
             continue
         rec = man.record(key, creator, f"{name} - {variants}" if variants else name)
         is_new_asset = not rec["files"]
-        rec.update(name=name, creator=creator, variants=variants or None, url=p.get("product_long_url"),
+        rec.update(name=name, creator=creator, variants=variants or None, library_id=str(pur.get("id") or ""), url=p.get("product_long_url"),
                    last_synced=dl.now_iso())
         folder = man.folder_of(rec)
         token = props.get("token")
@@ -336,7 +336,7 @@ def dl__sync_gumroad_purchases(cfg: dict, gr: "Gumroad", store_dir: dl.Path, man
                 continue
             is_update = target.exists() or (old is not None and (old.get("size") != size or old.get("path") != relpath))
             label = f"{creator} / {name} / {relpath}"
-            if dl.left_out(args, report, "gumroad", name, relpath):
+            if dl.left_out(args, report, "gumroad", name, relpath, product_id=rec.get("library_id") or rec.get("key")):
                 continue
             if args.dry_run:
                 dl.would_get(args, report, "gumroad", rec, name, creator, relpath, is_update, old is not None and not is_update)
@@ -536,3 +536,8 @@ def extract_page_json(text: str):
     return None
 
 LIBRARY_EXPORTS['extract_page_json'] = extract_page_json
+
+
+def chosen_name(key, record):
+    """Name extracted page images specially and otherwise use the saved filename."""
+    return record.get("label") or (record["path"].rsplit(".", 1)[0] if key.startswith("page-image:") else record["path"])

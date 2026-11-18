@@ -18,7 +18,7 @@ def _visible_projects(self) -> list[dict]:
     hidden = app.MarkStore().keys("hidden")
     if not hidden:
         return found
-    return [{**p, "assets": [a for a in p["assets"] if app.tag_key(a["store"], a["name"]) not in hidden]} for p in found]
+    return [{**p, "assets": [a for a in p["assets"] if app.tag_key(a["store"], a["name"], a.get("store_id")) not in hidden]} for p in found]
 
 
 def _vpm_logged(self, path: str, handle, arg):
@@ -113,6 +113,14 @@ def _vpm_post(self, path: str, body: dict):
     from ..vpm.project import is_project
     srv = self.server
     try:
+        if path == "/api/vpm/auto-update":
+            from ..vpm import autoupdate
+            project_path = srv.vpm.listed(body.get("path"))
+            try:
+                mode = autoupdate.configure(project_path, body.get("mode"))
+            except ValueError as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json({"ok": True, "mode": mode})
         if path == "/api/vpm/preview":
             return self._json(srv.vpm.preview(body))
         if path in ("/api/vpm/apply", "/api/vpm/backup", "/api/vpm/preload"):
@@ -348,6 +356,7 @@ def post_api_projects_forget(self, path, body, query):
 METHODS = {'_visible_projects': _visible_projects, '_vpm_logged': _vpm_logged, '_vpm_get': _vpm_get, '_vpm_git': _vpm_git, '_vpm_job': _vpm_job, '_vpm_post': _vpm_post}
 
 ROUTES = [
+    Route('POST', '/api/vpm/auto-update', post_api_vpm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('path', 'string'), ('mode', 'string')), response='object'),
     Route('GET', '/api/projects', get_api_projects, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/vpm', get_api_vpm, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/vpm/about', get_api_vpm, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),

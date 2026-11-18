@@ -79,7 +79,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/refresh` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
 | POST | `/api/routine/seen` | key | yes | — | object |
 | GET | `/api/sets` | key | no | — | object |
-| POST | `/api/sets` | key | yes | `action: string`, `code: string`, `data: string`, `id: string`, `items: array`, `key: string`, `links: array`, `marks: array`, `photo: string`, `photos: array`, `short: string` | object |
+| POST | `/api/sets` | key | yes | `target: string`, `dependencies: array`, `file: object`, `action: string`, `code: string`, `data: string`, `id: string`, `items: array`, `key: string`, `links: array`, `marks: array`, `photo: string`, `photos: array`, `short: string` | object |
 | GET | `/api/settings` | key | no | — | object |
 | POST | `/api/settings` | key | yes | — | object |
 | GET | `/api/setup` | key | no | — | object |
@@ -106,6 +106,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/api/vpm/about` | key | no | — | object |
 | POST | `/api/vpm/add-project` | key | yes | — | object |
 | POST | `/api/vpm/apply` | key | yes | — | object |
+| POST | `/api/vpm/auto-update` | key | yes | `path: string`, `mode: string` | object |
 | POST | `/api/vpm/backup` | key | yes | — | object |
 | POST | `/api/vpm/backups` | key | yes | — | object |
 | POST | `/api/vpm/backups/delete` | key | yes | — | object |
@@ -154,6 +155,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | GET | `/api/vpm/updates` | key | no | — | object |
 | GET | `/api/vpm/versions` | key | no | — | object |
 | POST | `/api/wishlists/import` | key | yes | `files: array` | object |
+| GET | `/api/wishlists/rates` | key | no | — | object |
 | POST | `/api/wishlists/read` | key | yes | `stores: array`, `list: string` | object |
 | GET | `/downloads` | public | no | — | text/html |
 | GET | `/files/*` | key | no | — | application/octet-stream |

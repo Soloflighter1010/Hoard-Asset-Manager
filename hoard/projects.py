@@ -208,7 +208,7 @@ def view(projects: list[dict], index: dict, updates: dict) -> list[dict]:
             d = by_folder.get(a["folder"])
             assets.append({**a, "download": d["id"] if d else None,
                            "update": bool(d and d.get("tag_key") in updates),
-                           "tag_key": (d or {}).get("tag_key") or tag_key(a["store"], a["name"]),   # (for Make a set)
+                           "tag_key": (d or {}).get("tag_key") or tag_key(a["store"], a["name"], a.get("store_id")),   # (for Make a set)
                            "page": (d or {}).get("page")})   # its public page, for the credits list
         p = {**p, "assets": assets}
         out.append({**p, "credits_text": {s: credits_text(p, s) for s in STYLES},

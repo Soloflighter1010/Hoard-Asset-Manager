@@ -819,6 +819,9 @@ def not_applied(folder: Path, changes: Changes) -> list[str]:
                 out.append(f"{label}: vpm-manifest.json says {locked[0] if locked else 'nothing'}, not {want}")
             elif on_disk != want:
                 out.append(f"{label}: its folder in Packages has {on_disk or 'nothing'}, not {want}")
+        elif isinstance(c, Install) and c.to_dependencies is not None:
+            if after.dependencies.get(name) != c.to_dependencies:
+                out.append(f"{name}: its requested dependency range wasn't saved ({c.to_dependencies})")
         elif isinstance(c, Remove) and (name in after.locked or (folder / "Packages" / name).exists()):
             out.append(f"{name}: still there")
     return out

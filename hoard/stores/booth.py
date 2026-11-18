@@ -273,9 +273,9 @@ def dl_sync_booth(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
                     dl.tick(f"Booth: item {n} of {len(items)}")   # Stop is noticed here, even when items fail fast
                     name = (b["name"] or f"Booth item {b['id']}").strip()
                     creator = (b["creator"] or "Unknown Creator").strip()
-                    if dl.skip_product(args, "booth", name, creator):
+                    if dl.skip_product(args, "booth", name, creator, b["id"]):
                         continue
-                    if dl.removed_product("booth", name, report) or man.away(b["id"], f"Booth: {name}", report):
+                    if dl.removed_product("booth", name, report, b["id"]) or man.away(b["id"], f"Booth: {name}", report):
                         continue
                     rec = man.record(b["id"], creator, name)
                     is_new_asset = not rec["files"]
@@ -315,7 +315,7 @@ def dl_sync_booth(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
                         if not old and not replaces and (folder / guess).exists():  # already on disk, e.g. downloaded by hand
                             rec["files"][fid] = {"path": guess, "size": (folder / guess).stat().st_size, "label": f["name"]}
                             continue
-                        if dl.left_out(args, report, "booth", name, f["name"] or guess):
+                        if dl.left_out(args, report, "booth", name, f["name"] or guess, product_id=rec.get("library_id") or rec.get("key")):
                             continue
                         if args.dry_run:
                             dl.would_get(args, report, "booth", rec, name, creator, f["name"] or guess, bool(replaces), old is not None)

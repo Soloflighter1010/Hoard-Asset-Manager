@@ -18,7 +18,7 @@ def _sets_view(self) -> dict:
     hidden = set() if unlocked else set(marks["hidden"])
     lib = {}
     for i in srv.lib.snapshot()[0]:
-        lib.setdefault(app.tag_key(i["store"], i["name"]), i)
+        lib.setdefault(app.tag_key(i["store"], i["name"], i.get("id")), i)
     dl = {}
     for a in srv.index(stale_ok=True)["assets"]:
         dl.setdefault(a["tag_key"], a)
@@ -32,6 +32,9 @@ def _sets_view(self) -> dict:
                 left_out = True
                 continue
             i, a, p = lib.get(key), dl.get(key), known.get(key) or {}
+            placeholder = (s.get("placeholders") or {}).get(key)
+            if placeholder:
+                i, a, p = None, None, {"store": "local", "name": placeholder}
             store = (i or {}).get("store") or p.get("store") or (str(a["store"]).lower() if a else "")
             if i and i.get("thumbnail"):
                 pic = "/thumb/" + app.quote(i["key"], safe=":")
@@ -48,7 +51,7 @@ def _sets_view(self) -> dict:
                          "creator": (i or a or p).get("creator") or "",
                          "url": (i or {}).get("url") or p.get("url") or (a or {}).get("url"),
                          "pic": pic, "owned": bool(i), "lib": (i or {}).get("key"), "download": a["id"] if a else None,
-                         "local": store == "local", "mark": mark,
+                         "local": store == "local", "placeholder": bool(placeholder), "mark": mark,
                          # for adults (hoard/adult.py): as its store, tags or you say, or whoever shared the set
                          "adult": bool(adult.why(key, name=(i or a or p).get("name") or "", marks=marks,
                                                  tags=[*((i or {}).get("store_tags") or []), *mine.get(key, [])],
@@ -59,7 +62,7 @@ def _sets_view(self) -> dict:
             block = {str(w).lower() for w in (srv.cfg.get("tags") or {}).get("blocklist", [])}
             for row, words in zip(rows, app.common_words([r["name"] for r in rows], 2, 0.5, block)):
                 row["words"] = sorted(words)
-        out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "photos": s.get("photos", []),
+        out.append({"id": s["id"], "name": s["name"], "note": s.get("note", ""), "dependencies": s.get("dependencies", []), "photos": s.get("photos", []),
                     # where its products are on its photos (issue #346), only those shown
                     "marks": {u: [m for m in ms if m[0] not in hidden] for u, ms in (s.get("marks") or {}).items()},
                     "photo_p": [app.pic_for(u) for u in s.get("photos", [])],   # (each photo's address mark: /setphoto)
@@ -311,6 +314,17 @@ def post_api_sets(self, path, body, query):
             return self._json({"ok": True, **app.shortlinks.fetch(body.get("short"))})
         except app.shortlinks.ShortLinkError as e:
             return self._json({"error": str(e)}, 404 if isinstance(e, app.shortlinks.Gone) else 502)
+    if body.get("action") in ("export-json", "import-json"):
+        try:
+            store = app.sets.SetStore()
+            if body["action"] == "export-json":
+                hidden = app.MarkStore().keys("hidden") if not self._unlocked() else frozenset()
+                return self._json({"ok": True, "file": store.export_json(str(body.get("id", "")), hidden)})
+            data = store.import_json(body.get("file"))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.start_worker("Updating Unity catalog", app.rebuild_catalog_quietly, srv)
+        return self._json({"ok": True, "made": data["made"]})
     gone = None
     if body.get("action") == "delete":   # its short link goes with it, once the set has
         gone = next((x for x in app.sets.SetStore().load()["sets"] if x["id"] == body.get("id")), None)
@@ -357,14 +371,24 @@ def post_api_wishlists_import(self, path, body, query):
 
 
 
+def get_api_wishlists_rates(self, path, body, query):
+    """Serve public reference rates for optional wishlist price estimates."""
+    from .. import exchange
+    try:
+        return self._json(exchange.latest())
+    except ValueError as e:
+        return self._json({"error": str(e)}, 503)
+
+
 METHODS = {'_sets_view': _sets_view, '_add_links': _add_links, '_set_code': _set_code, '_short_view': _short_view, '_share_set': _share_set, '_share_parts': _share_parts, '_split_set': _split_set, '_shorten_set': _shorten_set, '_unshorten_set': _unshorten_set}
 
 ROUTES = [
+    Route('GET', '/api/wishlists/rates', get_api_wishlists_rates, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/sets', get_api_sets, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/setpic/*', get_setpic, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setphoto/*', get_setphoto, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/setcover/*', get_setcover, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
-    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
+    Route('POST', '/api/sets', post_api_sets, changes=True, auth='key', image_key=False, max_body=16777216, request=(('target', 'string'), ('dependencies', 'array'), ('file', 'object'), ('action', 'string'), ('code', 'string'), ('data', 'string'), ('id', 'string'), ('items', 'array'), ('key', 'string'), ('links', 'array'), ('marks', 'array'), ('photo', 'string'), ('photos', 'array'), ('short', 'string')), response='object'),
     Route('POST', '/api/wishlists/read', post_api_wishlists_read, changes=True, auth='key', image_key=False, max_body=1048576, request=(('stores', 'array'), ('list', 'string')), response='object'),
     Route('POST', '/api/wishlists/import', post_api_wishlists_import, changes=True, auth='key', image_key=False, max_body=83886080, request=(('files', 'array'),), response='object'),
 ]

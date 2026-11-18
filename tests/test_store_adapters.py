@@ -36,6 +36,25 @@ class Contract(IsolatedTestCase):
         with self.assertRaises(UnsupportedOperation):
             adapters()["payhip"].list_files({}, None, SimpleNamespace(), downloader.Report())
 
+    def test_store_policies_preserve_file_selection_and_login_behavior(self):
+        self.assertEqual(adapters()["jinxxy"].direct_link({"url": "product", "download_url": "other"}), "product")
+        self.assertEqual(adapters()["booth"].direct_link({"url": "product", "download_url": "download"}), "download")
+        for store in ("jinxxy", "payhip"):
+            self.assertEqual(downloader.chosen_name(store, "file-key", {"label": "", "path": "asset.zip"}), "file-key")
+        self.assertEqual(downloader.chosen_name("gumroad", "page-image:cover", {"path": "Cover.jpg"}), "Cover")
+        self.assertEqual(downloader.chosen_name("booth", "file-key", {"label": "", "path": "asset.zip"}), "asset.zip")
+        with mock.patch.object(library, "payhip_shops", return_value=["https://shop.example"]):
+            self.assertEqual(library.sign_in_urls({}, "payhip"), [library.STORES["payhip"]["login"], "https://shop.example/b-account"])
+        self.assertEqual(adapters()["booth"].library_state({"found_shops": ["private"]}), {})
+        self.assertEqual(adapters()["booth"].saved_data("no scripts"), {})
+
+    def test_gumroad_keeps_distinct_product_ids_with_identical_titles(self):
+        cards = [{"product": {"id": str(n), "name": "Same Hoodie", "creator": {"name": "Kitsu"}},
+                  "purchase": {"id": f"purchase-{n}", "download_url": f"https://gumroad.com/d/{n}"}} for n in (1, 2)]
+        with mock.patch.object(library, "gumroad_cards", return_value=[*cards, cards[0]]):
+            items = library.fetch_gumroad(None, {"gumroad": {}}, lambda message: None)
+        self.assertEqual([i["id"] for i in items], ["purchase-1", "purchase-2"])
+
     def test_modes_preserve_selected_files_and_never_download_during_a_check(self):
         args = SimpleNamespace(keys={"booth:rusk"}, files={"booth:rusk": {"chosen": {"a.zip"}}}, dry_run=False)
         seen = []
@@ -89,6 +108,15 @@ class Contract(IsolatedTestCase):
         for damaged in ("[]", '{"booth": []}', '{"booth": {"library": "x"}}', '{"booth": {"library": {"last_success": [1]}}}',
                         '{"booth": {"libr'):
             with self.subTest(damaged=damaged):
+                if storage.managed(path):
+                    try:
+                        json.loads(damaged)
+                    except ValueError:
+                        before = storage.read_document(path)
+                        with self.assertRaises(ValueError):
+                            storage.write_document(path, damaged)
+                        self.assertEqual(storage.read_document(path), before, "SQLite rejects malformed writes atomically")
+                        continue
                 storage.write_document(path, damaged)
                 self.assertEqual(health.snapshot()["booth"]["operations"].get("library", {}).get("last_success", ""), "")
                 with mock.patch.object(library, "fetch_booth", return_value=[{"id": "sample"}]):

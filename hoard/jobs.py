@@ -261,7 +261,7 @@ def project_tasks_file():
 PROJECTS = "projects"   # Projects' lane: its tasks run on a thread of their own, never waiting behind a sync or download
 
 
-PROJECT_WORK = {"create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
+PROJECT_WORK = {"auto-update": "Keep {0} up to date", "create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
                 "backup": "Back up {0}", "refresh": "Refresh the repositories", "move-backups": "Move {0}",
                 "delete": "Delete {0} from this computer", "git-fetch": "Fetch {0}", "git-pull": "Pull {0}",
                 "git-push": "Push {0}", "git-clone": "Get {0} from its Git address"}
@@ -1211,7 +1211,7 @@ class Jobs:
                     snap = self.lib.snapshot()[0]
                     picked = [i for i in snap if (items and i.get("key") in items) or
                               (only and only.lower() in f"{i.get('name', '')} {i.get('creator', '')}".lower())]
-                    narrowed = {tag_key(i["store"], i["name"]) for i in picked} or {"(none)"}
+                    narrowed = {tag_key(i["store"], i["name"], i.get("id")) for i in picked} or {"(none)"}
                 total = AssetUpdates().record_check(report.stores_done, narrowed, report.available)
                 found = len({a["key"] for a in report.available})
                 missed = [STORES[s]["label"] for s in stores if s not in report.stores_done and self.cfg[s].get("enabled", True)]

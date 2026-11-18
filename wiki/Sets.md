@@ -241,3 +241,53 @@ Hoard for Unity's **Sets** pill doesn't list wishlists: they're what you want, n
 Sets and wishlists are in `sets.json` in Hoard's app-data folder (see [Where Hoard keeps things](Where-Hoard-Keeps-Things)), and in
 backups (**Settings**, **Backup**). A backup made while your hidden library is locked leaves hidden products out
 of every set.
+
+## JSON files
+
+Open a set or wishlist and choose **Export JSON** to save a portable file. Use
+**Import JSON...** in Sets and Wishlists to load one. Import always creates a new
+entry, leaving existing sets and lists unchanged.
+
+Files preserve product order, local product entries, notes, photos, photo marks,
+wishlist prices and the chosen cover picture. Short-link credentials are excluded;
+an imported set can be shared with a new link. Hidden products are omitted while
+the hidden library is locked. The JSON contains the exported notes and product
+information, so review it before sending it to someone else. Asset files themselves
+are not included.
+
+## Set dependencies
+
+Use **Edit** in a set's note and photos section to list **Set dependencies**, one
+requirement per line (up to 30, each up to 120 characters). These requirements
+apply to the whole set, such as a shader, tool or SDK. They are displayed together
+in the set details and included in shared sets and JSON exports. They are
+informational; listing a dependency does not install it in a project.
+
+## Finding sets and wishlists
+
+Use **Find a set or wishlist** to filter tiles by name. The matching count updates
+as you type. Clear the search to show all entries again. **Sort sets and wishlists**
+can show names alphabetically or restore the saved order; it does not change the
+contents of any set.
+
+## Placeholder assets
+
+Use **Add placeholder...** for an asset you plan to make, find or add locally.
+Give it a short description. Once the real asset exists, add it to the set, choose
+it in the placeholder's **Replace with a product in this set** list, and select
+**Replace placeholder**. The real product takes the placeholder's position without
+a duplicate entry. Remove works for placeholders too.
+
+Placeholders are included in JSON exports. Like other Local entries, they stay
+out of shared-set links and are not downloadable products.
+
+## Wishlist currency estimates
+
+Choose **Convert prices to** in a wishlist to show estimated prices beside the
+original amounts. Choosing a currency requests public reference rates from
+[Frankfurter](https://frankfurter.dev/v1/); no product names, prices or account
+information are sent. Rates are cached for an hour during the app session. The
+rate date is shown; if a later refresh fails, older cached rates are marked.
+If no rate is available, the original price stays visible. **Original prices**
+turns estimates off. Price-range filters still use the selected original currency.
+Checkout prices, taxes and payment-provider fees can differ from these estimates.

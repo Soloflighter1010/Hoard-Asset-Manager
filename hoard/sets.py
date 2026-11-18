@@ -81,6 +81,13 @@ CODE_MARK = re.compile(r"[0-9a-f]{16}")                        # a short link's 
 _lock = storage.metadata_lock
 
 
+def clean_dependencies(value) -> list[str]:
+    """At most 30 set-wide requirements, kept as plain text."""
+    if not isinstance(value, list):
+        return []
+    return list(dict.fromkeys(clean_text(x, 120) for x in value[:30] if isinstance(x, str) and clean_text(x, 120)))
+
+
 def sets_file() -> Path:
     """Where your sets and wishlists are kept."""
     return data_dir() / "sets.json"
@@ -383,8 +390,13 @@ class SetStore:
             for k in s.get("items") if isinstance(s.get("items"), list) else []:
                 if isinstance(k, str) and TAG_KEY_RX.match(k) and k not in items:
                     items.append(k)
+            placeholders = s.get("placeholders") if isinstance(s.get("placeholders"), dict) else {}
             wish = s.get("kind") == "wishlist"
             one = {"id": s["id"], "name": name, "items": items[:MAX_WISH_ITEMS if wish else MAX_ITEMS]}
+            planned = {k: clean_name(v) for k, v in placeholders.items()
+                       if k in one["items"] and k.startswith("local:planned") and clean_name(v)}
+            if planned:
+                one["placeholders"] = planned
             if wish:   # a wishlist (issue #158); read from a store's list ("source"), when it was read last
                 one["kind"] = "wishlist"
                 src = s.get("source") if isinstance(s.get("source"), dict) else {}
@@ -392,6 +404,8 @@ class SetStore:
                     one["source"] = {"store": src["store"], "list": clean_text(src["list"], 60)}
                 if isinstance(s.get("read"), str) and re.fullmatch(r"\d{4}-\d\d-\d\dT[\d:]{8}Z", s["read"]):
                     one["read"] = s["read"]
+            if clean_dependencies(s.get("dependencies")):
+                one["dependencies"] = clean_dependencies(s["dependencies"])
             note = clean_note(s.get("note"))
             if note:
                 one["note"] = note
@@ -431,6 +445,51 @@ class SetStore:
     def _save(self, data: dict) -> None:
         """Write your sets."""
         write_file_safely(self.path, json.dumps({"version": 1, **data}, ensure_ascii=False, indent=1))
+
+    def export_json(self, sid: str, hidden=frozenset()) -> dict:
+        """Portable local backup, without short-link credentials or machine-specific picture names."""
+        one = next((x for x in self.load()["sets"] if x["id"] == sid), None)
+        if one is None:
+            raise ValueError("That set isn't there anymore.")
+        one = dict(one)
+        one["items"] = [k for k in one["items"] if k not in hidden]
+        one = self.sanitize({"sets": [one]})["sets"][0]
+        cover = picture_file(one)
+        image = base64.b64encode(cover.read_bytes()).decode("ascii") if cover else None
+        for key in ("id", "short", "short_ended", "picture"):
+            one.pop(key, None)
+        return {"format": "hoard-set", "version": 1, "set": one, "image": image}
+
+    def import_json(self, raw) -> dict:
+        """Import as a new set; never overwrite an existing set or trust link credentials."""
+        if not isinstance(raw, dict) or raw.get("format") != "hoard-set" or type(raw.get("version")) is not int or raw["version"] != 1:
+            raise ValueError("Choose a Hoard set JSON file (version 1).")
+        given = raw.get("set")
+        if not isinstance(given, dict) or not isinstance(given.get("items"), list) or not clean_name(given.get("name")):
+            raise ValueError("That JSON file doesn't contain a named set and product list.")
+        limit = MAX_WISH_ITEMS if given.get("kind") == "wishlist" else MAX_ITEMS
+        if len(given["items"]) > limit or any(not isinstance(k, str) or not TAG_KEY_RX.fullmatch(k) for k in given["items"]):
+            raise ValueError("That JSON file contains too many products or invalid product keys.")
+        image = chosen_picture(raw["image"]) if raw.get("image") is not None else None
+        with _lock:
+            data = self.load()
+            if len(data["sets"]) >= MAX_SETS:
+                raise ValueError(f"Hoard keeps up to {MAX_SETS} sets.")
+            sid = secrets.token_hex(4)
+            one = {k: v for k, v in given.items() if k not in ("id", "short", "short_ended", "picture")}
+            one["id"] = sid
+            try:
+                one = self.sanitize({"sets": [one]})["sets"][0]
+            except (TypeError, ValueError, IndexError, AttributeError):
+                raise ValueError("That JSON file contains invalid set details.") from None
+            if image:
+                picture, kind = image
+                one["picture"] = f"{secrets.token_hex(4)}.{kind}"
+                pictures_dir().mkdir(parents=True, exist_ok=True)
+                write_file_safely(pictures_dir() / f"{sid}-{one['picture']}", picture)
+            data["sets"].append(one)
+            self._save(data)
+            return {**data, "made": sid}
 
     def change(self, body: dict, details=None, kept: set | frozenset = frozenset()) -> dict:
         """One change, from the page: {"action": "create", "name", "items"?, "note"?, "photos"?},
@@ -473,7 +532,7 @@ class SetStore:
                 one = {"id": made, "name": name,
                        "items": list(dict.fromkeys(given["items"] if given else items))[:MAX_ITEMS]}
                 if given:
-                    one.update({k: given[k] for k in ("note", "photos", "products", "marks") if given.get(k)}, from_link=True)
+                    one.update({k: given[k] for k in ("note", "photos", "products", "marks", "dependencies") if given.get(k)}, from_link=True)
                 else:
                     one.update(note=clean_note(body.get("note")), photos=body.get("photos") or [])
                     if body.get("kind") == "wishlist":   # one of your own, product by product (issue #158)
@@ -499,6 +558,23 @@ class SetStore:
                     remember(s, items)
                 elif action == "remove":
                     s["items"] = [k for k in s["items"] if k not in items]
+                elif action == "placeholder-add":
+                    name = clean_name(body.get("name"))
+                    if not name:
+                        raise ValueError("Say what the placeholder is for.")
+                    if len(s["items"]) >= MAX_ITEMS:
+                        raise ValueError(f"A set holds up to {MAX_ITEMS} products.")
+                    key = "local:planned" + secrets.token_hex(8)
+                    s["items"].append(key)
+                    s.setdefault("placeholders", {})[key] = name
+                elif action == "placeholder-resolve":
+                    key, target = body.get("key"), body.get("target")
+                    if key not in s.get("placeholders", {}) or target not in s["items"] or target in s.get("placeholders", {}):
+                        raise ValueError("Choose a product already added to this set.")
+                    s["items"] = [target if k == key else k for k in s["items"] if k != target]
+                    s["placeholders"].pop(key)
+                elif action == "dependencies":
+                    s["dependencies"] = clean_dependencies(body.get("dependencies"))
                 elif action == "note":
                     s["note"] = clean_note(body.get("note"))
                 elif action == "photos":
@@ -549,7 +625,7 @@ class SetStore:
             for p in products:
                 clean = clean_product(p)
                 if clean:
-                    key = tag_key(clean["store"], clean["name"])
+                    key = tag_key(clean["store"], clean["name"], clean.get("id"))
                     known[key] = clean
                     s["items"] = list(dict.fromkeys(s["items"] + [key]))
             most = MAX_WISH_ITEMS if s.get("kind") == "wishlist" else MAX_ITEMS
@@ -608,7 +684,7 @@ class SetStore:
                     clean = clean_product(p)
                     if not clean:
                         continue
-                    k = tag_key(clean["store"], clean["name"])
+                    k = tag_key(clean["store"], clean["name"], clean.get("id"))
                     if k in products:
                         continue
                     old = before.get(k) or {}
@@ -658,7 +734,7 @@ class SetStore:
             known, made, inside = s.get("products") or {}, [], set(s["items"])
             for n, keys in enumerate(parts, 1):
                 one = {"id": secrets.token_hex(4), "name": part_name(s["name"], n, len(parts)),
-                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks") if s.get(k)},
+                       "items": [k for k in keys if k in inside], **{k: s[k] for k in ("note", "photos", "marks", "dependencies", "placeholders") if s.get(k)},
                        "products": {k: known[k] for k in keys if k in known}}
                 if s.get("kind") == "wishlist":
                     one["kind"] = "wishlist"
@@ -694,7 +770,7 @@ def share_parts(s: dict, details=None, leave_out=frozenset(), fits=fits_short_li
     if len(items) <= MAX_ITEMS and fits(_pack(s, [r for r in rows if r], [k for k, r in zip(items, rows) if r])):
         return [items] if items else []
     sized = {**s, "name": part_name(s.get("name", ""), 1, 1)}
-    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), s.get("marks"), items, rows,
+    seen = hashlib.sha256(json.dumps([sized["name"], s.get("note"), s.get("photos"), s.get("marks"), s.get("dependencies"), items, rows,
                                       fits.__module__ + "." + fits.__qualname__], ensure_ascii=False).encode()).hexdigest()
     if seen in _parts_kept:
         return [list(p) for p in _parts_kept[seen]]
@@ -781,6 +857,8 @@ def _pack(s: dict, rows: list[list], keys: list[str] | None = None) -> str:
     doc = {"v": 1, "n": s.get("name", ""), "i": rows}
     if any(len(r) > 6 and r[6] for r in rows):   # a set with a product for adults in it: its viewer is asked first
         doc["a"] = 1
+    if clean_dependencies(s.get("dependencies")):
+        doc["r"] = clean_dependencies(s["dependencies"])
     if s.get("note"):
         doc["d"] = s["note"]
     if s.get("photos"):
@@ -847,7 +925,7 @@ def from_code(text) -> dict:
                            "thumbnail": row[5], "adult": row[6] in (1, True)})
         if not p or p["store"] not in STORES:
             continue
-        key = tag_key(p["store"], p["name"])
+        key = tag_key(p["store"], p["name"], p.get("id"))
         row_keys[n] = key
         if key not in products:
             items.append(key)
@@ -863,7 +941,8 @@ def from_code(text) -> dict:
                 and 0 <= m[0] < len(given) and given[m[0]] and m[1] in row_keys:
             marks.setdefault(given[m[0]], []).append([row_keys[m[1]], m[2], m[3]])
     return {"name": name, "note": clean_note(doc.get("d")), "photos": photos, "items": items,
-            "products": products, "marks": clean_marks(marks, photos, items)}
+            "products": products, "marks": clean_marks(marks, photos, items),
+            **({"dependencies": clean_dependencies(doc["r"])} if clean_dependencies(doc.get("r")) else {})}
 
 
 def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:
@@ -873,7 +952,7 @@ def for_catalog(catalog: list[dict], data: dict | None = None) -> list[dict]:
     data = data if data is not None else SetStore().load()
     folders: dict[str, list[str]] = {}
     for e in catalog:
-        folders.setdefault(tag_key(e["store"], e["name"]), []).append(e["folder"])
+        folders.setdefault(tag_key(e["store"], e["name"], e.get("id")), []).append(e["folder"])
     out = []
     for s in data["sets"]:
         if s.get("kind") == "wishlist":   # what you want, not a set to import together (Hoard for Unity's Import set)

@@ -744,9 +744,9 @@ def dl__jinxxy_item(ctx, page, url, man, store_dir, jcfg, args, report, chosen: 
     key = dl.urlparse(url).path.rstrip("/").split("/")[-1]
     name = (info.get("name") or key).strip()
     creator = (info.get("creator") or "Unknown Creator").strip()
-    if not chosen and dl.skip_product(args, "jinxxy", name, creator):   # (a chosen item was picked by its page, not its name)
+    if not chosen and dl.skip_product(args, "jinxxy", name, creator, key):   # (a chosen item was picked by its page, not its name)
         return
-    if dl.removed_product("jinxxy", name, report) or man.away(key, f"Jinxxy: {name}", report):
+    if dl.removed_product("jinxxy", name, report, key) or man.away(key, f"Jinxxy: {name}", report):
         return
     rec = man.record(key, creator, name)
     is_new_asset = not rec["files"]
@@ -1051,3 +1051,18 @@ STILL_JS = r"""() => {
 }"""
 
 LIBRARY_EXPORTS['STILL_JS'] = STILL_JS
+
+
+def saved_data(html):
+    """Extract Jinxxy list metadata from an embedded saved-page payload."""
+    return lib.jinxxy_data(lib.jinxxy_ssr([t for _, t in lib.script_tags(html) if "ApolloSSRDataTransport" in t]))
+
+
+def direct_link(item):
+    """Use the inventory page as the direct download target."""
+    return item.get("url")
+
+
+def chosen_name(key, record):
+    """Use the displayed file label, falling back to its Jinxxy file key."""
+    return record.get("label") or (key if "label" in record else record["path"])
