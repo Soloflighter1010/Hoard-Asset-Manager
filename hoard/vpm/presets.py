@@ -118,7 +118,8 @@ def export_alcom(preset: dict, assets_by_key: dict, vcc_folder: Path) -> dict:
     files, left_out = [], []
     for p in preset["products"]:
         a = assets_by_key.get(p["key"])
-        path = safe_join(Path(a["abs_folder"]), p["file"]) if a and p["kind"] == "unitypackage" and not p.get("member") else None
+        path = safe_join(Path(a["abs_folder"]), p["file"]) if a and not a.get("away") and p["kind"] == "unitypackage" \
+            and not p.get("member") else None
         if path is None or not path.is_file():
             left_out.append(p["label"] or p["product"] or p["file"])
             continue

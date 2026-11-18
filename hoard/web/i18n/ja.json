@@ -2613,5 +2613,8 @@
  "Automatic updates are off for this project.": "このプロジェクトの自動更新はオフです。",
  "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "自動更新: パッケージ変更{0}件、管理対象アセット更新{1}件。未追跡・編集済み・未対応の{2}件は変更しませんでした。",
  "Placeholders": "プレースホルダー",
- "Say what the placeholder is for.": "プレースホルダーが何のためのものか入力してください。"
+ "Say what the placeholder is for.": "プレースホルダーが何のためのものか入力してください。",
+ "Its drive isn't connected": "ドライブが接続されていません",
+ "Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.": "フォルダーが今は接続されていないドライブかネットワーク共有にあるため、Hoardは読み込んでいません。接続すると、前と同じように表示されます。",
+ "Its folder is on a drive that isn't connected now: {0}": "フォルダーが今は接続されていないドライブにあります:{0}"
 }

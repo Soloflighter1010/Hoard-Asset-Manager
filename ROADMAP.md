@@ -11,11 +11,12 @@ work; they do not promise release dates or rank the new requests.
 
 - [ ] [#327](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/327) — Windows Defender quarantined the Tauri experiment; investigate the detection.
 - [ ] [#335](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/335) — Project package updates reported complete without the expected result.
+- [x] [#368](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/368) — Local products listed on a NAS or drive that doesn't answer stopped the library from loading; fixed in PR #369 (#366 is the offline rescue for a library that already stopped).
 
 ## Architecture and rollout
 
-- [ ] [#316](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/316) — Test isolation and parallel CI: comparable hosted-CI timing evidence remains outstanding.
-- [ ] [#322](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/322) — Store adapters and health checks: finish the store-specific branches in shared modules before adding stores.
+- [ ] [#316](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/316) — Test isolation and parallel CI: done except the timing. Each shard runs every test twice in about 9 minutes (16 to 19 before, once); waiting on a decision whether that counts per pass, or tests run once on pull requests.
+- [x] [#322](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/322) — Store adapters and health checks: the store-specific branches moved behind each store's adapter (PR #365).
 - [ ] [#324](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/324) — Choose one desktop shell using cross-platform measurements and tester results; Mac signing remains outstanding.
 - [ ] [#320](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/320) — SQLite metadata and stable product IDs: implemented behind an opt-in flag, not enabled by default.
 - [ ] [#348](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/348) — JSON compatibility, recovery, sealing cost and identity collisions are addressed in PR #365. Native packaged validation and beta activation remain, after the desktop transition settles.
@@ -24,21 +25,21 @@ Implementation evidence and reproduction commands live in [the architecture impl
 
 ## Requested features and UI improvements
 
-These requests have no assigned release or priority yet.
+Each of these is done in PR #365, for the next beta.
 
-- [ ] [#354](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/354) — Export and import sets and lists as JSON.
-- [ ] [#355](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/355) — Improve the sets and lists interface.
-- [ ] [#356](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/356) — Explain source control for new users.
-- [ ] [#357](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/357) — Automatically update a project’s assets, packages, or both.
-- [ ] [#358](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/358) — Placeholder entries for local, unfound or not-yet-created assets in sets.
-- [ ] [#359](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/359) — Currency conversion in wishlists.
-- [ ] [#360](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/360) — Replace underlined actions with buttons.
-- [ ] [#362](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/362) — List dependencies for the set as a whole.
+- [x] [#354](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/354) — Export and import sets and lists as JSON (PR #365).
+- [x] [#355](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/355) — Improve the sets and lists interface (PR #365).
+- [x] [#356](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/356) — Explain source control for new users (PR #365).
+- [x] [#357](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/357) — Automatically update a project’s assets, packages, or both (PR #365).
+- [x] [#358](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/358) — Placeholder entries for local, unfound or not-yet-created assets in sets (PR #365).
+- [x] [#359](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/359) — Currency conversion in wishlists (PR #365).
+- [x] [#360](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/360) — Replace underlined actions with buttons (PR #365).
+- [x] [#362](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/362) — List dependencies for the set as a whole (PR #365).
 
 ## Later and research
 
 - [ ] [#306](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/306) — New products and sales from followed creators; previously deferred to Hoard V6.
-- [ ] [#332](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/332) — Research a Hoard domain and self-hosted Kutt links; recommendation only, no purchase or migration.
+- [x] [#332](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/332) — Research a Hoard domain and self-hosted Kutt links: the recommendation is in [docs/DOMAIN-AND-SHARING.md](docs/DOMAIN-AND-SHARING.md) (PR #365); nothing bought or moved.
 
 ## Legacy work awaiting review
 

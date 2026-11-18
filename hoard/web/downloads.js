@@ -457,7 +457,7 @@ function otherCopies(a) {
 const slotHTML = a => {
   const n = stackSize.get(a.id) || 0, others = otherCopies(a), store = storeName(a.store);
   const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
-  const [status, statusKind] = a.folder_gone ? [tr("Folder gone"), "bad"] : a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
+  const [status, statusKind] = a.away ? [tr("Drive not connected"), "bad"] : a.folder_gone ? [tr("Folder gone"), "bad"] : a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
     : [tr(a.files.length === 1 ? "{0} file, {1}" : "{0} files, {1}", a.files.length, fmtSize(a.size)), ""];
   return productTile(a, { key: "id", id: a.id, current: a.id === openId, store: a.store.toLowerCase(), storeName: store,
     src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0], count: n, others: others.map(o => o.store.toLowerCase()),
@@ -671,7 +671,7 @@ function showDetail(a, focus = true) {
     `<h3>Files<span class="muted">${a.files.length} ${a.files.length === 1 ? "file" : "files"}, ${fmtSize(a.size)}</span></h3>` +
     `<ul class="files">${a.files.map(f => `<li class="${f.missing ? "miss" : ""}"><span class="fn">${esc(f.path)}${f.code ? ` <span class="codemark" ` +
       `title="${esc(codeWords(f.code, f.code.loose).join(" "))}">${esc(tr("Code"))}</span>` : ""}</span>` +
-      `<span class="fs">${f.missing ? "Missing on disk" : fmtSize(f.size)}</span>` +
+      `<span class="fs">${f.missing ? (a.away ? "Drive not connected" : "Missing on disk") : fmtSize(f.size)}</span>` +
       (f.missing ? "<span></span>" : `<span class="fb">` + (canLookInside(f.path)
         ? `<button class="ghost sm" data-act="inside" data-path="${esc(a.folder + "/" + f.path)}">Look inside</button>` : "") +
         `<button class="ghost sm" data-act="open" data-path="${esc(a.folder + "/" + f.path)}">Show in folder</button></span>`) +

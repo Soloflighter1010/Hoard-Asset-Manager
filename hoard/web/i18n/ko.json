@@ -2613,5 +2613,8 @@
  "Automatic updates are off for this project.": "이 프로젝트의 자동 업데이트가 꺼져 있습니다.",
  "Automatic update: {0} package changes, {1} managed assets updated; {2} untracked, modified or unsupported entries left unchanged.": "자동 업데이트: 패키지 변경 {0}개, 관리 에셋 업데이트 {1}개. 추적되지 않거나 수정되었거나 지원되지 않는 항목 {2}개는 유지했습니다.",
  "Placeholders": "자리 표시자",
- "Say what the placeholder is for.": "자리 표시자가 무엇인지 적어 주세요."
+ "Say what the placeholder is for.": "자리 표시자가 무엇인지 적어 주세요.",
+ "Its drive isn't connected": "드라이브가 연결되지 않았어요",
+ "Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.": "폴더가 지금 연결되지 않은 드라이브나 네트워크 공유에 있어서 Hoard가 읽지 않고 있어요. 연결하면 전처럼 보여요.",
+ "Its folder is on a drive that isn't connected now: {0}": "폴더가 지금 연결되지 않은 드라이브에 있어요: {0}"
 }

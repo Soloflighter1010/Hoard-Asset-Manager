@@ -8,7 +8,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-from . import previous
+from . import previous, reach
 from .paths import HERE
 from .safety import DataFileError, read_json_file, safe_join, store_link
 from .sets import product_link, public_page
@@ -92,23 +92,27 @@ def library_status(root: Path) -> dict:
     return {"root_exists": root.is_dir(), "stores": stores, "elsewhere": elsewhere}
 
 
-def _linked_folder(location: str) -> Path | None:
-    """A Local item's own folder, if it's a plain absolute path that isn't a link."""
+def _linked_folder(location: str, look: bool = True) -> Path | None:
+    """A Local item's own folder, if it's a plain absolute path that isn't a link. look=False: one on a drive that
+    isn't connected now, so not looked at (whether it's a link is seen when it's back)."""
     from .downloader import valid_location
-    if not valid_location(location) or os.path.islink(location):
+    if not valid_location(location) or (look and os.path.islink(location)):
         return None
     return Path(location)
 
 
 def problems(assets: list[dict], checked: dict | None = None, failed: dict | None = None) -> dict:
     """What's wrong with each product, by its tag_key, for an error mark on its tile (issue #334): each as
-    {"kind": "folder"} (a Local product's own folder isn't there), {"kind": "missing", "n"} (files gone from disk),
+    {"kind": "folder"} (a Local product's own folder isn't there), {"kind": "away"} (it's on a drive that isn't connected
+    now: hoard/reach.py), {"kind": "missing", "n"} (files gone from disk),
     {"kind": "changed", "n"} (files the last check of the downloads found changed: downloader.last_integrity) or
     {"kind": "failed", "why", "at"} (a download of it that didn't finish: asset_updates' "failed"). A product with
     none isn't in it."""
     out: dict[str, list] = {}
     for a in assets:
-        if a.get("folder_gone"):
+        if a.get("away"):
+            out.setdefault(a["tag_key"], []).append({"kind": "away"})
+        elif a.get("folder_gone"):
             out.setdefault(a["tag_key"], []).append({"kind": "folder"})
         elif a.get("missing"):
             out.setdefault(a["tag_key"], []).append({"kind": "missing", "n": a["missing"]})
@@ -138,6 +142,8 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             for record in read_manifests(base):
                 identities[(str(base), record["store"] + "/" + record["folder"])] = record.get("library_id") or record.get("key")
     assets, gone = [], 0
+    # a Local item listed where it is, on a drive or share that doesn't answer now, isn't read at all (hoard/reach.py)
+    away = reach.away(e["location"] for e in catalog if e.get("location"))
     for i, e in enumerate(catalog):
         if progress:
             progress(i + 1)
@@ -149,11 +155,14 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
                 continue
         base = libraries[lib]
         place = f"@{lib}/{e['folder']}" if lib else e["folder"]   # how the page names it
-        folder = _linked_folder(linked) if linked else safe_join(base, e["folder"])
+        not_here = bool(linked) and linked in away
+        folder = _linked_folder(linked, look=not not_here) if linked else safe_join(base, e["folder"])
         if folder is None:  # a folder that would lead outside the downloads isn't shown
             continue
         files, total, missing, newest = [], 0, 0, 0.0
-        for rel in e.get("files", []):
+        if not_here:   # each of its files as it was recorded, none of them looked at
+            files = [{"path": rel, "size": None, "missing": True} for rel in e.get("files", [])]
+        for rel in [] if not_here else e.get("files", []):
             try:
                 target = safe_join(folder, rel)
                 if target is None:
@@ -165,8 +174,8 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             except OSError:
                 missing += 1
                 files.append({"path": rel, "size": None, "missing": True})
-        folder_gone = bool(linked and files and missing == len(files) and not folder.is_dir())
-        if files and missing == len(files) and not folder_gone:
+        folder_gone = bool(linked and files and missing == len(files) and not not_here and not folder.is_dir())
+        if files and missing == len(files) and not folder_gone and not not_here:
             # every file was deleted from disk: it isn't a download any more, so it isn't shown, and the library
             # offers it again (issue #24). Its record is kept, so downloading it again works as before. A Local
             # product listed where it is whose folder has gone is shown, saying so (issue #334): moved, it can be
@@ -208,6 +217,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "size": total,
             "missing": missing,
             "folder_gone": folder_gone,
+            "away": not_here,   # its drive isn't connected now (it's shown as it was, and looked at again later)
             "added": e.get("added"),
             "modified": newest or None,
             "thumb": f"{place}/{thumb}" if thumb else None,

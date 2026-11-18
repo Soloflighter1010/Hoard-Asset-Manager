@@ -24,6 +24,7 @@ function adultMark() {
 // what it says on hover, and its spoken label.
 function problemWords(list) {
   return (list || []).map(p => p.kind === "folder" ? tr("Its folder isn't there any more")
+    : p.kind === "away" ? tr("Its drive isn't connected")
     : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk" : "{0} files are missing on disk", p.n)
     : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded" : "{0} files changed since they were downloaded", p.n)
     : p.kind === "failed" ? tr("Its last download didn't finish") : "").filter(Boolean);
@@ -31,6 +32,7 @@ function problemWords(list) {
 // ...and in its details, with what to do about it.
 function problemAdvice(p) {
   return p.kind === "folder" ? tr("Its folder isn't there any more. If you moved it, take it out of Local and add it again from where it is now.")
+    : p.kind === "away" ? tr("Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.")
     : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk. Download it again, or deal with it in Check downloads."
                                           : "{0} files are missing on disk. Download it again, or deal with them in Check downloads.", p.n)
     : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded. Check downloads keeps it as it is or downloads it again."

@@ -247,6 +247,13 @@ def package_files(assets: list[dict]) -> list[tuple[str, dict]]:
     return out
 
 
+def _kept(assets: list[dict], items: list[tuple[str, dict]]) -> set:
+    """What's kept of the packages read before: the ones on disk, and those of a product whose drive isn't connected
+    now (hoard/reach.py), which needn't be read again from the start when it's back."""
+    return {p for p, _ in items} | {os.path.join(a["abs_folder"], *f["path"].split("/")) for a in assets if a.get("away")
+                                    for f in a.get("files") or [] if packages.can_look_inside(f.get("path") or "")}
+
+
 # ----------------------------------------------------------------------------- what each product needs
 
 def work_out(assets: list[dict], index: NeedsIndex) -> dict:
@@ -337,13 +344,16 @@ def add_to_catalog(root: Path, catalog: list[dict], index: NeedsIndex | None = N
     "guids"}]. Hoard for Unity says which of them aren't in the project before importing."""
     from .safety import valid_rel
     from .tags import tag_key
+    from . import reach
     index = index or NeedsIndex()
     if not index.files:
         return
     assets = []
+    away = reach.away(e["location"] for e in catalog if e.get("location"))   # (nothing on them is looked at)
     for i, e in enumerate(catalog):
         base = Path(e["location"]) if e.get("location") else (Path(e["library"]) if e.get("library") else root) / e["folder"]
-        assets.append({"id": i, "abs_folder": str(base), "files": [{"path": f} for f in e["files"]],
+        gone = {"missing": True} if e.get("location") in away else {}
+        assets.append({"id": i, "abs_folder": str(base), "files": [{"path": f, **gone} for f in e["files"]],
                        "tag_key": tag_key(e["store"], e["name"], e.get("id")), "name": e["name"], "creator": e["creator"],
                        "store": e["store"], "catalog_folder": e["folder"]})
     for i, a in enumerate(assets):   # what code its packages hold, for Hoard for Unity's warning (issue #303)
@@ -452,8 +462,9 @@ class NeedsReader:
         if self.busy():
             return Again(1)
         if self._pending is None:
-            items = package_files(self.assets())
-            self.index.keep_only({path for path, _ in items})
+            assets = self.assets()
+            items = package_files(assets)
+            self.index.keep_only(_kept(assets, items))
             self._pending = deque(path for path, _ in items if not self.index.fresh(path))
             self.state.update(total=len(items), done=len(items) - len(self._pending), reading=bool(self._pending))
             self._read_since_scan = False
@@ -480,8 +491,9 @@ class NeedsReader:
 
     def run_once(self, stop: threading.Event | None = None) -> int:
         """Read what needs reading. Returns how many files were read."""
-        items = package_files(self.assets())
-        self.index.keep_only({p for p, _ in items})
+        assets = self.assets()
+        items = package_files(assets)
+        self.index.keep_only(_kept(assets, items))
         todo = [p for p, _ in items if not self.index.fresh(p)]
         self.state.update(total=len(todo), done=0, reading=bool(todo))
         read, saved = 0, time.monotonic()
