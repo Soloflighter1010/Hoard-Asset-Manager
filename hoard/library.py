@@ -129,7 +129,7 @@ IMPORT_BASES = {"booth": "https://accounts.booth.pm/library", "jinxxy": JX_INVEN
                 "itch": ITCH_LIBRARY}
 
 
-SAVED_PAGE_TYPES = (".mhtml", ".mht", ".html", ".htm", ".eml")   # (.eml: a Gumroad receipt: receipts.py)
+SAVED_PAGE_TYPES = (".mhtml", ".mht", ".html", ".htm")
 
 
 def read_saved_page(filename: str, text: str) -> tuple[str, str | None, dict]:
@@ -250,10 +250,6 @@ def import_saved_pages(cfg: dict, pages, store: str | None = None, trust_shops=(
         result = {"filename": filename}
         results.append(result)
         try:
-            receipts = _gumroad_receipts(cfg, store, filename, text)
-            if receipts is not None:   # a Gumroad receipt, or a purchase's saved page: kept, read by Gumroad's refresh
-                result.update(receipts)
-                continue
             ready.append((result, _prepare_import(cfg, store, filename, text, trusted)))
         except NewShop as e:
             result["confirm_shop"] = e.shop
@@ -273,32 +269,6 @@ def import_saved_pages(cfg: dict, pages, store: str | None = None, trust_shops=(
             finally:
                 browser.close()
     return results
-
-
-def _gumroad_receipts(cfg: dict, store: str | None, filename: str, text: str) -> dict | None:
-    """A Gumroad receipt brought in with the saved pages (receipts.py): its email (.eml), its page, or a purchase's
-    download or product page saved from your browser. {"receipts": how many it has, "added": how many are new}, or
-    None when it isn't one (a store's page to import)."""
-    if store not in (None, "", "auto", "gumroad"):
-        return None
-    from . import receipts
-    low = (filename or "").lower()
-    head = text[:8000]
-    if low.endswith(".eml"):
-        pass
-    elif low.endswith((".mhtml", ".mht")) or re.search(r"^Content-Type:\s*multipart/related", head, re.I | re.M):
-        m = re.search(r"^Snapshot-Content-Location:\s*(\S+)", head, re.I | re.M)
-        if store_for_url(m.group(1) if m else None) != "gumroad":
-            return None
-    elif not receipts.LINK.search(text):
-        return None
-    found = receipts.find(filename, text)
-    if not found:
-        if low.endswith(".eml") or store == "gumroad":
-            raise ValueError("there's no Gumroad receipt in that file: save the email with its View content button")
-        return None
-    got = receipts.add(cfg, found)
-    return {"store": "gumroad", "receipts": len(found), "added": got["added"], "emails_kept": got["emails_kept"]}
 
 
 def import_saved_page(cfg: dict, store: str | None, filename: str, text: str, trust_shop: str | None = None) -> tuple[str, list[dict]]:
@@ -441,15 +411,13 @@ class Library:
                 i["adult"] = before[i["key"]]["adult"]
         return first
 
-    def replace_store(self, store: str, items: list[dict], keep_others: bool = False, keep_keys=()) -> None:
+    def replace_store(self, store: str, items: list[dict], keep_others: bool = False) -> None:
         """Swap in a store's freshly read items and record the refresh. keep_others: the refresh couldn't read
-        everything (a Payhip shop), so items it didn't find are kept rather than dropped. keep_keys: these items
-        are kept if it didn't find them (Gumroad receipts that couldn't be read this time)."""
+        everything (a Payhip shop), so items it didn't find are kept rather than dropped."""
         with self.changing():
-            if keep_others or keep_keys:
+            if keep_others:
                 found = {i["key"] for i in items}
-                items = items + [i for i in self.data["items"] if i["store"] == store and i["key"] not in found
-                                 and (keep_others or i["key"] in keep_keys)]
+                items = items + [i for i in self.data["items"] if i["store"] == store and i["key"] not in found]
             first = self._stamp(store, items)
             self.data["items"] = [i for i in self.data["items"] if i["store"] != store] + items
             self.data["stores"][store] = {"updated": now_iso(), "count": len(items), "error": None, "source": "refresh",
@@ -477,23 +445,6 @@ class Library:
                 info = self.data["stores"].get(store)
                 if isinstance(info, dict):
                     info["count"] = sum(1 for i in self.data["items"] if i["store"] == store)
-            self.save()
-            kept = {i.get("thumbnail") for i in self.data["items"]}
-        _forget_pictures(gone, kept)
-        return len(gone)
-
-    def forget_downloads(self, store: str, tokens: set, token_of) -> int:
-        """Take off the list a store's products whose download page is one of these (token_of(its download_url) in
-        tokens: Gumroad receipts removed), with their cached pictures. Returns how many."""
-        with self.lock:
-            gone = [i for i in self.data["items"] if i["store"] == store and token_of(i.get("download_url")) in tokens]
-            if not gone:
-                return 0
-            gone_ids = {id(g) for g in gone}
-            self.data["items"] = [i for i in self.data["items"] if id(i) not in gone_ids]
-            info = self.data["stores"].get(store)
-            if isinstance(info, dict):
-                info["count"] = sum(1 for i in self.data["items"] if i["store"] == store)
             self.save()
             kept = {i.get("thumbnail") for i in self.data["items"]}
         _forget_pictures(gone, kept)
