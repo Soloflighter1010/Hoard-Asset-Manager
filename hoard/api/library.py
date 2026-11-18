@@ -48,7 +48,7 @@ def _privacy_action(self, path: str, body: dict):
             if (keys & marks["hidden"]) and not self._unlocked() and not (kind == "hidden" and on):
                 return self._json({"error": "Unlock your hidden library first."}, 403)
             # each product's own key on its store, so the choice stays with it if the store renames it
-            ids = {i["key"]: k for i in srv.lib.snapshot()[0] if (k := app.tag_key(i["store"], i["name"])) in keys} if on else {}
+            ids = {i["key"]: k for i in srv.lib.snapshot()[0] if (k := app.tag_key(i["store"], i["name"], i.get("id"))) in keys} if on else {}
             store.change(kind, keys, on, ids)
         elif path == "/api/purge":   # removed products, deleted from Hoard's list for good
             keys &= store.load()["removed"]
@@ -101,7 +101,7 @@ def _product_details(self):
     srv = self.server
     lib, dl = {}, {}
     for i in srv.lib.snapshot()[0]:
-        lib.setdefault(app.tag_key(i["store"], i["name"]), i)
+        lib.setdefault(app.tag_key(i["store"], i["name"], i.get("id")), i)
     for a in srv.index(stale_ok=True)["assets"]:
         dl.setdefault(a["tag_key"], a)
 

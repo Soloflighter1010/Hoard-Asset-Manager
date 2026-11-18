@@ -26,7 +26,7 @@ from .net import STORE_HOSTS, blocked_here, blocked_message, plain_error
 from .paths import THUMB_DIR
 from .safety import DataFileError, STORE_LINK_SITES, clean_text, fetch_public, inert_html, is_video_address, offline_page, remember_sealed, safe_url, seal, store_link
 from .storage import seal_status as check_seal, read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
-from .tags import TagMatcher, TagStore, clean_tag, product_type, tag_key
+from .tags import TagMatcher, TagStore, clean_tag, key_resolver, product_type, tag_key
 
 
 from .stores import adapters
@@ -99,8 +99,7 @@ def sign_in_urls(cfg: dict, store: str) -> list[str]:
     your settings: a shop keeps its own buyer account, and a shop on its own address also asks payhip.com whether
     you're signed in to Payhip itself (its sign-in check, payhip.com/global-identity), which goes round in a loop
     when you aren't."""
-    shops = [s + "/b-account" for s in payhip_shops(cfg)] if store == "payhip" else []
-    return [STORES[store]["login"], *shops]
+    return adapters()[store].login_pages(cfg)
 
 
 def open_sign_in_pages(ctx, cfg: dict, store: str):
@@ -197,7 +196,7 @@ def _prepare_import(cfg: dict, store: str | None, filename: str, text: str, trus
     # as prep["base"]; a <base> tag here would be removed by inert_html along with any the page brought, so none
     # is added (earlier versions added one that was then always removed).
     # (Jinxxy's page came with its items' data in its scripts, read as data before they're taken out: issue #276)
-    data = jinxxy_data(jinxxy_ssr([t for _, t in script_tags(page_html) if "ApolloSSRDataTransport" in t])) if store == "jinxxy" else {}
+    data = adapters()[store].saved_data(page_html)
     return {"store": store, "html": inert_html(page_html), "base": base, "shop_page": shop_page, "images": images,
             "jinxxy_data": data}
 
@@ -341,6 +340,11 @@ class Library:
                 why = ("was changed by something other than Hoard" if status == "changed"
                        else "was saved by Hoard on another computer")
                 note = f"Hoard's saved list {why}, so its links and images are hidden until you refresh."
+                recovery = storage.recovery_notice(path)
+                if recovery:
+                    note = ("Hoard could not authenticate its saved metadata. Links and images are hidden until you refresh. "
+                            "Automatic checks and project updates are off; review settings before enabling them. "
+                            f"The original metadata is preserved as {recovery['backup']}.")
                 for info in self.data["stores"].values():
                     info["error"] = note
                 print(note, flush=True)
@@ -369,8 +373,7 @@ class Library:
                     "error": clean_text(info.get("error"), 600) or None,
                     **{k: clean_text(info[k], 40) for k in ("refreshed", "updated", "first_read") if isinstance(info.get(k), str)},
                     **({"source": info["source"]} if info.get("source") in ("import", "refresh") else {}),
-                    **({"found_shops": [f for f in info["found_shops"][:200] if isinstance(f, str) and clean_payhip_shop(f) == f]}
-                       if store == "payhip" and isinstance(info.get("found_shops"), list) else {}),
+                    **adapters()[store].library_state(info),
                 }
         return out
 
@@ -439,8 +442,8 @@ class Library:
     def forget_products(self, keys: set) -> int:
         """Delete these products (by product key) from the list, with their cached pictures. Returns how many."""
         with self.lock:
-            gone = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) in keys]
-            self.data["items"] = [i for i in self.data["items"] if tag_key(i["store"], i["name"]) not in keys]
+            gone = [i for i in self.data["items"] if tag_key(i["store"], i["name"], i.get("id")) in keys]
+            self.data["items"] = [i for i in self.data["items"] if tag_key(i["store"], i["name"], i.get("id")) not in keys]
             for store in {i["store"] for i in gone}:
                 info = self.data["stores"].get(store)
                 if isinstance(info, dict):
@@ -542,10 +545,11 @@ def enrich(items: list[dict], tcfg: dict, tagdata: dict | None = None, apart=fro
     groups: dict[str, list] = {}
     out = []
     matcher = TagMatcher(tagdata["tags"])
+    resolve_key = key_resolver()
     for n, (i, ts) in enumerate(zip(items, suggestions), 1):
         if progress:
             progress(n)
-        key = tag_key(i["store"], i["name"])
+        key = resolve_key(i["store"], i["name"], i.get("id"))
         mine = TagStore.tags_for(tagdata, key, i["name"], matcher)
         kind, known = product_type(tagdata, key, i["name"], mine, i.get("store_tags"))   # what it is (issue #223)
         e = {**i, "tag_key": key, "tags": mine, "suggested": sorted(ts - set(mine)),
@@ -1011,5 +1015,5 @@ def public_pages(path: Path | None = None) -> dict[str, str]:
         if page:
             if i.get("url"):
                 found.setdefault(i["url"], page)
-            found.setdefault(tag_key(i["store"], i["name"]), page)
+            found.setdefault(tag_key(i["store"], i["name"], i.get("id")), page)
     return found

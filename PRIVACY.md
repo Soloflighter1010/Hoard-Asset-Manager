@@ -93,6 +93,10 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   are kept in that project's own Git settings, and go with your commits to wherever you push them (an email that
   isn't real, such as `you@example.com`, is fine). **Set up Git...** writes ignore rules that come with Hoard,
   and fetches nothing.
+- **Frankfurter, only when you convert a wishlist's prices** (5.2.0: **Convert prices to**, on a wishlist). Hoard
+  asks `api.frankfurter.dev` for the day's reference exchange rates, at most once an hour, and keeps them in memory
+  only. Nothing else is sent: no product, price, wishlist or account. Frankfurter sees your IP address, as with any
+  website.
 - **GitHub,** where Hoard is published: when you open a link in Hoard's footer or in the documentation, and
   when Hoard checks for a newer version. It checks when you choose **Check now** in **Settings**, and once a
   day when it starts only if you've turned on **Check for updates automatically** (off unless you do). A
@@ -102,7 +106,7 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
 
 That's all. The pages' typefaces come with Hoard, so showing a page never contacts anyone. Hoard
 has no telemetry or automatic crash reporting: errors and crash details stay on your computer until you choose to share a sanitized report, and it works offline except for refreshing, signing in, downloading,
-checking for updates, short links, Projects' packages and Git's remotes.
+checking for updates, short links, Projects' packages, Git's remotes and converting a wishlist's prices.
 
 ## The set viewer's age question
 

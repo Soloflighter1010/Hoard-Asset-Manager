@@ -261,19 +261,31 @@
     <li><label class="check"><input type="checkbox" disabled> <span><b translate="no">VRChat SDK - Base</b> <span class="muted" translate="no">3.10.5</span> <span class="pj-tag">In it already</span><br><span class="muted" translate="no">com.vrchat.base · Official</span></span></label></li>
   </ul>
   <div class="pj-addbar"><span class="muted">1 chosen</span><button class="primary sm">Add the chosen packages</button></div>
+  <h3 class="sg-h">Keeping a project up to date, and the Git tab's guide</h3>
+  <div class="pj-field pj-auto"><label for="sgAuto">Keep this project up to date</label><select id="sgAuto"><option>Off</option><option>Packages only</option><option>Assets only</option><option selected>Assets and packages</option></select></div>
+  <p class="hint">Checked hourly while Hoard is open; changes wait until Unity is closed. Local edits are kept.</p>
+  <details class="pj-git-guide" open><summary>New to source control?</summary><p>Git records checkpoints of your project on this computer. A commit saves a checkpoint.</p>
+    <ol><li>Review Changes and choose the files you want to keep.</li><li>Stage them, then Commit with a short message.</li></ol></details>
 </div></div>
 
 <h2 class="sg-h" id="sets">Sets and Wishlists</h2>
 <div class="sg-ex">
+  <div class="setfind"><input class="find" type="search" placeholder="Find a set or wishlist" aria-label="Find a set or wishlist"><label>Sort <select aria-label="Sort sets and wishlists"><option>Saved order</option><option>Name</option></select></label></div>
   <div class="grid setgrid">
     <button class="slot settile" aria-label="Rusk, winter: 3 products"><span class="art"><span class="collage n2"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%2356D1DC'/%3E%3C/svg%3E" alt=""><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 3'%3E%3Crect width='4' height='3' fill='%23FF8AD8'/%3E%3C/svg%3E" alt=""></span><i class="tick" aria-hidden="true"></i></span><span class="nm-t" translate="no">Rusk, winter</span><span class="cr">3 products, all yours</span></button>
     <div class="slot ext wanted"><a class="ext-main" href="#sets"><span class="art"><span class="ph" style="--h:330" translate="no"><b>FE</b></span><i class="notch jinxxy" data-s="Jinxxy"></i></span><span class="nm-t" translate="no">Fox Ears</span><span class="cr" translate="no">by Tails · Jinxxy</span></a><span class="ext-price"><span class="price down" translate="no">$8.00</span> <s class="was" translate="no"><span class="visually-hidden">was </span>$12.00</s></span><span class="ext-row"><span class="ext-what">Buy on Jinxxy</span><button class="ext-out" title="Take it off this wishlist"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6"/></svg><span>Remove</span></button></span></div>
   </div>
+  <h3 class="sg-h">A set's dependencies, and a placeholder in it</h3>
+  <div class="setdeps"><h4>Set dependencies</h4><ul><li translate="no">Poiyomi Toon 9</li><li translate="no">VRCFury</li></ul></div>
+  <div class="grid setgrid"><div class="slot ext planned"><span class="ext-main"><span class="art"><span class="ph" style="--h:160" translate="no"><b>WH</b></span></span><span class="nm-t" translate="no">A winter hat</span><span class="cr">Placeholder asset</span></span>
+    <span class="ext-ph"><select aria-label="Replace with a product in this set"><option>Choose a product</option><option>Fox Ears</option></select><button class="ghost sm">Replace placeholder</button></span></div></div>
   <h3 class="sg-h">A wishlist open</h3>
   <p class="muted">Its suggested tags, your tags on what you have of it and its creators are in the filters beside it, as the Library's are.</p>
-  <div class="wishbar">
+  <div class="wishbar"><label class="wish-price"><span class="wish-l">Convert prices to</span><select><option>Original prices</option><option selected>EUR</option><option>USD</option></select></label>
     <div class="wish-price" role="group" aria-label="Price range"><span class="wish-l">Price</span><input type="number" placeholder="From" aria-label="Lowest price"><span aria-hidden="true">–</span><input type="number" placeholder="To" aria-label="Highest price"><span translate="no">JPY</span><button class="linkish">Clear</button></div>
   </div>
+  <p class="hint">Estimates using Frankfurter reference rates dated 2026-11-17. Checkout prices and fees may differ.
+    A product shows its estimate beside its price: <span class="converted" translate="no">≈ €9.04</span><span class="price" translate="no">¥1,500</span></p>
   <details class="wishgroup" open><summary>Not yours yet <span class="n">2</span></summary><p class="none">(its products, as tiles)</p></details>
   <details class="wishgroup"><summary>Yours already <span class="n">1</span></summary></details>
   <h3 class="sg-h">Mix and match</h3>

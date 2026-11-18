@@ -48,8 +48,23 @@ def benchmark(count: int, repeats: int) -> dict:
             assert len(library.Library.sanitize(raw)["items"]) == count
             db.close()
             db_times.append(time.perf_counter() - started)
+        json_writes, sqlite_writes = [], []
+        db = storage.Database(home, safety.integrity_key())
+        try:
+            for n in range(repeats):
+                value = {"last": n, "note": "small metadata document"}
+                started = time.perf_counter()
+                safety.write_file_safely(home / "small-write-benchmark.json", json.dumps(safety.seal(value)))
+                json_writes.append(time.perf_counter() - started)
+                started = time.perf_counter()
+                db.write("routine.json", value)
+                sqlite_writes.append(time.perf_counter() - started)
+        finally:
+            db.close()
         return {"products": count, "repeats": repeats, "legacy_open_seconds": statistics.median(file_times),
                 "sqlite_open_seconds": statistics.median(db_times), "migration_seconds": migration,
+                "legacy_small_write_seconds": statistics.median(json_writes),
+                "sqlite_small_write_seconds": statistics.median(sqlite_writes),
                 "legacy_bytes": len(text.encode("utf-8")), "sqlite_bytes": (home / "metadata.sqlite3").stat().st_size}
 
 

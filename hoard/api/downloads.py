@@ -188,7 +188,7 @@ def get_api_integrity(self, path, body, query):
     last = app.last_integrity() or {"problems": [], "changed": [], "missing": [], "data_changed": [], "checked": None}
     hidden = set() if self._unlocked() else set(app.MarkStore().keys("hidden"))
     removed = app.MarkStore().keys("removed")   # (removed since the check: not listed, issue #259)
-    listed = [x for x in ({**x, "key": app.tag_key(x["store"], x["name"])} for x in last["problems"]) if x["key"] not in removed]
+    listed = [x for x in ({**x, "key": app.tag_key(x["store"], x["name"], x.get("id"))} for x in last["problems"]) if x["key"] not in removed]
     shown = [x for x in listed if x["key"] not in hidden]
     return self._json({"checked": last["checked"], "problems": shown, "hidden_left_out": len(listed) - len(shown),
                        "more": max(0, len(last["changed"]) + len(last["missing"]) - len(last["problems"])),
@@ -204,14 +204,14 @@ def get_api_assets(self, path, body, query):
     # each download carries its product's mark from the Library (archived, removed, hidden), so the Downloads
     # page has the same views (issue #29); hidden products' downloads stay out of view while it's locked
     marks, unlocked = app.MarkStore().view(), self._unlocked()
-    by_store = {app.tag_key(i["store"], i["name"]) for i in srv.lib.snapshot()[0] if i.get("archived")}
+    by_store = {app.tag_key(i["store"], i["name"], i.get("id")) for i in srv.lib.snapshot()[0] if i.get("archived")}
     updates = app.AssetUpdates().load()   # what the last check for updates found (issue #26)
     used = app.projects.used_in(self._visible_projects())   # the Unity projects using each (issue #86)
     stacks, looks = {}, []   # copies of one product stack here as in the Library: by its products (hoard/library.py)
     listed = [dict(i) for i in srv.lib.snapshot()[0]]
-    store_tags = {app.tag_key(i["store"], i["name"]): i["store_tags"] for i in listed if i.get("store_tags")}   # (#206)
+    store_tags = {app.tag_key(i["store"], i["name"], i.get("id")): i["store_tags"] for i in listed if i.get("store_tags")}   # (#206)
     from .. import adult
-    flagged = {app.tag_key(i["store"], i["name"]) for i in listed if i.get("adult") is True}   # (its store says: #311)
+    flagged = {app.tag_key(i["store"], i["name"], i.get("id")) for i in listed if i.get("adult") is True}   # (its store says: #311)
     tagdata = app.TagStore().load()   # (for each product's type, as the Library has it: issue #223)
     app.stack_by_picture(listed, apart=marks["apart"])
     for i in listed:
@@ -220,8 +220,8 @@ def get_api_assets(self, path, body, query):
         # keeps them apart, and so must Disk space's copies. The key is for downloads the library doesn't list
         stacks.setdefault((str(i["store"]).lower(), i["name"]), i["stack_key"])
         if i["stack_key"]:
-            stacks.setdefault(app.tag_key(i["store"], i["name"]), i["stack_key"])
-        if i.get("look_for") and (unlocked or app.tag_key(i["store"], i["name"]) not in marks["hidden"]):
+            stacks.setdefault(app.tag_key(i["store"], i["name"], i.get("id")), i["stack_key"])
+        if i.get("look_for") and (unlocked or app.tag_key(i["store"], i["name"], i.get("id")) not in marks["hidden"]):
             looks.append({"look_for": i["look_for"], "key": i["key"]})   # (its picture: /thumb/<key>)
     assets = []
     needed = srv.needs_view(index)

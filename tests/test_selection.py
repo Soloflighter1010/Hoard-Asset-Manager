@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 
-from hoard import config, downloader, library, server  # noqa: E402
+from hoard import config, downloader, library, server, storage  # noqa: E402
 
 try:
     from tests.test_packages import BROWSER
@@ -50,6 +50,7 @@ class Selecting(IsolatedTestCase):
         cls.pw.stop()
         cls.srv.shutdown()
         cls.srv.server_close()
+        storage.close_all()
         cls.env.stop()
         cls.tmp.cleanup()
 

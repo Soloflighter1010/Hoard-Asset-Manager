@@ -127,6 +127,85 @@ class Server(IsolatedTestCase):
             time.sleep(0.05)
         self.fail("the job didn't finish")
 
+    def test_auto_update_settings_only_accept_listed_projects_and_valid_modes(self):
+        project = self.tmp / "Opted Project"
+        for part in ("Assets", "Packages", "ProjectSettings"):
+            (project / part).mkdir(parents=True)
+        (project / "ProjectSettings/ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        path = str(project)
+        self.assertEqual(self.call("POST", "/api/vpm/auto-update", {"path": path, "mode": "both"})[0], 400)
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": path})[0], 200)
+        self.assertEqual(self.call("GET", "/api/vpm/project?path=" + urllib.parse.quote(path))[1]["auto_update"], "off")
+        for mode in ("packages", "assets", "both", "off"):
+            status, data = self.call("POST", "/api/vpm/auto-update", {"path": path, "mode": mode})
+            self.assertEqual((status, data["mode"]), (200, mode))
+        self.assertEqual(self.call("POST", "/api/vpm/auto-update", {"path": path, "mode": "invalid"})[0], 400)
+
+    def test_automatic_asset_updates_coordinate_real_task_lanes(self):
+        from hoard.vpm import autoupdate, managed, listing, unitypackage
+        from hoard.vpm.project import UnityProject
+        from hoard.asset_updates import AssetUpdates
+        from tests.test_vpm_projects import G2, make_unitypackage
+        import io
+        project = self.tmp / "Auto Assets"
+        for part in ("Assets", "Packages", "ProjectSettings"):
+            (project / part).mkdir(parents=True)
+        (project / "ProjectSettings/ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(project)})[0], 200)
+        initial = unitypackage.place(project, io.BytesIO(make_unitypackage({G2: ("Assets/Thing.txt", b"old")})))
+        managed.record(project, initial.baselines, "booth:product")
+        folder = self.tmp / "Downloads"
+        folder.mkdir(exist_ok=True)
+        package = folder / "Product.unitypackage"
+        package.write_bytes(make_unitypackage({G2: ("Assets/Thing.txt", b"old")}))
+        listing.add_preloaded(str(project), [{"tag_key": "booth:product", "kind": "unitypackage", "file": package.name}])
+        autoupdate.configure(str(project), "assets")
+        self.srv.cfg["setup_done"] = True
+        self.srv.asset_by_key = lambda key: {"tag_key": "booth:product", "abs_folder": str(folder), "files": [{"path": package.name}]}
+        phases = []
+        def download(stores, only, keys, check=False, **kwargs):
+            phases.append("check" if check else "download")
+            if not check:
+                package.write_bytes(make_unitypackage({G2: ("Assets/Thing.txt", b"new")}))
+            return True
+        self.srv.jobs._download = download
+        def wait_main():
+            for _ in range(300):
+                if not self.srv.jobs.state["running"]:
+                    return
+                time.sleep(0.01)
+            self.fail("download lane did not finish")
+        with mock.patch.object(UnityProject, "unity_running", return_value=False), mock.patch.object(AssetUpdates, "load", return_value={"items": {"booth:product": {"store": "booth"}}}):
+            self.assertTrue(autoupdate.tick(self.srv, 10000))
+            wait_main()
+            self.assertTrue(autoupdate.tick(self.srv, 10060))
+            wait_main()
+            self.assertTrue(autoupdate.tick(self.srv, 10120))
+            done = self.wait()
+        self.assertEqual(phases, ["check", "download"])
+        self.assertEqual(done["outcome"], "done", done)
+        self.assertIn("1 managed assets updated", done["message"])
+        self.assertEqual((project / "Assets/Thing.txt").read_bytes(), b"new")
+
+    def test_automatic_package_update_applies_and_verifies_through_tasks(self):
+        from hoard.vpm.project import UnityProject
+        from hoard.vpm import autoupdate
+        project = self.tmp / "Auto Packages"
+        for part in ("Assets", "Packages", "ProjectSettings"):
+            (project / part).mkdir(parents=True)
+        (project / "ProjectSettings/ProjectVersion.txt").write_text("m_EditorVersion: 2022.3.22f1\n")
+        manifest = project / "Packages/vpm-manifest.json"
+        manifest.write_text(json.dumps({"dependencies": {"com.vrchat.base": {"version": "3.7.0"}}, "locked": {"com.vrchat.base": {"version": "3.7.0", "dependencies": {}}}}))
+        self.assertEqual(self.call("POST", "/api/vpm/add-project", {"path": str(project)})[0], 200)
+        autoupdate.configure(str(project), "packages")
+        self.srv.cfg["setup_done"] = True
+        with mock.patch.object(UnityProject, "unity_running", return_value=False), mock.patch("hoard.vpm.repos.Collection.refresh", return_value=[]):
+            self.assertTrue(autoupdate.tick(self.srv, 10000))
+            done = self.wait()
+        self.assertEqual(done["outcome"], "done", done)
+        self.assertEqual(json.loads(manifest.read_text())["locked"]["com.vrchat.base"]["version"], "3.10.5")
+        self.assertEqual(json.loads((project / "Packages/com.vrchat.base/package.json").read_text())["version"], "3.10.5")
+
     def test_projects_tasks_run_in_a_lane_of_their_own(self):
         """A project's task never waits behind a sync or a download (or they behind it): Projects has its own queue
         and thread. Tasks shows both, Stop stops a project's task without touching the store browsers, and a

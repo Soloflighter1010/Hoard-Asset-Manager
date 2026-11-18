@@ -143,9 +143,9 @@ def dl_sync_itch(cfg: dict, root: dl.Path, args, report: dl.Report) -> None:
             g = dl.itch.game_of(k)
             name = dl.clean_text(g["title"], 300) or f"itch.io project {g['id']}"
             creator = dl.clean_text(g["creator"], 200) or "Unknown Creator"
-            if not g["id"] or dl.skip_product(args, "itch", name, creator):
+            if not g["id"] or dl.skip_product(args, "itch", name, creator, g["id"]):
                 continue
-            if dl.removed_product("itch", name, report) or man.away(str(g["id"]), f"itch.io: {name}", report):
+            if dl.removed_product("itch", name, report, g["id"]) or man.away(str(g["id"]), f"itch.io: {name}", report):
                 continue
             dl.pause(delay)
             try:
@@ -189,7 +189,7 @@ def dl__itch_project(sess, k: dict, g: dict, name: str, creator: str, man: dl.St
             report.skipped.append(f"itch.io: {name} / {label} - a game build for {' and '.join(dl.itch.systems(u))}, so not "
                                   "downloaded (Settings, itch.io: Skip game builds)")
             continue
-        if dl.left_out(args, report, "itch", name, label):
+        if dl.left_out(args, report, "itch", name, label, product_id=rec.get("library_id") or rec.get("key")):
             continue
         if args.dry_run:
             dl.would_get(args, report, "itch", rec, name, creator, label, old is not None and old.get("shown", shown) != shown,

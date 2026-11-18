@@ -150,6 +150,41 @@ class _Harness(IsolatedTestCase):
         thread.join(15)
 
 
+class MetadataRecovery(_Harness):
+    def test_window_opens_after_lost_or_foreign_integrity_key(self):
+        from hoard import library, paths, safety
+        with unittest.mock.patch.dict(os.environ, {"HOARD_METADATA": "sqlite"}):
+            for missing in (True, False):
+                with self.subTest(missing_key=missing):
+                    cfg = config.load_config()
+                    config.save_config({**cfg, "setup_done": True, "auto_sync_hours": 1, "routine_hours": 1})
+                    lib = library.Library(paths.LIBRARY_FILE)
+                    lib.data = {"items": [library.item("booth", "1", name="Hoodie", url="https://booth.pm/en/items/1")],
+                                "stores": {"booth": {"count": 1}}}
+                    lib.save()
+                    storage.close_all()
+                    key_path = paths.data_dir() / "integrity.key"
+                    if missing:
+                        key_path.unlink()
+                    else:
+                        key_path.write_text("ab" * 32, encoding="ascii")
+                    safety._integrity_key = None
+                    sys.modules["webview"] = wv = fake_webview()
+                    t, result, info = self.start()
+                    self.assertEqual(wv.windows[0].title, "Hoard")
+                    key = enter(wv.windows[0].url)
+                    self.assertTrue(key, "the window can authenticate with the recovered server")
+                    self.assertTrue(config.load_config()["setup_done"])
+                    recovered_library = library.Library(paths.LIBRARY_FILE)
+                    self.assertIsNone(recovered_library.data["items"][0]["url"])
+                    self.assertIn("refresh", recovered_library.data["stores"]["booth"]["error"])
+                    self.assertEqual(config.load_config()["auto_sync_hours"], 0)
+                    self.assertEqual(post(info["url"], "/api/quit", {}, key), 200)
+                    t.join(15)
+                    self.assertEqual(result.get("code"), 0)
+                    storage.close_all()
+
+
 class DesktopApp(_Harness):
 
     def test_window_one_copy_and_quit(self):

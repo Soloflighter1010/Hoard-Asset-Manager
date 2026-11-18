@@ -28,6 +28,79 @@ class Store(IsolatedTestCase):
         self.store.change({"action": "delete", "id": made})
         self.assertEqual(self.store.load()["sets"], [])
 
+    def test_json_round_trip_and_hidden_products(self):
+        local = tag_key("Local", "My asset")
+        for kind in (None, "wishlist"):
+            made = self.store.change({"action": "create", "name": "Portable", "items": [RUSK, HOODIE, local],
+                                      "note": "My note", "kind": kind})["made"]
+            exported = self.store.export_json(made)
+            imported = self.store.import_json(json.loads(json.dumps(exported)))
+            original, restored = [x for x in imported["sets"] if x["id"] in (made, imported["made"])]
+            self.assertNotEqual(original["id"], restored["id"])
+            self.assertEqual({k: v for k, v in original.items() if k != "id"},
+                             {k: v for k, v in restored.items() if k != "id"})
+            self.assertEqual(self.store.export_json(made, {HOODIE})["set"]["items"], [RUSK, local])
+
+    def test_json_cover_picture_round_trip(self):
+        import base64
+        made = self.store.change({"action": "create", "name": "Cover", "items": []})["made"]
+        self.store.change({"action": "picture", "id": made, "image": base64.b64encode(PNG_4x3).decode()})
+        raw = self.store.export_json(made)
+        imported = self.store.import_json(raw)
+        one = next(x for x in imported["sets"] if x["id"] == imported["made"])
+        self.assertEqual(sets.picture_file(one).read_bytes(), PNG_4x3)
+
+    def test_json_import_rejects_invalid_data_without_changes(self):
+        before = self.store.load()
+        for raw in (None, {}, {"format": "hoard-set", "version": 2},
+                    {"format": "hoard-set", "version": 1, "set": {"name": "Broken", "items": [42]}},
+                    {"format": "hoard-set", "version": 1, "set": {"name": "Broken", "items": [], "photos": 42}}):
+            with self.subTest(raw=raw), self.assertRaises(ValueError):
+                self.store.import_json(raw)
+            self.assertEqual(self.store.load(), before)
+
+    def test_json_import_drops_machine_ids_and_short_credentials(self):
+        raw = {"format": "hoard-set", "version": 1, "set": {"id": "existing", "name": "Imported", "items": [],
+               "picture": "12345678.png", "short": {"token": "secret"}}}
+        made = self.store.import_json(raw)
+        one = made["sets"][0]
+        self.assertNotEqual(one["id"], "existing")
+        self.assertNotIn("short", one)
+        self.assertNotIn("picture", one)
+
+    def test_set_dependencies_persist_and_travel_with_the_set(self):
+        made = self.store.change({"action": "create", "name": "Requirements", "items": SHARED["items"]},
+                                 SHARED["products"].get)["made"]
+        self.store.change({"action": "dependencies", "id": made, "dependencies": ["lilToon", "VRCFury", "lilToon", ""]})
+        one = self.store.load()["sets"][0]
+        self.assertEqual(one["dependencies"], ["lilToon", "VRCFury"])
+        restored = self.store.import_json(self.store.export_json(made))
+        self.assertEqual(restored["sets"][-1]["dependencies"], one["dependencies"])
+        code, count = sets.share_code(one)
+        self.assertGreater(count, 0)
+        shared = sets.from_code(code)
+        self.assertEqual(shared["dependencies"], one["dependencies"])
+        imported = self.store.change({"action": "import", "code": code})
+        self.assertEqual(imported["sets"][-1]["dependencies"], one["dependencies"])
+        parts = self.store.split(made, [[RUSK], [HOODIE]])
+        self.assertTrue(all(x["dependencies"] == one["dependencies"] for x in parts["sets"] if x["id"] in parts["made"]))
+        self.store.change({"action": "dependencies", "id": made, "dependencies": []})
+        self.assertNotIn("dependencies", self.store.load()["sets"][0])
+
+    def test_placeholder_json_round_trip_and_resolution_keeps_position(self):
+        made = self.store.change({"action": "create", "name": "Planned", "items": [RUSK]})["made"]
+        self.store.change({"action": "placeholder-add", "id": made, "name": "Hair to make"})
+        original = self.store.load()["sets"][0]
+        key = next(iter(original["placeholders"]))
+        restored = self.store.import_json(self.store.export_json(made))["sets"][-1]
+        self.assertEqual(restored["placeholders"], {key: "Hair to make"})
+        self.store.change({"action": "add", "id": made, "items": [HOODIE]})
+        resolved = self.store.change({"action": "placeholder-resolve", "id": made, "key": key, "target": HOODIE})["sets"][0]
+        self.assertEqual(resolved["items"], [RUSK, HOODIE])
+        self.assertNotIn("placeholders", resolved)
+        with self.assertRaises(ValueError):
+            self.store.change({"action": "placeholder-resolve", "id": made, "key": key, "target": "missing"})
+
     def test_what_cant_be_done(self):
         for body in ({"action": "create", "name": "  "}, {"action": "rename", "id": "nope", "name": "x"},
                      {"action": "explode", "id": "x"}, {"action": "create", "name": 7}):
@@ -636,6 +709,15 @@ class Tab(IsolatedTestCase):
                 return json.loads(r.read())
         except urllib.error.HTTPError as e:
             return {"status": e.code, **json.loads(e.read() or b"{}")}
+
+    def test_json_file_api_round_trip(self):
+        made = self.api("/api/sets", {"action": "create", "name": "From file", "items": [RUSK]})["made"]
+        exported = self.api("/api/sets", {"action": "export-json", "id": made})
+        self.assertTrue(exported["ok"])
+        imported = self.api("/api/sets", {"action": "import-json", "file": exported["file"]})
+        self.assertTrue(imported["ok"])
+        self.assertNotEqual(imported["made"], made)
+        self.assertEqual(self.api("/api/sets", {"action": "import-json", "file": {}})["status"], 400)
 
     def test_a_picture_follows_its_product_when_one_is_taken_out(self):
         """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved
