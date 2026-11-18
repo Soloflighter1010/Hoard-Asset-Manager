@@ -58,6 +58,7 @@ class RoundTrip(IsolatedTestCase):
         self.assertIn("secretthing", text, "unlocked: hidden items go in")
         self.assertIn("pin", doc["marks"])
         self.assertNotIn("downloadables", text, "never a link that downloads what you bought")
+
         # only as their slow hashes, whose random hex held "2468" by chance once: look everywhere else
         outside = text
         for field in ("pin", "recovery"):
@@ -72,6 +73,17 @@ class RoundTrip(IsolatedTestCase):
             return [x for item in v for x in values(item)] if isinstance(v, list) else [v]
         for word in self.phrase.split():
             self.assertNotIn(word, values(doc["marks"]), "only their slow hash")
+
+    def test_a_gumroad_purchases_download_page_stays_out(self):
+        """A Gumroad purchase's link is its download page (a receipt's too), which opens what you bought for anyone
+        who has it: a backup leaves it out (a refresh brings it back)."""
+        self.lib.replace_store("gumroad", [library.item("gumroad", "p1", name="Fluff", creator="Example",
+                                                       url="https://gumroad.com/d/" + "a" * 32,
+                                                       download_url="https://gumroad.com/d/" + "a" * 32,
+                                                       page="https://example.gumroad.com/l/fluff")])
+        text = json.dumps(self.make(unlocked=True))
+        self.assertNotIn("a" * 32, text)
+        self.assertIn("Fluff", text)
 
     def test_recovery_words_that_are_other_names_too(self):
         """A recovery word can be a theme's name ("midnight", "frost"): the settings name it, the marks don't."""

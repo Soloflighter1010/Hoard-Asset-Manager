@@ -33,6 +33,16 @@ ITEM_FIELDS = ("store", "id", "name", "creator", "creator_url", "thumbnail", "ur
                "added")   # not download_url or files: those are links to download what you bought
 
 
+def _listed(item: dict) -> dict:
+    """A product as a backup keeps it (ITEM_FIELDS). Its link is left out when it's the download page itself (a
+    Gumroad purchase's, a receipt's among them: anyone with it can download what you bought)."""
+    out = {k: item.get(k) for k in ITEM_FIELDS}
+    if out.get("url") and (out["url"] == item.get("download_url") or "gumroad.com/d/" in str(out["url"])
+                           or "gumroad.com/r/" in str(out["url"])):
+        out["url"] = None
+    return out
+
+
 class BackupError(ValueError):
     """A file that isn't a Hoard backup, or one Hoard can't use."""
 
@@ -72,7 +82,7 @@ def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:
                   **({"products": {k: p for k, p in s["products"].items() if k not in out}} if s.get("products") else {})}
                  for s in SetStore().load()["sets"]],
         "marks": chosen,
-        "library": {"items": [{k: i.get(k) for k in ITEM_FIELDS} for i in items],
+        "library": {"items": [_listed(i) for i in items],
                     "stores": {s: {**{k: v for k, v in info.items() if k in ("updated", "first_read", "source")},
                                    **({"count": counts.get(s, 0)} if "count" in info else {})}
                                for s, info in stores.items()}},
