@@ -37,6 +37,8 @@ def _there(folder: str) -> str:
 
 
 def _look() -> None:
+    """One of the threads that look: it takes the folders waiting in turn, notes what each said (and when), and wakes
+    whoever is waiting for it; it ends when none are left waiting."""
     global _looking
     while True:
         with _lock:
