@@ -24,7 +24,9 @@ _lock = threading.Lock()
 _said: dict[str, tuple[float, str]] = {}               # folder -> (when it answered, "there", "gone" or "away")
 _asking: dict[str, tuple[float, threading.Event]] = {}  # folder -> (when it was asked about, set once it answers)
 _queue: deque[str] = deque()                            # folders waiting for a thread to look at them
+_overdue: set[str] = set()                              # folders someone has already waited out, with no answer yet
 _looking = 0                                            # threads looking
+_now = time.monotonic                                   # (the clock: Windows' moves in steps of about 16 ms)
 
 
 def _there(folder: str) -> str:
@@ -46,15 +48,16 @@ def _look() -> None:
                 _looking -= 1
                 return
             folder = _queue.popleft()
-        started = time.monotonic()
+        started = _now()
         try:
             said = _there(folder)
         except Exception:   # (whatever it was, the thread goes on to the next, and this one is looked at again later)
             said = "gone"
-        if said == "gone" and time.monotonic() - started >= WAIT:
+        if said == "gone" and _now() - started >= WAIT:
             said = "away"   # that long to say it isn't there: its drive doesn't answer, and each file would wait as long
         with _lock:
-            _said[folder] = (time.monotonic(), said)
+            _said[folder] = (_now(), said)
+            _overdue.discard(folder)
             done = _asking.pop(folder, (0.0, None))[1]
         if done is not None:
             done.set()
@@ -66,7 +69,7 @@ def away(folders, wait: float | None = None) -> set[str]:
     not, on a drive that answers, isn't."""
     global _looking
     wait = WAIT if wait is None else wait
-    now = time.monotonic()
+    now = _now()
     out: set[str] = set()
     waiting: dict[str, threading.Event] = {}
     with _lock:
@@ -82,8 +85,8 @@ def away(folders, wait: float | None = None) -> set[str]:
                 _asking[f] = (now, done)
                 _queue.append(f)
                 waiting[f] = done
-            elif now - asking[0] >= wait:   # asked about before, and still no answer: away, without waiting again
-                out.add(f)
+            elif f in _overdue or now - asking[0] >= wait:   # waited out before, and still no answer: away, without
+                out.add(f)                                     # waiting again
             else:
                 waiting[f] = asking[1]
         while _looking < min(MOST, len(_queue)):
@@ -94,8 +97,11 @@ def away(folders, wait: float | None = None) -> set[str]:
             _looking += 1
     deadline = now + wait
     for f, done in waiting.items():
-        if not done.wait(max(0.0, deadline - time.monotonic())):
+        if not done.wait(max(0.0, deadline - _now())):
             out.add(f)
+            with _lock:
+                if f in _asking:   # (no answer yet: the next to ask doesn't wait for it again)
+                    _overdue.add(f)
             continue
         with _lock:
             said = _said.get(f)

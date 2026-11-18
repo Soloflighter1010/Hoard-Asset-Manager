@@ -112,6 +112,17 @@ class AwayFolders(IsolatedTestCase):
         self.assertEqual(reach.away([str(self.nas)]), {str(self.nas)}, "still waiting: still away")
         self.assertLess(time.monotonic() - t, 0.2, "and not waited on again")
 
+    def test_waited_out_once_is_away_at_once_however_little_the_clock_moved(self):
+        """Windows' clock moves in steps of about 16 ms: a second ask just after the first had waited it out could
+        read as less than the wait since, and wait again."""
+        self.nas.mkdir()
+        _Unplugged(self, self.nas)
+        with mock.patch.object(reach, "_now", lambda: 1000.0):   # (a clock that doesn't move at all)
+            self.assertEqual(reach.away([str(self.nas)]), {str(self.nas)})
+            t = time.monotonic()
+            self.assertEqual(reach.away([str(self.nas)]), {str(self.nas)})
+            self.assertLess(time.monotonic() - t, 0.1, "not waited on again")
+
     def test_folders_that_answer_arent_away(self):
         gone = self.base / "Not here"
         self.assertEqual(reach.away([str(self.base), str(gone)]), set(), "there, or not there, on a drive that answers")
