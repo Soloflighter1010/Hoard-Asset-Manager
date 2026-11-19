@@ -46,13 +46,15 @@ Before one product downloads (**Download** in its details, **Update** in Downloa
 you want to save?** (5.2.0). It says what the product contains, such as "2 Unity packages, 1 Substance Painter
 project, and 3 compressed files", then:
 
+- Its files, listed by kind and all ticked (5.2.0 beta 11: open from the start, so you see what you can choose), to
+  untick what you don't want this time; **Download these** gets the rest.
 - **Download everything** gets all of it.
-- **Choose files** lists its files by kind, to untick what you don't want this time; **Download these** gets the
-  rest.
 
 Where the store doesn't list a product's files before downloading (Gumroad, Jinxxy and itch.io, and Booth when
 your library list doesn't have them), Hoard looks at its download page first, as a short task of its own (**See
-what's in it** in Tasks). Nothing is downloaded, and **Download everything** works while it looks.
+what's in it** in Tasks). Nothing is downloaded. From 5.2.0 beta 11 you can download once its whole list is in, so
+you choose from all of it. When that task waits its turn behind another (a download that's running), **Download
+everything** works meanwhile and waits its turn too.
 
 Hoard remembers what you leave out of each product, and asks again whenever you download from it later or it gets
 an update: what you left out before, and what your rules leave out (**Files to leave out**, in

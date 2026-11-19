@@ -238,8 +238,8 @@ def get_thumb(self, path, body, query):
     srv = self.server
     u = app.urlparse(self.path)
     got = app.fetch_thumbnail(app.unquote(path[len("/thumb/"):]), srv.lib)
-    if not got:
-        return self._send(404, b"Not found", "text/plain")
+    if not got:   # (never kept by the page: the store may only have been slow, and the page asks again, issue #406)
+        return self._send(404, b"Not found", "text/plain", {"Cache-Control": "no-store"})
     return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
 
 

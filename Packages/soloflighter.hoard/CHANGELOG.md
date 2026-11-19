@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1
+
+- **Pictures don't flicker or go blank in a long list** (#407). A store's picture, which can be thousands of pixels
+  across, is kept at the size it's drawn, so many more fit in memory; one on screen is never let go (letting go of
+  one read it again at once, and the window flickered between it and its placeholder); and one that couldn't be read
+  is tried again a little later, as when Hoard saves it after a download.
+- **A WebP or AVIF picture shows** when Hoard 5.2.0 beta 11 or newer has saved a PNG or JPEG copy beside it.
+
 ## 0.11.0
 
 - **Code in a package.** Before importing a product whose packages hold scripts or DLLs (which Unity runs as soon as

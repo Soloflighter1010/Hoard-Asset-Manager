@@ -1911,7 +1911,7 @@ async function pickDownloads(title, verb, items, go, choices) {
   choices = choices || await downloadChoices();
   const skip = new Set((choices.skipped || []).map(e => e.key));
   Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb,
-                        offFiles: new Map(), openFiles: new Set(), reading: new Set() });
+                        offFiles: new Map(), openFiles: new Set(), reading: new Set(), queued: new Set() });
   for (const e of PICK.items) {   // (issue #225: what your rules, or an earlier choice, leave out comes unticked)
     const out = (e.out || []).filter(n => fileNames(e).includes(n));
     if (out.length) PICK.offFiles.set(e.key, new Set(out));
@@ -1968,14 +1968,14 @@ function contentsText(names) {   // "2 Unity packages, 1 Substance Painter proje
   for (const f of names) n.set(kindOfFile(f), (n.get(kindOfFile(f)) || 0) + 1);
   return listed(CONTENT_KINDS.filter(([k]) => n.has(k)).map(([k, , one, many]) => tr(n.get(k) === 1 ? one : many, n.get(k))));
 }
-const FILES = { product: null, names: null, off: new Set(), picking: false, failed: false, go: null, timer: 0, asked: 0 };
+const FILES = { product: null, names: null, off: new Set(), picking: false, failed: false, queued: false, go: null, timer: 0, asked: 0 };
 /** Ask which of a product's files to download ({key, store, name, creator, names: its files, when known; more: only
  *  what isn't downloaded yet}), then go(the choice, for DL_FILES). With asking turned off in Settings: go(null). */
 function askFiles(product, go) {
   if (typeof DATA === "object" && DATA && DATA.ask_files === false) return go(null);
   clearTimeout(FILES.timer);
   const known = [...new Set(product.names || [])];
-  Object.assign(FILES, { product, names: known.length ? known : null, off: new Set(), picking: false, failed: false, go,
+  Object.assign(FILES, { product, names: known.length ? known : null, off: new Set(), picking: false, failed: false, queued: false, go,
                          asked: FILES.asked + 1 });
   $("#filesName").textContent = product.name;
   $("#filesBy").textContent = product.creator ? tr("by {0}", product.creator) : "";
@@ -1991,8 +1991,11 @@ async function readFiles(asked, read) {   // its files and what's left out of th
   if (got) {
     FILES.names = [...new Set(FILES.names && !got.read ? FILES.names : got.files)];
     FILES.off = new Set(got.out.filter(n => FILES.names.includes(n)));
-    FILES.picking = FILES.off.size > 0 && FILES.names.length > 1;   // (left out before: the choice, again)
+    FILES.picking = FILES.names.length > 1;   // (its whole list, open: what you can choose, issue #401)
   } else if (r.ok && r.data.reading) {
+    const was = FILES.queued;
+    FILES.queued = !!r.data.waiting;   // (its read waits its turn behind what's running now)
+    if (was !== FILES.queued) drawFiles();
     FILES.timer = setTimeout(() => readFiles(asked, false), 1500);
     return;
   } else if (!FILES.names) {
@@ -2003,7 +2006,12 @@ async function readFiles(asked, read) {   // its files and what's left out of th
 // Draw the files dialog: what the product contains, and each file to tick.
 function drawFiles() {
   const names = FILES.names, p = FILES.product;
-  $("#filesHas").textContent = names === null ? tr("Looking at what it contains...")
+  // its list being read: nothing downloads until all of it is in (issue #401), unless the read itself waits its turn
+  // behind what's running now, when Download everything waits there too
+  const waiting = names === null && !FILES.queued;
+  $("#filesHas").textContent = names === null ? tr("Looking at what it contains...") + " " + tr(FILES.queued
+      ? "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too."
+      : "You can download once its whole list is in.")
     : names.length ? tr(p.more ? "Not downloaded yet: {0}." : "It contains {0}.", contentsText(names))
     : p.more ? tr("Everything it has is downloaded already.")
     : FILES.failed ? tr("Hoard couldn't see its files before downloading. Download everything gets them all.")
@@ -2017,8 +2025,9 @@ function drawFiles() {
       `<label class="check"><input type="checkbox" data-file="${esc(n)}"${FILES.off.has(n) ? "" : " checked"}> <span translate="no">${esc(n)}</span></label>`).join("");
   }).join("");
   const n = names ? names.filter(x => !FILES.off.has(x)).length : 0;
-  $("#filesAll").textContent = FILES.picking ? tr(n === 1 ? "Download this one" : "Download these {0}", n) : tr("Download everything");
-  $("#filesAll").disabled = (FILES.picking && n === 0) || (!!p.more && !!names && !names.length);
+  $("#filesAll").textContent = FILES.picking && n < names.length ? tr(n === 1 ? "Download this one" : "Download these {0}", n) : tr("Download everything");
+  $("#filesAll").disabled = waiting || (FILES.picking && n === 0) || (!!p.more && !!names && !names.length);
+  $("#filesDialog").setAttribute("aria-busy", String(waiting));
 }
 // The files dialog's ticks, Download everything, and remembering the choice.
 function wireFiles() {
@@ -2061,7 +2070,10 @@ function drawPick() {
   $("#pickSkipped ul").innerHTML = PICK.skipped.map(e => row(e, true)).join("");
   const n = PICK.items.length - PICK.off.size;
   $("#pickGo").textContent = !PICK.off.size ? tr(`${PICK.verb} all`) : tr(`${PICK.verb} {0}`, n);
-  $("#pickGo").disabled = PICK.items.length > 0 && n === 0;
+  // (a product's files being read: nothing downloads until its whole list is in, issue #401)
+  const reading = PICK.items.some(x => PICK.reading.has(x.key) && !PICK.queued.has(x.key) && !PICK.off.has(x.key));
+  $("#pickGo").disabled = (PICK.items.length > 0 && n === 0) || reading;
+  $("#pickGo").title = reading ? tr("You can download once its whole list is in.") : "";
 }
 // Skip a product's downloads, or stop skipping them.
 async function pickSkip(key, on) {
@@ -2105,8 +2117,10 @@ async function pickRead(key) {   // a product's files, looked at on its store (n
   for (let tries = 0; tries < 200 && $("#pickDialog").open; tries++) {
     const r = await apiPost("/api/product-files", { keys: [key], read: tries === 0 });
     const got = r.ok && r.data.files && r.data.files[key], item = PICK.items.find(x => x.key === key);
+    const queued = !!(r.ok && r.data.reading && r.data.waiting);   // (its read waits its turn behind what's running now)
+    if (queued !== PICK.queued.has(key)) { if (queued) PICK.queued.add(key); else PICK.queued.delete(key); drawPick(); }
     if (got || !r.ok || !r.data.reading) {
-      PICK.reading.delete(key);
+      PICK.reading.delete(key); PICK.queued.delete(key);
       if (got && item) {
         item.names = got.files;
         const out = got.out.filter(n => got.files.includes(n));

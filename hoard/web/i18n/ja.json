@@ -2736,5 +2736,9 @@
  "Use the folder Hoard started with instead": "Hoardの最初のフォルダーに戻す",
  "Use this folder for {0}?": "{0}にこのフォルダーを使いますか?",
  "Use this folder": "このフォルダーを使う",
- "There are too many exports of this set in Exported sets: move some out, and try again.": "Exported setsに、このセットのエクスポートが多すぎます。いくつか別の場所に移してから、もう一度お試しください。"
+ "There are too many exports of this set in Exported sets: move some out, and try again.": "Exported setsに、このセットのエクスポートが多すぎます。いくつか別の場所に移してから、もう一度お試しください。",
+ "You can download once its whole list is in.": "一覧がすべてそろうと、ダウンロードできます。",
+ "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too.": "今実行中のものが終わると、Hoardが一覧を読み込みます(タスクをご覧ください)。「すべてダウンロード」も順番を待ちます。",
+ "That isn't a product's WebP or AVIF picture.": "それは商品のWebPやAVIFの画像ではありません。",
+ "That isn't a PNG or JPEG picture.": "それはPNGやJPEGの画像ではありません。"
 }

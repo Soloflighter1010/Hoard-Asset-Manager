@@ -1,6 +1,7 @@
 // Product pictures for the Hoard window, loaded only for rows being drawn: the file is read (and a GIF decoded, every
 // frame, at thumbnail size) on a background thread, then made into textures on Unity's main thread a few per frame.
-// Only the most recently used are kept, within a memory budget. Animated GIFs play wherever they're drawn.
+// Only the most recently used are kept, within a memory budget, and never one that's on screen (PictureShelf, issue
+// #407). A still picture is kept no bigger than it's drawn. Animated GIFs play wherever they're drawn.
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -21,6 +22,7 @@ namespace SoloFlighter.Hoard.Editor
         const int DecodePerFrame = 6;                 // made into textures per editor update, so scrolling stays smooth
         const long MaxBytes = 8L * 1024 * 1024;       // a picture file bigger than this isn't read
         const int GifSide = 160;                      // a GIF's frames are kept at most this big: the size it's shown at
+        const int StillSide = 480;                    // and a still picture: the details' 240, on a screen at twice that
         const int Readers = 2;                        // files read and GIFs decoded at once, however fast the list scrolls
 
         /// <summary>A picture as textures: one frame, or a GIF's frames and their timing.</summary>
@@ -34,15 +36,12 @@ namespace SoloFlighter.Hoard.Editor
         /// <summary>A picture as read from disk, before it's made into textures.</summary>
         sealed class Read { public string Path; public int Generation; public byte[] Still; public GifImage Gif; }
 
-        readonly Dictionary<string, Picture> ready = new Dictionary<string, Picture>();   // null: couldn't be shown
-        readonly LinkedList<string> recent = new LinkedList<string>();                   // most recently used first
-        readonly Dictionary<string, LinkedListNode<string>> place = new Dictionary<string, LinkedListNode<string>>();
-        readonly HashSet<string> asked = new HashSet<string>();
+        readonly Dictionary<string, Picture> ready = new Dictionary<string, Picture>();   // the pictures made
+        readonly PictureShelf shelf = new PictureShelf(Capacity, Budget);                // which to keep, ask for, let go
         readonly ConcurrentQueue<Read> read = new ConcurrentQueue<Read>();
         readonly ConcurrentQueue<Read> toRead = new ConcurrentQueue<Read>();
         int readers;
         volatile int generation;   // Clear starts a new one: a read asked for before it is dropped, not kept
-        long used;
         double animatedDrawnAt = -1;
 
         /// <summary>Animated pictures shown as a still of their first frame, as the app's Pause animated pictures.</summary>
@@ -53,22 +52,17 @@ namespace SoloFlighter.Hoard.Editor
         public Texture2D Get(string path)
         {
             if (path == null) return null;
-            Picture p;
-            if (ready.TryGetValue(path, out p))
-            {
-                Touch(path);
-                if (p == null) return null;
-                if (p.Timing == null || p.Frames.Length == 1 || Paused) return p.Frames[0];
-                double now = EditorApplication.timeSinceStartup;
-                animatedDrawnAt = now;
-                return p.Frames[Math.Min(p.Frames.Length - 1, p.Timing.FrameAt(now * 1000))];
-            }
-            if (asked.Add(path))
+            double now = EditorApplication.timeSinceStartup;
+            if (shelf.Drawn(path, now))   // (not kept, or a while since it couldn't be read)
             {
                 toRead.Enqueue(new Read { Path = path, Generation = generation });
                 StartReader();
             }
-            return null;
+            Picture p;
+            if (!ready.TryGetValue(path, out p)) return null;
+            if (p.Timing == null || p.Frames.Length == 1 || Paused) return p.Frames[0];
+            animatedDrawnAt = now;
+            return p.Frames[Math.Min(p.Frames.Length - 1, p.Timing.FrameAt(now * 1000))];
         }
 
         void StartReader()
@@ -113,27 +107,22 @@ namespace SoloFlighter.Hoard.Editor
         public bool Pump()
         {
             bool any = false;
+            double now = EditorApplication.timeSinceStartup;
             Read item;
             for (int n = 0; n < DecodePerFrame && read.TryDequeue(out item); n++)
             {
                 if (item.Generation != generation) continue;   // read for before a Clear: nothing kept of it
                 Picture had;
-                if (ready.TryGetValue(item.Path, out had) && had != null) { Destroy(had); used -= had.Bytes; }   // never two
+                if (ready.TryGetValue(item.Path, out had)) { Destroy(had); ready.Remove(item.Path); }   // never two
                 var p = Make(item);
-                ready[item.Path] = p;
-                if (p != null) used += p.Bytes;
-                Touch(item.Path);
+                if (p != null) { ready[item.Path] = p; shelf.Kept(item.Path, p.Bytes, now); }
+                else shelf.Failed(item.Path, now);   // (asked for again in a while: Hoard may save it later)
                 any = true;
             }
-            while (recent.Count > Capacity || (used > Budget && recent.Count > 1))   // forget the least recently used
+            foreach (string old in shelf.ToForget(now))   // the least recently drawn, never one on screen now
             {
-                string old = recent.Last.Value;
-                recent.RemoveLast();
-                place.Remove(old);
-                asked.Remove(old);   // it's read again if it's needed
                 Picture p;
-                if (ready.TryGetValue(old, out p) && p != null) { Destroy(p); used -= p.Bytes; }
-                ready.Remove(old);
+                if (ready.TryGetValue(old, out p)) { Destroy(p); ready.Remove(old); }
             }
             return any;
         }
@@ -165,9 +154,44 @@ namespace SoloFlighter.Hoard.Editor
             if (item.Still == null) return null;
             var t = new Texture2D(2, 2) { hideFlags = HideFlags.HideAndDontSave };
             bool loaded;
-            try { loaded = t.LoadImage(item.Still, true); } catch (Exception) { loaded = false; }
+            try { loaded = t.LoadImage(item.Still, false); } catch (Exception) { loaded = false; }
             if (!loaded) { UnityEngine.Object.DestroyImmediate(t); return null; }
+            t = Smaller(t, StillSide);   // (a store's picture can be thousands of pixels across: kept at the size it's drawn)
+            t.Apply(false, true);        // no longer readable: its copy in memory is let go
             return new Picture { Frames = new[] { t }, Bytes = (long)t.width * t.height * 4 };
+        }
+
+        /// <summary>A picture no bigger than side across, made on the graphics card; the one given when it's already
+        /// small enough (or can't be made smaller). The bigger one is let go.</summary>
+        static Texture2D Smaller(Texture2D t, int side)
+        {
+            if (t.width <= side && t.height <= side) return t;
+            float k = Mathf.Min((float)side / t.width, (float)side / t.height);
+            int w = Mathf.Max(1, Mathf.RoundToInt(t.width * k)), h = Mathf.Max(1, Mathf.RoundToInt(t.height * k));
+            var was = RenderTexture.active;
+            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Texture2D small = null;
+            try
+            {
+                t.filterMode = FilterMode.Bilinear;
+                Graphics.Blit(t, rt);
+                RenderTexture.active = rt;
+                small = new Texture2D(w, h, TextureFormat.RGBA32, false)
+                    { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
+                small.ReadPixels(new Rect(0, 0, w, h), 0, 0, false);
+                UnityEngine.Object.DestroyImmediate(t);
+                return small;
+            }
+            catch (Exception)   // (kept as it is: larger, but shown)
+            {
+                if (small != null) UnityEngine.Object.DestroyImmediate(small);
+                return t;
+            }
+            finally
+            {
+                RenderTexture.active = was;
+                RenderTexture.ReleaseTemporary(rt);
+            }
         }
 
         /// <summary>Free a picture's textures.</summary>
@@ -176,23 +200,13 @@ namespace SoloFlighter.Hoard.Editor
             foreach (var t in p.Frames) if (t != null) UnityEngine.Object.DestroyImmediate(t);
         }
 
-        void Touch(string path)
-        {
-            LinkedListNode<string> node;
-            if (place.TryGetValue(path, out node)) recent.Remove(node);
-            place[path] = recent.AddFirst(path);
-        }
-
         /// <summary>Forget every picture (one being read is dropped when it arrives).</summary>
         public void Clear()
         {
             generation++;
-            foreach (var p in ready.Values) if (p != null) Destroy(p);
+            foreach (var p in ready.Values) Destroy(p);
             ready.Clear();
-            recent.Clear();
-            place.Clear();
-            asked.Clear();
-            used = 0;
+            shelf.Clear();
             Read item;
             while (read.TryDequeue(out item)) { }
         }

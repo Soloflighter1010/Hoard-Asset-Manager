@@ -2736,5 +2736,9 @@
  "Use the folder Hoard started with instead": "Hoard의 처음 폴더로 되돌리기",
  "Use this folder for {0}?": "{0}에 이 폴더를 쓸까요?",
  "Use this folder": "이 폴더 쓰기",
- "There are too many exports of this set in Exported sets: move some out, and try again.": "Exported sets에 이 세트를 내보낸 파일이 너무 많아요. 몇 개를 다른 곳으로 옮긴 다음 다시 해 보세요."
+ "There are too many exports of this set in Exported sets: move some out, and try again.": "Exported sets에 이 세트를 내보낸 파일이 너무 많아요. 몇 개를 다른 곳으로 옮긴 다음 다시 해 보세요.",
+ "You can download once its whole list is in.": "목록이 다 들어오면 다운로드할 수 있어요.",
+ "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too.": "지금 실행 중인 것이 끝나면 Hoard가 목록을 읽어요(작업 참고). '모두 다운로드'도 차례를 기다려요.",
+ "That isn't a product's WebP or AVIF picture.": "상품의 WebP나 AVIF 이미지가 아니에요.",
+ "That isn't a PNG or JPEG picture.": "PNG나 JPEG 이미지가 아니에요."
 }

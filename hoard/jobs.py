@@ -739,6 +739,11 @@ class Jobs:
                 specs.append(self._spec)
         return {k for s in specs for k in (s.get("keys") or ())}
 
+    def waiting_keys_of(self, task: str) -> set[str]:
+        """The products the waiting jobs of a task are for (not the running one's), by key: what's waiting its turn."""
+        with self._qlock:
+            return {k for q in self._queue if q.get("task") == task for k in (q.get("keys") or ())}
+
     def tasks(self) -> dict:
         """The Tasks tab: what's running (with its progress so far), what's waiting, and what finished, newest
         first."""

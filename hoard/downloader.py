@@ -21,7 +21,7 @@ import requests
 
 from .browser import ProfileBusy, STORE_SITES, SigninsUnprotected, _on_sites, _playwright, launch_context, settle
 from .common import NotLoggedIn, log, now_iso, pause, tick
-from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, scroll_inventory
+from .library import DOWNLOADABLE, STORES, booth_cards, extract_page_json, gumroad_cards, picture_type, scroll_inventory
 from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
@@ -722,12 +722,15 @@ def save_thumbnail(url: str | None, folder: Path, referer: str | None = None) ->
                              "Chrome/140.0 Safari/537.36"}
     if referer:
         headers["Referer"] = referer
+    # (asked for as PNG, JPEG or GIF first, which Hoard for Unity shows, where an image host can choose: issue #407)
+    headers["Accept"] = "image/png,image/jpeg,image/gif;q=0.9,image/webp;q=0.5,image/*;q=0.3"
     got = fetch_public(url, headers, 15 * 1024 * 1024)
     exts = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif"}
-    if not got or got[1] not in exts:
+    kind = (got[1] if got[1] in exts else picture_type(got[0])) if got else None   # (one sent untyped: its bytes say)
+    if not kind:
         log("    (thumbnail skipped)")
         return
-    write_file_safely(folder / f"_thumbnail.{exts[got[1]]}", got[0])
+    write_file_safely(folder / f"_thumbnail.{exts[kind]}", got[0])
 
 
 def store_url(url: str, sites: list[str]) -> bool:

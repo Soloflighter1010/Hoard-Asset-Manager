@@ -56,16 +56,46 @@ function legacyFragment(html) {
   return template.content;
 }
 // A product's safe local picture, falling back to its initials without interpreting its name as markup.
+// Pictures that have loaded, by address, kept to be put back when the grid is drawn again (issue #406): a new <img>
+// for each redraw went blank until it was decoded again, so every refresh flickered. At most PICS_KEPT of them.
+const PICS = new Map(), PICS_KEPT = 600;
+// The waits before a picture that didn't load is asked for again (Hoard fetches each from its store the first time,
+// and a store can be slow or say no for a moment): its placeholder shows meanwhile, and the picture once it comes.
+const PIC_RETRIES = [1500, 6000];
+// A picture that has loaded, kept by its address (the newest last; the oldest let go past PICS_KEPT).
+function keepPicture(src, img) {
+  PICS.delete(src); PICS.set(src, img);
+  if (PICS.size > PICS_KEPT) PICS.delete(PICS.keys().next().value);
+}
+// A product's picture: the one already drawn when it has loaded before (kept, so nothing flickers), else a new one
+// that asks again if it doesn't load (retryPicture); its placeholder (its initials, in its creator's colour) without one.
 function productPicture(a, src, type = "", lazy = true) {
   if (src) {
-    const img = productElement("img", { src, alt: "", decoding: "async", loading: lazy ? "lazy" : null });
-    img.addEventListener("error", () => img.replaceWith(productPicture(a, "", type)), { once: true });
+    const kept = PICS.get(src);
+    if (kept && !kept.isConnected && kept.complete && kept.naturalWidth && !PAUSE) { keepPicture(src, kept); return kept; }
+    const img = productElement("img", { src, alt: "", class: "loading", "data-pic": "", decoding: kept ? "sync" : "async", loading: lazy && !kept ? "lazy" : null });
+    img.style.setProperty("--h", hue(a.creator));
+    img.addEventListener("load", () => { img.classList.remove("loading"); keepPicture(src, img); }, { once: true });
+    img.addEventListener("error", () => retryPicture(a, src, type, img, 0), { once: true });
     return img;
   }
   const node = productElement("span", { class: "ph" }, productElement("b", {}, initials(a.name)));
   node.style.setProperty("--h", hue(a.creator));
   if (type) node.append(productElement("small", {}, "." + type));
   return node;
+}
+// A picture that didn't load: its placeholder in its place, and the picture asked for again a little later, put in
+// when it comes (while the placeholder is still showing). After the last try, the placeholder stays.
+function retryPicture(a, src, type, img, n) {
+  const ph = img.classList.contains("ph") ? img : productPicture(a, "", type);
+  if (ph !== img && img.isConnected) img.replaceWith(ph);
+  if (n >= PIC_RETRIES.length) return;
+  setTimeout(() => {
+    if (!ph.isConnected) return;   // (drawn again since: the new tile asks for it itself)
+    const again = productElement("img", { src: src + (src.includes("?") ? "&" : "?") + "again=" + (n + 1), alt: "", "data-pic": "", decoding: "async" });
+    again.addEventListener("load", () => { keepPicture(src, again); if (ph.isConnected) ph.replaceWith(again); }, { once: true });
+    again.addEventListener("error", () => retryPicture(a, src, type, ph, n + 1), { once: true });
+  }, PIC_RETRIES[n]);
 }
 // Store colours and accessible names on the spine of a tile, including copies bought elsewhere.
 function productNotch(store, others = []) {

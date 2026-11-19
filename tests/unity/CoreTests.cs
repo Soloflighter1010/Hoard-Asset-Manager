@@ -67,6 +67,30 @@ public static class CoreTests
         Check("gif: damaged files don't throw", !threw);
     }
 
+    // Issue #407: which pictures the window keeps, asks for and lets go.
+    static void ShelfChecks()
+    {
+        var shelf = new PictureShelf(3, 1000);
+        Check("shelf: a picture not kept is asked for once", shelf.Drawn("a", 0) && !shelf.Drawn("a", 0.1));
+        shelf.Kept("a", 400, 0.2);
+        Check("shelf: a kept picture isn't asked for again", !shelf.Drawn("a", 0.3) && shelf.Used == 400);
+        shelf.Drawn("b", 0.3); shelf.Kept("b", 400, 0.3);
+        shelf.Drawn("c", 0.3); shelf.Kept("c", 400, 0.3);   // 1200: over the budget, but all three on screen
+        Check("shelf: a picture drawn just now is never let go, over budget or not", shelf.ToForget(0.5).Count == 0 && shelf.Count == 3);
+        shelf.Drawn("b", 2.0); shelf.Drawn("c", 2.0);       // a is off screen now
+        var go = shelf.ToForget(2.0);
+        Check("shelf: the one off screen goes, least recently drawn first", go.Count == 1 && go[0] == "a" && shelf.Used == 800, string.Join(",", go));
+        Check("shelf: one let go is asked for again when it's drawn again", shelf.Drawn("a", 2.1));
+        shelf.Failed("a", 2.2);
+        Check("shelf: one that couldn't be read isn't asked for at once", !shelf.Drawn("a", 3) && shelf.HasFailed("a"));
+        Check("shelf: and is asked for again after a while", shelf.Drawn("a", 2.2 + shelf.RetryAfter + 0.1) && !shelf.HasFailed("a"));
+        for (int i = 0; i < 10; i++) { shelf.Drawn("n" + i, 100 + i); shelf.Kept("n" + i, 1, 100 + i); }
+        shelf.ToForget(200);
+        Check("shelf: within its count once nothing's on screen", shelf.Count <= 3, shelf.Count.ToString());
+        shelf.Clear();
+        Check("shelf: cleared", shelf.Count == 0 && shelf.Used == 0 && shelf.Drawn("n9", 300));
+    }
+
     // which picture the window shows: a GIF thumbnail now; for a WebP one (which Unity can't show), a preview
     // among the product's files, as Hoard's own pages choose
     static void PictureChecks(string gifs)
@@ -659,6 +683,7 @@ public static class CoreTests
         ShareChecks();
         GifChecks(Path.Combine(dir, "gifs"));
         PictureChecks(Path.Combine(dir, "gifs"));
+        ShelfChecks();
         ProjectChecks(dir);
         OriginChecks(dir);
 

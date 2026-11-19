@@ -38,6 +38,7 @@ async function refreshView(response) {
   byId = new Map(DATA.assets.map(a => [a.id, a]));
   stackMembers = new Map();
   for (const a of DATA.assets) if (a.stack_key) stackMembers.set(a.stack_key, [...(stackMembers.get(a.stack_key) || []), a]);
+  unityPictures(DATA.assets);
   if (APP.active !== "downloads") return;
   if (SPACE) mapSpace(SPACE);
   render();
@@ -48,6 +49,46 @@ async function refreshView(response) {
   const wanted = (DATA.looks_wanted || []).map(w => ({ look_for: w.look_for, src: keyed("/thumb/" + encodeURIComponent(w.key)) }));
   if (wanted.length) lookAtPictures(wanted).then(found => { if (found) load(); });
   return DATA.assets.length;
+}
+
+// Hoard for Unity shows PNG, JPEG and GIF pictures only, and a store's picture can be WebP or AVIF (issue #407): this
+// page can read those, so it makes each one a PNG (or JPEG) no bigger than Unity draws it, in the background, one at
+// a time, and Hoard saves it beside it as _thumbnail.png (or .jpg). Each is tried once while Hoard runs.
+const UNITY_SIDE = 480, UNITY_TRIED = new Set();
+let unityBusy = false;
+// Each product's WebP or AVIF picture that has no copy Unity can show yet, made one, one at a time.
+async function unityPictures(assets) {
+  if (unityBusy) return;
+  unityBusy = true;
+  try {
+    for (const a of assets) {
+      if (!a.thumb || a.linked || !/\/_thumbnail\.(webp|avif)$/i.test(a.thumb) || UNITY_TRIED.has(a.thumb)) continue;
+      UNITY_TRIED.add(a.thumb);
+      const png = await pngOf(fileUrl(a.thumb, a.thumb_v), UNITY_SIDE);
+      if (png) await apiPost("/api/unity-picture", { thumb: a.thumb, png });
+    }
+  } finally { unityBusy = false; }
+}
+// A picture, as a PNG data: address no bigger than side across (a JPEG when a PNG would be too large); null when it
+// can't be read.
+function pngOf(src, side) {
+  return new Promise(done => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      try {
+        const k = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const fits = url => url.length < 680000;   // (what Hoard takes: 512 KB, as base64)
+        const png = c.toDataURL("image/png"), jpeg = fits(png) ? "" : c.toDataURL("image/jpeg", 0.88);   // (a photo: JPEG)
+        done(fits(png) ? png : fits(jpeg) ? jpeg : null);
+      } catch (e) { done(null); }
+    };
+    img.onerror = () => done(null);
+    img.src = src;
+  });
 }
 
 /* ---------- filtering */
@@ -1658,7 +1699,7 @@ viewListen("downloads", grid, "click", e => {
   lastFocus = s; showDetail(byId.get(+s.dataset.id));
 });
 viewListen("downloads", grid, "error", e => {  // thumbnail missing or unreadable: fall back to the placeholder
-  if (e.target.tagName !== "IMG") return;
+  if (e.target.tagName !== "IMG" || e.target.hasAttribute("data-pic")) return;   // (a product's own asks again: #406)
   const a = byId.get(+e.target.closest(".slot").dataset.id);
   e.target.outerHTML = placeholder(a);
 }, true);

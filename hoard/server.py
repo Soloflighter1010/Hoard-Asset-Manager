@@ -407,7 +407,7 @@ def apply_settings(cfg: dict, body: dict) -> dict:
 MAX_SERVED_IMAGE = 30 * 1024 * 1024
 # The type each image in the downloads folder is served as: from this fixed list, never worked out from the request
 SERVED_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
-                      ".gif": "image/gif"}
+                      ".gif": "image/gif", ".avif": "image/avif"}   # (AVIF: a store's picture can be one, issue #406)
 MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open connections can't pile up
 
 

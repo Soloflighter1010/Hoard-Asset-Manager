@@ -1783,12 +1783,12 @@ viewListen("library", $("#grid"), "click", e => {
   if ((stackSize.get(s.dataset.key) || 0) > 1) { showCopies(byKey.get(s.dataset.key), "stack_key"); return; }   // a stack: every copy
   lastFocus = s; showDetail(byKey.get(s.dataset.key));
 });
-viewListen("library", $("#grid"), "error", e => {
-  if (e.target.tagName !== "IMG") return;
+viewListen("library", $("#grid"), "error", e => {   // (a product's own picture asks again itself: productPicture, #406)
+  if (e.target.tagName !== "IMG" || e.target.hasAttribute("data-pic")) return;
   e.target.outerHTML = placeholder(byKey.get(e.target.closest(".slot").dataset.key));
 }, true);
 viewListen("library", $("#detail"), "error", e => {
-  if (e.target.tagName === "IMG" && openKey) e.target.outerHTML = placeholder(byKey.get(openKey));
+  if (e.target.tagName === "IMG" && !e.target.hasAttribute("data-pic") && openKey) e.target.outerHTML = placeholder(byKey.get(openKey));
 }, true);
 viewListen("library", $("#detail"), "click", e => {
   const b = e.target.closest("[data-act]"); if (!b) return;

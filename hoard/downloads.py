@@ -15,7 +15,7 @@ from .sets import product_link, public_page
 from .tags import TagMatcher, TagStore, tag_key, tag_overview
 
 
-IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"}
 
 
 PREVIEW_HINT = re.compile(r"preview|thumb|cover|icon|promo|banner", re.I)
@@ -41,9 +41,10 @@ def _same_creator(a: str, b: str) -> bool:
 
 
 def _thumbnail(folder: Path, files: list[str]) -> str | None:
-    """_thumbnail.* saved by the downloader, else a preview-looking image, else any image."""
+    """_thumbnail.* saved by the downloader (a PNG, JPEG or GIF one first, which Hoard for Unity shows too: a WebP or
+    AVIF one can have a copy beside it, issue #407), else a preview-looking image, else any image."""
     try:
-        for p in sorted(folder.glob("_thumbnail.*")):
+        for p in sorted(folder.glob("_thumbnail.*"), key=lambda p: (p.suffix.lower() in (".webp", ".avif"), p.name)):
             if p.suffix.lower() in IMAGE_EXT:
                 return p.name
     except OSError:
