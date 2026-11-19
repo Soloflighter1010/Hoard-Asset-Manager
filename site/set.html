@@ -118,14 +118,30 @@
         <textarea id="makeLinks" rows="4" spellcheck="false" placeholder="https://booth.pm/en/items/..."></textarea>
         <p class="sv-buttons"><button class="button ghost" id="makeAdd" type="button">Add them</button>
           <span id="makeSaid" class="small" role="status"></span></p>
-        <p class="small">A web page can't read the stores' own pages: they don't let other sites read them. So each
-          product is added with what its link says, and you can type its name and creator. Hoard fills in its picture,
-          creator and price from its store when the set is added to Hoard.</p>
+        <p class="small">Each product starts with what its link says: type its name and creator if you like.</p>
         <ol id="makeItems" class="sv-make-items"></ol>
         <p class="small" id="makeAdultNote">Tick <strong>18+</strong> on a product for adults: whoever opens the set is
           asked their age first, and under 18 it isn't shown.</p>
         <p class="sv-buttons"><button class="button primary" id="makeShare" type="button" disabled>Share</button></p>
       </div>
+      <aside class="sv-hoard" id="makeWithHoard" aria-labelledby="withHoardTitle">
+        <h2 id="withHoardTitle">Hoard fills in the rest</h2>
+        <p>A web page can't read the stores' own pages, since they don't let other sites read them. That's why each
+          product here is only what its link says. Hoard reads them for you:</p>
+        <ul>
+          <li><strong>Each product's name, picture, creator and price</strong>, from your library, or from its store
+            for one you don't own yet.</li>
+          <li><strong>A short link</strong> of about 70 characters, easy to pass around, instead of one that holds the
+            whole set.</li>
+          <li><strong>What you own, marked as yours</strong>: Hoard knows your library on Booth, Gumroad, Jinxxy, Payhip
+            and itch.io, and says where to buy the rest.</li>
+          <li><strong>The whole set in Unity</strong>: Hoard for Unity puts a set's products in a project
+            together.</li>
+        </ul>
+        <p class="sv-buttons"><a class="button primary" href="./#download">Download Hoard, free</a>
+          <a class="button ghost" href="./">See what it does</a></p>
+        <p class="small">For Windows, macOS and Linux. Free, open source, and it runs only on your computer.</p>
+      </aside>
       <section id="makeShared" class="sv-get" hidden aria-labelledby="sharedTitle">
         <h2 id="sharedTitle">Its link</h2>
         <p><input id="makeLink" readonly aria-label="The set's link"></p>
@@ -135,6 +151,8 @@
         <p class="small">The set is in the link itself, after the “#”, which your browser never sends anywhere: nothing
           is stored, and nothing about who made it. In Hoard, choose <strong>Add a shared set</strong> in
           <strong>Sets</strong> and paste the link to keep it there.</p>
+        <p class="sv-nudge">A long link? <a href="./#download">Hoard</a> makes a short one, with each product's picture
+          and price filled in.</p>
       </section>
     </section>
     <noscript><p class="lead">This page reads the shared set with JavaScript, in your browser.</p></noscript>

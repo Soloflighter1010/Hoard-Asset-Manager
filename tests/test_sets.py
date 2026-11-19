@@ -1078,6 +1078,8 @@ class Tab(IsolatedTestCase):
             page.goto("https://hoard.furryup.link/set.html#new")
             page.locator("#new").wait_for()
             self.assertTrue(page.locator("#makeShare").is_disabled(), "nothing to share yet")
+            self.assertEqual(page.locator("#makeWithHoard a.primary").get_attribute("href"), "./#download",
+                             "what a web page can't do, and Hoard can, with its download")
             page.fill("#makeName", "Winter <outfit>")
             page.fill("#makeNote", "For snowy worlds")
             page.fill("#makeLinks", "https://booth.pm/ja/items/4242\nhttps://mochi.gumroad.com/l/snow-cap?ref=x\n"

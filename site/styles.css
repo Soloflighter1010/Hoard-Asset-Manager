@@ -671,6 +671,14 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
 .sv-make-fields a { grid-column: 1 / -1; color: var(--dust); overflow-wrap: anywhere; }
 .sv-form .sv-make-item label.sv-check { margin: 0; font-weight: 600; }
 .sv-check { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* What Hoard does that a web page can't: the maker's limits, said as what you'd get with Hoard */
+.sv-hoard { max-width: 760px; box-sizing: border-box; margin: 24px 0 8px; padding: 18px 22px; background: var(--ledge);
+  border: 1px solid var(--seam); border-left: 4px solid var(--gold); border-radius: var(--radius); }
+.setviewer .sv-hoard h2 { margin: 0 0 .4em; }
+.sv-hoard ul { margin: .4em 0 .8em; padding-left: 1.2em; display: grid; gap: 6px; }
+.sv-hoard .small { margin: 8px 0 0; }
+.sv-nudge { max-width: 760px; margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--ledge);
+  border: 1px solid var(--seam); }
 @media (max-width: 600px) {
   .sv-make-item { flex-wrap: wrap; }
   .sv-make-fields { flex-basis: calc(100% - 22px); grid-template-columns: minmax(0, 1fr); }
