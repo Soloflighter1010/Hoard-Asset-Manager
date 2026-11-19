@@ -148,10 +148,26 @@ async function pollDownload() {
   else if (dlActive) { dlActive = false; T.reload(); }
 }
 
+// A running download's panel tucks itself away after DL_TUCK_MS (issue #402), so Stop isn't always under your hand:
+// what's downloading stays in the bar, which brings the panel back (untuckDownload), as a problem does.
+const DL_TUCK_MS = 10000;
+let dlShownAt = 0, dlTucked = false;
+// Bring the download panel back, for another DL_TUCK_MS.
+function untuckDownload() {
+  dlTucked = false; dlShownAt = Date.now();
+  $("#dlPanel").hidden = false;
+}
 // Shared showDownload: one implementation for both Library and Downloads.
 function showDownload(job) {
-  $("#dlPanel").hidden = false;
+  const panel = $("#dlPanel");
   const stopped = /^Stopped/.test(job.message || "");
+  const trouble = !job.running && (stopped || job.error || job.partial || !!(job.report && job.report.problems && job.report.problems.length));
+  if (!job.running) dlShownAt = 0;
+  else if (!dlShownAt) { dlShownAt = Date.now(); dlTucked = false; }   // (a download starting: shown at first)
+  if (job.running && !dlTucked && Date.now() - dlShownAt >= DL_TUCK_MS && !panel.matches(":hover, :focus-within")) dlTucked = true;
+  if (trouble) dlTucked = false;   // (what went wrong is always said)
+  panel.hidden = dlTucked;
+  if (!job.running && dlTucked) { dlTucked = false; return; }   // (finished well while tucked away: Tasks keeps it)
   $("#dlTitle").textContent = job.running ? (job.sync && job.task !== "download" ? "Syncing: reading your stores" : job.sync ? "Syncing: downloading" : "Downloading")
     : stopped ? "Stopped" : job.error ? "Couldn't finish" : job.partial ? "Finished, with problems" : "Finished";
   const xfer = job.running ? job.transfer : null;   // a file downloading: its bar says it all

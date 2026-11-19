@@ -208,8 +208,8 @@ so for a set you'll share for long, use another site.
 
 ### What's in a photo, marked
 
-Once a set's note and photos are saved (5.2), its page shows each photo, with a numbered mark where each product
-marked on it is, and the same numbers listed beside it with each product's picture, name and store. Point at a mark
+Once a set's note and photos are saved (5.2), its page shows each photo as a small preview (5.2.0 beta 11: **Show larger**
+shows it across the page, **Show smaller** puts it back), with a numbered mark where each product marked on it is, and the same numbers listed beside it with each product's picture, name and store. Point at a mark
 (or move to it with the keyboard) to see its product; choose it to open the product's details, or its store page
 when it isn't on the page. The viewer shows them the same way to whoever opens the set. A set you added from
 someone else's link shows its photos once you choose **Show the photos**: they're on sites that person chose, and
@@ -293,7 +293,9 @@ of every set.
 
 ## JSON files
 
-Open a set or wishlist and choose **Export JSON** to save a portable file. Use
+Open a set or wishlist and choose **Export JSON** to save a portable file. Hoard writes it in **Exported sets**, in
+the folder for editable copies (beside **Unity packages**), named after the set, and shows it there; a second export
+gets a new name, so nothing is written over (5.2.0 beta 11). Use
 **Import JSON...** in Sets and Wishlists to load one. Import always creates a new
 entry, leaving existing sets and lists unchanged.
 

@@ -65,7 +65,8 @@ async function load(rescan = false, cached = false) {
   applyDisplay(current.display); applyUi(current.ui);
   for (const [key, value] of Object.entries(current.store_sites || {})) STORE_SITES[key] = value;
   $("#version").textContent = current.version || "";
-  for (const node of document.querySelectorAll("[data-version]")) node.textContent = `Hoard ${current.version || ""}`;
+  // (the Menu's version line: its own mark, as a project's packages carry data-version for theirs, issue #398)
+  for (const node of document.querySelectorAll("[data-hoard-version]")) node.textContent = `Hoard ${current.version || ""}`;
   if (!UPDATE) showUpdate();
   // Inactive indexes are prepared first so shared windows can access either kind of product immediately.
   const other = APP.active === "library" ? "downloads" : "library";

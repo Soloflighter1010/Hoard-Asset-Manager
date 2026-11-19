@@ -171,6 +171,50 @@ class InHoard(IsolatedTestCase):
             browser.close()
 
     @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_a_small_preview_unless_its_shown_larger(self):
+        """Issue #404: a set's photo is a small preview on its page, its marks where they belong; Show larger shows it full
+        width, and Mark products on it... is as large as before."""
+        import struct
+        import zlib
+
+        def png(w, h):   # a plain grey picture of that size
+            chunk = lambda kind, data: struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))  # noqa: E731
+            raw = b"".join(b"\x00" + b"\x80\x80\x80" * w for _ in range(h))
+            return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                    + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        big = png(1200, 800)
+        sets.SetStore().change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": [[HAIR, 500, 500]]})
+        with mock.patch.object(server, "fetch_picture", lambda url, referer, hosts=None: (big, "image/png")), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            page.click('#storeSeg [data-store="Sets"]')
+            page.locator(f'#setView .settile[data-setopen="{self.sid}"]').click()
+            img = page.locator(".setphoto-pic > img").first
+            img.wait_for()
+            page.wait_for_function("() => document.querySelector('.setphoto-pic > img').naturalWidth === 1200")
+            box = img.bounding_box()
+            self.assertLessEqual(box["width"], 360)
+            self.assertLessEqual(box["height"], 240)
+            mark = page.locator(".setphoto .pmark").first.bounding_box()
+            self.assertAlmostEqual(mark["x"] + mark["width"] / 2, box["x"] + box["width"] / 2, delta=3, msg="its mark in place")
+            page.locator(".setphoto [data-setx=photobig]").first.click()
+            self.assertGreater(img.bounding_box()["width"], 500, "Show larger: full width")
+            self.assertEqual(page.locator(".setphoto [data-setx=photobig]").first.inner_text(), "Show smaller")
+            page.evaluate("() => showSet(state.set)")   # the page drawn again keeps it larger
+            img.wait_for()
+            self.assertGreater(img.bounding_box()["width"], 500, "still larger when drawn again")
+            self.assertEqual(page.locator(".setphoto [data-setx=photobig]").first.inner_text(), "Show smaller")
+            page.locator(".setphoto [data-setx=photobig]").first.click()
+            self.assertLessEqual(img.bounding_box()["width"], 360, "and back")
+            page.locator("[data-setx=markphoto]").first.click()
+            edit = page.locator("dialog.pmark-dlg .pm-edit > img")
+            edit.wait_for()
+            page.wait_for_function("() => document.querySelector('dialog.pmark-dlg .pm-edit > img').complete")
+            self.assertGreater(edit.bounding_box()["width"], 360, "marking: as large as before")
+            browser.close()
+
     def test_marked_shown_and_changed_by_keyboard(self):
         sets.SetStore().change({"action": "marks", "id": self.sid, "photo": PHOTO, "marks": [[HAIR, 250, 750]]})
         with mock.patch.object(server, "fetch_picture", lambda url, referer, hosts=None: (PNG, "image/png")), sync_playwright() as pw:

@@ -117,16 +117,20 @@ class OnTheTiles(IsolatedTestCase):
         product(root, "111", "Rusk", {"rusk.unitypackage": b"pkg", "readme.txt": b"hi"})
         product(root, "222", "Anko", {"anko.unitypackage": b"anko"})
         product(root, "333", "Mochi", {"mochi.unitypackage": b"mochi"})
+        product(root, "444", "Kumo", {"kumo.unitypackage": b"kumo"})
         cfg = {**config.load_config(), "root": str(root), "setup_done": True, "ui": {"toured": True}}
         downloader.build_catalog(cfg, root)
         (root / "Booth" / "Kitsu Studio" / "Rusk" / "readme.txt").unlink()   # a file gone from disk
+        downloader.check_integrity(root)   # (each file's fingerprint, the first time it's checked)
+        (root / "Booth" / "Kitsu Studio" / "Kumo" / "kumo.unitypackage").write_bytes(b"kumo, edited")   # one changed
+        downloader.check_integrity(root)   # (...and Check downloads finds it changed)
         updates = asset_updates.AssetUpdates()
         self.addCleanup(storage.remove, updates.path, missing_ok=True)
         updates.after_download(set(), ["x"], set(), {ANKO: {"store": "booth", "why": "anko.unitypackage: timed out"}})
         self.srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
         with self.srv.lib.lock:   # (in memory only)
             self.srv.lib.data["items"] = [library.item("booth", k, name=n, creator="Kitsu Studio", url=f"https://booth.pm/ja/items/{k}")
-                                          for k, n in (("111", "Rusk"), ("222", "Anko"), ("333", "Mochi"))]
+                                          for k, n in (("111", "Rusk"), ("222", "Anko"), ("333", "Mochi"), ("444", "Kumo"))]
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.addCleanup(self.srv.server_close)
         self.addCleanup(self.srv.shutdown)
@@ -148,19 +152,31 @@ class OnTheTiles(IsolatedTestCase):
                              "big enough to see on a tile")
             self.assertIn("1 file is missing on disk", tile("Rusk").get_attribute("aria-label"))
             self.assertIn("Its last download didn't finish", tile("Anko").get_attribute("aria-label"))
+            # a changed file has a mark of its own (issue #400): an error's is red, a change's a blue circle
+            self.assertEqual(tile("Rusk").locator(".change-mark").count(), 0, "a missing file is an error")
+            changed = tile("Kumo").locator(".problem-mark")
+            self.assertIn("change-mark", changed.get_attribute("class"))
+            self.assertEqual(changed.get_attribute("title"), "1 file was changed after it was downloaded.")
+            colours = [x.evaluate("e => getComputedStyle(e).backgroundColor") for x in (changed, tile("Rusk").locator(".problem-mark"))]
+            self.assertNotEqual(colours[0], colours[1])
             # Downloads: the same, a Problems view of them, and what to do in a product's details
             page.click("nav.apptabs a[href='/downloads']")
             page.locator('#views [data-view="problems"]').wait_for()
-            self.assertIn("2", page.locator('#views [data-view="problems"]').inner_text())
+            self.assertIn("3", page.locator('#views [data-view="problems"]').inner_text())
             page.click('#views [data-view="problems"]')
-            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 2")
-            self.assertEqual(sorted(page.locator("#grid .slot .nm-t, #grid .slot .nm").all_inner_texts()), ["Anko", "Rusk"])
+            page.wait_for_function("() => document.querySelectorAll('#grid .slot').length === 3")
+            self.assertEqual(sorted(page.locator("#grid .slot .nm-t, #grid .slot .nm").all_inner_texts()), ["Anko", "Kumo", "Rusk"])
             tile("Anko").click()
             page.locator("#detail .d-problems li").first.wait_for()
             self.assertIn("Its last download didn't finish (anko.unitypackage: timed out). Download it again.",
                           page.locator("#detail .d-problems").inner_text())
             tile("Rusk").click()
             page.locator("#detail .d-problems li", has_text="1 file is missing on disk. Download it again").wait_for()
+            tile("Kumo").click()
+            said = page.locator("#detail .d-problems.changed-only li", has_text="1 file was changed after it was downloaded")
+            said.wait_for()
+            self.assertIn("choose Keep it as it is, or Download again for the original", said.inner_text())
+            self.assertEqual(said.locator(".change-mark").count(), 1)
             browser.close()
         self.assertEqual(errors, [])
 
