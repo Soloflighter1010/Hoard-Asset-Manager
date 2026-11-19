@@ -169,6 +169,19 @@ def add_preloaded(path: str, items: list[dict]) -> None:
         save_state(state)
 
 
+def remove_preloaded(path: str, tag_key: str) -> list[dict]:
+    """Issue #378: forget a product put in a project (taken out again); returns what was noted of it."""
+    with _lock:
+        state = load_state()
+        entry = state["projects"].get(_key(path))
+        have = entry.get("preloaded") if entry and isinstance(entry.get("preloaded"), list) else []
+        gone = [i for i in have if isinstance(i, dict) and i.get("tag_key") == tag_key]
+        if gone:
+            entry["preloaded"] = [i for i in have if not (isinstance(i, dict) and i.get("tag_key") == tag_key)]
+            save_state(state)
+        return gone
+
+
 # ---- the shared list
 
 def shared_paths(settings: environment.Settings | None = None) -> tuple[list[str], dict[str, dict]]:
@@ -212,6 +225,7 @@ def projects(progress=None) -> list[dict]:
             "favorite": bool(mine["favorite"]) if "favorite" in mine else record.get("Favorite") is True,
             "created": _ms(record.get("CreatedAt")) or None, "opened": opened or None,
             "preloaded": len(mine.get("preloaded") or []),
+            "packages": info.get("packages") or [],   # (its own, for Add packages' Used most: issue #375)
             "git": info["exists"] and os.path.exists(os.path.join(path, ".git")),   # (its own repository: issue #296)
             "folder": clean_text(mine.get("folder") if isinstance(mine.get("folder"), str) else "", 60) or None,   # (#190)
             "tags": [t for t in mine.get("tags") or [] if isinstance(t, str)][:MAX_PROJECT_TAGS] if isinstance(mine.get("tags"), list) else [],

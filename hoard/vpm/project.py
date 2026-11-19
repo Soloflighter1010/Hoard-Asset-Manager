@@ -222,17 +222,22 @@ class UnityProject:
         self.manifest_raw = self.manifest_json()
 
 
+MAX_SUMMARY_PACKAGES = 200   # (a project's own packages the list carries, for Add packages' Used most: issue #375)
+
+
 def summary(folder) -> dict:
-    """What the project list shows for a project, read quickly: name, Unity version, kind, and whether it's there."""
+    """What the project list shows for a project, read quickly: name, Unity version, kind, whether it's there, and the
+    packages it asks for itself (its vpm-manifest's dependencies, not what they bring with them)."""
     folder = Path(folder)
     if not folder.is_dir():
-        return {"exists": False, "unity": None, "type": None}
+        return {"exists": False, "unity": None, "type": None, "packages": []}
     unity, _ = read_unity_version(folder)
     try:
-        kind = UnityProject.load(folder).project_type()
+        p = UnityProject.load(folder)
+        kind, packages = p.project_type(), sorted(p.dependencies)[:MAX_SUMMARY_PACKAGES]
     except ProjectError:
-        kind = UNKNOWN
-    return {"exists": True, "unity": str(unity) if unity else None, "type": kind}
+        kind, packages = UNKNOWN, []
+    return {"exists": True, "unity": str(unity) if unity else None, "type": kind, "packages": packages}
 
 
 # What a project's folders hold, for its size on disk: Unity's own cache (made again when the project's opened, and

@@ -329,6 +329,8 @@ class Service:
             return done + (" Not moved: " + "; ".join(problems[:10]) if problems else "")
         if op in ("git-fetch", "git-pull", "git-push", "git-clone"):
             return self._git_task(op, what)
+        if op == "from-backup":
+            return self._from_backup(what)
         path = self.listed(what.get("path"))
         if op == "auto-update":
             if autoupdate.preference(path) == "off":
@@ -372,7 +374,113 @@ class Service:
             return f"Backed up {Path(path).name} to {out}." + (" Its Git history is in it, as a bundle." if history else "")
         if op == "delete":
             return self._delete(path, backup_first=what.get("backup") is not False)
+        if op == "take-out":
+            return self._take_out(path, str(what.get("key") or ""), backup_first=what.get("backup") is not False,
+                                  changed_too=what.get("changed_too") is True)
         raise ProjectsError("Hoard doesn't know that project task.")
+
+    # ---- a new project from a backup (issue #386)
+
+    def _from_backup(self, what: dict) -> str:
+        """A new project from a backup in your backups folder: unpacked into a new folder (never over the original, or
+        any folder that's there), its Git history back when the backup has it, put on the list, and its packages
+        installed as its manifest lists them. Stop works while it's unpacking; nothing is left half made."""
+        import zipfile
+        chosen = self.backups_chosen([what.get("backup")])
+        if not chosen:
+            raise ProjectsError("That backup isn't in your backups folder.")
+        src, name = chosen[0], str(what.get("name") or "").strip()
+        location = Path(str(what.get("location") or ""))
+        if not location.is_absolute():
+            raise ProjectsError("Choose a folder for it, by its full path.")
+        problem, _ = templates.check_name(location, name)
+        if problem:
+            raise ProjectsError(problem)
+        dest = location / name
+        log(f"Unpacking {src.name} into {dest}")
+        try:
+            done = backup.unpack(src, dest)
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            raise ProjectsError(f"The backup couldn't be unpacked: {e}") from None
+        if not is_project(dest):
+            shutil.rmtree(dest, ignore_errors=True)
+            if done["bundle"]:
+                done["bundle"].unlink(missing_ok=True)
+            raise ProjectsError("That backup isn't of a Unity project.")
+        said = f"Made {name} from {src.name}: {done['files']:,} files."
+        if done["bundle"] and (dest / ".git").exists():
+            # (a backup made before a project was deleted has its own .git: that one's kept, untrusted until you say,
+            # as any repository that comes from elsewhere; Git isn't run in it with the bundle)
+            done["bundle"].unlink(missing_ok=True)
+            done["bundle"] = None
+            log("It has its own Git folder, so that's its history (Source control asks before trusting it)")
+        if done["bundle"]:
+            log("Putting its Git history back")
+            try:
+                branch = git.restore_bundle(dest, done["bundle"])
+                said += " Its Git history is back" + (f", on {branch}." if branch else ".")
+            except git.GitError as e:
+                log(Warn(f"Its Git history couldn't be put back ({e}); its files are all there"))
+                said += " Its Git history couldn't be put back (see the log); its files are all there."
+            finally:
+                done["bundle"].unlink(missing_ok=True)
+        listing.add(str(dest))
+        listing.note(str(dest), created=time.strftime("%Y-%m-%dT%H:%M:%S"), from_backup=src.name)
+        try:
+            project = UnityProject.load(dest)
+            if resolve.needs_repair(project):
+                self._fetch_missing()
+                log("Installing its packages")
+                self._apply(project, resolve.repair(project, self.collection()))
+        except (ProjectError, resolve.ResolveError, ProjectsError) as e:
+            log(Warn(f"Its packages couldn't all be installed ({e})"))
+            said += " Some of its packages couldn't be installed: open it in Projects to see which."
+        return said
+
+    # ---- a product taken out of a project again (issue #378)
+
+    def take_out_plan(self, path: str, tag_key: str) -> dict:
+        """What taking a product out of a listed project would do, for the page to say before anything is deleted:
+        managed.take_out_plan's files, the packages it added (which stay: other things may need them), whether Unity
+        has the project open, and the product as it was noted."""
+        from . import managed
+        path = self.listed(path)
+        noted = [i for i in listing.load_state()["projects"].get(listing._key(path), {}).get("preloaded") or []
+                 if isinstance(i, dict) and i.get("tag_key") == tag_key]
+        if not noted:
+            raise ProjectsError("Hoard didn't put that product in this project.")
+        plan = managed.take_out_plan(Path(path), tag_key)
+        packages = sorted({a.split("/", 1)[1] for i in noted for a in i.get("added") or []
+                           if isinstance(a, str) and a.startswith("Packages/")})
+        return {**plan, "packages": packages, "name": noted[0].get("name") or "",
+                "open_in_unity": UnityProject.load(path).unity_running()}
+
+    def _take_out(self, path: str, tag_key: str, backup_first: bool, changed_too: bool) -> str:
+        """Take a product out of a project: backed up first (unless you said not to), then the files Hoard put in for
+        it deleted (those you changed since only when you said so), the project's lists of imports and Hoard's own
+        note of it updated. Never while Unity has the project open."""
+        from . import managed
+        plan = self.take_out_plan(path, tag_key)
+        name = Path(path).name
+        if plan["open_in_unity"]:
+            raise ProjectsError(f"Unity has {name} open. Close it, then take the product out.")
+        if backup_first:
+            log(f"Backing up {name} first")
+            out = backup.back_up(Path(path), self.backups_folder(), set())
+            listing.note(path, backed_up=time.strftime("%Y-%m-%dT%H:%M:%S"))
+            log(f"Backed up to {out}")
+        log(f"Taking {plan['name']} out of {name}")
+        done = managed.take_out(Path(path), tag_key, changed_too=changed_too)
+        noted = listing.remove_preloaded(path, tag_key) if not done["kept"] else []
+        first = noted[0] if noted else {"name": plan["name"]}
+        store = tag_key.split(":", 1)[0] if ":" in tag_key else ""
+        imports.taken_out(path, {"store": store, "name": first.get("name"), "creator": first.get("creator")}, done, log=log)
+        said = f"Took {plan['name']} out of {name}: {done['removed']:,} {'file' if done['removed'] == 1 else 'files'} deleted."
+        if done["kept"]:
+            said += f" Kept {len(done['kept']):,} you changed since, so it's still listed as in the project."
+        if plan["packages"]:
+            said += " Its packages stay (" + ", ".join(plan["packages"][:5]) + "): remove them in Packages if nothing else needs them."
+        return said
 
     # ---- source control (hoard/vpm/git.py, issues #296 to #299): only for a project on the list
 

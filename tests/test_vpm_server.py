@@ -403,6 +403,25 @@ class Server(IsolatedTestCase):
         self.assertEqual((status, out["deleted"]), (200, 1))
         status, out = self.call("POST", "/api/vpm/backups/move", {"paths": [view["backups"][0]["path"]], "to": "relative"})
         self.assertEqual(status, 400)
+        # issue #386: a new project from a backup, as a task; never from a file that isn't one, nor into a folder there
+        import zipfile
+        made = folder / "Avatar-2024-06-01T10-00-00.zip"
+        with zipfile.ZipFile(made, "w") as zf:
+            zf.writestr("ProjectSettings/ProjectVersion.txt", "m_EditorVersion: 2022.3.22f1\n")
+            zf.writestr("Packages/vpm-manifest.json", json.dumps({"dependencies": {}, "locked": {}}))
+            zf.writestr("Assets/a.txt", "one")
+        status, out = self.call("POST", "/api/vpm/from-backup", {"backup": str(folder / "notes.zip"), "name": "X", "location": str(self.tmp)})
+        self.assertEqual(status, 400, out)
+        (self.tmp / "Taken").mkdir()
+        status, out = self.call("POST", "/api/vpm/from-backup", {"backup": str(made), "name": "Taken", "location": str(self.tmp)})
+        self.assertEqual(status, 400, out)
+        status, out = self.call("POST", "/api/vpm/from-backup", {"backup": str(made), "name": "Avatar again", "location": str(self.tmp)})
+        self.assertEqual(status, 200, out)
+        done = self.wait()
+        self.assertEqual(done["outcome"], "done", done)
+        self.assertIn("Made Avatar again from Avatar-2024-06-01T10-00-00.zip: 3 files.", done["message"])
+        self.assertEqual((self.tmp / "Avatar again" / "Assets" / "a.txt").read_text(), "one")
+        self.assertIn(str(self.tmp / "Avatar again"), json.loads((self.vcc / "settings.json").read_text())["userProjects"])
 
     def test_make_a_project_with_its_sdk_and_a_product(self):
         status, overview = self.call("GET", "/api/vpm")
