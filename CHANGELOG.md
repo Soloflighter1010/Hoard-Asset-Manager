@@ -1,5 +1,100 @@
 # Changelog
 
+## 5.2.0-beta.10
+
+### Sets and wishlists
+
+- **Sets and wishlists go out and come back as JSON files.** **Export JSON** saves a set or wishlist as a file, with
+  its note, photos and the marks on them, your own products, a wishlist's prices and its cover picture; **Import
+  JSON** makes new sets from one. A short link's keys and hidden products (while Hidden is locked) never go in one.
+- **A set can list its dependencies as a whole**: what everything in it needs (a base avatar, a shader), as a list of
+  its own under a small heading. They travel with the set, in a JSON file, a short link and a set split in parts.
+- **Placeholders** stand in for a product you don't have yet, one of your own that isn't found, or one that isn't
+  made yet: **Add placeholder...** puts one in a set, with a dashed picture and a group of its own. **Replace**
+  swaps in the real product later, in its place, without making a second.
+- **Find a set or wishlist, and sort the shelf**, from a find field and a **Sort** dropdown above them.
+- **Convert prices to** shows a wishlist's prices as an estimate in one currency, beside each price as the store
+  shows it, from the day's reference rates (Frankfurter, at most once an hour; nothing else is sent). The price
+  range still filters by each product's own price.
+- **What isn't yours yet has a Total**, on a wishlist and in a set: per currency, or one estimate with Convert prices
+  to; of what's shown while you narrow it; and how many have no price (#381).
+- **A set added from someone's link shows prices.** A shared set carries none, so Hoard reads each product's public
+  page in the background for what isn't yours, at most 30 products and once a day (#384). It fills in a product's
+  picture and creator from the same page when the set came without them.
+- **Read my wishlists offers only the stores you're signed in to**, and says which aren't (#372).
+- **Payhip products can be added by their link.** Payhip's pages are behind Cloudflare, which refuses Hoard's
+  request for them, so **Add products by link...** reads those in Hoard's own browser for Payhip instead, as a task,
+  and adds them when it's done. If Cloudflare shows a check in its window, complete it there (#387).
+- **A Payhip shop that shows its sign-in page instead of your wishlist is said**, and its wishlist is kept as it was,
+  where it used to be read as empty: sign in to Payhip in Stores, or save the shop's wishlist page and import it
+  (#387).
+- **Make a set on the website, without Hoard**, at hoard.furryup.link/set.html#new: a name, a note, and products
+  by their links on Booth, Gumroad, Jinxxy, Payhip or itch.io, with their names and creators typed, and 18+ ticked
+  on a product for adults. **Share** puts the whole set in the link, so nothing is sent or kept; Hoard's **Add a
+  shared set...** opens it as any other (#379).
+
+### Projects
+
+- **Keep this project up to date**, off unless you choose it: its products from your library, its repository
+  packages, or both. Hoard checks every hour, downloads what's new first, then puts it in while Unity is closed.
+  Only files Hoard put in, and that you haven't changed since, are replaced, each journaled so an interrupted
+  update is finished or undone the next time; a conflict waits for you. docs/MANAGED-ASSETS.md says what it does
+  and doesn't do.
+- **Used most in your projects** comes first in **Add packages**: the packages your projects ask for most, with how
+  many ask for each (#375).
+- **A new project's products from your library are tiles**, each with **Leave out**, and a × on each package of a
+  product with several (#376).
+- **Take out...** on a product's tile in a project takes it out again: only the files Hoard put in for it, and the
+  folders that leaves empty. It says what would go first, keeps files you've changed unless you say, backs up
+  first and never runs while Unity has the project open (#378).
+- **New project from this...** on a backup makes a project from it, with its Git history back on the branch it was
+  on and its packages installed, as a task you can stop (#386).
+- **The Git tab explains source control** for someone new to it, in a fold you can open from the tab.
+- **A package change that's only a dependency is checked** after it's saved, so it's no longer said to be done when
+  it wasn't (#335).
+
+### Settings and Local
+
+- **Change... beside each of Hoard's folders** puts it somewhere else, after saying what that does (#385):
+  - **Downloads folder:** new downloads go in the new one; the old one stays as a library folder, so nothing large is
+    copied.
+  - **Editable copies, Backups, Support reports:** used from now on, and what's in the old one moved too if you
+    tick it.
+  - **Hoard's own folder, its logs and store sign-ins:** in use while Hoard runs, so they move the next time it
+    starts: copied, checked, then deleted where they were. Quit Hoard and open it again to move them. Never onto a
+    network drive; sign-ins only within your own user folder.
+  - **The Creator Companion's folder** is only pointed at, never moved.
+- **A Local sync folder**: a folder on this computer whose contents are added to Local by themselves, each a tile of
+  its own (folders listed where they are, files copied in). A file over 100 MB or a folder over 1 GB isn't added,
+  and Settings says which. Something taken out of the folder is marked on its tile and stays until you remove it.
+  Network drives and NAS can't be one (#388).
+- **Make a Unity package** on a Local item writes a .unitypackage without Unity, keeping each file's own .meta (its
+  GUID and import settings) where it has one, in Unity packages in the editable copies folder (#382).
+- **Local products on a drive or NAS that doesn't answer no longer stop the library loading.** Hoard looks at each
+  such folder first, a few seconds at most; one that's away is marked **Drive not connected**, keeps its tags and
+  places in sets, and is read again once it's back (#368).
+
+### Stores and setup
+
+- **A Gumroad product links to its own page**, not its creator's: a refresh reads each purchase's download page for
+  its product's address, at most 150 a refresh. A set you share, Hoard for Unity's credits and Copy store link
+  use it. A backup never keeps a purchase's download page as its link, and support reports scrub them.
+- **A sign-in from the setup assistant no longer reads the whole store** once its window closes, so setup isn't
+  held up; **Finish** reads every store (#373).
+- **The setup assistant's browser choice is the size of its words** (#374), and so are Sets' Sort, a wishlist's
+  prices and a placeholder's product.
+- **Next gives a small shake** when the setup assistant has been left for three minutes (a ring for a moment with
+  Reduce motion) (#383).
+- **Star us on GitHub**, in the app's bar and Menu and on the website (#380).
+- **Buttons, not underlined words**, for the actions that were links.
+
+### Under the hood
+
+- **SQLite metadata (opt-in) recovers itself**: each document sealed, a JSON copy kept beside it, and a damaged or
+  foreign one set aside and rebuilt; products with the same name keep their own tags, marks and sets. It's still
+  off unless you turn it on.
+- **Each store's own rules are behind its adapter**, and the test suite runs in parallel in a third of the time.
+
 ## 5.2.0-beta.9
 
 - **Hoard can read your stores with Vivaldi.** Signing in with Vivaldi worked, but reading a store then waited 3
