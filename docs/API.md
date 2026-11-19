@@ -36,6 +36,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/edit-copy` | key | yes | `key: string`, `local: boolean`, `open: boolean` | object |
 | POST | `/api/enter` | entry | no | `token: string` | object |
 | GET | `/api/folders` | key | no | — | object |
+| POST | `/api/folders/change` | key | yes | `id: string`, `path: string`, `default: boolean`, `confirm: boolean`, `move: boolean` | object |
 | POST | `/api/folders/open` | key | yes | `id: string` | object |
 | POST | `/api/force-stop` | key | yes | `lane: any` | object |
 | POST | `/api/hidden/forget` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
@@ -54,6 +55,8 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/local/preview` | key | no | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/remove` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/rescan` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
+| POST | `/api/local/sync` | key | yes | `folder: string`, `look: boolean` | object |
+| POST | `/api/local/unitypackage` | key | no | `folder: string` | object |
 | POST | `/api/lock` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
 | POST | `/api/login` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | POST | `/api/logout` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |

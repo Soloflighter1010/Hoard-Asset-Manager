@@ -208,6 +208,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "library": lib,
             "abs_folder": str(folder),
             "linked": bool(linked),
+            "sync_gone": e.get("sync_gone") is True,   # (taken out of the Local sync folder: issue #388)
             "note": e.get("note"),
             "tag_key": tag_key(e["store"], e["name"], identities.get((str(base), e["folder"]))),
             "tags": [],

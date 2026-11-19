@@ -48,8 +48,10 @@ class BackupError(ValueError):
 
 
 def backups_dir() -> Path:
-    """Where backups go: a folder in Documents, outside Hoard's own, so uninstalling Hoard leaves them."""
-    return documents_dir() / "Hoard backups"
+    """Where backups go: a folder in Documents, outside Hoard's own, so uninstalling Hoard leaves them; or where you
+    moved it to (issue #385)."""
+    from .paths import placed
+    return placed("backups") or documents_dir() / "Hoard backups"
 
 
 def make(cfg: dict, settings: dict, lib, unlocked: bool) -> dict:

@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from tests.isolation import IsolatedTestCase
 from hoard import storage
 from pathlib import Path
@@ -230,6 +231,20 @@ class LocalItems(IsolatedTestCase):
         self.assertTrue(a["own_picture"] and a["thumb"].endswith("_thumbnail.jpg"))
         self.assertEqual(call("/api/local/picture", {"folder": "Local/nope", "image": jpeg})[0], 404)
         self.assertEqual(call("/api/local/picture", {"folder": entry["folder"], "image": "<svg/>"})[0], 400)
+        # issue #382: a Unity package of it, in Unity packages in the folder for editable copies; never in its own folder
+        from hoard import downloader
+        with mock.patch.object(server, "reveal", lambda p: str(p)):
+            status, made = call("/api/local/unitypackage", {"folder": entry["folder"]})
+            self.assertEqual(status, 200, made)
+            again = call("/api/local/unitypackage", {"folder": entry["folder"]})[1]
+        out = downloader.edits_root(srv.cfg, self.root) / "Unity packages"
+        self.assertEqual(Path(made["path"]).parent, out)
+        self.assertTrue(Path(made["path"]).is_file())
+        self.assertTrue(again["path"].endswith(" (2).unitypackage"), "never over one that's there")
+        self.assertGreaterEqual(made["assets"], 1)
+        self.assertFalse(any(p.suffix == ".unitypackage" and "Unity packages" in str(p) for p in self.src.rglob("*")),
+                         "nothing written into the item's own folder")
+        self.assertEqual(call("/api/local/unitypackage", {"folder": "Local/nope"})[0], 404)
         self.assertEqual(call("/api/local/remove", {"folder": entry["folder"]})[0], 400, "not without confirming")
         self.assertEqual(call("/api/local/remove", {"folder": "Booth/x", "confirm": True})[0], 404)
         self.assertTrue(srv.jobs.busy.acquire(timeout=5))   # a job is running: these wait their turn
@@ -392,7 +407,7 @@ class LocalPage(IsolatedTestCase):
             page.click("#localGo")
             page.locator("#grid .slot", has_text="Commission Kit").wait_for(timeout=20000)
             page.locator("#grid .slot", has_text="Commission Kit").click()
-            page.get_by_text("Listed where it is").wait_for()
+            page.locator(".sub", has_text="Listed where it is").wait_for()   # (Settings' sync folder says it too)
             page.get_by_text("For A commission.").wait_for()
             # a picture of your choosing for its tile (in Hoard's own folder for it: nothing of yours is written)
             self.addCleanup(shutil.rmtree, local.pictures_dir(), True)

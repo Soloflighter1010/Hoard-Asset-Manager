@@ -36,6 +36,12 @@ def vcc_dir() -> Path:
     """The Creator Companion's folder (ALCOM's too): VRChatCreatorCompanion in your local app data, or HOARD_VCC_DIR."""
     if os.environ.get("HOARD_VCC_DIR"):
         return Path(os.environ["HOARD_VCC_DIR"]).expanduser()
+    from ..paths import placed
+    return placed("vcc") or usual_vcc_dir()   # (where you told Hoard it is, issue #385: never moved, only pointed at)
+
+
+def usual_vcc_dir() -> Path:
+    """Where the Creator Companion keeps its folder, as if you hadn't pointed Hoard at another."""
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     elif in_flatpak():

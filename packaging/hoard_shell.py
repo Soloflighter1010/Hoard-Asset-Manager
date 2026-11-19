@@ -11,5 +11,7 @@ if __name__ == "__main__":
     shell.BUILD = True
     if "--shell" in sys.argv[1:]:
         shell.claim_pipes()   # (before anything prints)
+    from hoard import relocate
+    relocate.finish_pending(say=lambda said: None)   # (issue #385: a move of Hoard's own folder, before anything opens it)
     from hoard.cli import main
     main(sys.argv[1:])

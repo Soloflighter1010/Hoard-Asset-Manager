@@ -457,7 +457,8 @@ function otherCopies(a) {
 const slotHTML = a => {
   const n = stackSize.get(a.id) || 0, others = otherCopies(a), store = storeName(a.store);
   const also = [...new Set(others.filter(o => o.store !== a.store).map(o => storeName(o.store)))];
-  const [status, statusKind] = a.away ? [tr("Drive not connected"), "bad"] : a.folder_gone ? [tr("Folder gone"), "bad"] : a.missing ? [tr("Missing files"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]
+  const [status, statusKind] = a.away ? [tr("Drive not connected"), "bad"] : a.folder_gone ? [tr("Folder gone"), "bad"] : a.missing ? [tr("Missing files"), "bad"]
+    : a.sync_gone ? [tr("Not in the sync folder any more"), "bad"] : hasUpdate(a) ? [tr("Update"), "upd"]   // (issue #388)
     : [tr(a.files.length === 1 ? "{0} file, {1}" : "{0} files, {1}", a.files.length, fmtSize(a.size)), ""];
   return productTile(a, { key: "id", id: a.id, current: a.id === openId, store: a.store.toLowerCase(), storeName: store,
     src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0], count: n, others: others.map(o => o.store.toLowerCase()),
@@ -1116,17 +1117,36 @@ function toggle(set, v) { set.has(v) ? set.delete(v) : set.add(v); }
 
 /* ---------- Local (issue #80): your own packages, copied into Hoard or listed where they are */
 function localSection(a) {
-  return `<p class="sub">${a.note ? `${esc(tr("For {0}.", a.note))} ` : ""}${a.linked
+  return (a.sync_gone ? `<p class="pj-warn">${esc(tr("It isn't in your Local sync folder any more. It stays in Local, with its tags and its places in sets, until you remove it."))}</p>` : "") +
+    `<p class="sub">${a.note ? `${esc(tr("For {0}.", a.note))} ` : ""}${a.linked
       ? "Listed where it is: Hoard never changes anything in this folder."
       : "A copy in Hoard, checked like your downloads."}</p>` +
     `<div class="actions">${a.linked ? `<button class="ghost" data-act="local-rescan">Rescan</button>` : ""}` +
     `<button class="ghost" data-act="local-picture">${esc(tr(a.own_picture ? "Change its picture..." : "Choose a picture..."))}</button>` +
     (a.own_picture ? `<button class="ghost" data-act="local-unpicture">${esc(tr(a.linked ? "Use one of its own pictures" : "Take the picture off"))}</button>` : "") +
+    `<button class="ghost" data-act="local-package">${esc(tr("Make a Unity package"))}</button>` +   // (issue #382)
     `<button class="ghost" data-act="local-remove">Remove from Local</button></div>`;
+}
+// Issue #382: a .unitypackage of one of your own packages, made without Unity, in Unity packages in the folder for
+// editable copies (shown in its folder); what it holds, which files got a new ID and which were left out, said after.
+async function localPackage(a) {
+  toast(tr("Making a Unity package of {0}...", a.name));
+  const r = await apiPost("/api/local/unitypackage", { folder: a.folder });
+  if (!r.ok) { toast(r.data.error || tr("The package couldn't be made.")); return; }
+  const d = r.data;
+  await askForm({ icon: "package", title: tr("Made a Unity package of {0}", a.name), ok: tr("OK"), cancel: "", keep: [d.path],
+    blocks: [{ type: "text", text: tr(d.assets === 1 ? "1 file is in it, in its own folder under Assets." : "{0} files are in it, in their own folder under Assets.", d.assets) },
+             { type: "pre", text: d.path },
+             ...(d.new_ids ? [{ type: "text", tone: "hint", text: tr(d.new_ids === 1
+               ? "1 file had no .meta file beside it, so it has a new ID: anything that referred to it by an older one won't find it."
+               : "{0} files had no .meta file beside them, so they have new IDs: anything that referred to them by older ones won't find them.", d.new_ids) }] : []),
+             ...(d.left_out.length ? [{ type: "text", tone: "warn", text: tr("Left out:") },
+                                     { type: "list", items: d.left_out.map(x => ({ name: x.path, sub: tr(x.why) })) }] : [])] });
 }
 // Do what a button on one of your own packages says: its picture, details, or taking it out of Local.
 async function localAction(act, a) {
   if (!a) return;
+  if (act === "local-package") return localPackage(a);
   if (act === "local-picture" || act === "local-unpicture") {   // (kept in Hoard's own folder for it: see local.py)
     const image = act === "local-picture" ? await choosePicture() : null;
     if (act === "local-picture" && !image) return;

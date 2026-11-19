@@ -1748,17 +1748,87 @@ const FOLDER_ICON = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" 
 async function loadPlaces() {
   const box = $("#setPlaces");
   if (!box) return;
-  let found = null;
-  try { const r = await api("/api/folders", { cache: "no-store" }); if (r.ok) found = (await r.json()).folders; } catch (e) { /* said below */ }
+  let found = null, got = {};
+  try { const r = await api("/api/folders", { cache: "no-store" }); if (r.ok) { got = await r.json(); found = got.folders; } } catch (e) { /* said below */ }
   if (!found) { box.innerHTML = `<p class="hint">${esc(tr("Hoard's folders couldn't be read just now."))}</p>`; return; }
-  box.innerHTML = found.map(p => {
+  PLACES_SEEN = found;
+  const note = (got.pending ? `<p class="pj-warn">${esc(tr("{0} moves to {1} when Hoard next starts: quit Hoard and open it again.", tr((PLACES[got.pending.what] || [got.pending.what])[0]), got.pending.to))}</p>` : "") +
+    (got.failed ? `<p class="pj-warn">${esc(got.failed)}</p>` : "");
+  box.innerHTML = note + found.map(p => {
     const [name, what] = PLACES[p.id.startsWith("library-") ? "library" : p.id] || [p.id, ""], opens = p.exists || PLACES_OWN.has(p.id);
     return `<div class="librow${opens ? "" : " away"}" data-place-row="${esc(p.id)}">${FOLDER_ICON}<span class="lp">` +
       `<b>${p.label ? `<span translate="no">${esc(p.label)}</span>` : esc(tr(name))}</b><small>${esc(tr(what))}</small>` +
       `<small translate="no">${esc(p.path)}</small></span>` +
       (opens ? `<button class="ghost sm" data-place="${esc(p.id)}">${esc(tr("Open"))}</button>`
-        : `<span class="muted">${esc(tr("Not there yet"))}</span>`) + `</div>`;
+        : `<span class="muted">${esc(tr("Not there yet"))}</span>`) +
+      (p.change ? `<button class="ghost sm" data-place-change="${esc(p.id)}">${esc(tr("Change..."))}</button>` : "") + `</div>`;
   }).join("");
+}
+// Issue #388: Settings' Local sync folder: where it is, and what in it wasn't added, and why.
+function showSyncFolder(v) {
+  if (!$("#syncPath")) return;
+  $("#syncPath").value = v.folder || "";
+  $("#syncOff").hidden = !v.folder;
+  $("#syncSkipped").innerHTML = v.folder && v.skipped.length
+    ? `<p class="hint">${esc(tr("Not added:"))}</p><ul class="sync-skipped">${v.skipped.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted">${esc(tr(x.why))}</span></li>`).join("")}</ul>` : "";
+  $("#syncMsg").textContent = v.folder && (v.last || {}).error ? v.last.error : "";
+}
+async function loadSyncFolder(body = {}) {   // (body: a change, or a look now)
+  const r = await apiPost("/api/local/sync", body);
+  if (!r.ok) { $("#syncMsg").textContent = r.data.error || tr("That folder can't be used."); return false; }
+  showSyncFolder(r.data);
+  if (r.data.busy) $("#syncMsg").textContent = tr("Hoard looks at it once what it's doing now is done.");
+  return true;
+}
+// Settings' Local sync folder: choose one (typed, or picked in Hoard's window), or turn it off.
+function wireSyncFolder() {
+  if (!$("#syncPath")) return;
+  $("#syncBrowse").addEventListener("click", async () => { if (await browseInto($("#syncPath"))) $("#syncUse").click(); });
+  $("#syncUse").addEventListener("click", async () => {
+    const folder = $("#syncPath").value.trim();
+    if (folder && await loadSyncFolder({ folder })) toast(tr("Hoard adds what's in it to Local, and keeps looking."));
+  });
+  $("#syncPath").addEventListener("keydown", e => { if (e.key === "Enter") $("#syncUse").click(); });
+  $("#syncOff").addEventListener("click", async () => {
+    if (await loadSyncFolder({ folder: "" })) toast(tr("The sync folder is off. What it added stays in Local."));
+  });
+}
+let PLACES_SEEN = [];   // (Hoard's folders as last read)
+// Issue #385: one of Hoard's folders somewhere else. Where (typed, or chosen), or back where it started; then what
+// that does is said (moved now, moved when Hoard next starts, left as a library folder, or only pointed at) before
+// anything changes, with moving what's there now as a choice where it can be.
+async function changePlace(id) {
+  const p = PLACES_SEEN.find(x => x.id === id);
+  if (!p) return;
+  const name = tr((PLACES[id] || [id])[0]);
+  const res = await askForm({ icon: "folder", title: tr("Change where {0} is", name), ok: tr("Next"), keep: [p.path],
+    blocks: [{ type: "text", text: tr("Now: {0}", p.path) },
+             { type: "field", id: "placeTo", label: tr("New folder"), browse: true, placeholder: p.path, max: 1000 },
+             { type: "check", id: "placeDefault", label: tr("Put it back where it started") }] });
+  if (!res.ok) return;
+  const body = res.fields.placeDefault ? { id, default: true } : { id, path: res.fields.placeTo.trim() };
+  if (!body.default && !body.path) return;
+  const r = await apiPost("/api/folders/change", body);
+  if (!r.ok) { toast(r.data.error || tr("That folder can't be used.")); return; }
+  const plan = r.data.plan, how = {
+    library: tr("New downloads go in the new folder. The old one stays as a library folder, so everything in it is still found: nothing is copied."),
+    "move-later": tr("It's in use while Hoard runs, so it's moved when Hoard next starts: copied, checked, then deleted where it was. Quit Hoard and open it again to move it."),
+    "move-now": tr("Hoard uses the new folder from now on."),
+    point: tr("Hoard and Projects use the Creator Companion folder you chose. Nothing is moved: it's the Creator Companion's and ALCOM's."),
+    projects: tr("Projects uses the new folder from now on. What's in the old one stays where it is.") }[plan.how];
+  const res2 = await askForm({ icon: "folder", title: tr("Change where {0} is?", name), ok: tr("Change it"), keep: [plan.from, plan.to],
+    blocks: [{ type: "text", text: tr("From: {0}", plan.from) }, { type: "text", text: tr("To: {0}", plan.to) },
+             { type: "text", text: how },
+             ...(plan.how === "move-later" && plan.files ? [{ type: "text", tone: "hint", text: tr("{0} files, {1}.", plan.files.toLocaleString(), sizeText(plan.bytes)) }] : []),
+             ...(plan.how === "move-now" && plan.files ? [{ type: "check", id: "placeMove", checked: true,
+               label: tr("Move what's in it now too ({0} files, {1})", plan.files.toLocaleString(), sizeText(plan.bytes)) }] : []),
+             ...(plan.warning ? [{ type: "text", tone: "warn", text: tr(plan.warning) }] : [])] });
+  if (!res2.ok) return;
+  const done = await apiPost("/api/folders/change", { ...body, confirm: true, move: !!res2.fields.placeMove });
+  if (!done.ok) { toast(done.data.error || tr("That folder can't be used.")); return; }
+  toast(done.data.restart ? tr("Quit Hoard and open it again to move it.")
+    : done.data.moving ? tr("Changed. What was in it is being moved (see Tasks).") : tr("Changed."));
+  loadPlaces();
 }
 // Send a change to the library folders, then show them as they are. null when it didn't work.
 async function libraryChange(path, body) {
@@ -1796,7 +1866,10 @@ function wireLibs() {
   };
   $("#libAdd").addEventListener("click", add);
   $("#libPath").addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  wireSyncFolder();
   $("#setPlaces").addEventListener("click", async e => {
+    const c = e.target.closest("[data-place-change]");
+    if (c) return changePlace(c.dataset.placeChange);   // (issue #385)
     const b = e.target.closest("[data-place]");
     if (!b) return;
     const r = await apiPost("/api/folders/open", { id: b.dataset.place });
@@ -2266,6 +2339,7 @@ function fillSettings() {   // the controls, as the settings are now
   $("#setRoot").value = SETTINGS.root;
   renderLibs(SETTINGS.libraries);
   loadPlaces();
+  loadSyncFolder();
   $("#setNewDays").value = String(SETTINGS.new_days ?? 7);
   $("#setRetries").value = String(SETTINGS.download_retries ?? 2);
   $("#setPrevious").value = String(SETTINGS.keep_previous ?? 1);

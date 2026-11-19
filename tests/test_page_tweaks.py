@@ -78,7 +78,7 @@ class Tweaks(IsolatedTestCase):
         page = self.downloads()
         menu(page, "#settingsBtn")
         jumps = page.locator(".setjump button")
-        self.assertEqual(jumps.count(), 12)   # with Hoard's folders, Notifications, Support Hoard and Acknowledgements
+        self.assertEqual(jumps.count(), 13)   # with Hoard's folders, the Local sync folder, Notifications, Support Hoard and Acknowledgements
         page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)
         page.click("[data-jump='part-help']")
         page.wait_for_timeout(800)
