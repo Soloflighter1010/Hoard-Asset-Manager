@@ -64,8 +64,8 @@ def _local(self, path: str, body: dict):
     if not found:
         return self._json({"error": "That isn't in Local any more."}, 404)
     if path == "/api/local/picture":   # a picture of your choosing for its tile, or back to one of its own
-        if srv.jobs.state["running"] and srv.jobs.state.get("task") in ("add-local", "rescan-local", "remove-local",
-                                                                        "move"):
+        if any(j.state["running"] and j.state.get("task") in ("add-local", "rescan-local", "remove-local", "move")
+               for j in (srv.jobs, srv.side_jobs)):   # (Local's tasks can run in the side lane: issue #403)
             return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
         try:
             local.choose_picture(srv.cfg, app.root_dir(srv.cfg), found[0], body.get("image"))

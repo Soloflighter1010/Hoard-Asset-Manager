@@ -1,5 +1,61 @@
 # Changelog
 
+## 5.2.0-beta.11
+
+### Tasks and downloads
+
+- **Tasks run side by side when they don't get in each other's way** (#403). A small task (reading a product's
+  list of files, adding to Local, rescanning or taking out, bringing in from KonoAsset, deleting downloaded files,
+  checking downloads) runs beside a download or a store read when they share nothing, with its own progress, Stop
+  and Force stop in Tasks. Two that use the same store, or the downloads, still take turns. A setting waits only for
+  a task that uses it (turning off a store a download isn't from changes at once), and a set's prices are read
+  beside whatever runs.
+- **Downloading a product waits for its whole list of files, and opens it** (#401), so you choose from all of it,
+  every file ticked to begin with. When reading the list waits its turn behind another task, **Download
+  everything** works meanwhile and waits its turn too.
+- **The Local sync folder is kept when Hoard starts again** (#388). It was never saved with Hoard's other
+  settings, so Hoard forgot it each time it was closed.
+- **The download panel tucks itself away 10 seconds after a download starts** (#402), so **Stop** isn't always
+  under your hand. What's downloading stays in the bar, and choosing it there brings the panel back. A download
+  with problems shows it again when it ends.
+
+### Library and pictures
+
+- **Pictures don't flicker or go blank** (#406). A picture that has loaded is put back as it was when the library is
+  drawn again (each refresh used to redraw every picture), one that didn't load is asked for again a moment later
+  instead of becoming its initials for good, and a tile waiting for its picture is its placeholder's colour. A
+  picture a store sends without saying it's one is known by its bytes, and an AVIF picture shows in Downloads.
+- **A changed file has its own mark** (#400): a blue circle with a pencil, where an error has the red triangle. A
+  file changed after it was downloaded is often your own edit, and the advice says what **Keep it as it is** and
+  **Download again** do.
+
+### Sets and wishlists
+
+- **hoard:// links open Hoard at a shared set, a product to add, or a product in your library** (#396):
+  `hoard://set/<code>` opens **Add a shared set...** with the set in it, `hoard://add?link=<a product's page>` a
+  wishlist to add it to, and `hoard://product/<store>/<id>` its details. Nothing is added until you say so. The
+  website's set viewer and set maker have **Open in Hoard**.
+- **Export JSON works in the app** (#405). Hoard's window turned away the page's download, so nothing was saved.
+  Hoard now writes the file itself, in **Exported sets** in the folder for editable copies, named after the set and
+  never over another file, and shows it there.
+- **A set's photos are small previews on its page** (#404), with **Show larger** to see one across the page.
+  Marking products on a photo still shows it large.
+
+### Hoard for Unity
+
+- **Pictures that don't flicker or go blank** (#407, Hoard for Unity 0.11.1): kept at the size they're drawn (a
+  store's can be thousands of pixels across, and only a few fitted in memory), never let go while on screen, and
+  tried again when one couldn't be read.
+- **A store's WebP or AVIF picture shows**: Unity can't read those, so Hoard saves a PNG or JPEG copy beside it the
+  first time Downloads shows it, and the window shows that the next time it reads Hoard's library.
+
+### Fixes
+
+- **A package in Projects shows its own version again** (#398). After a page refresh, every package read Hoard's
+  version.
+- **Clearer words** (#399): changing where a folder is, the editable copies folder, and a download check's changed
+  files.
+
 ## 5.2.0-beta.10
 
 ### Sets and wishlists

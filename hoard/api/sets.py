@@ -475,8 +475,8 @@ def post_api_sets_prices(self, path, body, query):
     if not todo:
         return self._json({"started": False})
     _pricing.add(sid)
-    try:
-        self.server.start_worker("Reading prices", _read_prices, sid, todo)
+    try:   # (beside whatever runs, not maintenance that waits for it to end: issue #403)
+        self.server.start_beside("Reading prices", _read_prices, sid, todo)
     except Exception:
         _pricing.discard(sid)
         raise

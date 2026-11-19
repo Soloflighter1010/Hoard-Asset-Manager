@@ -113,6 +113,15 @@ class SyncFolder(IsolatedTestCase):
         with self.assertRaisesRegex(ValueError, "Hoard's own folder"):
             localsync.check_folder(self.cfg, str(data_dir().parent))
 
+    def test_kept_when_hoard_starts_again(self):
+        """It's one of the settings config.json keeps: it was dropped when they were saved, so Hoard forgot it."""
+        from hoard import server
+        path = self.tmp / "config.json"
+        srv = server.AppServer(("127.0.0.1", 0), self.cfg, lan=False, config_path=path)
+        self.addCleanup(srv.server_close)
+        srv.save_settings()
+        self.assertEqual(config.load_config(path)["local_sync"], self.cfg["local_sync"])
+
     def test_never_while_a_job_uses_local(self):
         busy = threading.Lock()
         busy.acquire()

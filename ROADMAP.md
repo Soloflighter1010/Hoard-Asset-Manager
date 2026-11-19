@@ -65,6 +65,19 @@ currency conversion and the others above) was done in PR #365.
 - [x] [#396](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/396) — `hoard://` links: open a shared set, a product to add to a wishlist, or a product in your library, with **Open in Hoard** on the website's set viewer and set maker.
 - [ ] [#394](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/394) — Try Hoard on the website: a demo in the browser with a pretend sign-in and real products (waiting on the list of products to show).
 
+### Beta 10 notes
+
+- [x] [#398](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/398) — Projects: each package shows its own version again after a page refresh.
+- [x] [#399](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/399) — Clearer words: moving a folder in Settings, the editable copies folder, a download check's changed files.
+- [x] [#400](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/400) — A file changed after it was downloaded has its own mark (a blue circle with a pencil), apart from errors.
+- [x] [#401](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/401) — Downloading a product waits for its whole list of files, and opens it.
+- [x] [#402](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/402) — The download panel tucks itself away 10 seconds after a download starts; the bar brings it back.
+- [x] [#403](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/403) — Tasks side by side: a small task runs beside a download or store read when they share nothing; settings wait only for a task that uses them.
+- [x] [#404](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/404) — A set's photos are small previews on its page, with Show larger.
+- [x] [#405](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/405) — Export JSON works in the app: Hoard writes the file itself, in Exported sets.
+- [x] [#406](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/406) — Pictures that don't flicker or go blank: kept across redraws, asked for again when one doesn't load.
+- [x] [#407](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/407) — Hoard for Unity's pictures: kept at the size they're drawn, never let go on screen, retried; WebP and AVIF get a PNG copy.
+
 ## Later and research
 
 - [ ] [#306](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/306) — New products and sales from followed creators; previously deferred to Hoard V6.

@@ -46,13 +46,15 @@ Before one product downloads (**Download** in its details, **Update** in Downloa
 you want to save?** (5.2.0). It says what the product contains, such as "2 Unity packages, 1 Substance Painter
 project, and 3 compressed files", then:
 
+- Its files, listed by kind and all ticked (5.2.0 beta 11: open from the start, so you see what you can choose), to
+  untick what you don't want this time; **Download these** gets the rest.
 - **Download everything** gets all of it.
-- **Choose files** lists its files by kind, to untick what you don't want this time; **Download these** gets the
-  rest.
 
 Where the store doesn't list a product's files before downloading (Gumroad, Jinxxy and itch.io, and Booth when
 your library list doesn't have them), Hoard looks at its download page first, as a short task of its own (**See
-what's in it** in Tasks). Nothing is downloaded, and **Download everything** works while it looks.
+what's in it** in Tasks). Nothing is downloaded. From 5.2.0 beta 11 you can download once its whole list is in, so
+you choose from all of it. When that task waits its turn behind another (a download that's running), **Download
+everything** works meanwhile and waits its turn too.
 
 Hoard remembers what you leave out of each product, and asks again whenever you download from it later or it gets
 an update: what you left out before, and what your rules leave out (**Files to leave out**, in
@@ -79,6 +81,15 @@ seconds. **Force stop** ends any task at once (a refresh or a sign-in too): it c
 sign-in window or the browser download straight away, and keeps what finished. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
 left out of it.
+
+**Tasks side by side** (5.2.0 beta 11). A small task runs beside what's running when they don't use the same
+thing: reading a product's list of files, adding to Local (and rescanning or taking out), bringing in from KonoAsset,
+deleting downloaded files and checking downloads. Each shows in Tasks with its own progress, **Stop** and **Force
+stop**. Two that use the same thing still take turns: a product's files are read beside a download from another
+store, not the same one, and a check of your downloads waits for a download, which it would read part way. A
+setting a running task uses waits for it too (the store it's reading, the store browser, the downloads folder),
+and the rest change at once: turning off a store a download isn't from, say. A set's prices are read beside
+whatever runs.
 
 **Stop** pauses safely within a few seconds, even part way through a big file. A file Hoard downloads itself
 (Gumroad, itch.io, and Booth and Jinxxy unless they turn Hoard away) resumes where it stopped next time; one the

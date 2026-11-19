@@ -3932,12 +3932,12 @@ class DownloadChoices(IsolatedTestCase):
             status, got = self.call("POST", "/api/product-files", {"keys": [rusk], "names": {rusk: ["Rusk.zip", "Rusk (Quest).zip", 7]}})
             self.assertEqual(status, 200)
             self.assertEqual(got, {"files": {rusk: {"files": ["Rusk.zip", "Rusk (Quest).zip"], "read": False,
-                                                    "out": ["Rusk (Quest).zip"]}}, "reading": False})
-            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi]})[1], {"files": {}, "reading": False},
+                                                    "out": ["Rusk (Quest).zip"]}}, "reading": False, "waiting": False})
+            self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi]})[1], {"files": {}, "reading": False, "waiting": False},
                              "not asked to read it")
             self.assertEqual(started, [], "nothing read")
             got = self.call("POST", "/api/product-files", {"keys": [mochi, "no store", 5, "payhip:paw pack"], "read": True})[1]
-            self.assertEqual(got, {"files": {}, "reading": True})
+            self.assertEqual(got, {"files": {}, "reading": True, "waiting": False})
             self.assertEqual(started, [("list-files", ["gumroad"], {"keys": [mochi, "payhip:paw pack"]})], "Payhip isn't read")
             with mock.patch.object(self.srv.jobs, "keys_of", lambda task: {mochi} if task == "list-files" else set()):
                 self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["reading"])
@@ -3946,13 +3946,17 @@ class DownloadChoices(IsolatedTestCase):
                 self.assertTrue(self.call("POST", "/api/product-files", {"keys": [rusk], "read": True})[1]["reading"])
                 self.assertEqual(started[1], ("list-files", ["booth"], {"keys": [rusk]}))
                 self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi]})[1]["reading"], "its next look")
+                # issue #401: its read waiting its turn behind what's running now is said, so Download everything
+                # can wait its turn too
+                with mock.patch.object(self.srv.jobs, "waiting_keys_of", lambda task: {mochi} if task == "list-files" else set()):
+                    self.assertTrue(self.call("POST", "/api/product-files", {"keys": [mochi]})[1]["waiting"])
             del started[1]
             # read: its files, with the one you left out of it before
             self.srv.jobs.listed[mochi] = {"store": "gumroad", "name": "Mochi", "creator": "Kitsu Studio",
                                            "files": ["Mochi.zip", "Mochi.psd"], "at": time.monotonic(), "read": True}
             got = self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]
             self.assertEqual(got, {"files": {mochi: {"files": ["Mochi.zip", "Mochi.psd"], "read": True, "out": ["Mochi.psd"]}},
-                                   "reading": False})
+                                   "reading": False, "waiting": False})
             self.srv.jobs.listed[mochi]["at"] -= 700
             self.assertEqual(self.call("POST", "/api/product-files", {"keys": [mochi], "read": True})[1]["files"], {},
                              "read again after ten minutes")

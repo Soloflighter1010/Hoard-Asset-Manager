@@ -23,6 +23,9 @@ USER = 0
 ROUTINE = 10
 MAINTENANCE = 20
 PACKAGES = 30
+# Threads at once: the main lane's task, the side lane's (issue #403), Projects', a reader beside them, maintenance and
+# a moment's control step (Stop, a stuck task's check), so none of them waits for another to finish.
+MAX_WORKERS = 6
 _local = threading.local()
 _instances = weakref.WeakSet()
 
@@ -252,7 +255,7 @@ class Scheduler:
                 ready = [t for t in self._tasks.values() if not any(t[k] for k in ("running", "paused", "stopped", "finished", "external"))
                          and t["due"] <= now and (t["foreground"] or t["control"]
                                                   or not maintenance and (t["beside"] or not self._foreground_waiting()))]
-                if not ready or len(self._workers) >= 4:
+                if not ready or len(self._workers) >= MAX_WORKERS:
                     self._condition.wait(0.1)
                     continue
                 task = min(ready, key=lambda t: (t["priority"], t["due"], t["sequence"]))

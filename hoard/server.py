@@ -32,7 +32,7 @@ from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_do
                          restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED, MAX_PROBLEMS, STORE_DIRS,
                          edits_root, last_integrity, make_editable_copy, reseal_catalog, resolve_problem)
 from .downloads import build_index, library_status, reveal, with_tags
-from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, Jobs, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
+from .jobs import MAX_SKIP, PROJECTS, ROUTINE_CHOICES, SIDE, Jobs, claims, clash, Schedule, download_skip, forget_deleted_signins, routine_hours, routine_record, save_routine
 from .net import blocked_here, blocked_message, is_network_error
 from .wishlists import read_store_page   # (Add products by link: tests stand in for it here)
 from .library import (DOWNLOADABLE, IMPORTABLE, STORES, Library, cache_images, common_words, enrich, fetch_picture, fetch_thumbnail, import_saved_pages,
@@ -58,6 +58,25 @@ BROWSER_CHOICES = ("", "msedge", "chrome", "brave", "vivaldi", "opera", "opera_g
 TEXT_SIZES = (100, 115, 130, 150)   # percent
 FONTS = ("standard", "dyslexic")    # Settings, Accessibility: the pages' own, or OpenDyslexic
 JOB_SETTINGS = ("root", "browser_channel", "browser_path", "stores", "payhip_shops", "library_folders")   # read by a running job: not changed during one
+
+
+def setting_uses(body: dict) -> frozenset:
+    """What a change to the settings a running task reads (JOB_SETTINGS) would change under it, as jobs.claims names
+    what a task uses (issue #403): only a task that uses one of those makes the change wait. A store's own settings
+    are that store's; Payhip's shops, Payhip's; the store browser, every store's; the downloads and library folders,
+    the downloads'."""
+    from .jobs import EVERY_STORE
+    uses: set = set()
+    if "root" in body or "library_folders" in body:
+        uses |= {"downloads", "local"}
+    if "browser_channel" in body or "browser_path" in body:
+        uses |= {EVERY_STORE, "browser"}
+    if "payhip_shops" in body:
+        uses.add("store:payhip")
+    if "stores" in body:
+        given = body["stores"]
+        uses |= {f"store:{s}" for s in given if isinstance(s, str)} if isinstance(given, dict) and given else {EVERY_STORE}
+    return frozenset(uses)
 NEW_DAYS = (0, 1, 3, 7, 14, 30)     # how long something new in the library is marked New (0: never)
 
 
@@ -407,7 +426,7 @@ def apply_settings(cfg: dict, body: dict) -> dict:
 MAX_SERVED_IMAGE = 30 * 1024 * 1024
 # The type each image in the downloads folder is served as: from this fixed list, never worked out from the request
 SERVED_IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
-                      ".gif": "image/gif"}
+                      ".gif": "image/gif", ".avif": "image/avif"}   # (AVIF: a store's picture can be one, issue #406)
 MAX_CONNECTIONS = 64      # at once; more are closed straight away, so held-open connections can't pile up
 
 
@@ -485,6 +504,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         forget_deleted_signins(cfg, self.lib)   # a sign-in folder deleted while Hoard was closed (issue #31)
         self.jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index, scheduler=self.scheduler)
         self.project_jobs = Jobs(cfg, self.lib, lane=PROJECTS, scheduler=self.scheduler)
+        # issue #403: the small tasks that don't get in the way of what the main lane runs, beside it
+        self.side_jobs = Jobs(cfg, self.lib, on_download_done=self.forget_index, lane=SIDE, scheduler=self.scheduler)
+        self.jobs.side = self.side_jobs
+        self.jobs.peers, self.side_jobs.peers = [self.side_jobs], [self.jobs]
+        self.side_jobs.gate = self.jobs.gate
+        self.side_jobs.listed = self.jobs.listed   # (a product's files, read in either lane, are one list)
         # The downloads index: rebuilt outside the lock, one rebuild at a time (review finding P-07). _wanted counts
         # "the downloads changed"; _built_for is the count the current index was built for.
         self._index, self._index_lock = None, threading.Lock()
@@ -492,7 +517,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.updates = updater.Updates(cfg)
         self.updates.scheduler = self.scheduler
         # news, sent through Apprise as you chose (issue #230): counts, never a product's name
-        self.jobs.on_news = self.project_jobs.on_news = self._news
+        self.jobs.on_news = self.project_jobs.on_news = self.side_jobs.on_news = self._news
         self.updates.on_available = lambda version: alerts.send(
             self.cfg, "other", f"**Hoard {version}** is available. Open Hoard to update.", title="A new version of Hoard",
             link=f"{alerts.HOARD_URL}/releases")
@@ -501,7 +526,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         # What it needs (hoard/needs.py): every downloaded package read once, in the background (started by serve())
         self.needs_index = needs.NeedsIndex()
         self.needs_reader = needs.NeedsReader(self.needs_index, lambda: self.index(stale_ok=True).get("assets", []),
-                                              lambda: bool(self.jobs.state.get("running")))
+                                              lambda: self.task_running())
         self.needs_reader.on_read = lambda: rebuild_catalog_quietly(self)
         self._needs = (None, None, None)   # (the index and the read packages' time it was worked out from, {product id: ...})
         self.jobs.find_choices = lambda: {k: len(v) for k, v in self.download_choices(False).items() if k in ("new", "updates")}
@@ -510,12 +535,27 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.project_jobs.project_runner = lambda what: self.vpm.run(what, self.asset_by_key)
 
     def lane(self, name) -> Jobs:
-        """The jobs of a lane: Projects' (PROJECTS), else the main one."""
-        return self.project_jobs if name == PROJECTS else self.jobs
+        """The jobs of a lane: Projects' (PROJECTS), the side lane's (SIDE), else the main one."""
+        return self.project_jobs if name == PROJECTS else self.side_jobs if name == SIDE else self.jobs
 
-    def lanes(self) -> tuple[Jobs, Jobs]:
-        """Both lanes' jobs: the main one's and Projects'."""
-        return self.jobs, self.project_jobs
+    def lane_of(self, job_id: str) -> Jobs:
+        """The lane a task's id is from: Projects' start with p, the side lane's with s."""
+        return self.lane(PROJECTS if job_id.startswith("p") else SIDE if job_id.startswith("s") else None)
+
+    def lanes(self) -> tuple[Jobs, Jobs, Jobs]:
+        """Every lane's jobs: the main one's, Projects' and the side lane's."""
+        return self.jobs, self.project_jobs, self.side_jobs
+
+    def task_running(self, waiting: bool = False) -> bool:
+        """Whether a task of the main lane or the side lane (issue #403) is running (or, with waiting, waiting its
+        turn): what a change that a task would trip over waits for. Projects' lane isn't counted, as before."""
+        return any(j.state.get("running") or (waiting and j.state.get("queue")) for j in (self.jobs, self.side_jobs))
+
+    def in_use(self, uses: frozenset) -> bool:
+        """Whether a running task of the main or side lane uses any of these (jobs.claims), as a change to them would
+        trip it up (issue #403: the rest can change while it runs). The catalog being written, which holds the main
+        lane's runner without a task, isn't one."""
+        return any(j.state.get("running") and clash(uses, claims(j._spec)) for j in (self.jobs, self.side_jobs))
 
     def working(self) -> bool:
         """Is a task running, or waiting its turn, in either lane? (Closing Hoard asks first.)"""
@@ -523,10 +563,10 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 
     def tasks(self) -> dict:
         """The Tasks tab, both lanes: what's running in each, what's waiting, and what finished, newest first."""
-        main, pj = self.jobs.tasks(), self.project_jobs.tasks()
-        history = sorted(main["history"] + pj["history"], key=lambda h: h.get("ended") or "", reverse=True)
-        return {"current": main["current"], "project": pj["current"], "queue": main["queue"] + pj["queue"],
-                "history": history, "background": self.scheduler.snapshot()}
+        main, pj, side = self.jobs.tasks(), self.project_jobs.tasks(), self.side_jobs.tasks()
+        history = sorted(main["history"] + pj["history"] + side["history"], key=lambda h: h.get("ended") or "", reverse=True)
+        return {"current": main["current"], "project": pj["current"], "side": side["current"],
+                "queue": main["queue"] + side["queue"] + pj["queue"], "history": history, "background": self.scheduler.snapshot()}
 
     def asset_by_key(self, key) -> dict | None:
         """A downloaded product, by its tag key (Projects: your library in a project). The keys are looked up in a
@@ -557,6 +597,12 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
     def start_worker(self, name: str, target, *args) -> None:
         """Submit maintenance through the server's single worker owner."""
         self.scheduler.call(name, lambda: target(*args), priority=20, foreground=False, visible=True)
+
+    def start_beside(self, name: str, target, *args) -> None:
+        """Something you asked for that runs beside your tasks at once, rather than as maintenance, which waits for
+        them to end (issue #403: a set's prices, read from public pages, while a download runs). Shown in Tasks."""
+        from .scheduler import ROUTINE
+        self.scheduler.call(name, lambda: target(*args), priority=ROUTINE, foreground=True, visible=True)
 
     def server_close(self) -> None:
         """Wake and join readers before releasing this server's data and listening socket."""
@@ -1107,7 +1153,7 @@ def forget_short_links(records: list[dict]) -> None:
 def rebuild_catalog_quietly(srv) -> None:
     """After packages were read for What it needs: write catalog.json again, so Hoard for Unity knows what each
     product needs. Skipped while a job runs: that job writes the catalog itself when it ends."""
-    if not srv.jobs.busy.acquire(blocking=False):
+    if srv.side_jobs.state.get("running") or not srv.jobs.busy.acquire(blocking=False):
         return
     try:
         build_catalog(srv.cfg, root_dir(srv.cfg))
@@ -1116,6 +1162,7 @@ def rebuild_catalog_quietly(srv) -> None:
     finally:
         srv.jobs.busy.release()
         srv.jobs.kick()
+        srv.side_jobs.kick()   # (the side lane's tasks waited while the catalog was written: issue #403)
 
 
 def reseal_in_background(srv, cfg: dict) -> None:
@@ -1173,6 +1220,7 @@ def serve(cfg: dict, host: str = "127.0.0.1", port: int = 0, open_browser: bool 
     srv.needs_reader.register(srv.scheduler)
     srv.jobs.kick()
     srv.project_jobs.kick()
+    srv.side_jobs.kick()
     if on_ready:   # the desktop app: it opens its window with a one-time link, and never logs the key
         on_ready(url, srv)
     else:

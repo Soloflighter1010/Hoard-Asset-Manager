@@ -13,7 +13,7 @@ def _product_files(self, body: dict) -> dict:
     """Issue #225: what each of these products has on its store, as a quick look at it read it (no file is
     downloaded), each with the files your rules or an earlier choice leave out ("out"), for Hoard to ask which to
     download. A product not read in the last ten minutes is read, with read: true, as a task of its own;
-    "reading" says one is under way. names: the files the page knows a product has already ({key: [names]}: an
+    "reading" says one is under way, and "waiting" that it's waiting its turn behind another task. names: the files the page knows a product has already ({key: [names]}: an
     update's, or Booth's from your library), answered with what's left out of them, without reading anything."""
     srv = self.server
     keys = [k for k in (body.get("keys") if isinstance(body.get("keys"), list) else [])[:20]
@@ -30,13 +30,17 @@ def _product_files(self, body: dict) -> dict:
             names = [n for n in known[:500] if isinstance(n, str) and 0 < len(n) <= 500]
             files[k] = {"files": names, "read": False, "out": out(k, names)}
     missing = [k for k in keys if k not in files]
-    reading = srv.jobs.keys_of("list-files")   # (being read, or waiting its turn: asked for once, not again)
+    # (being read, or waiting its turn, in either lane: asked for once, not again; issue #403's side lane reads one
+    # beside a download from another store)
+    reading = srv.jobs.keys_of("list-files") | srv.side_jobs.keys_of("list-files")
     unread = [k for k in missing if k not in reading]
     if unread and body.get("read") is True:   # a read of its own, waiting its turn behind another's if need be
         stores = sorted({k.split(":", 1)[0] for k in unread} & set(app.DOWNLOADABLE))
         if stores and srv.jobs.start("list-files", stores, keys=unread):
             reading = reading | set(unread)
-    return {"files": files, "reading": any(k in reading for k in missing)}
+    # (waiting: its read hasn't started, as it waits its turn behind what's running now: issue #401)
+    waiting = srv.jobs.waiting_keys_of("list-files") | srv.side_jobs.waiting_keys_of("list-files")
+    return {"files": files, "reading": any(k in reading for k in missing), "waiting": any(k in waiting for k in missing)}
 
 
 def _resolve_integrity(self, body: dict):
@@ -64,7 +68,7 @@ def _resolve_integrity(self, body: dict):
             return self._json({"ok": True, "in": app.reveal(target if target.is_file() else folder if folder.is_dir() else folder.parent)})
         except (app.UnsafePath, OSError):
             return self._json({"error": "That folder couldn't be opened."}, 400)
-    if srv.jobs.state.get("running"):   # (a sync or check holds its own copy of a store's records, and saves it)
+    if srv.task_running():   # (a sync or check holds its own copy of a store's records, and saves it)
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     done, failed, again = 0, [], {}
     for x in problems:
@@ -307,6 +311,40 @@ def get_files(self, path, body, query):
     return self._send(200, data, ctype, {"Cache-Control": "max-age=3600"})
 
 
+UNITY_UNREADABLE = ("_thumbnail.webp", "_thumbnail.avif")   # a store's picture Hoard for Unity can't show
+UNITY_READABLE = ("png", "jpg", "jpeg", "gif")
+
+
+def post_api_unity_picture(self, path, body, query):
+    """POST /api/unity-picture. A PNG (or JPEG) copy of a product's WebP or AVIF picture (thumb: its address under /files/), made
+    by Hoard's page, which can read those (issue #407: Hoard for Unity shows PNG, JPEG and GIF only, so those products
+    had no picture there). Saved beside it as _thumbnail.png (or .jpg, for a photo), once: never over a picture that's
+    there."""
+    from ..safety import chosen_picture, write_file_safely
+    srv = self.server
+    found = app.libraries.resolve(srv.cfg, str(body.get("thumb", ""))[:2000])
+    root = found[0] if found else None
+    rel = app.contained_rel(root, found[1]) if found else None
+    pic = app.safe_join(root, rel) if rel else None
+    if not pic or app.Path(rel).name.lower() not in UNITY_UNREADABLE or not pic.is_file():
+        return self._json({"error": "That isn't a product's WebP or AVIF picture."}, 400)
+    folder = pic.parent
+    if any((folder / f"_thumbnail.{ext}").exists() for ext in UNITY_READABLE):
+        return self._json({"ok": True, "made": False})   # (one Hoard for Unity can show is there already)
+    try:
+        data, kind = chosen_picture(body.get("png"))
+    except ValueError as e:
+        return self._json({"error": str(e)}, 400)
+    if kind not in ("png", "jpg"):
+        return self._json({"error": "That isn't a PNG or JPEG picture."}, 400)
+    try:
+        write_file_safely(folder / f"_thumbnail.{kind}", data, root=root)
+    except OSError as e:
+        return self._json({"error": f"The picture couldn't be saved: {e.strerror or e}."}, 500)
+    srv.forget_index()   # (Downloads shows the copy from now on, so the page doesn't make it again)
+    return self._json({"ok": True, "made": True})
+
+
 def post_api_open(self, path, body, query):
     """POST /api/open. Serve this endpoint through the shared HTTP boundary."""
     srv = self.server
@@ -346,7 +384,7 @@ def post_api_previous_restore(self, path, body, query):
     """POST /api/previous/restore. Downloads: put a previous version of a file back (hoard/previous.py)"""
     srv = self.server
     u = app.urlparse(self.path)
-    if srv.jobs.state.get("running"):
+    if srv.task_running():
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     folder = app.open_target(srv.cfg, str(body.get("folder", "")))
     if not folder or not folder.is_dir():
@@ -467,6 +505,7 @@ ROUTES = [
     Route('GET', '/api/space', get_api_space, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/inside/*', get_inside, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
     Route('GET', '/files/*', get_files, changes=False, auth='key', image_key=True, max_body=1048576, request=(), response='application/octet-stream'),
+    Route('POST', '/api/unity-picture', post_api_unity_picture, changes=True, auth='key', image_key=False, max_body=1048576, request=(('png', 'string'), ('thumb', 'string')), response='object'),
     Route('POST', '/api/open', post_api_open, changes=True, auth='key', image_key=False, max_body=1048576, request=(('path', 'string'),), response='object'),
     Route('POST', '/api/look-inside', post_api_look_inside, changes=False, auth='key', image_key=False, max_body=1048576, request=(('path', 'string'),), response='object'),
     Route('POST', '/api/look-inside/extract', post_api_look_inside_extract, changes=True, auth='key', image_key=False, max_body=1048576, request=(('metas', 'any'), ('open', 'boolean'), ('path', 'string'), ('picks', 'any')), response='object'),

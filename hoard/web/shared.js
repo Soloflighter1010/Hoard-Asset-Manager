@@ -1911,7 +1911,7 @@ async function pickDownloads(title, verb, items, go, choices) {
   choices = choices || await downloadChoices();
   const skip = new Set((choices.skipped || []).map(e => e.key));
   Object.assign(PICK, { items: items.filter(e => !skip.has(e.key)), skipped: choices.skipped || [], off: new Set(), go, verb,
-                        offFiles: new Map(), openFiles: new Set(), reading: new Set() });
+                        offFiles: new Map(), openFiles: new Set(), reading: new Set(), queued: new Set() });
   for (const e of PICK.items) {   // (issue #225: what your rules, or an earlier choice, leave out comes unticked)
     const out = (e.out || []).filter(n => fileNames(e).includes(n));
     if (out.length) PICK.offFiles.set(e.key, new Set(out));
@@ -1968,14 +1968,14 @@ function contentsText(names) {   // "2 Unity packages, 1 Substance Painter proje
   for (const f of names) n.set(kindOfFile(f), (n.get(kindOfFile(f)) || 0) + 1);
   return listed(CONTENT_KINDS.filter(([k]) => n.has(k)).map(([k, , one, many]) => tr(n.get(k) === 1 ? one : many, n.get(k))));
 }
-const FILES = { product: null, names: null, off: new Set(), picking: false, failed: false, go: null, timer: 0, asked: 0 };
+const FILES = { product: null, names: null, off: new Set(), picking: false, failed: false, queued: false, go: null, timer: 0, asked: 0 };
 /** Ask which of a product's files to download ({key, store, name, creator, names: its files, when known; more: only
  *  what isn't downloaded yet}), then go(the choice, for DL_FILES). With asking turned off in Settings: go(null). */
 function askFiles(product, go) {
   if (typeof DATA === "object" && DATA && DATA.ask_files === false) return go(null);
   clearTimeout(FILES.timer);
   const known = [...new Set(product.names || [])];
-  Object.assign(FILES, { product, names: known.length ? known : null, off: new Set(), picking: false, failed: false, go,
+  Object.assign(FILES, { product, names: known.length ? known : null, off: new Set(), picking: false, failed: false, queued: false, go,
                          asked: FILES.asked + 1 });
   $("#filesName").textContent = product.name;
   $("#filesBy").textContent = product.creator ? tr("by {0}", product.creator) : "";
@@ -1991,8 +1991,11 @@ async function readFiles(asked, read) {   // its files and what's left out of th
   if (got) {
     FILES.names = [...new Set(FILES.names && !got.read ? FILES.names : got.files)];
     FILES.off = new Set(got.out.filter(n => FILES.names.includes(n)));
-    FILES.picking = FILES.off.size > 0 && FILES.names.length > 1;   // (left out before: the choice, again)
+    FILES.picking = FILES.names.length > 1;   // (its whole list, open: what you can choose, issue #401)
   } else if (r.ok && r.data.reading) {
+    const was = FILES.queued;
+    FILES.queued = !!r.data.waiting;   // (its read waits its turn behind what's running now)
+    if (was !== FILES.queued) drawFiles();
     FILES.timer = setTimeout(() => readFiles(asked, false), 1500);
     return;
   } else if (!FILES.names) {
@@ -2003,7 +2006,12 @@ async function readFiles(asked, read) {   // its files and what's left out of th
 // Draw the files dialog: what the product contains, and each file to tick.
 function drawFiles() {
   const names = FILES.names, p = FILES.product;
-  $("#filesHas").textContent = names === null ? tr("Looking at what it contains...")
+  // its list being read: nothing downloads until all of it is in (issue #401), unless the read itself waits its turn
+  // behind what's running now, when Download everything waits there too
+  const waiting = names === null && !FILES.queued;
+  $("#filesHas").textContent = names === null ? tr("Looking at what it contains...") + " " + tr(FILES.queued
+      ? "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too."
+      : "You can download once its whole list is in.")
     : names.length ? tr(p.more ? "Not downloaded yet: {0}." : "It contains {0}.", contentsText(names))
     : p.more ? tr("Everything it has is downloaded already.")
     : FILES.failed ? tr("Hoard couldn't see its files before downloading. Download everything gets them all.")
@@ -2017,8 +2025,9 @@ function drawFiles() {
       `<label class="check"><input type="checkbox" data-file="${esc(n)}"${FILES.off.has(n) ? "" : " checked"}> <span translate="no">${esc(n)}</span></label>`).join("");
   }).join("");
   const n = names ? names.filter(x => !FILES.off.has(x)).length : 0;
-  $("#filesAll").textContent = FILES.picking ? tr(n === 1 ? "Download this one" : "Download these {0}", n) : tr("Download everything");
-  $("#filesAll").disabled = (FILES.picking && n === 0) || (!!p.more && !!names && !names.length);
+  $("#filesAll").textContent = FILES.picking && n < names.length ? tr(n === 1 ? "Download this one" : "Download these {0}", n) : tr("Download everything");
+  $("#filesAll").disabled = waiting || (FILES.picking && n === 0) || (!!p.more && !!names && !names.length);
+  $("#filesDialog").setAttribute("aria-busy", String(waiting));
 }
 // The files dialog's ticks, Download everything, and remembering the choice.
 function wireFiles() {
@@ -2061,7 +2070,10 @@ function drawPick() {
   $("#pickSkipped ul").innerHTML = PICK.skipped.map(e => row(e, true)).join("");
   const n = PICK.items.length - PICK.off.size;
   $("#pickGo").textContent = !PICK.off.size ? tr(`${PICK.verb} all`) : tr(`${PICK.verb} {0}`, n);
-  $("#pickGo").disabled = PICK.items.length > 0 && n === 0;
+  // (a product's files being read: nothing downloads until its whole list is in, issue #401)
+  const reading = PICK.items.some(x => PICK.reading.has(x.key) && !PICK.queued.has(x.key) && !PICK.off.has(x.key));
+  $("#pickGo").disabled = (PICK.items.length > 0 && n === 0) || reading;
+  $("#pickGo").title = reading ? tr("You can download once its whole list is in.") : "";
 }
 // Skip a product's downloads, or stop skipping them.
 async function pickSkip(key, on) {
@@ -2105,8 +2117,10 @@ async function pickRead(key) {   // a product's files, looked at on its store (n
   for (let tries = 0; tries < 200 && $("#pickDialog").open; tries++) {
     const r = await apiPost("/api/product-files", { keys: [key], read: tries === 0 });
     const got = r.ok && r.data.files && r.data.files[key], item = PICK.items.find(x => x.key === key);
+    const queued = !!(r.ok && r.data.reading && r.data.waiting);   // (its read waits its turn behind what's running now)
+    if (queued !== PICK.queued.has(key)) { if (queued) PICK.queued.add(key); else PICK.queued.delete(key); drawPick(); }
     if (got || !r.ok || !r.data.reading) {
-      PICK.reading.delete(key);
+      PICK.reading.delete(key); PICK.queued.delete(key);
       if (got && item) {
         item.names = got.files;
         const out = got.out.filter(n => got.files.includes(n));
@@ -3188,18 +3202,20 @@ function renderTasks(t) {
   const place = new Map([...document.querySelectorAll("#tasksBody details[data-id] pre")].map(pre =>
     [pre.closest("details").dataset.id, { top: pre.scrollTop, atEnd: pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4 }]));
   const win = $("#tasksWin"), winTop = win ? win.scrollTop : 0;
-  const cur = t.current, pj = t.project;   // (Projects' tasks run in a lane of their own, beside the rest)
+  // (Projects' tasks run in a lane of their own, beside the rest; so do small tasks that don't get in the way of
+  // what the main lane runs: the side lane, issue #403)
+  const cur = t.current, pj = t.project, side = t.side;
   // The problems a finished task reported.
   const problems = h => ((h.report && h.report.problems) || []);
   // A running task, with its progress and its Stop and Force stop buttons.
   const running = (c, lane) => `<div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>${esc(c.label)}</b>` +
-      (lane ? `<button class="ghost sm" data-task="stop" data-lane="${lane}" title="${esc(tr("Stop it at its next step: what it was changing is put back as it was"))}">Stop</button>`
-        : (STOPPABLE.includes(c.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
-          `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button>`) + `</div>` +
+      (lane === "projects" ? `<button class="ghost sm" data-task="stop" data-lane="${lane}" title="${esc(tr("Stop it at its next step: what it was changing is put back as it was"))}">Stop</button>`
+        : (STOPPABLE.includes(c.task) ? `<button class="ghost sm" data-task="stop" data-lane="${lane || ""}">Stop</button>` : "") +
+          `<button class="ghost sm" data-task="force" data-lane="${lane || ""}" title="End it now, whatever it's doing">Force stop</button>`) + `</div>` +
       (c.transfer ? transferHtml(c.transfer) : `<p class="task-msg">${esc(c.message || "Starting")}</p>`) +
       `<details class="live" data-id="${esc(c.id)}"${open.has(c.id) ? " open data-kept" : ""}><summary>Progress</summary><pre>${esc((c.log || []).join("\n"))}</pre></details></div>`;
   $("#tasksBody").innerHTML =
-    `<h3>Running</h3>` + (cur || pj ? (cur ? running(cur) : "") + (pj ? running(pj, "projects") : "")
+    `<h3>Running</h3>` + (cur || pj || side ? (cur ? running(cur) : "") + (side ? running(side, "side") : "") + (pj ? running(pj, "projects") : "")
       : `<p class="none">Nothing is running.</p>`) +
     `<h3>Waiting <span class="n">${t.queue.length || ""}</span>${t.queue.length > 1 ? `<button class="linkish" data-task="clear-queue">Clear</button>` : ""}</h3>` +
     (t.queue.length
@@ -3222,7 +3238,7 @@ function renderTasks(t) {
     pre.scrollTop = d.classList.contains("live") && (!was || was.atEnd) ? pre.scrollHeight : was ? was.top : 0;
   }
   if (win) win.scrollTop = winTop;
-  taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
+  taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + (side ? 1 : 0) + t.queue.length);
 }
 // Background readers keep a quiet, separate group and use text nodes for all progress.
 function renderBackgroundTasks(tasks) {
@@ -3277,8 +3293,9 @@ document.addEventListener("toggle", e => {
   const pre = d.querySelector("pre");
   if (pre) pre.scrollTop = pre.scrollHeight;
 }, true);
-// What's running and waiting, in both lanes: Projects' tasks have a lane of their own (/api/status's project_job)
-const jobCount = st => [st.job || {}, st.project_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
+// What's running and waiting, in every lane: Projects' tasks have a lane of their own (/api/status's project_job), and
+// so do small tasks beside the main lane's (side_job, issue #403)
+const jobCount = st => [st.job || {}, st.project_job || {}, st.side_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
 // A job the page was watching has ended: what it changed is read again (both pages' watchers call this)
 function jobEnded(was, j) {
   if ((was === "wishlists" || was === "links") && j.task !== was) loadSets();   // (the wishlists read, or the products a link added, show without a reload)
@@ -6484,7 +6501,7 @@ function wireTasks() {
     else if (act === "force") {   // any task, now: its store browser or sign-in window is closed at once
       if (!await ask("Force stop this task now? Hoard closes its store browser or sign-in window straight away. What " +
                      "finished is kept, and a file part way through resumes next time where it can.", "Force stop", true)) return;
-      const r = await apiPost("/api/force-stop");
+      const r = await apiPost("/api/force-stop", { lane: b.dataset.lane || "" });
       if (!r.ok) toast(r.data.error || "Hoard didn't answer. Try again."); else if (!r.data.ok) toast("Nothing is running.");
     }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
@@ -6499,6 +6516,9 @@ function wireTasks() {
 }
 // Keeps the Tasks count up to date, and brings up a download or sync that was waiting its turn when it starts.
 let lastTask = null;   // a check of the downloads that just ended: the Downloads page shows what it found
+let lastSideTask = null;   // the same, in the side lane (issue #403)
+// The tasks whose end changes what Downloads shows (it reads its products again).
+const DISK_TASKS = ["verify", "add-local", "move", "rescan-local", "remove-local", "delete-files"];
 // Ask before Hoard closes (saying what's still running).
 async function askClose() {
   const d = $("#closeDialog");

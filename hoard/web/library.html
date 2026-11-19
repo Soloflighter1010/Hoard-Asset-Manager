@@ -313,6 +313,8 @@ body.dl-showing main { padding-bottom: calc(var(--dl-all, 0px) + 40px); }   /* t
 .slot:hover .art { transform: translateY(-3px); }
 .slot:focus-visible .art { outline: 3px solid var(--gold); outline-offset: 3px; }
 .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* while a picture loads, its tile is the colour its placeholder would be, not blank (issue #406) */
+.art img.loading, .d-art img.loading { background: hsl(var(--h) var(--ph-s) var(--ph-l)); }
 /* store spine along the bottom edge of every tile */
 .notch { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--c); }
 .badge {

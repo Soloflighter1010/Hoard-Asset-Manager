@@ -14,7 +14,7 @@ def _library_folders(self, path: str, body: dict):
     stay where they are, and leave Hoard's library until it's added again. Not while a job runs, which may be
     using it."""
     srv = self.server
-    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+    if srv.task_running(waiting=True):
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     folders = [str(f) for f in app.libraries.other_folders(srv.cfg)]
     try:
@@ -238,8 +238,8 @@ def get_thumb(self, path, body, query):
     srv = self.server
     u = app.urlparse(self.path)
     got = app.fetch_thumbnail(app.unquote(path[len("/thumb/"):]), srv.lib)
-    if not got:
-        return self._send(404, b"Not found", "text/plain")
+    if not got:   # (never kept by the page: the store may only have been slow, and the page asks again, issue #406)
+        return self._send(404, b"Not found", "text/plain", {"Cache-Control": "no-store"})
     return self._send(200, got[0], got[1], {"Cache-Control": "max-age=86400"})
 
 

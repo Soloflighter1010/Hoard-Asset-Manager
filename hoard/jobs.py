@@ -259,6 +259,54 @@ def project_tasks_file():
 
 
 PROJECTS = "projects"   # Projects' lane: its tasks run on a thread of their own, never waiting behind a sync or download
+SIDE = "side"           # small tasks, beside the main lane's when they don't get in its way (issue #403)
+
+
+def side_tasks_file():
+    """The side lane's finished tasks: its own file, as Projects' are (see Jobs)."""
+    return data_dir() / "side-tasks.json"
+
+
+# Issue #403: the small tasks that can run beside the main lane's (a download, a store read): reading a product's list
+# of files, Local's tasks, deleting downloaded files and checking downloads. Each goes there only while it doesn't
+# clash with what the main lane is running (claims), and waits in the main lane's queue as before when it does.
+SIDE_TASKS = frozenset({"list-files", "add-local", "konoasset", "rescan-local", "remove-local", "delete-files", "verify"})
+EVERY_STORE = "store:*"
+
+
+def claims(spec: dict | None) -> frozenset:
+    """What a task uses, that another running at the same time mustn't (issue #403): each store it reads from or signs
+    in to ("store:<name>", or EVERY_STORE), "downloads" (the store products' download folders and records), "local"
+    (Local's), "library" (the library list) and "browser" (the store browser Hoard runs). One that isn't known here
+    uses all of them."""
+    if not spec:
+        return frozenset()
+    task = spec.get("task")
+    stores = [x for x in (spec.get("stores") or []) if isinstance(x, str)]
+    store = {EVERY_STORE} if not stores or "all" in stores else {f"store:{x}" for x in stores}
+    if task == "list-files":
+        return frozenset(store)
+    if task in ("add-local", "konoasset", "rescan-local", "remove-local"):
+        return frozenset({"local"})
+    if task in ("verify", "delete-files"):
+        return frozenset({"downloads", "local"})
+    if task == "project":
+        return frozenset()   # (Projects' own lane, beside every other, as before)
+    if task in ("download", "check-updates"):
+        return frozenset(store | {"downloads"})
+    if task in ("refresh", "quick-refresh", "login", "logout", "wishlists", "quick-wishlist", "links"):
+        return frozenset(store | {"library"})
+    if task == "install-browser":
+        return frozenset({EVERY_STORE, "browser"})
+    return frozenset(store | {"downloads", "local", "library", "browser"})   # (a sync, the routine check, a move...)
+
+
+def clash(a: frozenset, b: frozenset) -> bool:
+    """Whether two tasks' claims get in each other's way: something both use (every store's taking in any store)."""
+    if a & b:
+        return True
+    return (EVERY_STORE in a and any(x.startswith("store:") for x in b)) or \
+        (EVERY_STORE in b and any(x.startswith("store:") for x in a))
 
 
 PROJECT_WORK = {"auto-update": "Keep {0} up to date", "create": "Make {0}", "change": "Change {0}'s packages", "preload": "Put products in {0}",
@@ -321,7 +369,10 @@ class Jobs:
         self.cfg, self.lib = cfg, lib
         self.scheduler = scheduler or Scheduler(persistent=False)
         self.lane = lane
-        self._prefix = "p" if lane == PROJECTS else ""   # (its jobs' ids, told apart from the main lane's)
+        self._prefix = {PROJECTS: "p", SIDE: "s"}.get(lane, "")   # (its jobs' ids, told apart from the main lane's)
+        self.side: "Jobs | None" = None   # the main lane's side lane, for the small tasks that can run beside it (#403)
+        self.peers: list["Jobs"] = []     # the lanes whose running task one of this lane's mustn't clash with
+        self.gate = threading.Lock()      # (shared with the peers: what's running is looked at, and changed, one at a time)
         self.on_download_done = on_download_done or (lambda: None)
         self.find_choices = None   # how many new products and updates there are to download (the server sets it)
         self.project_runner = None   # Projects' work (hoard/vpm/api.py: the server sets it)
@@ -395,8 +446,8 @@ class Jobs:
         self._publish_queue()
 
     def _history_file(self):
-        """Where this lane's finished tasks are kept (Projects' apart from the rest)."""
-        return project_tasks_file() if self.lane == PROJECTS else tasks_file()
+        """Where this lane's finished tasks are kept (Projects' and the side lane's apart from the rest)."""
+        return project_tasks_file() if self.lane == PROJECTS else side_tasks_file() if self.lane == SIDE else tasks_file()
 
     def _counted(self, **counts: int) -> None:
         """What a task did, in numbers alone, kept with its report for its news (issue #342: "Add to Local: done"
@@ -494,10 +545,35 @@ class Jobs:
                 "local": dict(local) if local else None, "move": dict(move) if move else None,
                 "files": dict(files) if files else None, "chosen": dict(chosen) if chosen else None,
                 "project": dict(project) if project else None, "then_refresh": bool(then_refresh)}
+        # a small task beside what the main lane runs, when it doesn't get in its way (issue #403); one that does
+        # waits its turn here, as every task did before
+        if self.side is not None and task in SIDE_TASKS and not clash(claims(spec), self.running_claims()):
+            return self.side._take(spec, queue)
+        return self._take(spec, queue)
+
+    def running_claims(self) -> frozenset:
+        """What this lane's running task uses (claims), or nothing while none runs. Its runner held for something
+        that isn't a task (the catalog written again, say) counts as using everything."""
+        if self.state.get("running"):
+            return claims(self._spec)
+        return claims({"task": None}) if self.busy.locked() else frozenset()
+
+    def _clashes(self, spec: dict) -> bool:
+        """Whether spec would get in the way of a peer lane's running task (call with the gate held)."""
+        mine = claims(spec)
+        return any(clash(mine, peer.running_claims()) for peer in self.peers)
+
+    def _take(self, spec: dict, queue: bool) -> str | None:
+        """start's work in this lane: spec run now, or queued behind what's waiting (or what it would clash with)."""
+        task, stores, only, keys, scheduled, project = (spec["task"], spec["stores"], spec["only"], spec["keys"],
+                                                         spec["scheduled"], spec["project"])
         with self._qlock:
             if not self._queue and self.busy.acquire(blocking=False):
-                self._launch(spec)
-                return "started"
+                with self.gate:
+                    if not self._clashes(spec):
+                        self._launch(spec)
+                        return "started"
+                self.busy.release()   # (a peer lane's task uses what this one needs: it waits its turn)
             same = [q for q in self._queue if all(q[k] == spec[k] for k in spec)]
             if not queue or same or len(self._queue) >= MAX_QUEUE:
                 return None
@@ -516,6 +592,8 @@ class Jobs:
         if make_way:
             self.make_way()
         self.kick()   # the running job may have finished meanwhile
+        for peer in self.peers:   # (and one of a peer lane's, that waited while this lane's runner was held to look)
+            peer.kick()
         return "queued"
 
     def make_way(self) -> None:
@@ -529,15 +607,25 @@ class Jobs:
         else:
             self._made_way = False
 
-    def kick(self) -> None:
-        """Start the next waiting job, if nothing is running. (Called whenever the runner is let go.)"""
+    def kick(self, peers: bool = True) -> None:
+        """Start the next waiting job, if nothing is running and it doesn't clash with a peer lane's running one.
+        (Called whenever the runner is let go, here or in a peer lane.)"""
+        backed_off = False
         with self._qlock:
             if self.scheduler.closed:
                 return
             if self._queue and self.busy.acquire(blocking=False):
-                spec = self._queue.pop(0)
-                self._publish_queue()
-                self._launch(spec)
+                with self.gate:
+                    if not self._clashes(self._queue[0]):
+                        spec = self._queue.pop(0)
+                        self._publish_queue()
+                        self._launch(spec)
+                        return
+                self.busy.release()   # (it starts when the peer's task that uses the same is done)
+                backed_off = True
+        if backed_off and peers:   # a peer lane that backed off at the same moment, seeing this one's runner held to
+            for peer in self.peers:   # look, tries again now it's let go (once: it never calls back here)
+                peer.kick(peers=False)
 
     def remove(self, job_id: str) -> bool:
         """Take a waiting job off the queue. False when it isn't waiting (it may have started)."""
@@ -668,8 +756,11 @@ class Jobs:
             self._set(message=why, error=why, diagnostic=diagnostic)
         finally:
             self._finish()
-            self._set(running=False, task=None, store=None, scheduled=False, job_id=None, transfer=None)
+            with self.gate:   # (a peer lane looking at what runs here sees it end at once, not part way)
+                self._set(running=False, task=None, store=None, scheduled=False, job_id=None, transfer=None)
             self.busy.release()
+            for peer in self.peers:   # a task of a peer lane that waited for this one to end can start now
+                peer.kick()
             self.kick()
 
     # ---- the Tasks tab: finished jobs
@@ -738,6 +829,11 @@ class Jobs:
             if self.state.get("running") and self._spec and self._spec.get("task") == task:
                 specs.append(self._spec)
         return {k for s in specs for k in (s.get("keys") or ())}
+
+    def waiting_keys_of(self, task: str) -> set[str]:
+        """The products the waiting jobs of a task are for (not the running one's), by key: what's waiting its turn."""
+        with self._qlock:
+            return {k for q in self._queue if q.get("task") == task for k in (q.get("keys") or ())}
 
     def tasks(self) -> dict:
         """The Tasks tab: what's running (with its progress so far), what's waiting, and what finished, newest
@@ -1106,10 +1202,16 @@ class Jobs:
         window = self._sign_in
         if window is not None:
             window.end()
-        stop_install()
-        end_browsers()
+        if self._browsers_are_mine():
+            stop_install()
+            end_browsers()
         cut_connections(self.lane)   # a download or a page read that's waiting on a quiet store ends now too
         return True
+
+    def _browsers_are_mine(self) -> bool:
+        """Whether ending Hoard's store browsers ends only this lane's task: always in the main lane; in the side lane
+        (issue #403) only while the main lane runs nothing, as a download there may be using one."""
+        return self.lane != SIDE or not any(peer.state.get("running") for peer in self.peers)
 
     def _stop_project(self) -> bool:
         """Stop Projects' task at its next step, which puts back what it was changing; False when nothing's running."""
@@ -1134,7 +1236,7 @@ class Jobs:
         """After Stop: a job still running FORCE_AFTER seconds later is waiting on a store browser that stopped
         answering (every other wait Hoard makes has a time limit). End that browser, so the job can finish, and say
         in Hoard's log where it was waiting."""
-        if not self._still(job_id):
+        if not self._still(job_id) or not self._browsers_are_mine():
             return
         print(f"Stop hadn't taken effect after {FORCE_AFTER:.0f} s, so Hoard ended the store's browser. The job was "
               f"at:\n{self.where()}", flush=True)

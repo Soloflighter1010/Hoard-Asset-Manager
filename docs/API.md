@@ -101,6 +101,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/tasks/background` | key | yes | `id: string`, `action: string` | object |
 | POST | `/api/tasks/clear` | key | yes | — | object |
 | POST | `/api/tasks/pictures` | key | yes | `done: number`, `total: number` | object |
+| POST | `/api/unity-picture` | key | yes | `png: string`, `thumb: string` | object |
 | POST | `/api/unlock` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
 | POST | `/api/unlock/touch` | key | yes | `used: boolean` | object |
 | GET | `/api/update` | key | no | — | object |

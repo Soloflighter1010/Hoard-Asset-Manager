@@ -587,10 +587,45 @@ def fetch_thumbnail(key: str, lib: Library) -> tuple[bytes, str] | None:
     return fetch_picture(*found) if found else None
 
 
+def picture_type(data: bytes) -> str | None:
+    """A picture's type from its first bytes (JPEG, PNG, GIF, WebP or AVIF), for an image host that sends one as
+    application/octet-stream (issue #406: those were turned away, and their tiles had no picture). Never SVG."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[4:8] == b"ftyp" and data[8:12] in (b"avif", b"avis"):
+        return "image/avif"
+    return None
+
+
+_FETCHING: dict[str, threading.Lock] = {}   # a picture's address -> held while it's being fetched (issue #406)
+_FETCHING_LOCK = threading.Lock()
+
+
 def fetch_picture(url: str, referer: str, hosts: tuple[str, ...] | None = None) -> tuple[bytes, str] | None:
     """A picture from a store's image host (an item's, or one a set remembers), fetched once with the store's
-    referrer and cached on disk: (its bytes, its type), or None. Given hosts, only from those, redirects included."""
+    referrer and cached on disk: (its bytes, its type), or None. Given hosts, only from those, redirects included.
+    The same picture asked for again while it's being fetched waits for that fetch, and is then read from disk."""
     h = hashlib.sha1(url.encode(), usedforsecurity=False).hexdigest()
+    with _FETCHING_LOCK:
+        one = _FETCHING.setdefault(h, threading.Lock())
+    try:
+        with one:
+            return _fetch_picture(url, referer, hosts, h)
+    finally:
+        with _FETCHING_LOCK:
+            if not one.locked():
+                _FETCHING.pop(h, None)
+
+
+def _fetch_picture(url: str, referer: str, hosts, h: str) -> tuple[bytes, str] | None:
+    """fetch_picture's work, with the picture's lock held: from disk if it's saved there (h: its address's hash), else
+    from its host, then saved."""
     for p in THUMB_DIR.glob(h + ".*"):
         ctype = next((t for t, e in IMAGE_TYPES.items() if e == p.suffix.lstrip(".")), None)
         if ctype:
@@ -602,7 +637,9 @@ def fetch_picture(url: str, referer: str, hosts: tuple[str, ...] | None = None) 
         return None
     data, ctype = got
     if ctype not in IMAGE_TYPES:
-        return None
+        ctype = picture_type(data)   # (what the bytes are, when the host didn't say)
+        if not ctype:
+            return None
     ext = IMAGE_TYPES[ctype]
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
     write_file_safely(THUMB_DIR / f"{h}.{ext}", data)

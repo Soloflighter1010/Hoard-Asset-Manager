@@ -560,6 +560,19 @@ gives both lanes (`current` and `project`, the queues together, the history merg
 it never ends the store browsers or a sign-in window, which are the main lane's. Closing or quitting Hoard waits for,
 or stops, both lanes (`app._lanes`).
 
+Small tasks have a third, `lane=SIDE` (`server.side_jobs`, issue #403): reading a product's list of files, Local's
+tasks, bringing in from KonoAsset, deleting downloaded files and checking downloads (`jobs.SIDE_TASKS`). Each kind of
+task says what it uses (`jobs.claims`: `store:<name>` for each store it reads or signs in to, `downloads`, `local`,
+`library`, `browser`; one not known there uses all of them), and two clash when they share one (`jobs.clash`). The
+main lane's `start` sends a small task to the side lane when it doesn't clash with the main lane's running task, and
+queues it in the main lane as before when it does. The two lanes are each other's `peers` and share one `gate`: each
+launch, in either lane, checks the other's running task under it, and a task ending kicks the other lane, so one that
+waited for it starts. A runner held without a task (the catalog written again, the Local sync folder's look) counts as
+using everything. The side lane's ids start with `s`, its history is `side-tasks.json`, and its Force stop leaves the
+store browsers alone while the main lane runs. `/api/status` adds `side_job`, `/api/tasks` adds `side`. A setting a
+running task reads waits only when that task uses it (`server.setting_uses`, `server.in_use`), and a set's prices are
+read beside whatever runs (`server.start_beside`).
+
 `downloader.with_retries()` wraps each file download (Booth, Gumroad, itch.io, and Jinxxy's click-to-download):
 a failure is tried again `download_retries` times after `RETRY_WAITS`, except for refusals that can't change
 (`worth_retrying`: 4xx answers such as 404/403, `NotLoggedIn`, `UnsafeRequest`, `UnsafePath`). A Stop is still

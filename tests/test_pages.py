@@ -403,8 +403,9 @@ class AccessKey(IsolatedTestCase):
                 page.wait_for_timeout(100)
             self.assertEqual(started, [("list-files", ["booth"], {"keys": [rusk]})])
             self.srv.jobs.listed[rusk] = {"files": ["Rusk (Quest).zip", "Rusk.psd"], "at": time.monotonic(), "read": True}
+            self.assertTrue(asked.locator("#filesAll").is_disabled(), "nothing downloads until its whole list is in (#401)")
             asked.get_by_text("Not downloaded yet: 1 layered image and 1 compressed file.").wait_for()
-            asked.locator("#filesPick").click()
+            self.assertTrue(asked.locator("#filesList").is_visible(), "its list, open (#401)")
             asked.locator("#filesList label", has_text="Rusk.psd").locator("input").uncheck()
             self.assertEqual(asked.locator("#filesAll").inner_text(), "Download this one")
             asked.locator("#filesAll").click()
@@ -1837,6 +1838,8 @@ class CopiesAndActions(IsolatedTestCase):
             asked = page.locator("#filesDialog[open]")
             self.assertIn("What files do you want to save?", asked.inner_text())
             self.assertIn("Looking at what it contains...", asked.inner_text())
+            self.assertIn("You can download once its whole list is in.", asked.inner_text())
+            self.assertTrue(asked.locator("#filesAll").is_disabled(), "nothing downloads until its whole list is in (#401)")
             for _ in range(50):   # its store's page is read first (no file downloaded), as a task of its own
                 if seen:
                     break
@@ -1844,8 +1847,10 @@ class CopiesAndActions(IsolatedTestCase):
             self.assertEqual(seen, [("list-files", ["gumroad"], {"keys": [key]})])
             self.srv.jobs.listed[key] = {"files": files, "at": time.monotonic(), "read": True}
             asked.get_by_text("It contains 2 Unity packages, 1 Substance Painter project, and 1 compressed file.").wait_for()
-            asked.locator("#filesPick").click()
+            self.assertTrue(asked.locator("#filesList").is_visible(), "its whole list, open (#401)")
             self.assertEqual(asked.locator("#filesList input:checked").count(), 4, "all ticked to begin with")
+            self.assertEqual(asked.locator("#filesAll").inner_text(), "Download everything")
+            self.assertFalse(asked.locator("#filesAll").is_disabled())
             asked.locator("#filesList label", has_text="Ghost (Quest).unitypackage").locator("input").uncheck()
             self.assertEqual(asked.locator("#filesAll").inner_text(), "Download these 3")
             asked.locator("#filesAll").click()
