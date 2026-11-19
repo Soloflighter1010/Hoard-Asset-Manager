@@ -137,6 +137,26 @@ def mark(boxes=FULL, line: str = CAVE, size: int | None = None, background: str 
             f'{boxes_svg(boxes, line, indent="  ")}\n</g></svg>\n')
 
 
+FOLDER_BACK, FOLDER_TOP, FOLDER_BOTTOM = "#E8A317", "#FFE48A", "#FFC83D"   # the sync folder's icon (issue #410)
+
+
+def folder(boxes=FULL, size: int | None = None, line: str = CAVE) -> str:
+    """Hoard's sync folder's icon (issue #410), as an SVG file: a folder drawn as Windows 11 draws its own (soft gold,
+    no outline, its front lit from above), so it sits among the others in File Explorer, with the heap in its front's
+    corner, so it's Hoard's at a glance. At 24 px and below the heap is drawn larger, so its colours still show."""
+    dims = f' width="{size}" height="{size}"' if size else ""
+    mark = "translate(25 21) scale(.6)" if size and size <= 24 else "translate(30 27) scale(.46)"
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"{dims}>'
+            '<defs><linearGradient id="hoard-folder-front" x1="0" y1="0" x2="0" y2="1">'
+            f'<stop offset="0" stop-color="{FOLDER_TOP}"/><stop offset="1" stop-color="{FOLDER_BOTTOM}"/></linearGradient></defs>'
+            '<path d="M5 14.5 Q5 10 9.5 10 H23 Q25.5 10 27.2 12 L29.3 14.5 H54.5 Q59 14.5 59 19 V49 Q59 54 54 54 H10 '
+            f'Q5 54 5 49 Z" fill="{FOLDER_BACK}"/>'
+            '<path d="M3.5 26 Q3.5 22 7.5 22 H56.5 Q60.5 22 60.5 26 L58.8 50.5 Q58.4 55 53.5 55 H10.5 Q5.6 55 5.2 50.5 Z" '
+            'fill="url(#hoard-folder-front)"/>'
+            f'<g transform="{mark}">{boxes_svg(boxes, line)}</g>'
+            '</svg>\n')
+
+
 def logo(boxes=FULL, line: str = CAVE, words: str = "#F2EDE4", label: str = "Hoard") -> str:
     """The heap and the wordmark, as an SVG file (226 x 64): the brand's logo, on dark (words light) or on light."""
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 226 64" role="img" aria-label="{escape(label)}">'
