@@ -75,6 +75,8 @@ def _local(self, path: str, body: dict):
             return self._json({"error": f"Couldn't save the picture: {e.strerror or e}."}, 500)
         srv.forget_index()
         return self._json({"ok": True})
+    if path == "/api/local/unitypackage":   # a Unity package of it, made without Unity (issue #382)
+        return self._json(*_unitypackage(srv, found[1]))
     if path == "/api/local/remove" and body.get("confirm") is not True:
         return self._json({"error": "Confirm first."}, 400)
     if not srv.jobs.busy.acquire(blocking=False):   # a job is running: this waits its turn after it
@@ -96,8 +98,71 @@ def _local(self, path: str, body: dict):
     return self._json({"ok": True, **done})
 
 
+def post_api_local_sync(self, path, body, query):
+    """POST /api/local/sync {folder ("" turns it off), look}. Issue #388: the Local sync folder, checked (on this
+    computer, answering, not inside a library folder); look: look at it now. What it holds and skipped, as view()."""
+    from .. import localsync
+    srv = self.server
+    if "folder" in body:
+        value = str(body.get("folder") or "").strip()[:1000]
+        try:
+            srv.cfg["local_sync"] = str(localsync.check_folder(srv.cfg, value)) if value else ""
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.save_settings()
+    if srv.cfg.get("local_sync") and (body.get("look") is True or "folder" in body):
+        if localsync.tick(srv) is None:
+            return self._json({"ok": True, "busy": True, **localsync.view(srv.cfg)})
+    return self._json({"ok": True, **localsync.view(srv.cfg)})
+
+
+MAX_PACKAGE_BYTES = 2 << 30   # a Local item bigger than this isn't packed by Hoard: export it from Unity (issue #382)
+
+
+def _unitypackage(srv, rec: dict) -> tuple[dict, int]:
+    """Issue #382: a .unitypackage of a Local item, made without Unity, in "Unity packages" in the folder for editable
+    copies (named after it, "Name (2)" beside one already there), then shown in its folder. (answer, status)."""
+    from .. import local, makepackage, reach
+    from ..downloader import edits_root, record_folder
+    from ..safety import UnsafePath
+    root = app.root_dir(srv.cfg)
+    if rec.get("location") and reach.is_away(rec["location"]):
+        return {"error": f"Its folder is on a drive that isn't connected now: {rec['location']}"}, 409
+    try:
+        folder = record_folder(local.local_dir(root), rec)
+    except UnsafePath:
+        return {"error": "Its folder can't be used any more."}, 400
+    files = [f["path"] for f in (rec.get("files") or {}).values() if isinstance(f, dict) and isinstance(f.get("path"), str)]
+    if sum(int(f.get("size") or 0) for f in (rec.get("files") or {}).values() if isinstance(f, dict)) > MAX_PACKAGE_BYTES:
+        return {"error": "It's over 2 GB, too big for a package Hoard makes: export it from Unity instead."}, 400
+    if not folder.is_dir() or not files:
+        return {"error": "There's nothing in it to put in a package."}, 400
+    try:
+        out_dir = edits_root(srv.cfg, root) / "Unity packages"
+    except ValueError as e:   # (the folder for editable copies is inside a library: Settings says so)
+        return {"error": str(e)}, 400
+    base = makepackage.folder_name(rec.get("name") or folder.name)
+    out = out_dir / f"{base}.unitypackage"
+    for n in range(2, 1000):
+        if not out.exists():
+            break
+        out = out_dir / f"{base} ({n}).unitypackage"
+    try:
+        done = makepackage.make(folder, files, rec.get("name") or folder.name, out)
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    except OSError as e:
+        return {"error": f"The package couldn't be written: {e.strerror or e}."}, 500
+    try:
+        app.reveal(out)
+    except OSError:
+        pass   # (it's made: the answer says where)
+    return {"ok": True, **done, "new_ids": len(done["new_ids"]),
+            "left_out": [{"path": p, "why": why} for p, why in done["left_out"][:50]]}, 200
+
+
 def post_api_local_add(self, path, body, query):
-    """POST /api/local/add, /api/local/rescan, /api/local/remove, /api/local/preview, /api/local/picture. your own packages (issue #80)"""
+    """POST /api/local/add, /api/local/rescan, /api/local/remove, /api/local/preview, /api/local/unitypackage, /api/local/picture. your own packages (issue #80)"""
     srv = self.server
     u = app.urlparse(self.path)
     return self._local(path, body)
@@ -118,6 +183,8 @@ ROUTES = [
     Route('POST', '/api/local/rescan', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/local/remove', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/local/preview', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
+    Route('POST', '/api/local/sync', post_api_local_sync, changes=True, auth='key', image_key=False, max_body=1048576, request=(('folder', 'string'), ('look', 'boolean')), response='object'),
+    Route('POST', '/api/local/unitypackage', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('folder', 'string'),), response='object'),
     Route('POST', '/api/local/picture', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/konoasset/preview', post_api_konoasset_preview, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),
     Route('POST', '/api/konoasset/bring-in', post_api_konoasset_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),

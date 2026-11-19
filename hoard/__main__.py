@@ -20,6 +20,10 @@ if (not getattr(sys, "frozen", False) and _on_disk and _on_disk.group(1) != __ve
         shutil.rmtree(cache, ignore_errors=True)
     sys.exit(subprocess.call([sys.executable, "-m", "hoard", *sys.argv[1:]], env={**os.environ, "HOARD_RESTARTED": "1"}))
 
+from . import relocate  # noqa: E402
+
+relocate.finish_pending()   # (issue #385: a move of Hoard's own folder asked for last time, before anything opens it)
+
 from .cli import main  # noqa: E402
 
 main()

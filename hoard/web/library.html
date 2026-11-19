@@ -613,6 +613,10 @@ body.selecting .toast { bottom: 96px; }
 }
 /* Hoard's folders: each with what it's for, where it is, and Open */
 .places .librow small + small { margin-top: 1px; }
+/* the Local sync folder's "Not added": each name, and why, as quietly as the hints around it */
+.sync-skipped { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--bone); }
+.sync-skipped li { margin: 2px 0; }
+.sync-skipped .muted { color: var(--dust); }
 .settings .field { display: flex; gap: 6px; }
 .settings .field input, .settings select { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border-radius: 8px; border: 0;
   background: var(--stone); color: var(--bone); box-shadow: inset 0 0 0 1px var(--seam); font: 500 13px var(--body); }
@@ -1519,7 +1523,7 @@ body.less-motion .tour-try::before { animation: none; }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Hoard updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
+  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-sync">Local sync folder</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Hoard updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
   <div class="set-body">
   <p>Changes are saved as you make them.</p>
   <h3 id="part-folders">Downloads folder</h3>
@@ -1541,6 +1545,17 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint" id="libMsg" role="status"></p>
   <h3 id="part-places">Hoard's folders</h3>
   <div id="setPlaces" class="libs places"></div>
+  <h3 id="part-sync">Local sync folder</h3>
+  <p class="hint">A folder on this computer whose contents are added to Local by themselves, each as a tile of its own:
+    each folder in it is listed where it is, each file in it is copied in. A file over 100 MB, or a folder over 1 GB,
+    isn't added. It's off until you choose one; a network drive or NAS can't be one.</p>
+  <div class="field"><input id="syncPath" spellcheck="false" autocomplete="off" aria-label="Local sync folder, as a full path"
+      placeholder="A folder on this computer, as a full path">
+    <button class="ghost sm" id="syncBrowse" data-browse hidden>Browse…</button>
+    <button class="ghost sm" id="syncUse">Use it</button>
+    <button class="ghost sm" id="syncOff">Turn off</button></div>
+  <p class="hint" id="syncMsg" role="status"></p>
+  <div id="syncSkipped"></div>
   <h3 id="part-stores">Stores</h3>
   <div id="setStores"></div>
   <h3>Payhip shops</h3>

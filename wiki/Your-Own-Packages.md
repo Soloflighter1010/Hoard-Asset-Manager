@@ -29,6 +29,24 @@ whose name your system can't take is left out, and the rest are still added.
 
 Copying a large folder takes a while: it runs as a task, so Tasks shows how far it's got.
 
+### The Local sync folder
+
+Choose a folder in [Settings](Settings), under **Local sync folder** (5.2.0), and whatever you put in it is added
+here by itself: a folder in it is listed where it is, a file in it is copied in. A file over 100 MB or a folder
+over 1 GB isn't added (Settings says which). It has to be on a drive of this computer: not a network drive or a NAS.
+Take something out of the sync folder and its tile says so; it's only taken out of Local when you choose **Remove
+from Local**.
+
+### Make a Unity package
+
+**Make a Unity package** (5.2.0), in a Local item's details, makes a `.unitypackage` of it without opening Unity, in
+**Unity packages** in your folder for editable copies, and shows it in its folder. Its files go under
+`Assets/<its name>/`. A file with its own `.meta` beside it (copied out of a Unity project) keeps it, so whatever
+refers to it still finds it; one without gets a new ID, and Unity gives it its usual import settings. Hoard says
+which got a new ID, and what it left out (hidden files, those ending in `~`, and stray `.meta` files). Nothing is
+written into the item's own folder. More in
+[the notes behind it](https://github.com/Soloflighter1010/Hoard-Asset-Manager/blob/main/docs/UNITYPACKAGE-FROM-LOCAL.md).
+
 ### A folder of folders
 
 Already keep your things in folders, say one per creator with a folder per product inside? Under **Folders inside

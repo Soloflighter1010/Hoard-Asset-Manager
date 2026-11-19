@@ -71,7 +71,22 @@ def get_api_folders(self, path, body, query):
     """GET /api/folders. Settings' Hoard's folders: every one it uses, where it is, and whether it's there"""
     srv = self.server
     u = app.urlparse(self.path)
-    return self._json({"folders": self._places()})
+    from .. import paths, relocate
+    folders = self._places()
+    for f in folders:   # (issue #385: which can be changed, and how)
+        f["change"] = ("library" if f["id"] == "downloads" else "later" if f["id"] in relocate.MOVE_LATER
+                       else "now" if f["id"] in relocate.MOVE_NOW else "point" if f["id"] == "vcc"
+                       else "projects" if f["id"] in ("projects", "project-backups") else None)
+    pending = failed = None
+    try:
+        pending = app.json.loads((paths.base_dir() / paths.PENDING).read_text("utf-8"))
+    except (OSError, ValueError):
+        pass
+    try:
+        failed = app.json.loads((paths.base_dir() / "move-failed.json").read_text("utf-8")).get("said")
+    except (OSError, ValueError, AttributeError):
+        pass
+    return self._json({"folders": folders, "pending": pending, "failed": failed})
 
 
 def get_api_update(self, path, body, query):
@@ -223,6 +238,28 @@ def post_api_backup_check(self, path, body, query):
     srv.forget_index()
     srv.start_worker("Updating Unity catalog", app.rebuild_catalog_quietly, srv)
     return self._json({"ok": True, **done, "before": str(before)})
+
+
+def post_api_folders_change(self, path, body, query):
+    """POST /api/folders/change {id, path (none: back where it started), confirm, move}. Issue #385: one of Hoard's
+    folders somewhere else; without confirm, what that would do (relocate.plan), nothing changed."""
+    from .. import paths, relocate
+    srv = self.server
+    pid = str(body.get("id") or "")
+    value = None if body.get("default") is True else str(body.get("path") or "").strip()[:1000]
+    try:
+        if body.get("confirm") is not True:
+            return self._json({"ok": True, "plan": relocate.plan(srv, pid, value)})
+        done = relocate.change(srv, pid, value, move=body.get("move") is True)
+    except ValueError as e:
+        return self._json({"error": str(e)}, 400)
+    except OSError as e:
+        return self._json({"error": f"That folder can't be used ({e.strerror or e})."}, 400)
+    try:
+        (paths.base_dir() / "move-failed.json").unlink()   # (a failed move said once is enough, once you try again)
+    except OSError:
+        pass
+    return self._json({"ok": True, **done})
 
 
 def post_api_folders_open(self, path, body, query):
@@ -425,6 +462,7 @@ ROUTES = [
     Route('POST', '/api/backup/show', post_api_backup_show, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/backup/check', post_api_backup_check, changes=False, auth='key', image_key=False, max_body=83886080, request=(('content', 'string'),), response='object'),
     Route('POST', '/api/backup/restore', post_api_backup_check, changes=True, auth='key', image_key=False, max_body=83886080, request=(('content', 'string'),), response='object'),
+    Route('POST', '/api/folders/change', post_api_folders_change, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'), ('path', 'string'), ('default', 'boolean'), ('confirm', 'boolean'), ('move', 'boolean')), response='object'),
     Route('POST', '/api/folders/open', post_api_folders_open, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),
     Route('POST', '/api/update/check', post_api_update_check, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('POST', '/api/update/install', post_api_update_install, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),

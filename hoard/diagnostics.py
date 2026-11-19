@@ -72,7 +72,8 @@ def support_report_dir() -> Path:
     This is still entirely local: Hoard never uploads the file. Keeping the export in the user's
     Documents/Hoard folder makes the result easy to find and attach to a bug report.
     """
-    return documents_dir() / "Hoard" / "Support Reports"
+    from .paths import placed
+    return placed("reports") or documents_dir() / "Hoard" / "Support Reports"   # (or where you moved it: #385)
 
 
 def incidents_file() -> Path:

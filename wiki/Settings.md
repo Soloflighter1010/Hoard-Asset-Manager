@@ -24,6 +24,26 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   profiles: never share what's in it), and Projects' (the Creator Companion's folder, where new projects are made,
   and project backups). One that isn't there yet says so; Hoard's own are made when you open them. See
   [Where Hoard keeps things](Where-Hoard-Keeps-Things).
+- **Change...** (5.2.0), beside each, puts it somewhere else (typed, or **Browse…**), or **Put it back where it
+  started**. Hoard says what it will do before anything changes:
+  - **Downloads folder:** new downloads go in the new folder; the old one stays as a library folder, so everything
+    in it is still found. Nothing is copied.
+  - **Editable copies, Backups, Support reports:** Hoard uses the new folder from now on, and moves what's there
+    too if you tick that (as a task).
+  - **Hoard's own folder, Logs, Store sign-ins:** they're in use while Hoard runs, so they're moved when Hoard next
+    starts: quit Hoard and open it again. Hoard copies them, checks every file arrived, then deletes the old copy;
+    if it can't, it leaves them where they were and says so here. Never onto a network drive, and store sign-ins
+    only within your own user folder, where only you can read them.
+  - **The Creator Companion's folder:** never moved (it's the Creator Companion's and ALCOM's), only pointed at
+    another Creator Companion folder.
+  - **New projects, Project backups:** the same as Projects' **Unity and folders**.
+  A network drive is refused for Hoard's own folder, its logs and its sign-ins, and warned about for the others.
+- **Local sync folder** (5.2.0): a folder on this computer whose contents are added to Local by themselves, each as
+  a tile of its own: a folder in it is listed where it is, a file in it is copied in. A file over 100 MB, or a
+  folder over 1 GB, isn't added; what wasn't, and why, is listed here. It's off until you choose one, and a network
+  drive or NAS can't be one. Hoard looks at it as it starts and every couple of minutes, reading only what's new.
+  Something taken out of it is marked **Not in the sync folder any more**, and stays in Local (with its tags and
+  its places in sets) until you **Remove from Local**. See [Your own packages](Your-Own-Packages).
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.

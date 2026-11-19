@@ -245,6 +245,7 @@ def public_settings(cfg: dict) -> dict:
         "download_retries": download_retries(cfg),
         "keep_previous": keep_previous(cfg),
         "local_copy": cfg.get("local_copy", True) is not False,
+        "local_sync": str(cfg.get("local_sync") or ""),   # (issue #388)
         "display": display_settings(cfg),
         # the browser each choice would really start on this computer (a chosen one that isn't installed is stood in
         # for by Hoard's own), so Settings can say so rather than leave it to a surprise at sign-in (issue #20)
@@ -547,6 +548,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         from .scheduler import PACKAGES
         self.scheduler.add("project-auto-updates", "Keep projects up to date", lambda context: autoupdate.tick(self),
                            delay=60, every=60, priority=PACKAGES)
+        from . import localsync   # (issue #388: the Local sync folder, as Hoard starts and every few minutes)
+        self.scheduler.add("local-sync", "Look at the Local sync folder", lambda context: localsync.tick(self),
+                           delay=20, every=localsync.EVERY, priority=PACKAGES)
         return self._background_stop
 
     def start_worker(self, name: str, target, *args) -> None:
