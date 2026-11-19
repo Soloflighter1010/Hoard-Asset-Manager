@@ -110,6 +110,9 @@ class FakeWindows(explorer.Windows):
     def registry(self):
         return self.reg
 
+    def long_path(self, path):
+        return str(path).replace("HOARDS~1", "Hoard sync")   # (a short name, written out as Explorer shows it)
+
     def ui_language(self):
         return self.language
 
@@ -195,6 +198,12 @@ class TheMenu(IsolatedTestCase):
         self.assertTrue(all(k.startswith("hkcu\\") for k in win.reg.keys), "this account's, never the whole computer's")
         explorer.unregister(win)
         self.assertEqual([k for k in win.reg.keys if "hoard." in k], [], "every key, and what's under it")
+
+    def test_by_the_name_explorer_shows(self):
+        win = FakeWindows()
+        self.assertTrue(explorer.register(self.EXE, r"D:\HOARDS~1", win))
+        self.assertEqual(win.reg.value(r"Software\Classes\Directory\shell\Hoard.SyncNow", "AppliesTo"),
+                         'System.ItemPathDisplay:="D:\\Hoard sync"', "a short (8.3) name written out long")
 
     def test_a_quote_in_a_path_is_never_written(self):
         win = FakeWindows()
@@ -473,10 +482,12 @@ class InSettings(IsolatedTestCase):
             self.assertEqual(got["explorer"], {"here": True, "on": True, "icon": False, "menu": False})
             self.assertEqual(applied, [], "only a change applies it")
             got = self.post({"folder": str(self.tmp / "Sync")})
-            self.assertEqual(applied[-1], (str((self.tmp / "Sync").resolve()), True, ""))
+            kept = self.srv.cfg["local_sync"]   # (as check_folder keeps it)
+            self.assertEqual(Path(kept).resolve(), (self.tmp / "Sync").resolve())
+            self.assertEqual(applied[-1], (kept, True, ""))
             self.assertTrue(got["explorer"]["icon"])
             got = self.post({"explorer": False})
-            self.assertEqual(applied[-1], (str((self.tmp / "Sync").resolve()), False, str((self.tmp / "Sync").resolve())))
+            self.assertEqual(applied[-1], (kept, False, kept))
             self.assertFalse(got["explorer"]["on"])
         self.assertFalse(config.load_config(self.tmp / "config.json")["explorer"], "kept")
 

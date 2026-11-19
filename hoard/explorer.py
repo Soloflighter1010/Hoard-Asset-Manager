@@ -87,6 +87,14 @@ class Windows:
         import winreg
         return winreg
 
+    def long_path(self, path: str) -> str:
+        """A path with its folders' short (8.3) names, such as RUNNER~1, written out long, as Explorer shows it.
+        Links and junctions aren't followed (Explorer shows the path through them)."""
+        import ctypes
+        buf = ctypes.create_unicode_buffer(32768)
+        n = ctypes.windll.kernel32.GetLongPathNameW(str(path), buf, len(buf))
+        return buf.value if 0 < n < len(buf) else str(path)
+
     def ui_language(self) -> str | None:
         """Windows' own language, as a locale name ("ja-JP"), or None."""
         import ctypes
@@ -223,6 +231,12 @@ def register(exe, sync_folder, win: Windows | None = None, lang: str = "en") -> 
     if not exe or not sync or '"' in exe or '"' in sync:
         return False
     reg = win.registry()
+    try:
+        sync = win.long_path(sync)   # (Explorer matches AppliesTo against the long name it shows)
+    except (OSError, AttributeError, ValueError):
+        pass
+    if '"' in sync:
+        return False
     only_sync = f'System.ItemPathDisplay:="{sync}"'
     try:
         for path, words, arg, sync_only in KEYS.values():
