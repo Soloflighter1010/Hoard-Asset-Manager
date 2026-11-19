@@ -70,10 +70,12 @@ class SideBySide(IsolatedTestCase):
         def add_local(what):
             self.ran.append(("add-local", what.get("name")))
             self.local_gate.wait(20)
-        for lane in (self.srv.jobs, self.srv.side_jobs):
-            self.enterContext(mock.patch.object(lane, "_download", download))
-            self.enterContext(mock.patch.object(lane, "_add_local", add_local))
-            self.enterContext(mock.patch.object(lane, "_verify", lambda *a, **k: self.ran.append(("verify",))))
+        for lane in (self.srv.jobs, self.srv.side_jobs):   # (patched by hand: enterContext is Python 3.11's, CI runs 3.10)
+            for name, stand_in in (("_download", download), ("_add_local", add_local),
+                                   ("_verify", lambda *a, **k: self.ran.append(("verify",)))):
+                patch = mock.patch.object(lane, name, stand_in)
+                patch.start()
+                self.addCleanup(patch.stop)
 
     def post(self, path, body):
         req = urllib.request.Request(f"http://127.0.0.1:{self.srv.server_address[1]}{path}", json.dumps(body).encode(),
