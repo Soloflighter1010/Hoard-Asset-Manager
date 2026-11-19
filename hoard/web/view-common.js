@@ -248,6 +248,7 @@ async function watchJobs() {
       const pill = $("#job");   // what's running, on the shelf
       if (pill) { pill.hidden = !(j.running && j.message); pill.textContent = j.message || ""; }
       if (j.running && (j.sync || j.task === "download" || j.task === "check-updates") && !dlActive) pollDownload();
+      if (st.link) takeLink();   // (a hoard:// link waiting, issue #396)
     }
   } catch (e) { /* not running */ }
   setTimeout(watchJobs, 4000);

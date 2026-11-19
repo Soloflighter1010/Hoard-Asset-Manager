@@ -76,7 +76,10 @@ computer, and contacts nobody. It keeps a list of what you imported through it i
   [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/). A long link from Hoard before 5.0
   holds the set itself, after its `#`, which a browser never sends, so opening one never involves the server. A
   set made on the website itself (`set.html#new`, 5.2.0) is such a long link too: the page packs it in your
-  browser, and nothing about it, or about who made it, is sent anywhere.
+  browser, and nothing about it, or about who made it, is sent anywhere. **Open in Hoard** (5.2.0 beta 11) hands
+  the set's code to Hoard on your computer as a `hoard://` link; Hoard sends it nowhere and doesn't keep the link,
+  and nothing is added until you say so. On Linux, other accounts on the same computer can see the link that
+  started Hoard while it runs, as they can any program's arguments.
 - **A photo site, when you add a photo to a set by its page link** (an Imgur, Gyazo, ImgBB, Postimages, Bluesky,
   Reddit or X page rather than the picture itself): Hoard reads that page once, as a browser would, for the
   picture it shows, and keeps only the picture's link. It reads it from that site only, following no redirect to

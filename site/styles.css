@@ -649,6 +649,7 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   padding: 12px 14px 12px 16px; background: var(--ledge); border: 1px solid var(--seam); border-left: 4px solid #b3261e;
   border-radius: var(--radius); }
 .setviewer .sv > .sv-age-note[hidden] { display: none; }
+.setviewer .sv-buttons [hidden] { display: none; }   /* (Open in Hoard, where a link is too long to hand over) */
 .sv-age-note > span:not(.adult-chip) { flex: 1 1 260px; }
 .sv-get input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 8px 12px; border-radius: 12px;
   border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }

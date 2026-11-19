@@ -138,7 +138,7 @@ class TheFlatpak(IsolatedTestCase):
 
     def test_what_software_centres_show(self):
         desktop = (FLATPAK / f"{APP_ID}.desktop").read_text("utf-8")
-        for line in ("Type=Application", "Name=Hoard", "Exec=hoard", f"Icon={APP_ID}", "Terminal=false"):
+        for line in ("Type=Application", "Name=Hoard", "Exec=hoard %u", f"Icon={APP_ID}", "Terminal=false"):   # (%u: a hoard:// link, #396)
             self.assertIn(line, desktop.splitlines())
         info = ET.parse(FLATPAK / f"{APP_ID}.metainfo.xml").getroot()
         self.assertEqual(info.get("type"), "desktop-application")

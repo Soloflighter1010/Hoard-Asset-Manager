@@ -106,7 +106,7 @@ class TheSite(IsolatedTestCase):
             page = Refs()
             page.feed((site / name).read_text("utf-8"))
             for tag, key, value in page.refs:
-                if re.match(r"(https?|vcc|mailto):", value):
+                if re.match(r"(https?|vcc|mailto|hoard):", value):   # (hoard://: Open in Hoard, issue #396)
                     continue
                 if tag == "base":   # 404.html, shown at any address: its links from the site's root
                     self.assertEqual((name, value), ("404.html", "/"))

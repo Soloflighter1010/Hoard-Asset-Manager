@@ -160,21 +160,33 @@ def refused_page(text: str) -> bool:
     return bool(_REFUSED.search(str(text or "")[:20000]))
 
 
-def from_product_page(link: str, fetch) -> dict:
-    """A product added to a set or wishlist by its link (Add products by link): read from its public page, as anyone
-    can see it (no sign-in is sent). fetch(url, hosts) gives (text, content type) or None, from those hosts only.
-    Booth's item has its JSON beside its page; the other stores' pages say what they sell in their JSON-LD or Open
-    Graph tags. Returns product()'s shape; raises LinkError saying why not."""
-    import json
+def product_page_link(link) -> tuple[str, str]:
+    """(store, its page) for a link to one product's page on a store, as Add products by link takes it (https on
+    the store's own site, without its query); raises LinkError for anything else."""
     from .sets import product_link   # (here: sets uses this module's shapes)
-    store = _store_of(link if isinstance(link, str) else "")
-    url = product_link(store, (link or "").strip()) if store else None
+    link = link if isinstance(link, str) else ""
+    try:
+        store = _store_of(link)
+        url = product_link(store, link.strip()) if store else None
+    except ValueError:   # (an address urlparse can't read: "https://[x", say)
+        store = url = None
     path = urlparse(url or "").path
     is_product = url and (store == "booth" and "/items/" in path or store == "gumroad" and "/l/" in path
                           or store == "jinxxy" and path.count("/") == 2 or store == "payhip" and "/b/" in path
                           or store == "itch" and len(path) > 1)
     if not is_product:
         raise LinkError("not a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io")
+    return store, url
+
+
+def from_product_page(link: str, fetch) -> dict:
+    """A product added to a set or wishlist by its link (Add products by link): read from its public page, as anyone
+    can see it (no sign-in is sent). fetch(url, hosts) gives (text, content type) or None, from those hosts only.
+    Booth's item has its JSON beside its page; the other stores' pages say what they sell in their JSON-LD or Open
+    Graph tags. Returns product()'s shape; raises LinkError saying why not."""
+    import json
+    store, url = product_page_link(link)
+    path = urlparse(url).path
     host = urlparse(url).hostname
     if store == "booth":   # https://booth.pm/en/items/<id>.json: its name, price, shop and pictures
         item = re.search(r"/items/(\d+)", path).group(1)

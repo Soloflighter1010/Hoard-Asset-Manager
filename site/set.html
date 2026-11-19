@@ -73,13 +73,18 @@
         what's in each product are as the store shows them now.</p>
       <section class="sv-get" aria-labelledby="getTitle">
         <h2 id="getTitle">Use it in Hoard</h2>
-        <p>Have <a href="./#download">Hoard</a>? Open <strong>Sets</strong>, choose <strong>Add a shared set</strong>,
-          and paste this page's link. Products you already own
-          show as yours, and the rest show where to buy them. Hoard for Unity can then import the set's products
-          together.</p>
+        <p>Have <a href="./#download">Hoard</a>? <strong>Open in Hoard</strong> asks it to add the set, once you say so.
+          Or open <strong>Sets</strong>, choose <strong>Add a shared set</strong>, and paste this page's link. Products
+          you already own show as yours, and the rest show where to buy them. Hoard for Unity can then import the
+          set's products together.</p>
         <p><input id="setCode" readonly aria-label="This set's link"></p>
-        <p class="sv-buttons"><button class="button primary" id="setCopy" type="button">Copy the link</button>
+        <p class="sv-buttons"><a class="button primary" id="setHoard" href="hoard://">Open in Hoard</a>
+          <button class="button ghost" id="setCopy" type="button">Copy the link</button>
           <span id="setCopied" class="small" aria-live="polite"></span></p>
+        <p class="small" id="setHoardNote">Nothing happens? Open in Hoard needs Hoard 5.2.0 beta 11 or later: copy the
+          link, and choose <strong>Add a shared set</strong> in Hoard.</p>
+        <p class="small" id="setHoardLong" hidden>This set's link is too long for a browser to hand to Hoard: copy it,
+          and choose <strong>Add a shared set</strong> in Hoard.</p>
       </section>
       <p class="small"><a href="#new">Make a set of your own</a>, here, without Hoard.</p>
       <p class="small" id="setWhere">The set is stored in this page's link, after the “#”. Your browser never sends that
@@ -146,8 +151,11 @@
         <h2 id="sharedTitle">Its link</h2>
         <p><input id="makeLink" readonly aria-label="The set's link"></p>
         <p class="sv-buttons"><button class="button primary" id="makeCopy" type="button">Copy the link</button>
+          <a class="button ghost" id="makeHoard" href="hoard://">Open in Hoard</a>
           <a class="button ghost" id="makeOpen" href="set.html">Open it</a>
           <span id="makeCopied" class="small" aria-live="polite"></span></p>
+        <p class="small" id="makeHoardNote" hidden>This set's link is too long for a browser to hand to Hoard: copy it,
+          and choose <strong>Add a shared set</strong> in Hoard.</p>
         <p class="small">The set is in the link itself, after the “#”, which your browser never sends anywhere: nothing
           is stored, and nothing about who made it. In Hoard, choose <strong>Add a shared set</strong> in
           <strong>Sets</strong> and paste the link to keep it there.</p>

@@ -162,6 +162,30 @@ you like, paste products' links on Booth, Gumroad, Jinxxy, Payhip or itch.io, on
   where the set has none.
 - It's a long link, not a short one: Hoard's share server only takes sets from Hoard itself.
 
+### Hoard links
+
+From 5.2.0 beta 11, a `hoard://` link opens Hoard (or brings it to the front, if it's open) at what the link asks
+for. The set viewer's and the set maker's **Open in Hoard** button is one.
+
+| Link | What it opens |
+|---|---|
+| `hoard://set/<code>` | **Add a shared set...**, with the set's code in the box: a short link's `S1.…`, or a long `H1.…` |
+| `hoard://add?link=<a product's page>` | a choice of wishlist (or a new one), then **Add products by link...** with that link in the box |
+| `hoard://product/<store>/<id>` | that product's details in your library, or that it isn't in it |
+| `hoard://` | Hoard, in front |
+
+- **Nothing is added until you say so:** a link only opens what you'd open yourself, with its part already in it.
+  Any web page can try to open a `hoard://` link, so your browser asks you first, and Hoard checks each part of it
+  as it checks a set's code or a store link you paste. A link it doesn't know, or a damaged one, is said and does
+  nothing else. There are no links for files, downloads or settings.
+- **Hoard never writes a link down**, in its log or anywhere else: a short link's key is in it. On Linux, other
+  accounts on the same computer can see the link that started Hoard while it runs, as they can any program's
+  arguments.
+- **Where it works:** the Windows installer, the macOS app, and on Linux the .deb, the Flatpak and the AppImage
+  (which tells your desktop each time it starts) say that Hoard opens `hoard://` links.
+- **A long link:** a browser won't hand another program a link much longer than 2,000 characters, so a set made on
+  the website with many products has no **Open in Hoard**. Copy its link and paste it into **Add a shared set...**.
+
 ## Its picture
 
 **Choose a picture...** in a set takes a picture from your computer for its tile: a PNG, JPEG, WebP or GIF, made at

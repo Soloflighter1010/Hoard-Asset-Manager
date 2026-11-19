@@ -16,6 +16,7 @@
   const PREFIX = "H1.", MAX_CODE = 256 * 1024, MAX_JSON = 1024 * 1024, MAX_ITEMS = 500, MAX_PHOTOS = 8, MAX_MARKS = 30;
   const SHARE_SERVER = "https://hoard-share.furryup.link";
   const SHORT = /^S1\.([0-9A-Za-z]{10})\.([A-Za-z0-9_-]{22})$/;
+  const HOARD_LINK_MAX = 2000;   // the longest hoard:// link a browser hands to Hoard (openInHoard)
 
   // The first element a selector matches.
   const $ = s => document.querySelector(s);
@@ -193,7 +194,7 @@
     return img;
   }
   // Show the set: its name, note, products and where to get each.
-  function show(set, expires) {
+  function show(set, expires, given) {
     document.title = set.name + " · a set shared from Hoard";
     $("#setName").textContent = set.name;
     const stores = [...new Set(set.items.map(i => STORES[i.store]))];
@@ -252,6 +253,9 @@
               : el("span", { class: "sv-none" }, "No store link")));
     }
     $("#setCode").value = location.href;
+    const fits = openInHoard($("#setHoard"), $("#setHoardLong"), given);
+    $("#setHoardNote").hidden = !fits;
+    if (!fits) $("#setCopy").classList.replace("ghost", "primary");   // (too long a link: copying it is the way)
     if (expires) {   // (a short link; a long one, as Hoard shared sets before 5.0, says the set is in it)
       const until = new Date(expires * 1000).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
       $("#setWhere").textContent = `This short link works until ${until}. Its set is kept on Hoard's share server until then, ` +
@@ -263,6 +267,16 @@
       try { await navigator.clipboard.writeText(location.href); $("#setCopied").textContent = "Copied."; }
       catch (e) { $("#setCode").select(); $("#setCopied").textContent = "Copy it from the box."; }
     });
+  }
+  // Open in Hoard (issue #396): a hoard://set/ link with the set's code, which Hoard asks about before it adds the set.
+  // A browser won't hand a longer link than about 2,000 characters to another program (Chromium's limit on Windows),
+  // so a long one says to copy the link instead. Returns whether it fits.
+  function openInHoard(button, note, code) {
+    const link = "hoard://set/" + code, fits = /^[SH]1\.[A-Za-z0-9_.-]+$/.test(code) && link.length <= HOARD_LINK_MAX;
+    button.hidden = !fits;
+    if (fits) button.href = link;
+    if (note) note.hidden = fits;
+    return fits;
   }
   // Say why the set can't be shown.
   function problem(why) {
@@ -366,6 +380,7 @@
     const link = location.origin + location.pathname + "#" + code;
     $("#makeLink").value = link;
     $("#makeOpen").href = "#" + code;
+    openInHoard($("#makeHoard"), $("#makeHoardNote"), code);
     $("#makeShared").hidden = false;
     $("#makeLink").focus();
     $("#makeLink").select();
@@ -396,7 +411,7 @@
     if (typeof DecompressionStream !== "function" || !(window.crypto && crypto.subtle)) {
       problem("This browser is too old to read the set. Open the link in a current Chrome, Edge, Firefox or Safari."); return;
     }
-    const short = code.match(SHORT);
+    const given = code, short = code.match(SHORT);   // (what Open in Hoard gives: a short link's own code)
     if (short) {
       const got = await fromServer(short[1], short[2]);
       if (got.why) { problem(got.why); return; }
@@ -415,7 +430,7 @@
         return;
       }
     }
-    show(set, expires);
+    show(set, expires, given);
   }
   window.addEventListener("hashchange", () => location.reload());
   start();

@@ -372,12 +372,17 @@ def post_api_apprise_test(self, path, body, query):
 
 
 def post_api_show(self, path, body, query):
-    """POST /api/show. a second copy of Hoard, asking this one to come to the front"""
+    """POST /api/show. a second copy of Hoard, asking this one to come to the front; open: a hoard:// link it was
+    started with (issue #396), for this one's page"""
     srv = self.server
     u = app.urlparse(self.path)
     if not app.token_matches(body.get("token"), srv.show_token) or not srv.show_window:
         return self._json({"error": "No."}, 403)
-    srv.show_window()
+    link = body.get("open")
+    if isinstance(link, str) and link:
+        srv.ask_open(link)
+    else:
+        srv.show_window()
     return self._json({"ok": True})
 
 
@@ -469,7 +474,7 @@ ROUTES = [
     Route('POST', '/api/pick', post_api_pick, changes=True, auth='key', image_key=False, max_body=1048576, request=(('kind', 'any'), ('start', 'any')), response='object'),
     Route('POST', '/api/apprise', post_api_apprise, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('forget', 'boolean'), ('id', 'string'), ('urls', 'any')), response='object'),
     Route('POST', '/api/apprise/test', post_api_apprise_test, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),
-    Route('POST', '/api/show', post_api_show, changes=False, auth='instance', image_key=False, max_body=1048576, request=(('token', 'string'),), response='object'),
+    Route('POST', '/api/show', post_api_show, changes=False, auth='instance', image_key=False, max_body=1048576, request=(('open', 'string'), ('token', 'string')), response='object'),
     Route('POST', '/api/quit', post_api_quit, changes=True, auth='key', image_key=False, max_body=1048576, request=(('anyway', 'boolean'),), response='object'),
     Route('POST', '/api/app/close', post_api_app_close, changes=True, auth='key', image_key=False, max_body=1048576, request=(('how', 'string'),), response='object'),
     Route('POST', '/api/setup/done', post_api_setup_done, changes=True, auth='key', image_key=False, max_body=1048576, request=(('done', 'boolean'),), response='object'),
