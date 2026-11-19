@@ -204,14 +204,23 @@ textarea.pnote-box:focus { outline: none; box-shadow: inset 0 0 0 2px var(--gold
 .d-problems li { display: flex; gap: 9px; align-items: flex-start; }
 .d-problems .problem-mark { position: static; flex: none; width: 20px; height: 20px; border-radius: 6px; box-shadow: none; }
 .d-problems .problem-mark svg { width: 13px; height: 13px; }
+/* A file changed after it was downloaded, and nothing else wrong (issue #400): often your own edit, so a calmer blue
+   circle with a pencil, not the error's red. */
+.problem-mark.change-mark { border-radius: 50%; background: #2f6c9e; }
+.d-problems.changed-only { background: rgb(47 108 158 / .14); border-color: rgb(47 108 158 / .4); }
 /* What's in a set's photos (issue #346): each photo with numbered marks where its products are (placed as a share
    of its width and height, so they line up at any size), a card with the product on pointing or focusing, and the
    same numbers in a list beside it. */
 .setphotos-shown { display: grid; gap: 14px; margin: 8px 0; }
-.setphoto { margin: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(200px, 1fr); gap: 14px; align-items: start; }
+.setphoto { margin: 0; display: grid; grid-template-columns: auto minmax(200px, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 760px) { .setphoto { grid-template-columns: 1fr; } }
 .setphoto-pic { position: relative; display: block; line-height: 0; border-radius: 10px; overflow: visible; }
 .setphoto-pic > img { width: 100%; height: auto; border-radius: 10px; background: var(--wash, rgb(127 127 127 / .12)); min-height: 60px; }
+/* On the set's page each photo is a small preview (issue #404): the picture box is as wide as the picture, so its marks
+   stay where they belong; Show larger shows it full width again. Mark products on it... (.pm-edit) is still large. */
+.setphoto:not(.big) .setphoto-pic:not(.pm-edit) { display: inline-block; justify-self: start; }
+.setphoto:not(.big) .setphoto-pic:not(.pm-edit) > img { width: auto; max-width: min(100%, 360px); max-height: 240px; }
+.setphoto.big { grid-template-columns: minmax(0, 1.4fr) minmax(200px, 1fr); }
 .pmark { position: absolute; transform: translate(-50%, -50%); z-index: 2; width: 26px; height: 26px; display: grid; place-items: center;
   border-radius: 999px; border: 2px solid #fff; background: var(--gold); color: var(--gold-ink); font: 800 12.5px/1 var(--body);
   box-shadow: 0 1px 5px rgba(0, 0, 0, .45); text-decoration: none; cursor: pointer; padding: 0; }

@@ -609,7 +609,7 @@ class AccessKey(IsolatedTestCase):
         self.assertEqual(gone.locator("button").all_inner_texts(), ["Download again", "Forget it"],
                          "missing: nothing there to show in its folder (issue #259)")
         row = dialog.locator(".check-list li", has_text="rusk.zip")
-        self.assertIn("Changed since Hoard downloaded it", row.inner_text())
+        self.assertIn("Changed after Hoard downloaded it", row.inner_text())
         self.assertEqual(row.locator("button").all_inner_texts(), ["Download again", "Keep it as it is", "Show in folder"])
         self.assertIn("Rusk", dialog.locator(".check-list h3").inner_text())
         row.get_by_role("button", name="Keep it as it is").click()
@@ -3500,6 +3500,38 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         page.clock.run_for(20000)
         self.assertTrue(page.locator("#dlPanel").is_visible(), "something went wrong: it stays")
         self.assertEqual(page.locator("#dlTitle").inner_text(), "Finished, with problems")
+        page.close()
+
+    def test_a_running_download_tucks_itself_away(self):
+        """Issue #402: a running download's panel tucks itself away after 10 seconds, so its Stop isn't always under
+        your hand; the bar's note brings it back, and so does a problem when it ends. One that ends well while tucked
+        away stays so."""
+        page = self.browser.new_page(viewport={"width": 1100, "height": 700})
+        page.clock.install()
+        goto(page, self.srv.entry_url())
+        page.locator(".slot", has_text="Mochi").wait_for()
+        page.evaluate("dlActive = true")   # (as a download Hoard started)
+        running = "showDownload({ running: true, message: 'Downloading', log: [] })"
+        page.evaluate(running)
+        self.assertTrue(page.locator("#dlPanel").is_visible(), "shown as it starts")
+        page.clock.run_for(5000)
+        page.evaluate(running)
+        self.assertTrue(page.locator("#dlPanel").is_visible())
+        page.clock.run_for(6000)
+        page.evaluate(running)
+        self.assertTrue(page.locator("#dlPanel").is_hidden(), "tucked away after 10 seconds")
+        page.evaluate(running)
+        self.assertTrue(page.locator("#dlPanel").is_hidden(), "and it stays so while it runs")
+        page.evaluate("document.querySelector('#job').hidden = false")
+        page.click("#job")
+        self.assertTrue(page.locator("#dlPanel").is_visible(), "the bar brings it back")
+        self.assertTrue(page.locator("#tasksWin").is_hidden(), "not Tasks")
+        page.clock.run_for(11000)
+        page.evaluate(running)
+        self.assertTrue(page.locator("#dlPanel").is_hidden(), "and it tucks away again")
+        page.evaluate("showDownload({ running: false, error: 'The store refused', message: 'Couldn\\'t finish', log: [] })")
+        self.assertTrue(page.locator("#dlPanel").is_visible(), "a problem is always said")
+        self.assertEqual(page.locator("#dlTitle").inner_text(), "Couldn't finish")
         page.close()
 
     def test_the_save_for_hoard_bookmark_is_offered(self):

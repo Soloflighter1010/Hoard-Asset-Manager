@@ -539,7 +539,7 @@ function renderIntegrity() {
     : tr("Checked {0}:", ago(v.checked));
   const found = !v.checked || !v.complete ? "" : (v.changed || v.missing || v.data_changed)
     ? ` <strong class="warn">${esc(v.summary)}</strong> ` + (v.listed ? `<button class="linkish" data-check-open>${esc(tr("See what it found"))}</button>`
-      : esc(tr("Which files is in Tasks."))) : ` ${esc(v.summary)}`;
+      : esc(tr("Tasks lists which files."))) : ` ${esc(v.summary)}`;
   el.innerHTML = `${esc(when)}${found} ${esc(every ? tr("Hoard checks {0}, in its routine check (Settings).", tr(every)) : tr("Hoard checks only when you ask (Settings)."))} ` +
     `<button class="linkish" id="checkNow">Check now</button>`;
 }
@@ -565,7 +565,7 @@ function drawCheck() {
   $("#checkList").innerHTML = !CHECK.list.length ? `<p class="none">${esc(tr("Nothing left to deal with."))}</p>`
     : [...by.values()].map(xs => `<h3><span class="dot ${esc(xs[0][0].store)}"></span><span translate="no">${esc(xs[0][0].name)}</span></h3><ul>` +
       xs.map(([x, i]) => `<li><span class="cf"><b translate="no">${esc(x.path)}</b><span class="warn">${esc(x.kind === "changed"
-          ? tr("Changed since Hoard downloaded it") : tr("Missing"))}</span></span><span class="acts">` +
+          ? tr("Changed after Hoard downloaded it") : tr("Missing"))}</span></span><span class="acts">` +
         `<button class="ghost sm" data-check="again" data-i="${i}">${esc(tr("Download again"))}</button>` +
         (x.kind === "changed" ? `<button class="ghost sm" data-check="keep" data-i="${i}">${esc(tr("Keep it as it is"))}</button>`
           : `<button class="ghost sm" data-check="forget" data-i="${i}">${esc(tr("Forget it"))}</button>`) +

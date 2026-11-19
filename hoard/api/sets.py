@@ -74,6 +74,36 @@ def _sets_view(self) -> dict:
     return {"sets": out, "hidden_left_out": left_out, "viewer": app.sets.VIEWER, "photo_hosts": list(app.sets.PHOTO_HOSTS)}
 
 
+def _save_set_json(cfg: dict, doc: dict) -> dict:
+    """An exported set, written by Hoard itself (issue #405: Hoard's window turns away a page's downloads, so the page
+    can't save it), as a file named after the set in Exported sets, in the folder for editable copies, beside Unity
+    packages, never over another file; then shown there. Raises ValueError, in words for the page."""
+    import json
+    from ..downloader import edits_root
+    from ..makepackage import folder_name
+    from ..safety import write_file_safely
+    out_dir = edits_root(cfg, app.root_dir(cfg)) / "Exported sets"   # (ValueError: it's inside a library folder)
+    base = folder_name(str((doc.get("set") or {}).get("name") or "Set"))
+    out = out_dir / f"{base}.json"
+    for n in range(2, 1000):
+        if not out.exists():
+            break
+        out = out_dir / f"{base} ({n}).json"
+    else:
+        if out.exists():
+            raise ValueError("There are too many exports of this set in Exported sets: move some out, and try again.")
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        write_file_safely(out, json.dumps(doc, ensure_ascii=False, indent=2), root=out_dir)
+    except OSError as e:
+        raise ValueError(f"The file couldn't be written: {e.strerror or e}.") from None
+    try:
+        app.reveal(out)
+    except OSError:
+        pass   # (it's written: the answer says where)
+    return {"saved": out.name, "where": str(out_dir)}
+
+
 def _add_links(self, sid: str, links):
     """Products added to a wishlist by their store links (at most 30): each one's public page read
     (wishlists.from_product_page), what was added and what wasn't, and why. A set is made from what's in your
@@ -328,7 +358,8 @@ def post_api_sets(self, path, body, query):
             store = app.sets.SetStore()
             if body["action"] == "export-json":
                 hidden = app.MarkStore().keys("hidden") if not self._unlocked() else frozenset()
-                return self._json({"ok": True, "file": store.export_json(str(body.get("id", "")), hidden)})
+                doc = store.export_json(str(body.get("id", "")), hidden)
+                return self._json({"ok": True, "file": doc, **_save_set_json(srv.cfg, doc)})
             data = store.import_json(body.get("file"))
         except ValueError as e:
             return self._json({"error": str(e)}, 400)

@@ -1733,7 +1733,7 @@ function renderLibs(list) {   // every library folder, the downloads folder firs
 const PLACES = {
   downloads: ["Downloads folder", "Where downloaded files are saved."],
   library: ["", "A library folder on another drive."],
-  edits: ["Editable copies", "Editable copies of downloads, and what Look inside takes out (in Extracted)."],
+  edits: ["Editable copies", "Copies of downloads you can change, and the files Look inside takes out (in its Extracted folder)."],
   data: ["Hoard's own folder", "Your settings, library list, tags, sets, and what Hoard keeps track of."],
   logs: ["Logs", "A log of each time Hoard runs, and Projects' logs."],
   backups: ["Backups", "The backups you make (Backup, below)."],
@@ -1801,22 +1801,22 @@ async function changePlace(id) {
   const p = PLACES_SEEN.find(x => x.id === id);
   if (!p) return;
   const name = tr((PLACES[id] || [id])[0]);
-  const res = await askForm({ icon: "folder", title: tr("Change where {0} is", name), ok: tr("Next"), keep: [p.path],
-    blocks: [{ type: "text", text: tr("Now: {0}", p.path) },
+  const res = await askForm({ icon: "folder", title: tr("Choose a new folder for {0}", name), ok: tr("Next"), keep: [p.path],
+    blocks: [{ type: "text", text: tr("It's in {0} now.", p.path) },
              { type: "field", id: "placeTo", label: tr("New folder"), browse: true, placeholder: p.path, max: 1000 },
-             { type: "check", id: "placeDefault", label: tr("Put it back where it started") }] });
+             { type: "check", id: "placeDefault", label: tr("Use the folder Hoard started with instead") }] });
   if (!res.ok) return;
   const body = res.fields.placeDefault ? { id, default: true } : { id, path: res.fields.placeTo.trim() };
   if (!body.default && !body.path) return;
   const r = await apiPost("/api/folders/change", body);
   if (!r.ok) { toast(r.data.error || tr("That folder can't be used.")); return; }
   const plan = r.data.plan, how = {
-    library: tr("New downloads go in the new folder. The old one stays as a library folder, so everything in it is still found: nothing is copied."),
-    "move-later": tr("It's in use while Hoard runs, so it's moved when Hoard next starts: copied, checked, then deleted where it was. Quit Hoard and open it again to move it."),
-    "move-now": tr("Hoard uses the new folder from now on."),
-    point: tr("Hoard and Projects use the Creator Companion folder you chose. Nothing is moved: it's the Creator Companion's and ALCOM's."),
-    projects: tr("Projects uses the new folder from now on. What's in the old one stays where it is.") }[plan.how];
-  const res2 = await askForm({ icon: "folder", title: tr("Change where {0} is?", name), ok: tr("Change it"), keep: [plan.from, plan.to],
+    library: tr("New downloads will go in the new folder. Nothing is copied: the old folder stays on Hoard's list of library folders, so everything in it is still found."),
+    "move-later": tr("Hoard is using this folder now, so it moves it the next time Hoard starts. It copies everything, checks the copy, then deletes the old folder. To move it now, quit Hoard and open it again."),
+    "move-now": tr("Hoard will use the new folder from now on."),
+    point: tr("Hoard and Projects will use the Creator Companion folder you chose. Nothing is moved, because that folder belongs to the Creator Companion and ALCOM."),
+    projects: tr("Projects will use the new folder from now on. What's in the old one stays where it is.") }[plan.how];
+  const res2 = await askForm({ icon: "folder", title: tr("Use this folder for {0}?", name), ok: tr("Use this folder"), keep: [plan.from, plan.to],
     blocks: [{ type: "text", text: tr("From: {0}", plan.from) }, { type: "text", text: tr("To: {0}", plan.to) },
              { type: "text", text: how },
              ...(plan.how === "move-later" && plan.files ? [{ type: "text", tone: "hint", text: tr("{0} files, {1}.", plan.files.toLocaleString(), sizeText(plan.bytes)) }] : []),
@@ -1827,7 +1827,7 @@ async function changePlace(id) {
   const done = await apiPost("/api/folders/change", { ...body, confirm: true, move: !!res2.fields.placeMove });
   if (!done.ok) { toast(done.data.error || tr("That folder can't be used.")); return; }
   toast(done.data.restart ? tr("Quit Hoard and open it again to move it.")
-    : done.data.moving ? tr("Changed. What was in it is being moved (see Tasks).") : tr("Changed."));
+    : done.data.moving ? tr("Done. Hoard is moving what was in the old folder (see Tasks).") : tr("Done. Hoard uses the new folder now."));
   loadPlaces();
 }
 // Send a change to the library folders, then show them as they are. null when it didn't work.
@@ -5650,6 +5650,7 @@ function setPhotosHTML(s) {
         (m.row.url ? `<a class="linkish" href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer" data-pmark="${esc(m.row.key)}">${esc(tr("Open"))}</a>` : "") +
         `</li>`).join("") + `</ol>` : `<p class="none">${esc(tr("Nothing marked on it yet."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="markphoto" data-n="${n}">${esc(tr(marks.length ? "Change what's marked..." : "Mark products on it..."))}</button>` +
+      `<button class="ghost sm" data-setx="photobig">${esc(tr("Show larger"))}</button>` +
       `<a class="linkish" href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(new URL(u).hostname)}</a></div>` +
       `</figcaption></figure>`;
   }).join("") + `</div>`;
@@ -6153,11 +6154,10 @@ async function setAct(e) {
     input.click(); return;
   }
   if (act === "exportjson") {
+    // Hoard writes the file itself, and shows it (issue #405: its window turns away a page's downloads)
     const r = await apiPost("/api/sets", { action: "export-json", id: state.set });
-    if (!r.ok) { toast(r.data.error); return; }
-    const url = URL.createObjectURL(new Blob([JSON.stringify(r.data.file, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a"); link.href = url; link.download = "hoard-set.json";
-    document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (!r.ok) { toast(tr(r.data.error || "The set couldn't be exported.")); return; }
+    toast(tr("Exported as {0}, in {1}.", r.data.saved, r.data.where));
     return;
   }
   if (act === "back") { showSet(""); return; }
@@ -6198,6 +6198,11 @@ async function setAct(e) {
   }
   if (act === "addlinks") return addByLinks(s);
   if (act === "markphoto") return markPhoto(s, +b.dataset.n);
+  if (act === "photobig") {   // a photo's small preview, full width, and back (issue #404)
+    const big = b.closest(".setphoto").classList.toggle("big");
+    b.textContent = tr(big ? "Show smaller" : "Show larger");
+    return;
+  }
   if (act === "showphotos") { PHOTOS_SHOWN.add(s.id); return showSet(s.id); }   // (someone else's set's photos: asked for)
   if (act === "project") return newProjectWithSet(s);
   if (act === "share") shareSet(s);
@@ -6485,7 +6490,8 @@ function wireTasks() {
     tasksShown = ""; loadTasks();
   });
   const pill = $("#job");
-  if (pill) pill.addEventListener("click", () => openTasks(true));
+  // (a download's panel that tucked itself away comes back from here: issue #402; anything else, Tasks)
+  if (pill) pill.addEventListener("click", () => { if (dlActive && dlTucked) untuckDownload(); else openTasks(true); });
   watchJobs();
 }
 // Keeps the Tasks count up to date, and brings up a download or sync that was waiting its turn when it starts.

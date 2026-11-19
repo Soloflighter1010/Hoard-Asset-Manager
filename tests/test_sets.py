@@ -711,13 +711,34 @@ class Tab(IsolatedTestCase):
             return {"status": e.code, **json.loads(e.read() or b"{}")}
 
     def test_json_file_api_round_trip(self):
+        from hoard import server
         made = self.api("/api/sets", {"action": "create", "name": "From file", "items": [RUSK]})["made"]
-        exported = self.api("/api/sets", {"action": "export-json", "id": made})
+        shown = []
+        with mock.patch.object(server, "reveal", shown.append):
+            exported = self.api("/api/sets", {"action": "export-json", "id": made})
+            again = self.api("/api/sets", {"action": "export-json", "id": made})
         self.assertTrue(exported["ok"])
+        # issue #405: Hoard writes the file itself (its window turns a page's downloads away), shows it, and never
+        # writes over one
+        from hoard.downloader import edits_root
+        where = edits_root(self.srv.cfg, Path(self.srv.cfg["root"])) / "Exported sets"
+        self.assertEqual((exported["saved"], again["saved"], exported["where"]), ("From file.json", "From file (2).json", str(where)))
+        self.assertEqual(json.loads((where / "From file.json").read_text("utf-8")), exported["file"])
+        self.assertEqual(shown, [where / "From file.json", where / "From file (2).json"])
+        from_disk = self.api("/api/sets", {"action": "import-json", "file": json.loads((where / "From file (2).json").read_text("utf-8"))})
+        self.assertTrue(from_disk["ok"])
         imported = self.api("/api/sets", {"action": "import-json", "file": exported["file"]})
         self.assertTrue(imported["ok"])
         self.assertNotEqual(imported["made"], made)
         self.assertEqual(self.api("/api/sets", {"action": "import-json", "file": {}})["status"], 400)
+        # with every name taken, it's refused, and nothing is written over
+        for n in range(3, 1000):
+            (where / f"From file ({n}).json").write_text("mine", "utf-8")
+        with mock.patch.object(server, "reveal", shown.append):
+            full = self.api("/api/sets", {"action": "export-json", "id": made})
+        self.assertEqual(full["status"], 400)
+        self.assertIn("too many exports", full["error"])
+        self.assertEqual((where / "From file (999).json").read_text("utf-8"), "mine")
 
     def test_a_picture_follows_its_product_when_one_is_taken_out(self):
         """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved

@@ -70,8 +70,10 @@ while something is running, and it's **queued**, and starts when its turn comes.
 finished, newest first, each with how it went (**Done**, **Partly done** when a store couldn't be read or a file
 couldn't be downloaded, **Failed** or **Stopped**), how long it took, any problems and its full progress. A sync
 that can't read any of your stores (offline, say, or signed out of them all) fails and says which, without trying
-to download. The download panel closes by itself a few seconds after a job that went well; one with problems
-stays until you close it. Take a
+to download. While a download runs, its panel tucks itself away after 10 seconds (5.2.0 beta 11), so **Stop** isn't
+always under your hand: what's downloading stays in the bar, and choosing it there brings the panel back. The panel
+closes by itself a few seconds after a job that went well; one with problems comes back, and stays until you close
+it. Take a
 waiting job off the queue with its **×**, or **Clear** them all; **Stop** stops a download or sync within a few
 seconds. **Force stop** ends any task at once (a refresh or a sign-in too): it closes the store's browser, the
 sign-in window or the browser download straight away, and keeps what finished. What's running also shows beside the store tabs; click it to open Tasks. The list of finished tasks is
@@ -229,7 +231,7 @@ ETag, date and size, in `.part-info`), and only resumes when the store says it's
   folder** shows one file there, and **Copy path** copies the folder's location.
 - A file that's been moved or deleted since it was downloaded shows as missing. **Rescan** (in the **Menu**) checks the
   folder again, say after you've tidied it yourself. A product with something wrong (files missing or changed, a
-  download that didn't finish, a Local folder that's gone) has a red mark on its tile, and the **Problems** view
+  download that didn't finish, a Local folder that's gone) has a mark on its tile, and the **Problems** view
   (5.2, while there are any) lists them: see [Something wrong with a product](Library#something-wrong-with-a-product).
 - **Look inside** (from 4.0, beside each `.unitypackage` and `.zip`) shows what it holds without importing
   anything, and takes nothing out until you choose **Extract** (below). A Unity package's files are listed in their folders (each opens as you choose it), with

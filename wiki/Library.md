@@ -119,8 +119,9 @@ see [Sets](Sets#sharing-a-set).
 
 ## Something wrong with a product
 
-From 5.2, a product with something wrong has a red mark on its tile, here and in Downloads, and saying what on hover
-and to a screen reader:
+From 5.2, a product with something wrong has a mark on its tile, here and in Downloads, saying what on hover and to
+a screen reader. It's a red triangle for an error, and a blue circle with a pencil when all that's different is a file
+changed after it was downloaded, which is often your own edit (5.2.0 beta 11):
 
 - files of it are missing on disk (moved or deleted since they were downloaded);
 - the last [check of your downloads](Downloads#checking-your-downloads) found files of it changed;

@@ -26,7 +26,7 @@ function problemWords(list) {
   return (list || []).map(p => p.kind === "folder" ? tr("Its folder isn't there any more")
     : p.kind === "away" ? tr("Its drive isn't connected")
     : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk" : "{0} files are missing on disk", p.n)
-    : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded" : "{0} files changed since they were downloaded", p.n)
+    : p.kind === "changed" ? tr(p.n === 1 ? "1 file was changed after it was downloaded" : "{0} files were changed after they were downloaded", p.n)
     : p.kind === "failed" ? tr("Its last download didn't finish") : "").filter(Boolean);
 }
 // ...and in its details, with what to do about it.
@@ -35,15 +35,18 @@ function problemAdvice(p) {
     : p.kind === "away" ? tr("Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.")
     : p.kind === "missing" ? tr(p.n === 1 ? "1 file is missing on disk. Download it again, or deal with it in Check downloads."
                                           : "{0} files are missing on disk. Download it again, or deal with them in Check downloads.", p.n)
-    : p.kind === "changed" ? tr(p.n === 1 ? "1 file changed since it was downloaded. Check downloads keeps it as it is or downloads it again."
-                                          : "{0} files changed since they were downloaded. Check downloads keeps them as they are or downloads them again.", p.n)
+    : p.kind === "changed" ? tr(p.n === 1 ? "1 file was changed after it was downloaded, by you or by another program. In Check downloads, choose Keep it as it is, or Download again for the original."
+                                          : "{0} files were changed after they were downloaded, by you or by another program. In Check downloads, choose Keep it as it is, or Download again for the originals.", p.n)
     : tr("Its last download didn't finish ({0}). Download it again.", p.why || tr("no reason given"));
 }
-// The error mark on a product's tile.
-function problemMark(words) {
-  return productElement("span", { class: "problem-mark", title: words.join(". ") + ".", "aria-hidden": "true" },
-    productIcon("M8 2.2 14.3 13.3H1.7zM8 6.4v3.4M8 11.6v.1"));
+// The mark on a product's tile for what's wrong with it: a red one for an error, and a blue one with a pencil when all
+// that's different is a file changed after it was downloaded, which is often your own edit (issue #400).
+function problemMark(words, changed = false) {
+  return productElement("span", { class: `problem-mark${changed ? " change-mark" : ""}`, title: words.join(". ") + ".", "aria-hidden": "true" },
+    productIcon(changed ? "M10.6 2.8 13.2 5.4 6 12.6 2.8 13.2 3.4 10zM9.2 4.2 11.8 6.8" : "M8 2.2 14.3 13.3H1.7zM8 6.4v3.4M8 11.6v.1"));
 }
+// Whether everything wrong with a product is a changed file (its mark is the change mark, not the error's).
+const onlyChanged = list => !!(list && list.length) && list.every(p => p.kind === "changed");
 // Who says a product is for adults, in words: you, its store, or its tags and name.
 const ADULT_SAYS = { you: "For adults: you marked it.", store: "For adults: its store says so.", tags: "For adults: its tags or name say so." };
 // The only bridge for existing escaped HTML sections. Do not pass raw product data or new templates here.
@@ -83,7 +86,7 @@ function productTile(a, model) {
   const art = productElement("span", { class: "art" }, productPicture(a, model.src, model.type),
     productNotch(model.store, model.others), productElement("i", { class: "tick", "aria-hidden": "true" }));
   if (a.adult) art.append(adultMark());
-  if (wrong.length) art.append(problemMark(wrong));
+  if (wrong.length) art.append(problemMark(wrong, onlyChanged(a.problems)));
   if (a.your_note) art.append(productElement("span", { class: "note-mark", title: tr("Has a note"), "aria-hidden": "true" },
     productIcon("M3.5 2.5h6.2l2.8 2.8v8.2h-9zM6 7.5h4M6 10h4")));
   if (model.downloaded) art.append(productElement("span", { class: "ondisk-mark", title: tr("Downloaded"), "aria-hidden": "true" },
@@ -136,8 +139,9 @@ function renderProductDetail(a, model, sections, focus = true) {
   if (a.adult) grown.append(productElement("span", { class: "adult-chip", translate: "no" }, "18+"), " ", tr(ADULT_SAYS[a.adult_from] || ADULT_SAYS.tags), " ");
   if (a.tag_key) grown.append(productElement("button", { class: "linkish", type: "button", "data-adult-mark": a.adult ? "not_adult" : "adult", "data-key": a.tag_key },
     tr(a.adult ? "It isn't for adults" : "Mark as 18+")));
-  const wrong = productElement("ul", { class: "d-problems" });   // what's wrong with it, and what to do (issue #334)
-  for (const p of a.problems || []) wrong.append(productElement("li", {}, problemMark([]), problemAdvice(p)));
+  // what's wrong with it, and what to do (issue #334), each with its own mark (#400)
+  const wrong = productElement("ul", { class: `d-problems${onlyChanged(a.problems) ? " changed-only" : ""}` });
+  for (const p of a.problems || []) wrong.append(productElement("li", {}, problemMark([], p.kind === "changed"), problemAdvice(p)));
   keepTileInPlace(document.querySelector('#grid .slot[aria-current="true"]'), () => {
     detail.replaceChildren(productElement("button", { class: "x", "data-act": "close", "aria-label": tr("Close details") }, "×"),
       productElement("div", { class: `d-art ${model.store}${a.adult ? " adult" : ""}`, title: a.adult && blursAdult() ? tr("Blurred: for adults. Click to show it.") : null },

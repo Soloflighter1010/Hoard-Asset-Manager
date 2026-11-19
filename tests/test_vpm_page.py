@@ -630,6 +630,12 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertIn("com.vrchat.base", dialog.inner_text())
         dialog.locator("button[value=no]").click()
         self.assertTrue((self.tmp / "Unity" / "Rusk Avatar" / "Packages" / "com.vrchat.base").is_dir())
+        # each package keeps its own version when the page's data is read again (issue #398: they all said Hoard's)
+        base = page.locator(".pj-pk tr", has_text="VRChat SDK - Base").locator("[data-pj=versions]")
+        self.assertEqual(base.inner_text().split()[0], "3.7.0")
+        page.evaluate("() => load()")
+        self.assertEqual(base.inner_text().split()[0], "3.7.0")
+        self.assertRegex(page.locator(".barmenu-ver").text_content(), r"^Hoard \d", "the Menu's version line is Hoard's")
         # another version of a package (#160): every one that works in its Unity, the one installed chosen to start with
         self.assertEqual(avatars.locator("[data-pj=versions]").count(), 0, "one that isn't installed has none to change")
         page.locator(".pj-pk tr", has_text="VRChat SDK - Base").locator("[data-pj=versions]").click()
