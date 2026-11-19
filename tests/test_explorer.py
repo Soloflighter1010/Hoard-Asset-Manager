@@ -283,6 +283,23 @@ class WhatTheMenuAsks(IsolatedTestCase):
         self.assertEqual(explorer.add(self.srv, str(self.tmp / "gone.png")), {"said": "gone", "name": "gone.png"})
         self.assertEqual(self.started, [])
 
+    def test_only_what_add_to_local_takes(self):
+        downloaded = self.root / "Booth" / "Kitsu" / "Rusk" / "rusk.zip"
+        downloaded.parent.mkdir(parents=True)
+        downloaded.write_bytes(b"zip")
+        got = explorer.add(self.srv, str(downloaded))
+        self.assertEqual(got["said"], "refused", "already in Hoard's downloads folder")
+        self.assertIn("downloads folder", got["why"])
+        if hasattr(os, "symlink"):
+            try:
+                (self.tmp / "link.png").symlink_to(downloaded)
+            except OSError:
+                pass
+            else:
+                self.assertEqual(explorer.add(self.srv, str(self.tmp / "link.png"))["said"], "refused", "a link")
+        self.assertEqual(list(self.sync.iterdir()), [], "nothing copied")
+        self.assertEqual(self.started, [])
+
     def test_one_too_big_is_said(self):
         big = self.tmp / "big.bin"
         with open(big, "wb") as f:   # (sparse: as big as it says, without the disk)

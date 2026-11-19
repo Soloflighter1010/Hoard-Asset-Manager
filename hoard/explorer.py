@@ -378,7 +378,8 @@ def _copy_new(source: Path, folder: Path) -> Path:
 def add(srv, path: str) -> dict:
     """Add to Hoard (the menu's): a file is copied into the sync folder (never over one there: "name (2)"), which Hoard
     then looks at; a folder (or a file, when there's no sync folder) is added to Local as Add to Local does, a folder
-    listed where it is. What Hoard says about it (do's codes)."""
+    listed where it is. Either way only what Add to Local takes (local.check_source: not a link, nothing in Hoard's
+    downloads folder). What Hoard says about it (do's codes)."""
     from . import local, localsync
     from .config import root_dir
     p = Path(path)
@@ -389,17 +390,17 @@ def add(srv, path: str) -> dict:
     folder = Path(sync) if sync else None
     if folder and _inside(p, folder):
         return {"said": "there", "name": name}
-    if folder and folder.is_dir() and p.is_file() and not p.is_symlink():
-        if p.stat().st_size > localsync.MAX_FILE:
-            return {"said": "big", "name": name, "mb": localsync.MAX_FILE // (1024 * 1024)}
-        out = _copy_new(p, folder)
-        srv.start_worker("Look at the Local sync folder", localsync.tick, srv)
-        return {"said": "copied", "name": out.name}
     copy = not p.is_dir()
     try:
         local.check_source(root_dir(srv.cfg), str(p), copy)
     except ValueError as e:
         return {"said": "refused", "name": name, "why": str(e)}
+    if folder and folder.is_dir() and p.is_file():
+        if p.stat().st_size > localsync.MAX_FILE:
+            return {"said": "big", "name": name, "mb": localsync.MAX_FILE // (1024 * 1024)}
+        out = _copy_new(p, folder)
+        srv.start_worker("Look at the Local sync folder", localsync.tick, srv)
+        return {"said": "copied", "name": out.name}
     started = srv.jobs.start("add-local", [], local={"path": str(p), "name": "", "creator": "", "note": "",
                                                       "copy": copy, "depth": 0})
     return {"said": {"started": "adding", "queued": "queued"}.get(started, "waiting"), "name": name}
