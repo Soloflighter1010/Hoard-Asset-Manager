@@ -21,7 +21,7 @@ function invalidateAppData(url, options = {}) {
       if (Object.keys(body).length === 1 && body.ui) return;
     } catch (error) { /* An unfamiliar body must invalidate the cache. */ }
   }
-  if (/^\/api\/(?:tasks\/pictures|tasks\/background|touch|ui|loading|support)(?:\/|$)/.test(url)) return;
+  if (/^\/api\/(?:tasks\/pictures|tasks\/background|touch|ui|loading|support|link)(?:\/|$)/.test(url)) return;
   APP.revision++; APP.dirty = true;
 }
 // Fetch one complete projection with the authenticated transport and consistent, safe error messages.

@@ -56,6 +56,7 @@ class Parse(IsolatedTestCase):
                      "hoard://add?link=https://booth.pm/ja/items/1&link=https://booth.pm/ja/items/2",
                      "hoard://add?link=http://booth.pm/ja/items/1", "hoard://add?link=https://evil.example/items/1",
                      "hoard://add?link=https://gumroad.com/d/abcdef", "hoard://add?link=file:///etc/passwd",
+                     "hoard://add?link=https://[x/", "hoard://add?link=https://booth.pm:99999/items/1",
                      "hoard://add/more?link=https://booth.pm/ja/items/1",
                      "hoard://product/booth", "hoard://product/local/x", "hoard://product/steam/1",
                      "hoard://product/booth/1%2F..%2F..", "hoard://product/booth/" + "1" * 201,
@@ -81,7 +82,7 @@ class Parse(IsolatedTestCase):
     def test_add_products_by_link_checks_the_same(self):
         """The link an add link names is checked by the same function as a link pasted in Add products by link."""
         self.assertEqual(wishlists.product_page_link("https://booth.pm/ja/items/123"), ("booth", "https://booth.pm/ja/items/123"))
-        for bad in ("https://booth.pm/", "https://example.com/items/1", None):
+        for bad in ("https://booth.pm/", "https://example.com/items/1", None, "https://[x/items/1", "https://[::1"):
             with self.assertRaises(wishlists.LinkError):
                 wishlists.product_page_link(bad)
 
@@ -151,6 +152,12 @@ class Running(IsolatedTestCase):
         self.assertIn("doesn't know", said["error"])
         self.assertNotIn("reset", said["error"], "the link's own words aren't said back")
 
+    def test_a_link_that_breaks_the_reader_is_said_too(self):
+        """Whatever goes wrong reading a link, Hoard carries on and says it couldn't be opened."""
+        with mock.patch.object(links, "parse", side_effect=RuntimeError("boom")):
+            self.srv.ask_open("hoard://product/booth/1")
+        self.assertEqual(self.srv.take_open(), {"do": "error", "error": "That Hoard link couldn't be opened."})
+
     def test_hoard_alone_only_comes_forward(self):
         self.srv.ask_open("hoard://")
         self.assertEqual(self.shown, [True])
@@ -198,6 +205,10 @@ class Running(IsolatedTestCase):
         with mock.patch.object(cli, "run_app", return_value=0) as run, self.assertRaises(SystemExit):
             cli.main([])
         self.assertIsNone(run.call_args.kwargs["link"])
+        with mock.patch.object(cli, "cmd_sync") as sync, mock.patch("sys.stderr"), self.assertRaises(SystemExit) as said:
+            cli.main(["--open", "hoard://product/booth/1", "sync"])   # (not quietly let go: said)
+        self.assertEqual(said.exception.code, 2)
+        sync.assert_not_called()
 
 
 class Page(IsolatedTestCase):
@@ -261,9 +272,12 @@ class Page(IsolatedTestCase):
             # a product in the library: its details
             self.srv.ask_open("hoard://product/booth/1")
             page.locator("#detail", has_text="Rusk").wait_for(timeout=10000)
-            # one that isn't, and a link Hoard won't open: said
+            # one that isn't, and a link Hoard won't open: said; the details that were open close, and the address
+            # names no product
             self.srv.ask_open("hoard://product/booth/999")
             page.get_by_text("That product isn't in your library.").wait_for(timeout=10000)
+            self.assertFalse(page.evaluate("document.querySelector('#detail').classList.contains('open')"))
+            self.assertNotIn("open=", page.evaluate("location.hash"))
             self.srv.ask_open("hoard://download/everything")
             page.get_by_text("Hoard doesn't know what that link asks for.").wait_for(timeout=10000)
             self.assertEqual(errors, [])
@@ -325,10 +339,12 @@ class Website(IsolatedTestCase):
             self.viewer(page, code())
             self.assertEqual(page.get_attribute("#setHoard", "href"), "hoard://set/" + code())
             self.assertTrue(page.locator("#setHoardNote").is_visible(), "what to do with an older Hoard")
+            self.assertTrue(page.locator("#setHoardLong").is_hidden())
             page = browser.new_page()
             self.viewer(page, big)
             self.assertTrue(page.locator("#setHoard").is_hidden(), "too long for a browser to hand to Hoard")
             self.assertTrue(page.locator("#setHoardNote").is_hidden())
+            self.assertTrue(page.locator("#setHoardLong").is_visible(), "and it says so")
             self.assertIn("primary", page.get_attribute("#setCopy", "class"), "copying the link is the way")
             browser.close()
 

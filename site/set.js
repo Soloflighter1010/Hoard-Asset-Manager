@@ -253,7 +253,7 @@
               : el("span", { class: "sv-none" }, "No store link")));
     }
     $("#setCode").value = location.href;
-    const fits = openInHoard($("#setHoard"), null, given);
+    const fits = openInHoard($("#setHoard"), $("#setHoardLong"), given);
     $("#setHoardNote").hidden = !fits;
     if (!fits) $("#setCopy").classList.replace("ghost", "primary");   // (too long a link: copying it is the way)
     if (expires) {   // (a short link; a long one, as Hoard shared sets before 5.0, says the set is in it)

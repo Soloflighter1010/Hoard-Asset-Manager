@@ -6426,7 +6426,9 @@ async function addFromLink(link) {
 // hoard://product: its details in the library, or that it isn't there (a hidden one too, while Hidden is locked).
 async function openFromLink(key) {
   await navigateApp("/#open=" + encodeURIComponent(key));
-  if (!hasProduct(key)) toast(tr("That product isn't in your library."));
+  if (hasProduct(key)) return;
+  closeDetail();   // (nothing to show: no details stay open, and no open= stays in the address)
+  toast(tr("That product isn't in your library."));
 }
 // Open What's new.
 function openNews() {

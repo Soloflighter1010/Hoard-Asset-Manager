@@ -253,6 +253,8 @@ def main(argv=None) -> None:
     if len(argv) == 1 and links.is_link(argv[0]):   # (a desktop entry's %u: a hoard:// link alone, issue #396)
         argv = [f"--open={argv[0]}"]
     args = ap.parse_args(argv)
+    if args.open and args.cmd:
+        ap.error("--open opens a link in Hoard's window: give it without a command")
     cfg = load_config(args.config)
     try:
         if args.cmd is None and (args.no_open or args.host not in ("127.0.0.1", "localhost", "::1") or args.port):

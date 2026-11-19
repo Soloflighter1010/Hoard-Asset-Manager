@@ -114,7 +114,10 @@ class Shell:
             if not self._started:
                 self._early.append(event)
                 return
-            self._handle(kind, event)
+            try:
+                self._handle(kind, event)
+            except Exception as e:   # (one event that goes wrong never ends what the shell says next)
+                print(f"The shell's {kind!r} event couldn't be handled: {type(e).__name__}: {e}", flush=True)
 
     def _handle(self, kind, event: dict) -> None:
         """One event, once Hoard is ready for it."""
@@ -239,6 +242,8 @@ def open_in_shell(srv, shell: Shell) -> None:
     shell.on_gone = leaving.set
     shell.on_link = srv.ask_open
     shell.listen()
+    if shell.gone.is_set():   # (it went while Hoard was starting, before on_gone was this: Hoard quits now)
+        leaving.set()
     shell.start()
     shell.send(do="open", url=srv.entry_url())
     leaving.wait()

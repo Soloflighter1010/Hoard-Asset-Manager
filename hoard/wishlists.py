@@ -165,8 +165,11 @@ def product_page_link(link) -> tuple[str, str]:
     the store's own site, without its query); raises LinkError for anything else."""
     from .sets import product_link   # (here: sets uses this module's shapes)
     link = link if isinstance(link, str) else ""
-    store = _store_of(link)
-    url = product_link(store, link.strip()) if store else None
+    try:
+        store = _store_of(link)
+        url = product_link(store, link.strip()) if store else None
+    except ValueError:   # (an address urlparse can't read: "https://[x", say)
+        store = url = None
     path = urlparse(url or "").path
     is_product = url and (store == "booth" and "/items/" in path or store == "gumroad" and "/l/" in path
                           or store == "jinxxy" and path.count("/") == 2 or store == "payhip" and "/b/" in path

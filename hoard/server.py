@@ -585,6 +585,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
             asked = links.parse(url)
         except links.Refused as e:
             asked = {"do": "error", "error": str(e)}
+        except Exception as e:   # (never one that stops Hoard: it's only a link someone else made)
+            print(f"A hoard:// link couldn't be read: {type(e).__name__}", flush=True)
+            asked = {"do": "error", "error": "That Hoard link couldn't be opened."}
         if asked["do"] != "show":
             with self._link_lock:
                 self._link = asked

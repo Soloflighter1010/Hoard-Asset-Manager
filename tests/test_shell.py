@@ -9,6 +9,7 @@ import sys
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from hoard import shell  # noqa: E402
@@ -153,6 +154,28 @@ class Protocol(IsolatedTestCase):
         t.join(5)
         self.assertEqual(srv.links, ["hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv", "hoard://open",
                                      "hoard://product/booth/123"])
+
+    def test_the_shell_gone_while_hoard_starts(self):
+        """The shell ending before Hoard is up (killed, say) still ends Hoard, once it's up: it never waits for a
+        window that's gone."""
+        self.shell.listen(hold=True)
+        os.close(self.to_hoard_w)
+        self.assertTrue(self.shell.gone.wait(5))
+        t = threading.Thread(target=shell.open_in_shell, args=(_Server(), self.shell), daemon=True)
+        t.start()
+        t.join(5)
+        self.assertFalse(t.is_alive())
+
+    def test_an_event_that_goes_wrong_ends_nothing(self):
+        srv = _Server()
+        srv.ask_open = mock.Mock(side_effect=[ValueError("a bad link"), None])
+        t = self.run_hoard(srv)
+        self.event(event="open", url="hoard://add?link=https://[x/")
+        self.event(event="open", url="hoard://product/booth/1")
+        self.event(event="closing", quitting=True)
+        self.assertEqual(self.message(), {"do": "hide"}, "still listening")
+        t.join(5)
+        self.assertEqual(srv.ask_open.call_count, 2)
 
     def test_a_hello_without_a_link(self):
         self.shell.listen(hold=True)
