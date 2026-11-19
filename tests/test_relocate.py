@@ -175,3 +175,6 @@ class OnTheNetwork(IsolatedTestCase):
             self.assertFalse(paths.on_network("/mnt/nas/local/Hoard"), "the closest mount decides")
             self.assertFalse(paths.on_network("/home/me/Hoard"))
             self.assertFalse(paths.on_network("/mnt/nasty"), "not a mount it's only named like")
+            import pathlib
+            with mock.patch.object(paths, "Path", pathlib.PureWindowsPath):   # (as on the Windows test runner)
+                self.assertTrue(paths.on_network("/mnt/nas/Hoard"), "its / kept, not made \\")

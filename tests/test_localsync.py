@@ -51,6 +51,32 @@ class SyncFolder(IsolatedTestCase):
         self.assertEqual(len(self.records()), 2, "nothing added twice")
         self.assertEqual(len(localsync.view(self.cfg)["skipped"]), 2)
 
+    def test_a_listings_stale_times_dont_make_it_measure_again(self):
+        """On Windows a folder's listing keeps its entries' times as they were, and NTFS brings them up to date late:
+        what was too big is judged by the thing itself, so it isn't measured again for a listing's stale copy."""
+        real = localsync.os.scandir
+        ticks = iter(range(10 ** 6))
+
+        class Stale:
+            """A listing's entry whose stat() is a different, made-up time each time it's asked."""
+            def __init__(self, e):
+                self._e, self.name, self.path = e, e.name, e.path
+
+            def stat(self, follow_symlinks=True):
+                st = self._e.stat(follow_symlinks=follow_symlinks)
+                return type("S", (), {"st_mtime_ns": next(ticks), "st_size": st.st_size, "st_mode": st.st_mode})()
+
+            def __getattr__(self, name):
+                return getattr(self._e, name)
+
+        def listing(p):
+            """The sync folder's own listing, stale; any other (os.walk's, in measuring) as it is."""
+            return [Stale(e) for e in real(p)] if str(p) == str(self.sync) else real(p)
+        with mock.patch.object(localsync.os, "scandir", listing):
+            localsync.scan(self.cfg, self.root)
+            with mock.patch.object(localsync, "_folder_size", side_effect=AssertionError("measured again")):
+                self.assertEqual(len(localsync.scan(self.cfg, self.root)["skipped"]), 2)
+
     def test_taken_out_is_marked_not_removed(self):
         localsync.scan(self.cfg, self.root)
         shutil.rmtree(self.sync / "Hoodie")
