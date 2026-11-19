@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-for-Unity (English 0560caabd7af). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-for-Unity (English 0e23ec6d1cc0). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-for-Unity">English</a> · <b>日本語</b> · <a href="Hoard-for-Unity-사용법">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 **Hoard for Unity** は、HoardがダウンロードしたものをUnityエディターに持ち込みます。アセットを探し回ったり、もう一度ダウンロードしたりせずにインポートできます。(Hoard for Unityの画面は英語です。このページでは、ボタンなどの名前を英語のまま書いています。)
@@ -52,7 +52,7 @@ Hoardのアプリがプロジェクトに入れた商品([プロジェクト](�
 - Hoardが2.5.0からダウンロードするitch.ioのアセットには、パッケージの0.1.3以降が必要です。それより前のものは、知っているストアしか表示しないので、それらを除きます。
 - 自分のパッケージ(Hoardの **ローカル**、3.0から)とHoardの **プロジェクト** には、0.4.0以降とHoard 3.0が必要です。
 - Hoardのほかのライブラリフォルダー(ほかのドライブ、3.0から)にある商品には、0.5.0以降が必要です。それより古いバージョンは、ほかのフォルダーに商品があると、カタログが新しいHoardのものだと表示します。
-- アニメーションする画像とクレジットの一覧には、0.3.0以降が必要です。HoardがWebPやAVIFで保存した画像はUnityでは表示できないため、Hoard 5.2.0ベータ11からは、ダウンロードで初めて表示したときにPNGかJPEGのコピーをその横に保存し、ウィンドウはそれを表示します。それまでは、商品の中に画像があればそれを代わりに使います。
+- アニメーションする画像とクレジットの一覧には、0.3.0以降が必要です。HoardがWebPやAVIFで保存した画像はUnityでは表示できないため、Hoard 5.2.0ベータ11からは、ダウンロードで初めて表示したときにPNGかJPEGのコピーをその横に保存し、ウィンドウはHoardのライブラリを次に読み込んだとき(開いたとき、または **Reload**)にそれを表示します。それまでは、商品の中に画像があればそれを代わりに使います。
 - 長い一覧で画像がちらついたり空白になったりしないようにするには、0.11.1以降が必要です。画像は表示する大きさで保持され、画面に出ている画像は手放されず、読み込めなかった画像は少したってからもう一度読み込まれます。
 
 ## インストール

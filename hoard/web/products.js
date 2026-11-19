@@ -58,7 +58,7 @@ function legacyFragment(html) {
 // A product's safe local picture, falling back to its initials without interpreting its name as markup.
 // Pictures that have loaded, by address, kept to be put back when the grid is drawn again (issue #406): a new <img>
 // for each redraw went blank until it was decoded again, so every refresh flickered. At most PICS_KEPT of them.
-const PICS = new Map(), PICS_KEPT = 600;
+const PICS = new Map(), PICS_KEPT = 300;   // (a store's picture can be large: about two batches of tiles)
 // The waits before a picture that didn't load is asked for again (Hoard fetches each from its store the first time,
 // and a store can be slow or say no for a moment): its placeholder shows meanwhile, and the picture once it comes.
 const PIC_RETRIES = [1500, 6000];

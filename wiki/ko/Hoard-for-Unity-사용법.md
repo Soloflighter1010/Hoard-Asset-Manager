@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-for-Unity (English 0560caabd7af). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-for-Unity (English 0e23ec6d1cc0). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-for-Unity">English</a> · <a href="Hoard-for-Unityの使い方">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 **Hoard for Unity**는 Hoard가 다운로드한 것을 Unity 에디터로 가져와요. 에셋을 찾아 헤매거나 다시 다운로드하지 않고 임포트할 수 있어요. (Hoard for Unity의 화면은 영어예요. 이 페이지에서는 버튼 등의 이름을 영어 그대로 적었어요.)
@@ -52,7 +52,7 @@ Hoard 앱이 프로젝트에 넣은 상품([프로젝트](프로젝트#프로젝
 - Hoard가 2.5.0부터 다운로드하는 itch.io 에셋에는 패키지 0.1.3 이상이 필요해요. 그 전 버전은 아는 스토어만 보여 줘서 그것들을 빼요.
 - 내 패키지(Hoard의 **로컬**, 3.0부터)와 Hoard의 **프로젝트**에는 0.4.0 이상과 Hoard 3.0이 필요해요.
 - Hoard의 다른 라이브러리 폴더(다른 드라이브, 3.0부터)에 있는 상품에는 0.5.0 이상이 필요해요. 더 오래된 버전은 다른 폴더에 상품이 있으면 카탈로그가 더 새로운 Hoard의 것이라고 표시해요.
-- 움직이는 이미지와 크레딧 목록에는 0.3.0 이상이 필요해요. Hoard가 WebP나 AVIF로 저장한 이미지는 Unity에서 보여 줄 수 없어서, Hoard 5.2.0 베타 11부터는 다운로드에서 처음 보여 줄 때 PNG나 JPEG 사본을 그 옆에 저장하고, 창은 그걸 보여 줘요. 그전까지는 상품 안에 이미지가 있으면 대신 그걸 써요.
+- 움직이는 이미지와 크레딧 목록에는 0.3.0 이상이 필요해요. Hoard가 WebP나 AVIF로 저장한 이미지는 Unity에서 보여 줄 수 없어서, Hoard 5.2.0 베타 11부터는 다운로드에서 처음 보여 줄 때 PNG나 JPEG 사본을 그 옆에 저장하고, 창은 Hoard의 라이브러리를 다음에 읽을 때(열 때, 또는 **Reload**) 그걸 보여 줘요. 그전까지는 상품 안에 이미지가 있으면 대신 그걸 써요.
 - 긴 목록에서 이미지가 깜빡이거나 비지 않으려면 0.11.1 이상이 필요해요. 이미지는 그려지는 크기로 보관되고, 화면에 보이는 이미지는 놓지 않으며, 읽지 못한 이미지는 조금 뒤에 다시 읽어요.
 
 ## 설치
