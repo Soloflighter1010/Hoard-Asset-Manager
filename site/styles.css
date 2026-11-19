@@ -654,6 +654,35 @@ h2.count { font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: .005em; }
   border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 .9rem var(--body); }
 .sv-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 @media (max-width: 460px) { .sv-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+/* Make a set here (issue #379): its name, note and links, then each product with its name and creator to type */
+.sv-form { display: grid; gap: 8px; max-width: 760px; }
+.sv-form label { font-weight: 700; margin-top: 8px; }
+.sv-form input:not([type=checkbox]), .sv-form textarea { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid var(--seam); background: var(--cave); color: var(--bone); font: 500 1rem var(--body); }
+.sv-form textarea { resize: vertical; }
+.sv-form :is(input, textarea):focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.sv-form .sv-buttons, .sv-form > .small { margin: 4px 0; }
+.sv-make-items { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 10px; }
+.sv-make-items:empty { display: none; }
+.sv-make-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--ledge);
+  border: 1px solid var(--seam); border-radius: var(--radius); }
+.sv-make-item .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.sv-make-fields { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px 8px; }
+.sv-make-fields a { grid-column: 1 / -1; color: var(--dust); overflow-wrap: anywhere; }
+.sv-form .sv-make-item label.sv-check { margin: 0; font-weight: 600; }
+.sv-check { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* What Hoard does that a web page can't: the maker's limits, said as what you'd get with Hoard */
+.sv-hoard { max-width: 760px; box-sizing: border-box; margin: 24px 0 8px; padding: 18px 22px; background: var(--ledge);
+  border: 1px solid var(--seam); border-left: 4px solid var(--gold); border-radius: var(--radius); }
+.setviewer .sv-hoard h2 { margin: 0 0 .4em; }
+.sv-hoard ul { margin: .4em 0 .8em; padding-left: 1.2em; display: grid; gap: 6px; }
+.sv-hoard .small { margin: 8px 0 0; }
+.sv-nudge { max-width: 760px; margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--ledge);
+  border: 1px solid var(--seam); }
+@media (max-width: 600px) {
+  .sv-make-item { flex-wrap: wrap; }
+  .sv-make-fields { flex-basis: calc(100% - 22px); grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Press kit (press.html): words to copy, the facts, the logo on its own backgrounds, colours, and screenshots */
 .press h3 { margin: 1.2em 0 .4em; font-size: 1rem; color: var(--dust); }

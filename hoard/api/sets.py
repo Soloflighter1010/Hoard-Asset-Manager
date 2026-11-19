@@ -86,10 +86,13 @@ def _add_links(self, sid: str, links):
         return self._json({"error": "That set isn't there anymore."}, 404)
     if found.get("kind") != "wishlist":
         return self._json({"error": "Products are added by link to wishlists. A set is made from what's in your library."}, 400)
-    got, said = [], []
+    got, said, refused = [], [], []
     for link in [str(x)[:2000] for x in links[:30]]:
         try:
             p = wishlists.from_product_page(link, app.read_store_page)
+        except wishlists.PageRefused:   # (issue #387: read in Hoard's browser for the store instead, as a task)
+            refused.append(link)
+            continue
         except wishlists.LinkError as e:
             said.append({"link": link[:200], "error": str(e)})
             continue
@@ -100,8 +103,14 @@ def _add_links(self, sid: str, links):
             app.sets.SetStore().add_products(sid, got)
     except ValueError as e:
         return self._json({"error": str(e)}, 400)
+    job = None
+    if refused:
+        job = self.server.jobs.start("links", list(wishlists.BROWSER_READ[:1]), local={"set": sid, "links": refused})
+        said += [{"link": x[:200], **({"browser": True} if job else
+                                      {"error": "Hoard has too much waiting to read it in its browser now: try again later"})}
+                 for x in refused]
     self.server.start_worker("Updating Unity catalog", app.rebuild_catalog_quietly, self.server)
-    return self._json({"ok": True, "links": said})
+    return self._json({"ok": True, "links": said, **({"job": job} if job else {})})
 
 
 def _set_code(self, sid: str):
@@ -391,16 +400,19 @@ def _read_prices(sid: str, todo: list) -> None:
     import time as _time
     from .. import wishlists
     from ..common import pause
-    prices = {}
+    prices, details = {}, {}
     try:
         for n, (key, page) in enumerate(todo):
             if n:
                 pause(1.0)
             try:
-                prices[key] = wishlists.from_product_page(page, app.read_store_page).get("price")
+                got = wishlists.from_product_page(page, app.read_store_page)
             except Exception as e:   # (one page that can't be read is left without a price)
                 print(f"Couldn't read the price of a product in a set: {type(e).__name__}", flush=True)
-        app.sets.SetStore().put_prices(sid, prices, _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()))
+                continue
+            prices[key] = got.get("price")
+            details[key] = {"thumbnail": got.get("thumbnail"), "creator": got.get("creator")}   # (what it lacks: #379)
+        app.sets.SetStore().put_prices(sid, prices, _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()), details)
     finally:
         _pricing.discard(sid)
 

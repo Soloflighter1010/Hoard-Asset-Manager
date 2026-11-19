@@ -1054,9 +1054,71 @@ class Tab(IsolatedTestCase):
             self.assertIn("damaged", page.locator("#setProblemWhy").inner_text())
             browser.close()
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_making_a_set_on_the_website(self):
+        """Issue #379: the set page makes a set without Hoard: products by their links (what each link says, the
+        name and creator typed), packed into the link as Hoard packs one; the viewer and Hoard both open it, and
+        nothing is sent anywhere."""
+        from playwright.sync_api import sync_playwright
+        site = Path(__file__).resolve().parent.parent / "site"
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            asked, errors = [], []
+            page.on("pageerror", lambda e: errors.append(str(e)))
 
+            def serve(route):
+                url = route.request.url
+                asked.append(url)
+                if url.startswith("https://hoard.furryup.link/"):
+                    name = url.split("hoard.furryup.link/", 1)[1].split("#")[0].split("?")[0]
+                    kind = {"html": "text/html", "js": "text/javascript", "css": "text/css"}.get(name.rsplit(".", 1)[-1], "application/octet-stream")
+                    return route.fulfill(path=str(site / name), content_type=kind) if (site / name).is_file() else route.fulfill(status=404)
+                return route.fulfill(status=404)
+            page.route("**/*", serve)
+            page.goto("https://hoard.furryup.link/set.html#new")
+            page.locator("#new").wait_for()
+            self.assertTrue(page.locator("#makeShare").is_disabled(), "nothing to share yet")
+            self.assertEqual(page.locator("#makeWithHoard a.primary").get_attribute("href"), "./#download",
+                             "what a web page can't do, and Hoard can, with its download")
+            page.fill("#makeName", "Winter <outfit>")
+            page.fill("#makeNote", "For snowy worlds")
+            page.fill("#makeLinks", "https://booth.pm/ja/items/4242\nhttps://mochi.gumroad.com/l/snow-cap?ref=x\n"
+                                    "https://kitsu.itch.io/tail-pack\nhttps://payhip.com/b/ADn4p\nhttps://jinxxy.com/Kitsu/fluffy-tail\n"
+                                    "https://example.com/items/1\nhttps://booth.pm/ja/items/4242")
+            page.click("#makeAdd")
+            self.assertEqual(page.locator("#makeItems li").count(), 5, "each product once; the link that isn't one stays in the box")
+            self.assertEqual(page.input_value("#makeLinks"), "https://example.com/items/1")
+            self.assertIn("1 link isn't a product's page", page.inner_text("#makeSaid"))
+            names = [page.input_value(f"#makeItems li:nth-child({n}) input[aria-label^=Name]") for n in range(1, 6)]
+            self.assertEqual(names, ["Booth item 4242", "snow cap", "tail pack", "Payhip product ADn4p", "fluffy tail"])
+            page.fill("#makeItems li:nth-child(1) input[aria-label^=Name]", "Fox Hoodie")
+            page.fill("#makeItems li:nth-child(1) input[aria-label^=Creator]", "Mochi Works")
+            page.check("#makeItems li:nth-child(5) input[type=checkbox]")
+            page.locator("#makeItems li:nth-child(3) button").click()   # (Take out: tail pack)
+            page.click("#makeShare")
+            page.locator("#makeShared").wait_for()
+            link = page.input_value("#makeLink")
+            self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
+            got = sets.from_code(link)   # (Hoard opens it as it opens any shared set)
+            self.assertEqual((got["name"], got["note"]), ("Winter <outfit>", "For snowy worlds"))
+            products = [got["products"][k] for k in got["items"]]
+            self.assertEqual([(p["store"], p["name"], p.get("creator", ""), p["url"]) for p in products], [
+                ("booth", "Fox Hoodie", "Mochi Works", "https://booth.pm/ja/items/4242"),   # (its language kept, as Hoard keeps it)
+                ("gumroad", "snow cap", "mochi", "https://mochi.gumroad.com/l/snow-cap"),
+                ("payhip", "Payhip product ADn4p", "", "https://payhip.com/b/ADn4p"),
+                ("jinxxy", "fluffy tail", "Kitsu", "https://jinxxy.com/Kitsu/fluffy-tail")])
+            self.assertEqual([p.get("adult", False) for p in products], [False, False, False, True], "18+ where ticked")
+            self.assertEqual((products[0].get("id"), products[2].get("id")), ("4242", "ADn4p"))
+            page.click("#makeOpen")   # the viewer shows it
+            page.locator("#setAge").wait_for()   # (an Adult set asks first)
+            page.click("#ageYes")
+            page.locator("#setView").wait_for()
+            self.assertEqual(page.inner_text("#setName"), "Winter <outfit>")
+            self.assertEqual(page.locator(".sv-item").count(), 4)
+            self.assertFalse(any(not u.startswith("https://hoard.furryup.link/") for u in asked), "nothing asked of any other site")
+            self.assertFalse(any("H1." in u.split("#")[0] for u in asked), "the set never leaves the page")
+            self.assertEqual(errors, [])
+            browser.close()
 
 class PricesOfASet(IsolatedTestCase):
     """Issue #384: a set brought in from someone's link (a share code carries no prices) has the prices of the products
@@ -1115,6 +1177,23 @@ class PricesOfASet(IsolatedTestCase):
         self.assertNotIn("price", json.dumps(sets.from_code(sets.share_code(store.load()["sets"][0])[0])),
                          "what's shared still carries no prices")
 
+    def test_what_a_set_made_on_the_website_lacks_is_filled_in(self):
+        """Issue #379: a set made on the website has only what its links say. Reading its prices fills in a product's
+        picture and creator from its page too, where it has none; what it has (typed by its maker) is kept."""
+        store = sets.SetStore()
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Made on the website", "items": [RUSK, HOODIE],
+            "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"},
+                         HOODIE: {"store": "booth", "name": "Hoodie for Rusk", "creator": "Typed by its maker",
+                                  "url": "https://booth.pm/ja/items/222"}}}]}))
+        found = {"price": {"text": "¥500", "amount": 500, "currency": "JPY"}, "thumbnail": BOOTH_PIC, "creator": "Kitsu"}
+        with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: found), mock.patch("hoard.common.pause", lambda s: None), \
+                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}))
+        products = store.load()["sets"][0]["products"]
+        self.assertEqual((products[RUSK]["creator"], products[RUSK]["thumbnail"]), ("Kitsu", BOOTH_PIC))
+        self.assertEqual(products[HOODIE]["creator"], "Typed by its maker", "what it had is kept")
+
     def test_a_date_that_isnt_one(self):
         store = sets.SetStore()
         store.path.parent.mkdir(parents=True, exist_ok=True)
@@ -1123,3 +1202,7 @@ class PricesOfASet(IsolatedTestCase):
         with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: {}), \
                 mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
             self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}), "read again")
+
+
+if __name__ == "__main__":
+    unittest.main()

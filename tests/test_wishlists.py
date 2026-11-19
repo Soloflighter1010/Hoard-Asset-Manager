@@ -266,6 +266,62 @@ class BoothLinks(IsolatedTestCase):
 
 
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+class PayhipInTheBrowser(IsolatedTestCase):
+    """Issue #387: Payhip's pages read in Hoard's own browser, where its plain request is refused."""
+    PRODUCT = '<html><head><title>Willow</title><meta property="og:title" content="Willow"></head><body>Willow</body></html>'
+    CHECK = '<html><head><title>Attention Required! | Cloudflare</title></head><body><div id="cf-wrapper"></div></body></html>'
+
+    def browse(self, pages: dict, fn):
+        """fn(page) with each address answered from pages ({url: (status, html, where it sends you)}), nothing else."""
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            ctx = browser.new_context()
+
+            def route(r):
+                status, body, to = pages.get(r.request.url.split("?")[0], (404, "", None))
+                if to:   # (sent on by the page itself: a redirect the route answers isn't routed again here)
+                    r.fulfill(status=200, content_type="text/html", body=f'<script>location.replace("{to}")</script>')
+                elif status:
+                    r.fulfill(status=status, content_type="text/html; charset=utf-8", body=body)
+                else:
+                    r.abort()
+            ctx.route("**/*", route)
+            try:
+                return fn(ctx)
+            finally:
+                browser.close()
+
+    def test_only_the_stores_own_https_pages(self):
+        from hoard.browser import Blocked, browser_page
+        hosts = ("payhip.com", "www.payhip.com")
+        pages = {"https://payhip.com/b/ADn4p": (200, self.PRODUCT, None),
+                 "https://payhip.com/b/Away": (0, "", "https://elsewhere.example/b/Away"),
+                 "https://elsewhere.example/b/Away": (200, self.PRODUCT, None),
+                 "https://payhip.com/b/Check": (403, self.CHECK, None)}
+
+        def run(ctx):
+            page = ctx.new_page()
+            got = browser_page(page, "https://payhip.com/b/ADn4p", hosts, 0)
+            self.assertEqual(got[1], "text/html")
+            self.assertIn('content="Willow"', got[0])
+            self.assertIsNone(browser_page(page, "http://payhip.com/b/ADn4p", hosts, 0), "https only")
+            self.assertIsNone(browser_page(page, "https://elsewhere.example/b/x", hosts, 0), "the store's own hosts only")
+            self.assertIsNone(browser_page(page, "https://payhip.com/b/Away", hosts, 0), "nor where it sends you off them")
+            with self.assertRaises(Blocked):
+                browser_page(page, "https://payhip.com/b/Check", hosts, 0)
+        self.browse(pages, run)
+
+    def test_a_shops_sign_in_page_is_said_not_read_as_an_empty_wishlist(self):
+        from hoard.stores import payhip
+        cfg = {"payhip": {"shops": ["myshop.store"], "check_wait": 0}}
+        pages = {"https://myshop.store/b-account/wishlists": (0, "", "https://myshop.store/auth/login"),
+                 "https://myshop.store/auth/login": (200, "<html><body><form>Sign in</form></body></html>", None)}
+        with self.assertRaisesRegex(payhip.WishlistsUnread, "sign-in page, not your wishlist, for myshop.store.*Import saved pages"):
+            self.browse(pages, lambda ctx: wishlists.read_payhip(ctx, cfg, lambda m: None))
+
+
+@unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class BoothPages(IsolatedTestCase):
     """Booth's loved items, 20 to a page: its page numbers are drawn by its script (an address with ?page=2 shows the
     first page again, so Hoard read only the first 20), and Hoard turns the pages with Booth's own arrow."""
@@ -630,6 +686,50 @@ class InHoard(IsolatedTestCase):
         self.assertIn("1 wishlist read, except Booth's", done["message"])
         self.assertIn("Not signed in to Booth", done["message"])
         self.assertEqual([s["name"] for s in sets.SetStore().load()["sets"]], ["Gumroad: Winter"])
+
+    def test_a_payhip_page_cloudflare_refuses_is_read_in_hoards_browser(self):
+        """Issue #387: Payhip's pages are behind Cloudflare, which answers Hoard's plain request with its own page
+        (HTTP 403). The link is read in Hoard's browser for Payhip instead, as a task, and added from there."""
+        from hoard import jobs, server
+        made = self.api("/api/sets", {"action": "create", "name": "Want", "items": [], "kind": "wishlist"})["made"]
+        cloudflare = ("<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title></head>"
+                      "<body><div id=\"cf-wrapper\">Sorry, you have been blocked</div></body></html>", "text/html")
+        product = ('<html><head><meta property="og:title" content="Willow - A Wickerbeast Halloween Edit">'
+                   '<meta property="og:image" content="https://payhip.com/cdn-cgi/image/willow.png">'
+                   '<meta property="og:site_name" content="Tor-Tal Chaos">'
+                   '<meta property="product:price:amount" content="15.00">'
+                   '<meta property="product:price:currency" content="USD"></head></html>', "text/html")
+        read = []
+
+        class Ctx:
+            def new_page(self):
+                return object()
+
+            def close(self):
+                pass
+
+        def in_browser(page, url, hosts, wait, said):
+            read.append((url, hosts))
+            return product
+        with mock.patch.object(server, "read_store_page", lambda url, hosts: cloudflare), \
+                mock.patch.object(jobs, "launch", lambda *a: Ctx()), mock.patch.object(jobs, "_playwright", lambda: contextlib.nullcontext), \
+                mock.patch.object(jobs, "browser_page", in_browser):
+            got = self.api("/api/sets", {"action": "add-links", "id": made, "links": ["https://payhip.com/b/ADn4p"]})
+            self.assertEqual(got["links"], [{"link": "https://payhip.com/b/ADn4p", "browser": True}])
+            self.assertIn(got["job"], ("started", "queued"))
+            for _ in range(200):
+                if not self.srv.jobs.state["running"] and self.srv.jobs.history:
+                    break
+                time.sleep(0.05)
+        done = self.srv.jobs.history[0]
+        self.assertEqual((done["task"], done["message"]), ("links", "Added 1 product."))
+        self.assertEqual(read, [("https://payhip.com/b/ADn4p", ("payhip.com", "www.payhip.com"))], "from Payhip's own site only")
+        view = next(s for s in self.api("/api/sets")["sets"] if s["id"] == made)
+        (added,) = view["items"]
+        self.assertEqual((added["name"], added["creator"], added["price"]["amount"]),
+                         ("Willow - A Wickerbeast Halloween Edit", "Tor-Tal Chaos", 15.0))
+        self.assertTrue(wishlists.refused_page(cloudflare[0]))
+        self.assertFalse(wishlists.refused_page(product[0]))
 
     def test_quick_refresh_of_one_wishlist(self):
         """Issue #331: Quick refresh on a wishlist's page reads the start of that list alone (the reader is told which,

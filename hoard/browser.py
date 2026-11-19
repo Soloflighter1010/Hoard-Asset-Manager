@@ -1294,6 +1294,26 @@ def goto_past_check(page, url: str, wait_s: float, progress=lambda m: None):
     raise Blocked("the check wasn't completed in time")
 
 
+MAX_PAGE_TEXT = 3 * 1024 * 1024   # a store page's HTML, read in the browser, at most (as wishlists.MAX_PRODUCT_PAGE)
+
+
+def browser_page(page, url: str, hosts: tuple, wait_s: float, progress=lambda m: None) -> tuple[str, str] | None:
+    """Issue #387: a store's public page read in Hoard's own browser for that store, where Hoard's plain request is
+    refused (a bot check): only an https address on those hosts, and only if it ends up on one; a check showing in
+    the window waits for you to complete it (goto_past_check). (Its HTML, "text/html"), or None."""
+    parts = urlparse(url)
+    if parts.scheme != "https" or (parts.hostname or "").lower() not in hosts:
+        return None
+    goto_past_check(page, url, wait_s, progress)
+    settle(page, 500)
+    if still_checking(page):
+        raise Blocked("the store's check wasn't completed")
+    end = urlparse(page.url)
+    if end.scheme != "https" or (end.hostname or "").lower() not in hosts:
+        return None
+    return page.content()[:MAX_PAGE_TEXT], "text/html"
+
+
 class PageLoadError(RuntimeError):
     """A page that didn't load: the browser's own reason (code: ERR_TOO_MANY_REDIRECTS, ...), and the addresses it
     went through on the way (hops: (status, address), each redirect in turn)."""

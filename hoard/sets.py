@@ -637,10 +637,12 @@ class SetStore:
             self._save(data)
         return data
 
-    def put_prices(self, sid: str, prices: dict, when: str) -> None:
+    def put_prices(self, sid: str, prices: dict, when: str, details: dict | None = None) -> None:
         """Issue #384: the prices read for a set's products from their public pages ({product key: price}, each as
         clean_price keeps it; None where none was found), and when they were read. A product the set no longer
-        holds is left out; one with no price found keeps the one it had."""
+        holds is left out; one with no price found keeps the one it had. details ({product key: {"thumbnail",
+        "creator"}}, read from the same pages) fill in what a product came without (a set made on the website, from
+        its links alone: issue #379); what it had is kept."""
         with _lock:
             data = self.load()
             s = next((x for x in data["sets"] if x["id"] == sid), None)
@@ -651,6 +653,11 @@ class SetStore:
                 clean = clean_price(price)
                 if key in s["items"] and key in known and clean:
                     known[key]["price"] = clean
+            for key, got in (details or {}).items():
+                if key in s["items"] and key in known and isinstance(got, dict):
+                    for field in ("thumbnail", "creator"):
+                        if not known[key].get(field) and isinstance(got.get(field), str) and got[field]:
+                            known[key][field] = got[field]   # (sanitize() checks it, as any product's)
             s["priced"] = when
             self._save(self.sanitize(data))
 

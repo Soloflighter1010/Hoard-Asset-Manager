@@ -11,8 +11,8 @@ import time
 import traceback
 from pathlib import Path
 
-from .browser import (Blocked, LEGACY_PROFILE, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
-                      browser_name, check_saved_signin, chosen_channel, for_signin, launch, made_with_another,
+from .browser import (Blocked, LEGACY_PROFILE, PageLoadError, ProfileBusy, SigninsUnprotected, SignInWindow, _playwright, _remove_tree,
+                      browser_name, browser_page, check_saved_signin, chosen_channel, for_signin, launch, made_with_another,
                       note_signin_browser, sign_out, signin_browser, signins_root, start_afresh, use_channel)
 from .safety import store_link
 from . import kept_pages
@@ -216,7 +216,7 @@ TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "S
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
+              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "links": "Add products by link", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -627,6 +627,8 @@ class Jobs:
             target = self._quick_refresh
         elif task == "quick-wishlist":
             target = lambda s: self._quick_wishlist(s, only or "")  # noqa: E731
+        elif task == "links":   # (spec's "local": {"set": its id, "links": [...]}, issue #387)
+            target = lambda s: self._links(s, spec.get("local") or {})  # noqa: E731
         else:
             target = lambda s: self._refresh(s, skip_imported)  # noqa: E731
         self.state["running"] = True   # before the thread starts, so a page asking straight away sees it
@@ -1482,6 +1484,43 @@ class Jobs:
             self._set(message=f"{read}, except {_names(list(failed))}'s: " + " ".join(failed.values()), partial=True)
         else:
             self._set(message=read)
+
+    def _links(self, stores: list[str], what: dict) -> None:
+        """Issue #387: products added to a wishlist by their links, whose pages the store refused to Hoard's plain
+        request (Payhip's are behind Cloudflare): each read in Hoard's own browser for the store, as reading the store
+        does (a check in its window waits for you to complete it), then added as Add products by link adds one."""
+        from .sets import SetStore
+        from .wishlists import LinkError, from_product_page
+        store = (stores or ["payhip"])[0]
+        label = STORES[store]["label"]
+        sid, links = str(what.get("set") or ""), [str(x)[:2000] for x in (what.get("links") or [])[:30]]
+        wait = float(self.cfg.get(store, {}).get("check_wait", 60))
+        got, failed = [], []
+        self._set(task="links", store=store, message=f"Reading {label}'s pages in Hoard's browser")
+        with _playwright()() as p:
+            ctx = launch(p, self.cfg, not (store == "payhip" and self.cfg["payhip"].get("headed", True)), store)
+            try:
+                page = ctx.new_page()
+                said = lambda m: self._set(message=f"{label}: {m}")   # noqa: E731
+                for n, link in enumerate(links, 1):
+                    if self._forced or self.stop.is_set():
+                        break
+                    said(f"page {n} of {len(links)}")
+                    try:
+                        got.append(from_product_page(link, lambda url, hosts: browser_page(page, url, hosts, wait, said)))
+                    except (LinkError, Blocked, PageLoadError) as e:   # (that page: the rest are still read)
+                        failed.append(f"{link[:200]}: {e}")
+            finally:
+                ctx.close()
+        if got:
+            SetStore().add_products(sid, got)
+        self._set(log=failed[-200:])
+        added = f"Added {len(got)} {'product' if len(got) == 1 else 'products'}"
+        if failed and not got:
+            self._set(message=f"Couldn't read {label}'s pages: " + "; ".join(failed[:3]), error="; ".join(failed[:3]))
+        else:
+            self._set(message=added + (f"; {len(failed)} couldn't be read (see the log)" if failed else "."),
+                      partial=bool(failed) or None)
 
     def _quick_refresh(self, stores: list[str]) -> None:
         """Issue #300: a quick look at each store for what's new: the start of its library (each listing's first

@@ -257,11 +257,24 @@ def wish_payhip_products(cards) -> list[dict]:
                                 price=c.get("price")) for c in cards) if p]
 
 
+class WishlistsUnread(RuntimeError):
+    """Issue #387: no shop showed its wishlist page (each sent Hoard's browser to its sign-in page instead)."""
+
+
+def wish_unread_note(shops: list[str]) -> str:
+    """What to do when Payhip showed its sign-in page, not your wishlist, for these shops."""
+    names = ", ".join(wish.urlparse(s).hostname or s for s in shops[:5]) + (" and more" if len(shops) > 5 else "")
+    return (f"Payhip showed its sign-in page, not your wishlist, for {names}. Sign in to Payhip on its row in Stores "
+            "(and to each shop, if it asks), or save each shop's wishlist page from your own browser and choose Import "
+            "saved pages in Wishlists.")
+
+
 def wish_read_payhip(ctx, cfg, progress) -> list[dict]:
-    """The wishlists in each Payhip shop you've added."""
+    """The wishlists in each Payhip shop you've added. A shop whose wishlist page sends Hoard's browser to sign in
+    instead is said, never read as an empty list (which would empty the wishlist kept): issue #387."""
     page = ctx.new_page()
     try:
-        out = []
+        out, unread = [], []
         for shop in wish.payhip_shops(cfg):
             only, host = cfg.get("_only_list"), wish.urlparse(shop).hostname or shop
             if only and not only.startswith(f"{host}:"):   # (a quick refresh of another shop's list: issue #331)
@@ -269,9 +282,15 @@ def wish_read_payhip(ctx, cfg, progress) -> list[dict]:
             url = shop.rstrip("/") + "/b-account/wishlists"
             wish.goto_past_check(page, url, float(cfg.get("payhip", {}).get("check_wait", 60)), progress)
             wish.settle(page, 1000)
+            if not wish.urlparse(page.url).path.rstrip("/").endswith("/b-account/wishlists"):
+                unread.append(shop)
+                progress(f"{host}: Payhip showed its sign-in page, not your wishlist")
+                continue
             cards = page.evaluate(wish.PAYHIP_JS)["cards"]
             out.extend(x for x in wish._payhip_lists(cards, shop, url, bool(cfg.get("_quick"))) if wish.wanted(cfg, x["list"]))
-            progress(f"{wish.urlparse(shop).hostname}: {len(cards)} products")
+            progress(f"{host}: {len(cards)} products")
+        if unread and not out:
+            raise WishlistsUnread(wish_unread_note(unread))
         return out
     finally:
         page.close()
