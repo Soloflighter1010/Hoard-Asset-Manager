@@ -13,6 +13,8 @@
 - **Downloading a product waits for its whole list of files, and opens it** (#401), so you choose from all of it,
   every file ticked to begin with. When reading the list waits its turn behind another task, **Download
   everything** works meanwhile and waits its turn too.
+- **The Local sync folder is kept when Hoard starts again** (#388). It was never saved with Hoard's other
+  settings, so Hoard forgot it each time it was closed.
 - **The download panel tucks itself away 10 seconds after a download starts** (#402), so **Stop** isn't always
   under your hand. What's downloading stays in the bar, and choosing it there brings the panel back. A download
   with problems shows it again when it ends.

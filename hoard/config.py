@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "library_folders": [],         # other library folders, besides root, read as one library (hoard/libraries.py)
     "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
     "local_copy": True,            # Local (issue #80): copy what you add into Hoard (False: list it where it is); your last choice
+    "local_sync": "",              # issue #388: the Local sync folder, whose contents Hoard adds to Local ("" = off)
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "msedge", "chrome", "brave", "vivaldi",
                                    # "opera", "opera_gx", "custom" (browser_path) or "chromium" (Hoard's own)
