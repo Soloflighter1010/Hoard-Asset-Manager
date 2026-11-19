@@ -110,7 +110,10 @@ def scan(cfg: dict, root: Path) -> dict:
             continue
         try:
             where = str(Path(entry.path).resolve())
-            st = entry.stat(follow_symlinks=False)
+            # (the thing itself, not the listing's copy of it: on Windows a folder's listing keeps its entries' times
+            # as they were, and NTFS brings them up to date late, so what was too big would look changed and be
+            # measured again)
+            st = os.stat(entry.path, follow_symlinks=False)
         except OSError:
             continue
         if where in have or entry.path in have:

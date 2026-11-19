@@ -103,7 +103,7 @@ def on_network(path) -> bool:
     can't go: issues #385, #388)? Windows: a \\server path or a mapped network drive; elsewhere: a folder whose mount is a
     network file system (NFS, SMB, AFP, WebDAV, SSHFS...)."""
     p = Path(path)
-    text = str(p)
+    text = os.fspath(path)   # (as given: a Windows path object would turn a POSIX path's / into \\)
     if text.startswith(("\\\\", "//")):
         return True
     if sys.platform == "win32":
