@@ -739,6 +739,10 @@ class Tab(IsolatedTestCase):
         self.assertEqual(full["status"], 400)
         self.assertIn("too many exports", full["error"])
         self.assertEqual((where / "From file (999).json").read_text("utf-8"), "mine")
+        # a set named like a Windows device is exported under a name Windows can use
+        con = self.api("/api/sets", {"action": "create", "name": "CON", "items": [RUSK]})["made"]
+        with mock.patch.object(server, "reveal", shown.append):
+            self.assertEqual(self.api("/api/sets", {"action": "export-json", "id": con})["saved"], "_CON.json")
 
     def test_a_picture_follows_its_product_when_one_is_taken_out(self):
         """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved

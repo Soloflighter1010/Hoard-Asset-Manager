@@ -5633,6 +5633,7 @@ function photoMarkHTML(m, tag = "a", extra = "") {
 // Sets added from someone else's link whose photos you chose to see, on this page: their photos are on sites that
 // person chose, so Hoard asks those sites for them only when you say so (it tells them you're looking).
 const PHOTOS_SHOWN = new Set();
+const PHOTOS_BIG = new Set();   // the photos shown larger ("<set id> <photo>"), kept when the page is drawn again (#404)
 // A set's photos, each with what's marked on it and a numbered list of those, and Mark products on it...
 function setPhotosHTML(s) {
   if (s.from_link && !PHOTOS_SHOWN.has(s.id)) {
@@ -5642,7 +5643,8 @@ function setPhotosHTML(s) {
   }
   return `<div class="setphotos-shown">` + s.photos.map((u, n) => {
     const marks = photoMarks(s, u);
-    return `<figure class="setphoto"><div class="setphoto-pic"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}" loading="lazy">` +
+    const big = PHOTOS_BIG.has(`${s.id} ${n}`);
+    return `<figure class="setphoto${big ? " big" : ""}"><div class="setphoto-pic"><img src="${esc(photoSrc(s, n))}" alt="${esc(tr("Photo {0} of {1}", n + 1, s.photos.length))}" loading="lazy">` +
         marks.map(m => photoMarkHTML(m)).join("") + `</div><figcaption>` +
       (marks.length ? `<ol class="pmarks">` + marks.map(m => `<li><span class="pnum" aria-hidden="true">${m.n}</span>` +
         (m.row.pic ? `<img src="${esc(keyed(m.row.pic))}" alt="" loading="lazy">` : `<span class="pnopic"></span>`) +
@@ -5650,7 +5652,7 @@ function setPhotosHTML(s) {
         (m.row.url ? `<a class="linkish" href="${esc(safeUrl(m.row.url))}" target="_blank" rel="noopener noreferrer" data-pmark="${esc(m.row.key)}">${esc(tr("Open"))}</a>` : "") +
         `</li>`).join("") + `</ol>` : `<p class="none">${esc(tr("Nothing marked on it yet."))}</p>`) +
       `<div class="row"><button class="ghost sm" data-setx="markphoto" data-n="${n}">${esc(tr(marks.length ? "Change what's marked..." : "Mark products on it..."))}</button>` +
-      `<button class="ghost sm" data-setx="photobig">${esc(tr("Show larger"))}</button>` +
+      `<button class="ghost sm" data-setx="photobig" data-n="${n}">${esc(tr(big ? "Show smaller" : "Show larger"))}</button>` +
       `<a class="linkish" href="${esc(safeUrl(u))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(new URL(u).hostname)}</a></div>` +
       `</figcaption></figure>`;
   }).join("") + `</div>`;
@@ -6199,7 +6201,8 @@ async function setAct(e) {
   if (act === "addlinks") return addByLinks(s);
   if (act === "markphoto") return markPhoto(s, +b.dataset.n);
   if (act === "photobig") {   // a photo's small preview, full width, and back (issue #404)
-    const big = b.closest(".setphoto").classList.toggle("big");
+    const big = b.closest(".setphoto").classList.toggle("big"), key = `${s.id} ${b.dataset.n}`;
+    if (big) PHOTOS_BIG.add(key); else PHOTOS_BIG.delete(key);
     b.textContent = tr(big ? "Show smaller" : "Show larger");
     return;
   }

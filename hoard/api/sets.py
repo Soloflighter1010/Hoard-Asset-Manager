@@ -79,22 +79,27 @@ def _save_set_json(cfg: dict, doc: dict) -> dict:
     can't save it), as a file named after the set in Exported sets, in the folder for editable copies, beside Unity
     packages, never over another file; then shown there. Raises ValueError, in words for the page."""
     import json
+    import os
     from ..downloader import edits_root
-    from ..makepackage import folder_name
-    from ..safety import write_file_safely
+    from ..safety import safe_name, write_file_safely
     out_dir = edits_root(cfg, app.root_dir(cfg)) / "Exported sets"   # (ValueError: it's inside a library folder)
-    base = folder_name(str((doc.get("set") or {}).get("name") or "Set"))
-    out = out_dir / f"{base}.json"
-    for n in range(2, 1000):
-        if not out.exists():
-            break
-        out = out_dir / f"{base} ({n}).json"
-    else:
-        if out.exists():
-            raise ValueError("There are too many exports of this set in Exported sets: move some out, and try again.")
+    base = safe_name(str((doc.get("set") or {}).get("name") or "Set"), 120)   # (CON, NUL and the like made safe too)
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        write_file_safely(out, json.dumps(doc, ensure_ascii=False, indent=2), root=out_dir)
+        for n in range(1, 1000):   # a new name taken at once, so two exports at the same moment never share one
+            out = out_dir / (f"{base}.json" if n == 1 else f"{base} ({n}).json")
+            try:
+                os.close(os.open(out, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644))
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise ValueError("There are too many exports of this set in Exported sets: move some out, and try again.")
+        try:
+            write_file_safely(out, json.dumps(doc, ensure_ascii=False, indent=2), root=out_dir)
+        except OSError:
+            out.unlink(missing_ok=True)   # (the empty file kept for it goes)
+            raise
     except OSError as e:
         raise ValueError(f"The file couldn't be written: {e.strerror or e}.") from None
     try:

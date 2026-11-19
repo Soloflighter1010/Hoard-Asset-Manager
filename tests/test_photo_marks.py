@@ -202,6 +202,10 @@ class InHoard(IsolatedTestCase):
             page.locator(".setphoto [data-setx=photobig]").first.click()
             self.assertGreater(img.bounding_box()["width"], 500, "Show larger: full width")
             self.assertEqual(page.locator(".setphoto [data-setx=photobig]").first.inner_text(), "Show smaller")
+            page.evaluate("() => showSet(state.set)")   # the page drawn again keeps it larger
+            img.wait_for()
+            self.assertGreater(img.bounding_box()["width"], 500, "still larger when drawn again")
+            self.assertEqual(page.locator(".setphoto [data-setx=photobig]").first.inner_text(), "Show smaller")
             page.locator(".setphoto [data-setx=photobig]").first.click()
             self.assertLessEqual(img.bounding_box()["width"], 360, "and back")
             page.locator("[data-setx=markphoto]").first.click()
