@@ -191,7 +191,7 @@ class TheMenu(IsolatedTestCase):
         self.assertEqual(win.reg.value(add, "Icon"), f'"{self.EXE}",0')
         sync = r"Software\Classes\Directory\Background\shell\Hoard.SyncNow"
         self.assertEqual(win.reg.value(sync, "AppliesTo"), f'System.ItemPathDisplay:="{self.SYNC}"', "the sync folder's only")
-        self.assertEqual(win.reg.value(sync + r"\command", ""), f'"{self.EXE}" --hoard-sync-now')
+        self.assertEqual(win.reg.value(sync + r"\command", ""), f'"{self.EXE}" --hoard-sync-now "%V"', "with the folder")
         self.assertTrue(all(k.startswith("hkcu\\") for k in win.reg.keys), "this account's, never the whole computer's")
         explorer.unregister(win)
         self.assertEqual([k for k in win.reg.keys if "hoard." in k], [], "every key, and what's under it")
@@ -228,8 +228,9 @@ class Applying(IsolatedTestCase):
         self.assertFalse((self.a / "desktop.ini").exists())
         self.assertTrue((self.b / "desktop.ini").exists())
         self.assertEqual(self.win.reg.value(explorer.NOTE_KEY, "SyncFolder"), str(self.b))
-        self.assertEqual(explorer.apply(cfg, None, win=self.win), {"icon": True, "menu": False}, "no program: no menu")
-        self.assertEqual([k for k in self.win.reg.keys if "hoard." in k], [])
+        self.assertEqual(explorer.apply(cfg, None, win=self.win), {"icon": True, "menu": False})
+        self.assertNotEqual([k for k in self.win.reg.keys if "hoard." in k], [],
+                            "a Hoard without its window knows no program: it leaves the menu as it is")
         cfg["explorer"] = False   # Settings: not in File Explorer
         self.assertEqual(explorer.apply(cfg, self.exe, win=self.win), {"icon": False, "menu": False})
         self.assertFalse((self.b / "desktop.ini").exists())
@@ -262,8 +263,9 @@ class WhatTheMenuAsks(IsolatedTestCase):
         mine = str(self.tmp / "hat.png")
         given = [{"do": "add", "path": mine}, {"do": "sync"}, {"do": "local"}, {"do": "add", "path": "hat.png"},
                  {"do": "add", "path": 7}, {"do": "add", "path": mine + "\x00.exe"}, {"do": "rm -rf"}, "add",
-                 {"do": "add", "path": "x" * 1001}]
-        self.assertEqual(explorer.actions(given), [{"do": "add", "path": mine}, {"do": "sync"}, {"do": "local"}])
+                 {"do": "add", "path": "x" * 1001}, {"do": "sync", "path": str(self.sync)}, {"do": "sync", "path": "Sync"}]
+        self.assertEqual(explorer.actions(given), [{"do": "add", "path": mine}, {"do": "sync"}, {"do": "local"},
+                                                   {"do": "sync", "path": str(self.sync)}])
         self.assertEqual(len(explorer.actions([{"do": "sync"}] * 50)), explorer.MAX_ACTIONS)
         self.assertEqual(explorer.actions("add"), [])
 
@@ -308,7 +310,43 @@ class WhatTheMenuAsks(IsolatedTestCase):
         self.assertEqual(explorer.do(self.srv, {"do": "sync"}), {"said": "no-sync"})
         self.srv.cfg["local_sync"] = str(self.sync)
         self.assertEqual(explorer.do(self.srv, {"do": "sync"}), {"said": "looking"})
+        self.assertEqual(explorer.do(self.srv, {"do": "sync", "path": str(self.sync)}), {"said": "looking"})
+        self.assertEqual(explorer.do(self.srv, {"do": "sync", "path": str(self.root)}), {"said": "not-sync"},
+                         "chosen on another folder (if Explorer showed it there)")
         self.assertIsNone(explorer.do(self.srv, {"do": "local"}))
+
+    def test_never_half_a_file(self):
+        """The copy is made under a hidden name the sync folder's look leaves out, then put in place whole; one that
+        couldn't be made leaves nothing behind."""
+        hat = self.tmp / "hat.png"
+        hat.write_bytes(b"\x89PNG" * 1000)
+        seen = []
+        real = explorer.shutil.copyfileobj
+
+        def copying(r, w, *a):
+            seen.append(sorted(p.name for p in self.sync.iterdir()))
+            return real(r, w, *a)
+        with mock.patch.object(explorer.shutil, "copyfileobj", copying):
+            self.assertEqual(explorer.add(self.srv, str(hat))["said"], "copied")
+        self.assertEqual(len(seen[0]), 1)
+        self.assertTrue(seen[0][0].startswith("."), "only a hidden name while it's copied")
+        self.assertEqual([p.name for p in self.sync.iterdir()], ["hat.png"], "then in place, and nothing else")
+
+        def failing(r, w, *a):
+            w.write(b"half")
+            raise OSError("the disk is full")
+        with mock.patch.object(explorer.shutil, "copyfileobj", failing), self.assertRaises(OSError):
+            explorer.add(self.srv, str(hat))
+        self.assertEqual([p.name for p in self.sync.iterdir()], ["hat.png"], "nothing left of it")
+
+    def test_where_a_drive_cant_link(self):
+        hat = self.tmp / "hat.png"
+        hat.write_bytes(b"\x89PNG")
+        (self.sync / "hat.png").write_bytes(b"theirs")
+        with mock.patch.object(explorer.os, "link", side_effect=PermissionError("FAT")):
+            self.assertEqual(explorer.add(self.srv, str(hat)), {"said": "copied", "name": "hat (2).png"})
+        self.assertEqual((self.sync / "hat.png").read_bytes(), b"theirs")
+        self.assertEqual(sorted(p.name for p in self.sync.iterdir()), ["hat (2).png", "hat.png"])
 
 
 class FromASecondStart(IsolatedTestCase):

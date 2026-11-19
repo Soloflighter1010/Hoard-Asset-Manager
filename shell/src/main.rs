@@ -65,8 +65,8 @@ fn start_link() -> Option<String> {
 }
 
 /// What File Explorer's right-click menu started this copy for (issue #410, hoard/explorer.py): Add to Hoard
-/// (--hoard-add, then the file or folder), Sync with Hoard now (--hoard-sync-now) and Open in Hoard
-/// (--hoard-open-local). Hoard checks each; a second start hands them to the Hoard that's running.
+/// (--hoard-add, then the file or folder), Sync with Hoard now (--hoard-sync-now, then the folder it was chosen on)
+/// and Open in Hoard (--hoard-open-local). Hoard checks each; a second start hands them to the Hoard that's running.
 fn start_actions() -> Vec<Value> {
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     let mut out = Vec::new();
@@ -77,7 +77,13 @@ fn start_actions() -> Vec<Value> {
                 out.push(json!({"do": "add", "path": args[i + 1]}));
                 i += 1;
             }
-            "--hoard-sync-now" => out.push(json!({"do": "sync"})),
+            "--hoard-sync-now" => match args.get(i + 1).filter(|a| !a.starts_with("--hoard-")) {
+                Some(folder) => {
+                    out.push(json!({"do": "sync", "path": folder}));
+                    i += 1;
+                }
+                None => out.push(json!({"do": "sync"})),
+            },
             "--hoard-open-local" => out.push(json!({"do": "local"})),
             _ => {}
         }

@@ -26,7 +26,9 @@ off takes them away too, and so does uninstalling: Hoard notes the folder with i
 Everything here does nothing off Windows; macOS and Linux are issue #411."""
 from __future__ import annotations
 
+import contextlib
 import os
+import secrets
 import shutil
 import sys
 from pathlib import Path
@@ -42,12 +44,14 @@ NOTE_KEY = r"Software\Hoard\Explorer"   # SyncFolder: the folder with Hoard's ic
 KEYS = {   # (key under ROOT, its menu words, the argument it runs Hoard with, whether it's only the sync folder's)
     "add_file": (r"*\shell\Hoard.Add", "Add to Hoard", "--hoard-add \"%1\"", False),
     "add_folder": (r"Directory\shell\Hoard.Add", "Add to Hoard", "--hoard-add \"%1\"", False),
-    "sync": (r"Directory\shell\Hoard.SyncNow", "Sync with Hoard now", "--hoard-sync-now", True),
-    "sync_inside": (r"Directory\Background\shell\Hoard.SyncNow", "Sync with Hoard now", "--hoard-sync-now", True),
+    "sync": (r"Directory\shell\Hoard.SyncNow", "Sync with Hoard now", "--hoard-sync-now \"%V\"", True),
+    "sync_inside": (r"Directory\Background\shell\Hoard.SyncNow", "Sync with Hoard now", "--hoard-sync-now \"%V\"", True),
     "open": (r"Directory\shell\Hoard.OpenLocal", "Open in Hoard", "--hoard-open-local", True),
     "open_inside": (r"Directory\Background\shell\Hoard.OpenLocal", "Open in Hoard", "--hoard-open-local", True),
 }
 FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_SYSTEM = 0x1, 0x2, 0x4
+FILE_ATTRIBUTE_NORMAL = 0x80   # (only on its own: none of the others)
+SETTABLE = 0x3127   # the attributes a program may set: read-only, hidden, system, archive, temporary, offline, not indexed
 INVALID = 0xFFFFFFFF
 
 
@@ -63,7 +67,7 @@ class Windows:
     def attributes(self, path: Path) -> int | None:
         """A file's or folder's attributes, or None when it can't be read."""
         import ctypes
-        got = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+        got = ctypes.windll.kernel32.GetFileAttributesW(str(path)) & 0xFFFFFFFF   # (a DWORD, which ctypes reads signed)
         return None if got == INVALID else got
 
     def set_attributes(self, path: Path, value: int) -> None:
@@ -126,7 +130,7 @@ def mark(folder, win: Windows | None = None) -> bool:
             if f.is_symlink():
                 f.unlink()
             elif f.exists():
-                win.set_attributes(f, 0x80)   # FILE_ATTRIBUTE_NORMAL (a hidden, system file can't be replaced)
+                win.set_attributes(f, FILE_ATTRIBUTE_NORMAL)   # (a hidden, system file can't be replaced)
                 f.unlink()
         with open(icon, "xb") as w, open(ICON_SOURCE, "rb") as r:   # (each made new: never through a link)
             shutil.copyfileobj(r, w)
@@ -134,7 +138,7 @@ def mark(folder, win: Windows | None = None) -> bool:
             w.write(_ini(before))
         for f in (ini, icon):
             win.set_attributes(f, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
-        win.set_attributes(folder, attrs | FILE_ATTRIBUTE_READONLY)
+        win.set_attributes(folder, (attrs & SETTABLE) | FILE_ATTRIBUTE_READONLY)
         win.changed(folder)
         return True
     except OSError:
@@ -154,11 +158,11 @@ def unmark(folder, win: Windows | None = None) -> bool:
     try:
         for f in (ini, icon):
             if f.exists() and not f.is_symlink():
-                win.set_attributes(f, 0x80)
+                win.set_attributes(f, FILE_ATTRIBUTE_NORMAL)
                 f.unlink()
         attrs = win.attributes(folder)
         if attrs is not None and (READONLY_WAS + "0") in mine:
-            win.set_attributes(folder, attrs & ~FILE_ATTRIBUTE_READONLY)
+            win.set_attributes(folder, (attrs & SETTABLE & ~FILE_ATTRIBUTE_READONLY) or FILE_ATTRIBUTE_NORMAL)
         win.changed(folder)
         return True
     except OSError:
@@ -270,11 +274,12 @@ def apply(cfg: dict, exe: str | None, was: str | None = None, win: Windows | Non
     elif sync:
         unmark(sync, win)
     _note(win, sync if icon else None)
-    if sync and exe and on(cfg):
-        menu = register(exe, sync, win, language(cfg, win))
-    else:
+    menu = False
+    if not (sync and on(cfg)):
         unregister(win)
-        menu = False
+    elif exe:
+        menu = register(exe, sync, win, language(cfg, win))
+    # (else a Hoard started without its window, which knows no program to run: the menu is left as it is)
     return {"icon": icon, "menu": menu}
 
 
@@ -284,18 +289,24 @@ ACTIONS = ("add", "sync", "local")
 MAX_ACTIONS = 20
 
 
+def _full_path(p) -> bool:
+    """Whether p is a full path, as Explorer gives one."""
+    return isinstance(p, str) and 0 < len(p) <= 1000 and "\x00" not in p and os.path.isabs(p)
+
+
 def actions(given) -> list[dict]:
-    """The menu's requests, checked: [{"do": "add", "path": a full path}, {"do": "sync"}, {"do": "local"}], at most
-    MAX_ACTIONS (Explorer starts Hoard once for each file chosen)."""
+    """The menu's requests, checked: [{"do": "add", "path": a full path}, {"do": "sync", "path": the folder it was
+    chosen on, if it says}, {"do": "local"}], at most MAX_ACTIONS (Explorer starts Hoard once for each file chosen)."""
     out = []
     for a in given if isinstance(given, list) else []:
         if not isinstance(a, dict) or a.get("do") not in ACTIONS:
             continue
         if a["do"] == "add":
-            p = a.get("path")
-            if not isinstance(p, str) or not 0 < len(p) <= 1000 or "\x00" in p or not os.path.isabs(p):
-                continue
-            out.append({"do": "add", "path": p})
+            if _full_path(a.get("path")):
+                out.append({"do": "add", "path": a["path"]})
+        elif a["do"] == "sync" and "path" in a:
+            if _full_path(a["path"]):
+                out.append({"do": "sync", "path": a["path"]})
         else:
             out.append({"do": a["do"]})
     return out[:MAX_ACTIONS]
@@ -308,8 +319,11 @@ def do(srv, action: dict) -> dict | None:
         return add(srv, action["path"])
     if action["do"] == "sync":
         from . import localsync
-        if not str(srv.cfg.get("local_sync") or "").strip():
+        sync = str(srv.cfg.get("local_sync") or "").strip()
+        if not sync:
             return {"said": "no-sync"}
+        if action.get("path") and not _inside(Path(action["path"]), Path(sync)):
+            return {"said": "not-sync"}   # (Explorer showed it on another folder)
         srv.start_worker("Look at the Local sync folder", localsync.tick, srv)
         return {"said": "looking"}
     return None   # ("local": Hoard at Local, where every request ends)
@@ -324,22 +338,41 @@ def _inside(path: Path, folder: Path) -> bool:
     return p == f or f in p.parents
 
 
+def _place(made: Path, out: Path) -> None:
+    """A file made in full put at out in one step, never over a file there (FileExistsError)."""
+    try:
+        os.link(made, out)   # (there whole, or not at all)
+    except FileExistsError:
+        raise
+    except OSError:   # (a drive that can't link, FAT say: a rename, which on Windows never replaces a file)
+        if os.name != "nt" and os.path.lexists(out):
+            raise FileExistsError(out) from None
+        os.rename(made, out)
+        return
+    os.unlink(made)
+
+
 def _copy_new(source: Path, folder: Path) -> Path:
-    """Copy a file into folder under its own name, or "name (2)" and on when that's taken: never over a file there,
-    even one that appears meanwhile (each name is made, or found taken, in one step)."""
-    for n in range(1, 1000):
-        out = folder / (source.name if n == 1 else f"{source.stem} ({n}){source.suffix}")
-        try:
-            with open(out, "xb") as w, open(source, "rb") as r:
-                shutil.copyfileobj(r, w, 1 << 20)
-        except FileExistsError:
-            continue
-        try:
-            shutil.copystat(source, out)   # (its dates, as the file's own)
-        except OSError:
-            pass
-        return out
-    raise OSError(f"no free name for {source.name} in the sync folder")
+    """Copy a file into folder under its own name, or "name (2)" and on when that's taken: never over a file there.
+    It's copied under a hidden name first (one starting with ".", which the sync folder's look leaves out), so the
+    look never takes in a file half copied, and one that couldn't be copied leaves nothing behind."""
+    made = folder / f".hoard-adding-{secrets.token_hex(6)}"
+    try:
+        with open(made, "xb") as w, open(source, "rb") as r:
+            shutil.copyfileobj(r, w, 1 << 20)
+        with contextlib.suppress(OSError):
+            shutil.copystat(source, made)   # (its dates, as the file's own)
+        for n in range(1, 1000):
+            out = folder / (source.name if n == 1 else f"{source.stem} ({n}){source.suffix}")
+            try:
+                _place(made, out)
+            except FileExistsError:
+                continue
+            return out
+        raise OSError(f"no free name for {source.name} in the sync folder")
+    finally:
+        with contextlib.suppress(OSError):
+            made.unlink()   # (gone already once it's in place)
 
 
 def add(srv, path: str) -> dict:

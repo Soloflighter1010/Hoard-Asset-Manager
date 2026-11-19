@@ -2757,5 +2757,6 @@
  "On Windows 11, Hoard's options are under <0>Show more options</0>.": "Windows 11에서는 Hoard의 항목이 <0>추가 옵션 표시</0> 안에 있어요.",
  "Add to Hoard": "Hoard에 추가",
  "Sync with Hoard now": "지금 Hoard와 동기화",
- "Open in Hoard": "Hoard에서 열기"
+ "Open in Hoard": "Hoard에서 열기",
+ "That folder isn't Hoard's sync folder.": "그 폴더는 Hoard의 동기화 폴더가 아니에요."
 }

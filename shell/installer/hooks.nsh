@@ -38,7 +38,10 @@
           ${If} $R3 == "; hoard-readonly-before=0"
             System::Call 'kernel32::GetFileAttributesW(w "$R0") i .R4'
             ${If} $R4 <> -1
-              IntOp $R4 $R4 & -2   ; (all but FILE_ATTRIBUTE_READONLY)
+              IntOp $R4 $R4 & 0x3126   ; (the attributes a program may set, but read-only)
+              ${If} $R4 = 0
+                StrCpy $R4 128   ; (FILE_ATTRIBUTE_NORMAL: none)
+              ${EndIf}
               System::Call 'kernel32::SetFileAttributesW(w "$R0", i R4)'
             ${EndIf}
           ${EndIf}

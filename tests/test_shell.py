@@ -194,9 +194,9 @@ class Protocol(IsolatedTestCase):
         hat = str(Path(os.sep, "Users", "you", "hat.png").resolve())
         self.event(event="hello", updates=False, open=None, exe=exe,
                    actions=[{"do": "add", "path": hat}, {"do": "sync"}, {"do": "format the drive"},
-                            {"do": "add", "path": "relative.png"}, "words"])
+                            {"do": "add", "path": "relative.png"}, "words", {"do": "sync", "path": exe}])
         self.assertTrue(self.shell.hello.wait(5))
-        self.assertEqual(self.shell.actions, [{"do": "add", "path": hat}, {"do": "sync"}])
+        self.assertEqual(self.shell.actions, [{"do": "add", "path": hat}, {"do": "sync"}, {"do": "sync", "path": exe}])
         self.assertEqual(self.shell.exe, exe)
         self.event(event="hello", exe="Hoard.exe", actions="add")   # (not a full path; not a list)
         threading.Event().wait(0.2)

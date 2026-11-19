@@ -6476,6 +6476,7 @@ const EXPLORER_SAID = {
   failed: x => tr("{0} couldn't be added.", x.name),
   looking: () => tr("Hoard is looking at the sync folder."),
   "no-sync": () => tr("There's no sync folder yet: choose one in Settings, under Local sync folder."),
+  "not-sync": () => tr("That folder isn't Hoard's sync folder."),
 };
 // File Explorer's menu brought Hoard to the front: Local, and what it did (the first few, when it was many).
 async function openFromExplorer(said) {

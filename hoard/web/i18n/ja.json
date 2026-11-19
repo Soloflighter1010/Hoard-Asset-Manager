@@ -2757,5 +2757,6 @@
  "On Windows 11, Hoard's options are under <0>Show more options</0>.": "Windows 11では、Hoardの項目は<0>その他のオプションを確認</0>の中にあります。",
  "Add to Hoard": "Hoardに追加",
  "Sync with Hoard now": "今すぐHoardと同期",
- "Open in Hoard": "Hoardで開く"
+ "Open in Hoard": "Hoardで開く",
+ "That folder isn't Hoard's sync folder.": "そのフォルダーはHoardの同期フォルダーではありません。"
 }
