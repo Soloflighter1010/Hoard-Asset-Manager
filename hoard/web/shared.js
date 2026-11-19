@@ -3281,7 +3281,7 @@ document.addEventListener("toggle", e => {
 const jobCount = st => [st.job || {}, st.project_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
 // A job the page was watching has ended: what it changed is read again (both pages' watchers call this)
 function jobEnded(was, j) {
-  if (was === "wishlists" && j.task !== "wishlists") loadSets();   // (the wishlists read show without a reload)
+  if ((was === "wishlists" || was === "links") && j.task !== was) loadSets();   // (the wishlists read, or the products a link added, show without a reload)
 }
 // The count on the Tasks button: how many are running or waiting.
 function taskCount(n) {
@@ -6371,7 +6371,10 @@ async function addByLinks(s) {
   const done = await changeSets({ action: "add-links", id: s.id, links: links.slice(0, 30) });
   if (!done) return;
   const added = (done.links || []).filter(x => x.added), failed = (done.links || []).filter(x => x.error);
+  const later = (done.links || []).filter(x => x.browser);   // (refused to a plain request: read in Hoard's browser, #387)
   toast([added.length ? tr(added.length === 1 ? "Added {0}." : "Added {0} products.", added.length === 1 ? added[0].added : added.length) : "",
+         later.length ? tr(later.length === 1 ? "Its store refused Hoard's request, so its page is read in Hoard's browser (see Tasks): it's added when that's done."
+                                              : "Their store refused Hoard's request, so {0} pages are read in Hoard's browser (see Tasks): they're added when that's done.", later.length) : "",
          failed.length ? tr("Not added: {0}", failed.map(x => `${x.link} (${tr(x.error)})`).join("; ")) : ""].filter(Boolean).join(" "));
 }
 // Open What's new.

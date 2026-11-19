@@ -59,7 +59,9 @@ another, just above its products.
   what's in your library): paste products' links on Booth, Gumroad,
   Jinxxy, Payhip or itch.io, one a line. Hoard reads each one's page as anyone sees it (no sign-in is sent), from the
   store's own site, for its name, creator, price and picture, and adds it, owned or not. A link that isn't a
-  product's page, or whose page can't be read, is left out, and Hoard says why.
+  product's page, or whose page can't be read, is left out, and Hoard says why. Payhip's pages are behind Cloudflare,
+  which often refuses that plain request: those are read in Hoard's own browser for Payhip instead, as a task
+  (5.2.0), and added when it's done. If Cloudflare shows a check in its window, complete it there.
 - **Find more to add**, on an open wishlist (5.2.0): type what you're after, then choose **Nexyy** (a search
   across the stores) or **Booth**, **Gumroad**, **Jinxxy** or **itch.io**: the search opens in your browser. Copy
   the link of a product you want there and add it with **Add products by link...** (a link from Nexyy works too).
@@ -142,6 +144,24 @@ under **Sets you added from a link** (5.2.0 beta 2; ones added before then stay 
   is, so a wishlist read from a store is still brought up to date when you read it again; its parts are
   wishlists of your own, as they were when you split it.
 
+### Making a set on the website
+
+You can make a set without Hoard on Hoard's website, at
+[hoard.furryup.link/set.html#new](https://hoard.furryup.link/set.html#new) (5.2.0). Give it a name and a note if
+you like, paste products' links on Booth, Gumroad, Jinxxy, Payhip or itch.io, one a line, and choose **Add them**.
+
+- A web page can't read the stores' own pages, since they don't let other sites read them. So each product starts
+  with what its link says (a Booth item's number, say, or the words in a Gumroad link), and you type its name and
+  creator.
+- Tick **18+** on a product for adults: whoever opens the set is asked their age first, as with a set shared from
+  Hoard.
+- **Share** makes the set's link. The set is in the link itself, after its `#`, which a browser never sends
+  anywhere: nothing is stored on a server, and nothing about who made it.
+- The set viewer opens the link, and so does **Add a shared set...** in Hoard, which keeps it under **Sets you
+  added from a link**. When Hoard reads its prices, it fills in each product's picture and creator from its store
+  where the set has none.
+- It's a long link, not a short one: Hoard's share server only takes sets from Hoard itself.
+
 ## Its picture
 
 **Choose a picture...** in a set takes a picture from your computer for its tile: a PNG, JPEG, WebP or GIF, made at
@@ -199,7 +219,9 @@ already in your library show as yours.
 - **Read my wishlists...** reads them from the stores you choose (only those you're signed in to are offered; sign
   in to the others in **Stores** first), each in its own signed-in window, as a refresh reads your library: Booth's loved items (all of them as one wishlist, and each list of them you made as one more),
   each of your Gumroad wishlists, your Jinxxy wishlist, likes and each of your lists, and the wishlists in each Payhip
-  shop you've added. It runs as a task, in **Tasks**.
+  shop you've added. It runs as a task, in **Tasks**. A Payhip shop that shows its sign-in page instead of your
+  wishlist is said, and its wishlist is kept as it was (5.2.0): sign in to Payhip on its row in **Stores**, or save
+  that shop's wishlist page from your own browser and import it (below).
 - **Import saved wishlist pages...** reads wishlist pages you saved from your own browser instead (press Ctrl+S and
   save as "Webpage, Single File"), on your computer, with nothing sent anywhere. A long wishlist saved a page at a
   time comes together as one. Save each Gumroad wishlist's or Jinxxy list's own page, not the page listing them.

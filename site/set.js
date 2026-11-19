@@ -269,9 +269,129 @@
     $("#setProblem").hidden = false;
     $("#setProblemWhy").textContent = why;
   }
+  /* Make a set here, without Hoard (issue #379): a name, a note, and products by their store links, packed as Hoard
+     packs a set (hoard/sets.py: _pack) into a link whose set is after the "#". Nothing is sent anywhere or kept, and
+     nothing about who made it. A web page can't read the stores' own pages (they don't let other sites read them),
+     so each product is what its link says, with the name and creator typed here; Hoard fills in its picture,
+     creator and price from its store when the set is added to it. */
+  const MAKE_MAX = 200;
+  // Words from a link's part ("snow-cap_2" -> "snow cap 2").
+  const words = s => { try { s = decodeURIComponent(s); } catch (e) { /* (as it is) */ } return text(s.replace(/[-_+]+/g, " "), 300); };
+  // What a store link says of its product: {store, id, name, creator, url}, or null for one that isn't a product's page.
+  function fromLink(raw) {
+    let u;
+    try { u = new URL(String(raw).trim()); } catch (e) { return null; }
+    const host = u.hostname.toLowerCase().replace(/\.$/, ""), sub = host.split(".")[0];
+    const store = host === "booth.pm" || host.endsWith(".booth.pm") ? "booth"
+      : host === "gumroad.com" || host.endsWith(".gumroad.com") ? "gumroad"
+      : host === "jinxxy.com" || host === "www.jinxxy.com" ? "jinxxy"
+      : host === "payhip.com" || host === "www.payhip.com" ? "payhip" : host.endsWith(".itch.io") ? "itch" : "";
+    const url = store ? storePage(store, u.origin + u.pathname) : "";
+    if (!url) return null;
+    const segs = new URL(url).pathname.split("/").filter(Boolean), own = !["www", store === "booth" ? "booth" : ""].includes(sub);
+    if (store === "booth") {
+      const id = segs[segs.length - 1];
+      return segs.includes("items") ? { store, id, name: "Booth item " + id, creator: host.endsWith(".booth.pm") && own ? sub : "", url } : null;
+    }
+    if (store === "gumroad") return segs[0] === "l" ? { store, id: "", name: words(segs[1]), creator: host.endsWith(".gumroad.com") && own ? sub : "", url } : null;
+    if (store === "jinxxy") return segs.length === 2 ? { store, id: "", name: words(segs[1]), creator: words(segs[0]), url } : null;
+    if (store === "payhip") return { store, id: segs[1], name: "Payhip product " + segs[1], creator: "", url };
+    return segs.length === 1 ? { store, id: "", name: words(segs[0]), creator: sub, url } : null;   // (itch.io)
+  }
+  // URL-safe base64 of bytes.
+  const b64u = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join("")).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  // A set as Hoard's code (H1.): its JSON, raw-deflated, in URL-safe base64.
+  async function pack(doc) {
+    const stream = new Blob([new TextEncoder().encode(JSON.stringify(doc))]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return PREFIX + b64u(new Uint8Array(await new Response(stream).arrayBuffer()));
+  }
+  // The set being made: its products, in order.
+  const made = [];
+  // Draw the products being made into a set, each with its name and creator to type, 18+, and Take out.
+  function drawMade() {
+    const list = $("#makeItems");
+    list.replaceChildren(...made.map((p, n) => {
+      const name = el("input", { value: p.name, maxlength: "300", "aria-label": `Name of product ${n + 1}`, spellcheck: "false" });
+      name.addEventListener("input", () => { p.name = name.value; showShare(); });
+      const creator = el("input", { value: p.creator, maxlength: "200", "aria-label": `Creator of product ${n + 1}`, placeholder: "Its creator", spellcheck: "false" });
+      creator.addEventListener("input", () => { p.creator = creator.value; });
+      const adult = el("input", { type: "checkbox", checked: p.adult || null });
+      adult.addEventListener("change", () => { p.adult = adult.checked; });
+      const out = el("button", { class: "button ghost", type: "button", "aria-label": `Take out product ${n + 1}` }, "Take out");
+      out.addEventListener("click", () => { made.splice(n, 1); drawMade(); });
+      return el("li", { class: "sv-make-item" },
+        el("span", { class: `dot ${p.store}`, "aria-hidden": "true" }),
+        el("span", { class: "sv-make-fields" }, name, creator,
+          el("a", { href: p.url, target: "_blank", rel: "noopener noreferrer", class: "small" }, STORES[p.store] + ": " + p.url.replace(/^https:\/\//, ""))),
+        el("label", { class: "sv-check" }, adult, "18+"), out);
+    }));
+    showShare();
+  }
+  // Share can be chosen once the set has a name and a product with one.
+  function showShare() {
+    $("#makeShare").disabled = !text($("#makeName").value, 60) || !made.some(p => text(p.name, 300));
+    $("#makeShared").hidden = true;
+  }
+  // Add the pasted links' products, saying which links aren't products' pages.
+  function addLinks() {
+    const lines = $("#makeLinks").value.split(/\s+/).filter(Boolean), bad = [];
+    let added = 0;
+    for (const line of lines) {
+      const p = fromLink(line);
+      if (!p) { bad.push(line.slice(0, 80)); continue; }
+      if (made.some(x => x.url === p.url)) continue;
+      if (made.length >= MAKE_MAX) { bad.push(line.slice(0, 80) + " (a set holds " + MAKE_MAX + " here)"); continue; }
+      made.push({ ...p, adult: false });
+      added++;
+    }
+    $("#makeLinks").value = bad.join("\n");
+    $("#makeSaid").textContent = (added ? (added === 1 ? "Added 1 product." : `Added ${added} products.`) : "") +
+      (bad.length ? (added ? " " : "") + (bad.length === 1 ? "1 link isn't" : bad.length + " links aren't") +
+        " a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io: it's left in the box." : "");
+    drawMade();
+  }
+  // Pack the set into its link, and show it.
+  async function share() {
+    const rows = made.filter(p => text(p.name, 300)).map(p => {
+      const row = [p.store, p.id || "", text(p.name, 300), text(p.creator, 200), p.url, "", p.adult ? 1 : ""];
+      while (row.length && row[row.length - 1] === "") row.pop();
+      return row;
+    });
+    const doc = { v: 1, n: text($("#makeName").value, 60), i: rows };
+    if (rows.some(r => r[6] === 1)) doc.a = 1;
+    if (note($("#makeNote").value)) doc.d = note($("#makeNote").value);
+    let code;
+    try { code = await pack(doc); } catch (e) { $("#makeSaid").textContent = "This browser can't pack the set. Use a current Chrome, Edge, Firefox or Safari."; return; }
+    if (code.length > MAX_CODE) { $("#makeSaid").textContent = "That's too much for one link: take some products out."; return; }
+    const link = location.origin + location.pathname + "#" + code;
+    $("#makeLink").value = link;
+    $("#makeOpen").href = "#" + code;
+    $("#makeShared").hidden = false;
+    $("#makeLink").focus();
+    $("#makeLink").select();
+  }
+  // Show the form for making a set.
+  function maker() {
+    document.title = "Make a set · Hoard";
+    $("#new").hidden = false;
+    $("#makeAdd").addEventListener("click", addLinks);
+    $("#makeName").addEventListener("input", showShare);
+    $("#makeShare").addEventListener("click", share);
+    $("#makeCopy").addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText($("#makeLink").value); $("#makeCopied").textContent = "Copied."; }
+      catch (e) { $("#makeLink").select(); $("#makeCopied").textContent = "Copy it from the box."; }
+    });
+    $("#makeName").focus();
+  }
+
   // Read the set from the address (or its short link), and show it.
   async function start() {
     let code = decodeURIComponent(location.hash.slice(1)).replace(/\s+/g, ""), expires = 0;
+    if (code === "new") {
+      if (typeof CompressionStream !== "function") { problem("This browser is too old to make a set. Use a current Chrome, Edge, Firefox or Safari."); return; }
+      maker();
+      return;
+    }
     if (!code) { problem("This page shows a set someone shared from Hoard. Open the link they sent you: the set is in it."); return; }
     if (typeof DecompressionStream !== "function" || !(window.crypto && crypto.subtle)) {
       problem("This browser is too old to read the set. Open the link in a current Chrome, Edge, Firefox or Safari."); return;

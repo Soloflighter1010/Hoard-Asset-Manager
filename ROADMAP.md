@@ -54,8 +54,8 @@ currency conversion and the others above) was done in PR #365.
 - [x] [#386](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/386) — Projects: a new project from a backup, with its Git history and packages (PR #391).
 - [x] [#385](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/385) — Settings: change the location of each of Hoard's folders (Hoard's own folder, its logs and sign-ins move as Hoard next starts).
 - [x] [#388](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/388) — Local: a sync folder on this computer whose contents are added by themselves (files over 100 MB and folders over 1 GB refused; no network drives).
-- [ ] [#387](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/387) — Payhip: products added to wishlists by their link, and Payhip wishlists read.
-- [ ] [#379](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/379) — Sets on the website: build and share a set without Hoard.
+- [x] [#387](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/387) — Payhip: products added to wishlists by their link (read in Hoard's browser when Cloudflare refuses), and Payhip wishlists read.
+- [x] [#379](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/379) — Sets on the website: build and share a set without Hoard (as a long link: the share server takes sets only from Hoard).
 - [x] [#377](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/377) — Research: preparing a new Unity project ahead of time: [docs/PREPARING-NEW-PROJECTS.md](docs/PREPARING-NEW-PROJECTS.md) (PR #391); what's worth building is #390.
 - [ ] [#390](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/390) — Projects: Get it ready imports a new project in the background, in Unity's batch mode (from #377's research).
 - [x] [#382](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/382) — Research: a .unitypackage from a Local asset without opening Unity: built as Make a Unity package ([docs/UNITYPACKAGE-FROM-LOCAL.md](docs/UNITYPACKAGE-FROM-LOCAL.md)).

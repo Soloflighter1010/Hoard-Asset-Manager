@@ -2693,5 +2693,9 @@
  "Turn off": "オフにする",
  "Local sync folder, as a full path": "ローカルの同期フォルダー(フルパス)",
  "A folder on this computer, as a full path": "このコンピューター上のフォルダー(フルパス)",
- "it's a link to somewhere outside its folder": "フォルダーの外を指すリンクです"
+ "it's a link to somewhere outside its folder": "フォルダーの外を指すリンクです",
+ "Its store refused Hoard's request, so its page is read in Hoard's browser (see Tasks): it's added when that's done.": "ストアがHoardのリクエストを断ったため、そのページはHoardのブラウザーで読みます(タスクをご覧ください)。終わると追加されます。",
+ "Their store refused Hoard's request, so {0} pages are read in Hoard's browser (see Tasks): they're added when that's done.": "ストアがHoardのリクエストを断ったため、{0}件のページはHoardのブラウザーで読みます(タスクをご覧ください)。終わると追加されます。",
+ "the store refused Hoard's request for its page": "ストアがページへのHoardのリクエストを断りました",
+ "Hoard has too much waiting to read it in its browser now: try again later": "Hoardのブラウザーで読むのを待っているものが多すぎます。あとでもう一度お試しください"
 }

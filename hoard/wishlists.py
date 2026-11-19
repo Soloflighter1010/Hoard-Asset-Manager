@@ -144,6 +144,22 @@ class LinkError(ValueError):
     """A link that isn't a product's page on a store, or whose page couldn't be read: why, in words to show."""
 
 
+class PageRefused(LinkError):
+    """Issue #387: the store refused its page to Hoard's plain request (Payhip's pages are behind Cloudflare, which
+    answers with its own "Attention Required" page, HTTP 403). It can be read in Hoard's own browser for that store
+    instead (jobs.py's "links" task)."""
+
+
+BROWSER_READ = ("payhip",)   # stores whose product pages are read in Hoard's browser when a plain request is refused
+_REFUSED = re.compile(r"<title>\s*(?:just a moment|attention required|access denied)|challenges\.cloudflare\.com/|"
+                      r"""id=["']cf-(?:wrapper|challenge)""", re.I)
+
+
+def refused_page(text: str) -> bool:
+    """Is this a bot check's page (Cloudflare's), not the store's own?"""
+    return bool(_REFUSED.search(str(text or "")[:20000]))
+
+
 def from_product_page(link: str, fetch) -> dict:
     """A product added to a set or wishlist by its link (Add products by link): read from its public page, as anyone
     can see it (no sign-in is sent). fetch(url, hosts) gives (text, content type) or None, from those hosts only.
@@ -175,6 +191,8 @@ def from_product_page(link: str, fetch) -> dict:
         return {**got, "store_tags": store_tags_in("booth", data), "adult": adult_on_a_page("booth", data) is True} if got else got
     address = page_address(store, url)
     got = fetch(address, tuple(dict.fromkeys((host,) + LINK_HOSTS[store]))) if address else None
+    if address and store in BROWSER_READ and (not got or refused_page(got[0])):
+        raise PageRefused("the store refused Hoard's request for its page")
     if not got or "html" not in got[1]:
         raise LinkError("its page couldn't be read")
     page = got[0]
