@@ -2616,5 +2616,16 @@
  "Say what the placeholder is for.": "자리 표시자가 무엇인지 적어 주세요.",
  "Its drive isn't connected": "드라이브가 연결되지 않았어요",
  "Its folder is on a drive or network share that isn't connected now, so Hoard isn't reading it. Connect it, and it's shown as before.": "폴더가 지금 연결되지 않은 드라이브나 네트워크 공유에 있어서 Hoard가 읽지 않고 있어요. 연결하면 전처럼 보여요.",
- "Its folder is on a drive that isn't connected now: {0}": "폴더가 지금 연결되지 않은 드라이브에 있어요: {0}"
+ "Its folder is on a drive that isn't connected now: {0}": "폴더가 지금 연결되지 않은 드라이브에 있어요: {0}",
+ "1 without a price": "가격 없는 상품 1개",
+ "{0} without a price": "가격 없는 상품 {0}개",
+ "Total": "합계",
+ "Total of those shown": "표시된 상품 합계",
+ "Not signed in: {0}. Sign in to them in Stores to read their wishlists too.": "로그인하지 않은 스토어: {0}. 그 위시리스트도 읽으려면 스토어에서 로그인하세요.",
+ "You aren't signed in to a store with wishlists yet (Booth, Gumroad, Jinxxy or Payhip). Sign in to one in Stores, then read them.": "위시리스트가 있는 스토어(Booth, Gumroad, Jinxxy, Payhip)에 아직 로그인하지 않았어요. 스토어에서 로그인한 다음 읽어 주세요.",
+ "{0}'s sign-in window opens when what Hoard is doing now is done (see Tasks). You can go on with setup meanwhile.": "Hoard가 지금 하는 일이 끝나면 {0} 로그인 창이 열려요(작업 참고). 그동안 설정을 계속할 수 있어요.",
+ "Signed in to {0}. Hoard reads it when setup is finished.": "{0}에 로그인했어요. 설정을 마치면 Hoard가 읽어요.",
+ "Star Hoard on GitHub: it helps others find it": "GitHub에서 Hoard에 별표 주기: 다른 사람들이 Hoard를 찾는 데 도움이 돼요",
+ "Star on GitHub": "GitHub에서 별표",
+ "Star us on GitHub": "GitHub에서 별표 주기"
 }

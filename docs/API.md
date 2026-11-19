@@ -24,13 +24,13 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/backup/show` | key | yes | — | object |
 | POST | `/api/cancel` | key | yes | `lane: any` | object |
 | GET | `/api/changelog` | key | no | — | object |
-| POST | `/api/check-updates` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
+| POST | `/api/check-updates` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | GET | `/api/credits` | key | no | — | object |
 | GET | `/api/credits/license` | key | no | — | object |
 | POST | `/api/delete-files` | key | yes | `confirm: boolean`, `keys: array` | object |
 | POST | `/api/diagnostics/open-folder` | key | yes | — | object |
 | POST | `/api/diagnostics/report` | key | yes | `context: string`, `notes: string` | object |
-| POST | `/api/download` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
+| POST | `/api/download` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | GET | `/api/download-choices` | key | no | — | object |
 | POST | `/api/download-skip` | key | yes | `keys: array`, `skip: boolean` | object |
 | POST | `/api/edit-copy` | key | yes | `key: string`, `local: boolean`, `open: boolean` | object |
@@ -55,8 +55,8 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/local/remove` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/rescan` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/lock` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
-| POST | `/api/login` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
-| POST | `/api/logout` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
+| POST | `/api/login` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
+| POST | `/api/logout` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | POST | `/api/look-inside` | key | no | `path: string` | object |
 | POST | `/api/look-inside/extract` | key | yes | `metas: any`, `open: boolean`, `path: string`, `picks: any` | object |
 | POST | `/api/marks` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
@@ -76,10 +76,11 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/queue/clear` | key | yes | — | object |
 | POST | `/api/queue/remove` | key | yes | `id: string` | object |
 | POST | `/api/quit` | key | yes | `anyway: boolean` | object |
-| POST | `/api/refresh` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
+| POST | `/api/refresh` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | POST | `/api/routine/seen` | key | yes | — | object |
 | GET | `/api/sets` | key | no | — | object |
 | POST | `/api/sets` | key | yes | `target: string`, `dependencies: array`, `file: object`, `action: string`, `code: string`, `data: string`, `id: string`, `items: array`, `key: string`, `links: array`, `marks: array`, `photo: string`, `photos: array`, `short: string` | object |
+| POST | `/api/sets/prices` | key | yes | `id: string` | object |
 | GET | `/api/settings` | key | no | — | object |
 | POST | `/api/settings` | key | yes | — | object |
 | GET | `/api/setup` | key | no | — | object |
@@ -90,7 +91,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/signin-link` | key | yes | `url: string` | object |
 | GET | `/api/space` | key | no | — | object |
 | GET | `/api/status` | key | no | — | object |
-| POST | `/api/sync` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `stores: array` | object |
+| POST | `/api/sync` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
 | POST | `/api/tags` | key | yes | — | object |
 | GET | `/api/tasks` | key | no | — | object |
 | POST | `/api/tasks/background` | key | yes | `id: string`, `action: string` | object |

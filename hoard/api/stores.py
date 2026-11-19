@@ -136,7 +136,8 @@ def post_api_refresh(self, path, body, query):
     started = srv.jobs.start(task, stores[:1] if task in ("login", "logout") else stores,
                              skip_imported=bool(body.get("all")), only=only, keys=keys,
                              items=[item] if item and task in ("download", "check-updates") else None,
-                             chosen=self._remember_files(app.chosen_files(body.get("files"))) if task == "download" else None)
+                             chosen=self._remember_files(app.chosen_files(body.get("files"))) if task == "download" else None,
+                             then_refresh=body.get("refresh") is not False)   # (the setup assistant's sign-ins: #373)
     if not started:
         return self._json({"error": "That's already waiting its turn in Tasks (or the queue is full)."}, 409)
     self._json({"ok": True, "queued": started == "queued"}, 202)
@@ -151,10 +152,10 @@ ROUTES = [
     Route('POST', '/api/download-skip', post_api_download_skip, changes=True, auth='key', image_key=False, max_body=1048576, request=(('keys', 'array'), ('skip', 'boolean')), response='object'),
     Route('POST', '/api/signin-link', post_api_signin_link, changes=True, auth='key', image_key=False, max_body=1048576, request=(('url', 'string'),), response='object'),
     Route('POST', '/api/setup/browser', post_api_setup_browser, changes=True, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
-    Route('POST', '/api/refresh', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
-    Route('POST', '/api/login', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
-    Route('POST', '/api/logout', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
-    Route('POST', '/api/download', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
-    Route('POST', '/api/sync', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
-    Route('POST', '/api/check-updates', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/refresh', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/login', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/logout', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/download', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/sync', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
+    Route('POST', '/api/check-updates', post_api_refresh, changes=True, auth='key', image_key=False, max_body=1048576, request=(('all', 'boolean'), ('files', 'object'), ('item', 'object'), ('keys', 'array'), ('only', 'string'), ('quick', 'boolean'), ('refresh', 'boolean'), ('stores', 'array')), response='object'),
 ]

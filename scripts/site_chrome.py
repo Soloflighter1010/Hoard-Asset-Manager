@@ -66,7 +66,7 @@ def header(current: str | None = None, up: str = "") -> str:
 {tabs}
     </nav>
     <div class="bar-tools">
-      <a class="ghost" href="{GITHUB}">GitHub</a>
+      <a class="ghost star-us" href="{GITHUB}" title="Star Hoard on GitHub: it helps others find it"><svg class="star" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 1.2l2.05 4.3 4.7.55-3.47 3.22.92 4.65L8 11.6l-4.2 2.32.92-4.65L1.25 6.05l4.7-.55z"/></svg>Star on GitHub</a>
       <a class="primary" href="{_href('./#download', up)}">Download</a>
     </div>
   </header>"""
