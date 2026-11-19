@@ -158,18 +158,27 @@ def scan(cfg: dict, root: Path) -> dict:
 
 
 def tick(srv) -> dict | None:
-    """The scheduled look (as Hoard starts, then every EVERY seconds): skipped while a job is using Local, so the two
-    never write its records at once."""
+    """The scheduled look (as Hoard starts, then every EVERY seconds): skipped while a job is using Local (in the main
+    lane or the side lane), so the two never write its records at once."""
     if not str(srv.cfg.get("local_sync") or "").strip():
         return None
+    side = getattr(srv, "side_jobs", None)   # (Local's tasks can run in the side lane too: issue #403)
     if not srv.jobs.busy.acquire(blocking=False):
+        return None
+    if side is not None and not side.busy.acquire(blocking=False):
+        srv.jobs.busy.release()
+        srv.jobs.kick()
         return None
     try:
         from .config import root_dir
         done = scan(srv.cfg, root_dir(srv.cfg))
     finally:
+        if side is not None:
+            side.busy.release()
         srv.jobs.busy.release()
         srv.jobs.kick()
+        if side is not None:
+            side.kick()
     if done["added"] or done["gone"]:
         srv.forget_index()
     return done

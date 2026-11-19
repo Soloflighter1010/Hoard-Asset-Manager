@@ -607,20 +607,25 @@ class Jobs:
         else:
             self._made_way = False
 
-    def kick(self) -> None:
+    def kick(self, peers: bool = True) -> None:
         """Start the next waiting job, if nothing is running and it doesn't clash with a peer lane's running one.
         (Called whenever the runner is let go, here or in a peer lane.)"""
+        backed_off = False
         with self._qlock:
             if self.scheduler.closed:
                 return
             if self._queue and self.busy.acquire(blocking=False):
                 with self.gate:
-                    if self._clashes(self._queue[0]):
-                        self.busy.release()   # (it starts when the peer's task that uses the same is done)
+                    if not self._clashes(self._queue[0]):
+                        spec = self._queue.pop(0)
+                        self._publish_queue()
+                        self._launch(spec)
                         return
-                    spec = self._queue.pop(0)
-                    self._publish_queue()
-                    self._launch(spec)
+                self.busy.release()   # (it starts when the peer's task that uses the same is done)
+                backed_off = True
+        if backed_off and peers:   # a peer lane that backed off at the same moment, seeing this one's runner held to
+            for peer in self.peers:   # look, tries again now it's let go (once: it never calls back here)
+                peer.kick(peers=False)
 
     def remove(self, job_id: str) -> bool:
         """Take a waiting job off the queue. False when it isn't waiting (it may have started)."""

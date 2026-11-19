@@ -553,8 +553,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
 
     def in_use(self, uses: frozenset) -> bool:
         """Whether a running task of the main or side lane uses any of these (jobs.claims), as a change to them would
-        trip it up (issue #403: the rest can change while it runs)."""
-        return any(clash(uses, j.running_claims()) for j in (self.jobs, self.side_jobs))
+        trip it up (issue #403: the rest can change while it runs). The catalog being written, which holds the main
+        lane's runner without a task, isn't one."""
+        return any(j.state.get("running") and clash(uses, claims(j._spec)) for j in (self.jobs, self.side_jobs))
 
     def working(self) -> bool:
         """Is a task running, or waiting its turn, in either lane? (Closing Hoard asks first.)"""

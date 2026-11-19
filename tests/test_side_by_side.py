@@ -148,3 +148,29 @@ class SideBySide(IsolatedTestCase):
             self.download_gate.set()
             self.assertTrue(wait_for(self, lambda: not self.srv.jobs.state["running"]))
             self.assertEqual(self.post("/api/settings", {"stores": {"booth": {"include_free": False}}})[0], 200, "after it")
+
+    def test_a_setting_changes_while_the_catalog_is_written(self):
+        """The catalog being written holds the main lane's runner without a task: a setting doesn't wait for it."""
+        with mock.patch.object(server, "save_config"):
+            self.assertTrue(self.srv.jobs.busy.acquire(timeout=5))
+            try:
+                self.assertEqual(self.post("/api/settings", {"stores": {"gumroad": {"enabled": False}}})[0], 200)
+                self.assertEqual(self.srv.jobs.start("add-local", [], local={"name": "Mine"}), "queued",
+                                 "but a task waits for it: it doesn't say what it uses")
+            finally:
+                self.srv.jobs.busy.release()
+                self.srv.jobs.kick()
+            self.assertTrue(wait_for(self, lambda: ("add-local", "Mine") in self.ran), "and starts once it's done")
+
+    def test_the_local_sync_folder_waits_for_a_local_task_beside(self):
+        from hoard import localsync
+        self.srv.cfg["local_sync"] = str(self.tmp / "sync")
+        self.assertEqual(self.srv.jobs.start("add-local", [], local={"name": "Mine"}), "started")
+        self.assertTrue(wait_for(self, lambda: self.srv.side_jobs.state["running"]))
+        with mock.patch.object(localsync, "scan", lambda *a: self.fail("never while Local's task runs beside")):
+            self.assertIsNone(localsync.tick(self.srv))
+        self.assertFalse(self.srv.jobs.busy.locked(), "the main lane's runner let go again")
+        self.local_gate.set()
+        self.assertTrue(wait_for(self, lambda: not self.srv.side_jobs.state["running"]))
+        with mock.patch.object(localsync, "scan", lambda *a: {"added": [], "gone": []}):
+            self.assertEqual(localsync.tick(self.srv), {"added": [], "gone": []})
