@@ -186,6 +186,23 @@ class Protocol(IsolatedTestCase):
         threading.Event().wait(0.2)
         self.assertIsNone(self.shell.link)
 
+    def test_what_file_explorer_started_it_for(self):
+        """Issue #410: the hello says what File Explorer's right-click menu started the shell for (checked), and the
+        program it is, for that menu to run."""
+        self.shell.listen(hold=True)
+        exe = str(Path(os.sep, "Programs", "Hoard", "Hoard.exe").resolve())
+        hat = str(Path(os.sep, "Users", "you", "hat.png").resolve())
+        self.event(event="hello", updates=False, open=None, exe=exe,
+                   actions=[{"do": "add", "path": hat}, {"do": "sync"}, {"do": "format the drive"},
+                            {"do": "add", "path": "relative.png"}, "words"])
+        self.assertTrue(self.shell.hello.wait(5))
+        self.assertEqual(self.shell.actions, [{"do": "add", "path": hat}, {"do": "sync"}])
+        self.assertEqual(self.shell.exe, exe)
+        self.event(event="hello", exe="Hoard.exe", actions="add")   # (not a full path; not a list)
+        threading.Event().wait(0.2)
+        self.assertIsNone(self.shell.exe)
+        self.assertEqual(self.shell.actions, [])
+
     def test_the_shell_says_whether_it_updates_this_copy(self):
         self.shell.listen()
         self.assertFalse(self.shell.can_update, "not until it says so")

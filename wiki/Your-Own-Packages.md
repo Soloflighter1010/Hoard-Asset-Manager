@@ -37,6 +37,11 @@ over 1 GB isn't added (Settings says which). It has to be on a drive of this com
 Take something out of the sync folder and its tile says so; it's only taken out of Local when you choose **Remove
 from Local**.
 
+On Windows, the sync folder has Hoard's own icon in File Explorer, and right-clicking any file or folder offers **Add
+to Hoard** (on Windows 11, under **Show more options**): a file is copied into the sync folder, a folder is listed
+here where it is. Right-click the sync folder for **Sync with Hoard now** or **Open in Hoard**. Settings' **Show it in
+File Explorer** turns them off.
+
 ### Make a Unity package
 
 **Make a Unity package** (5.2.0), in a Local item's details, makes a `.unitypackage` of it without opening Unity, in

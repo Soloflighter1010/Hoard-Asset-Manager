@@ -158,12 +158,15 @@ def running_file() -> Path:
     return data_dir() / "running.json"
 
 
-def show_running_copy(wait_s: float = 10.0, link: str | None = None) -> bool:
+def show_running_copy(wait_s: float = 10.0, link: str | None = None, actions: list | None = None) -> bool:
     """Ask the Hoard that's already running to bring its window to the front, with the hoard:// link this start was
-    given (issue #396) for its page to open. It proves this request comes from another Hoard of the same user with
-    the token it wrote in its private app-data folder."""
+    given (issue #396) for its page to open, or what File Explorer's right-click menu started it for (issue #410). It
+    proves this request comes from another Hoard of the same user with the token it wrote in its private app-data
+    folder."""
     from . import links
     body = {"open": link} if links.is_link(link) and len(link) <= links.MAX_LINK else {}
+    if actions:
+        body["actions"] = actions
     deadline = time.time() + wait_s
     while time.time() < deadline:
         try:
@@ -205,9 +208,10 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: b
         tauri.SHELL.listen(hold=True)   # (its hello at once: what it can do, the link it was started with)
     lock = InstanceLock(data_dir() / "running.lock")
     if not lock.acquire():   # (before the log: a second copy only brings the first to the front, and keeps no log)
-        if shell and not link and tauri.SHELL.hello.wait(5):
-            link = tauri.SHELL.link
-        if show_running_copy(link=link):
+        actions = []
+        if shell and tauri.SHELL.hello.wait(5):
+            link, actions = link or tauri.SHELL.link, tauri.SHELL.actions
+        if show_running_copy(30.0 if actions else 10.0, link=link, actions=actions):   # (Explorer starts one for each file, at once)
             return 0
         message("Hoard is already running, but isn't answering. Close it (or restart your computer) and open it again.")
         return 1
@@ -247,6 +251,10 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: b
         opened = False
         if link:   # (once the page has loaded, it takes this from /api/status)
             srv.ask_open(link)
+        if shell and tauri.SHELL.hello.wait(5):   # (issue #410: the program Explorer's right-click menu runs, and
+            srv.explorer_exe = tauri.SHELL.exe        # what it started this one for)
+            srv.explorer_do(tauri.SHELL.actions)
+        threading.Thread(target=srv.apply_explorer, daemon=True, name="explorer-icon").start()
         if shell:
             tauri.open_in_shell(srv, tauri.SHELL)
             opened = True

@@ -14,9 +14,11 @@ From Hoard to the shell, each line starting with MARK (anything else the shell o
     {"do": "install"}                     Hoard is quitting for it: install it once Hoard has stopped, then open again
 
 From the shell to Hoard:
-    {"event": "hello", "updates": bool, "open": ... or null}   first, always: what the shell can do (update this
-                                          copy itself: not without the updates' key, and never in the Flatpak), and
-                                          the hoard:// link it was started with (issue #396)
+    {"event": "hello", "updates": bool, "open": ... or null, "actions": [...], "exe": ...}   first, always: what the
+                                          shell can do (update this copy itself: not without the updates' key, and
+                                          never in the Flatpak), the hoard:// link it was started with (issue #396),
+                                          what File Explorer's right-click menu started it for, and the program it is,
+                                          for that menu to run (issue #410: hoard/explorer.py)
     {"event": "open", "url": ...}         a hoard:// link, while it runs (a Mac hands them to the app that's open)
     {"event": "closing", "quitting": bool}   the window's close button (quitting: Command-Q on a Mac)
     {"event": "picked", "id": n, "path": ... or null}
@@ -54,6 +56,8 @@ class Shell:
         self.can_update = False   # (the shell's hello says: this copy can update itself)
         self.hello = threading.Event()   # the shell's hello has come (its first line)
         self.link: str | None = None     # the hoard:// link it was started with, from its hello
+        self.actions: list[dict] = []    # what File Explorer's menu started it for (explorer.actions), from its hello
+        self.exe: str | None = None      # the shell's own program, for that menu to run
         self._listening = False
         self._order = threading.RLock()  # events in the order they came, those before start() held until then
         self._started, self._early = False, []
@@ -106,6 +110,10 @@ class Shell:
             self.can_update = event.get("updates") is True
             link = event.get("open")
             self.link = link if isinstance(link, str) and link else None
+            from . import explorer
+            self.actions = explorer.actions(event.get("actions"))
+            exe = event.get("exe")
+            self.exe = exe if isinstance(exe, str) and 0 < len(exe) <= 1000 and os.path.isabs(exe) else None
             self.hello.set()
             if self.link:
                 self._event({"event": "open", "url": self.link})

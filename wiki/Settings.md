@@ -44,6 +44,11 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   drive or NAS can't be one. Hoard looks at it as it starts and every couple of minutes, reading only what's new.
   Something taken out of it is marked **Not in the sync folder any more**, and stays in Local (with its tags and
   its places in sets) until you **Remove from Local**. See [Your own packages](Your-Own-Packages).
+  - **Show it in File Explorer** (5.2.0, Windows, on unless you turn it off): Hoard's icon on the sync folder, and
+    Hoard in File Explorer's right-click menu. **Add to Hoard**, on any file or folder, copies a file into the sync
+    folder (never over one there) or lists a folder in Local where it is; on the sync folder, **Sync with Hoard now**
+    and **Open in Hoard** are there too. On Windows 11 they're under **Show more options**. Uninstalling Hoard takes
+    them away.
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.

@@ -14,10 +14,14 @@ The menu (in this account's own registry: HKEY_CURRENT_USER\\Software\\Classes, 
                            it is (as Add to Local's "list it where it is")
     Sync with Hoard now    on the sync folder (and inside it): Hoard looks at it at once
     Open in Hoard          on the sync folder (and inside it): Hoard, at Local
-Each runs Hoard (the Tauri shell) with --hoard-add <path>, --hoard-sync-now or --hoard-open-local, which a second start
-hands to the Hoard that's running over its signed /api/show (as a hoard:// link is): never as a hoard:// link, which
-any web page can send. Windows 11 shows them under "Show more options" (its short menu is only for packaged apps).
-Settings turns the menu off; turning the sync folder off takes the menu and the icon away, and so does uninstalling.
+Each runs Hoard (the Tauri shell) with --hoard-add <path>, --hoard-sync-now or --hoard-open-local. The shell tells its
+Hoard in its hello; a second start hands them to the Hoard that's running over its signed /api/show (as a hoard://
+link is), never as a hoard:// link, which any web page can send. Hoard then comes to the front at Local and says what
+it did. Windows 11 shows them under "Show more options" (its short menu is only for packaged apps).
+
+Settings' "Show it in File Explorer" (the explorer setting) turns the icon and the menu off; turning the sync folder
+off takes them away too, and so does uninstalling: Hoard notes the folder with its icon in the registry
+(NOTE_KEY), for the uninstaller (shell/installer/hooks.nsh), which never runs Hoard.
 
 Everything here does nothing off Windows; macOS and Linux are issue #411."""
 from __future__ import annotations
@@ -34,6 +38,7 @@ READONLY_WAS = "; hoard-readonly-before="
 TIP = "Hoard's sync folder: what you put here is added to Hoard's Local."
 ICON_SOURCE = Path(__file__).resolve().parent / "web" / "icons" / "sync-folder.ico"
 ROOT = r"Software\Classes"
+NOTE_KEY = r"Software\Hoard\Explorer"   # SyncFolder: the folder with Hoard's icon, for the uninstaller
 KEYS = {   # (key under ROOT, its menu words, the argument it runs Hoard with, whether it's only the sync folder's)
     "add_file": (r"*\shell\Hoard.Add", "Add to Hoard", "--hoard-add \"%1\"", False),
     "add_folder": (r"Directory\shell\Hoard.Add", "Add to Hoard", "--hoard-add \"%1\"", False),
@@ -78,6 +83,13 @@ class Windows:
         import winreg
         return winreg
 
+    def ui_language(self) -> str | None:
+        """Windows' own language, as a locale name ("ja-JP"), or None."""
+        import ctypes
+        buf = ctypes.create_unicode_buffer(85)
+        langid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+        return buf.value if ctypes.windll.kernel32.LCIDToLocaleName(langid, buf, 85, 0) else None
+
 
 def _ini(readonly_before: bool) -> str:
     """The sync folder's desktop.ini: its icon and tip, with Hoard's mark."""
@@ -103,22 +115,23 @@ def mark(folder, win: Windows | None = None) -> bool:
     if not folder.is_dir() or folder.is_symlink():
         return False
     mine = _ours(ini)
-    if ini.exists() and mine is None:
-        return False   # (someone else's: left as it is)
+    if (ini.exists() or ini.is_symlink()) and mine is None:
+        return False   # (someone else's, or a link: left as it is)
     try:
         attrs = win.attributes(folder)
         if attrs is None:
             return False
         before = (READONLY_WAS + "1") in mine if mine else bool(attrs & FILE_ATTRIBUTE_READONLY)
-        for f in (ini, icon):   # (a hidden, system file can't be written over until it's plain again)
-            if f.exists() and not f.is_symlink():
-                win.set_attributes(f, 0x80)   # FILE_ATTRIBUTE_NORMAL
-        if icon.is_symlink():
-            icon.unlink()
-        shutil.copyfile(ICON_SOURCE, icon)
-        if ini.is_symlink():
-            ini.unlink()
-        ini.write_text(_ini(before), encoding="utf-8", newline="")
+        for f in (ini, icon):   # (Hoard's own from before, or a link where its icon goes: made again, from nothing)
+            if f.is_symlink():
+                f.unlink()
+            elif f.exists():
+                win.set_attributes(f, 0x80)   # FILE_ATTRIBUTE_NORMAL (a hidden, system file can't be replaced)
+                f.unlink()
+        with open(icon, "xb") as w, open(ICON_SOURCE, "rb") as r:   # (each made new: never through a link)
+            shutil.copyfileobj(r, w)
+        with open(ini, "x", encoding="utf-8", newline="") as w:
+            w.write(_ini(before))
         for f in (ini, icon):
             win.set_attributes(f, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
         win.set_attributes(folder, attrs | FILE_ATTRIBUTE_READONLY)
@@ -183,9 +196,24 @@ def _delete_tree(reg, path: str) -> None:
         pass
 
 
-def register(exe, sync_folder, win: Windows | None = None) -> bool:
+def language(cfg: dict, win: Windows) -> str:
+    """The language for the menu's words: the one chosen in Settings, or Windows' own when that's the system's."""
+    from . import i18n
+    d = cfg.get("display") if isinstance(cfg.get("display"), dict) else {}
+    chosen = i18n.setting(d.get("language"))
+    if chosen != "system":
+        return chosen
+    try:
+        return i18n.from_header(win.ui_language())
+    except (OSError, AttributeError, ValueError):
+        return "en"
+
+
+def register(exe, sync_folder, win: Windows | None = None, lang: str = "en") -> bool:
     """Put Hoard's options in Explorer's right-click menu for this account: Add to Hoard everywhere, and Sync with Hoard
-    now and Open in Hoard on the sync folder (Explorer's AppliesTo, by its full path). False when it can't be."""
+    now and Open in Hoard on the sync folder (Explorer's AppliesTo, by its full path), in lang. False when it can't
+    be."""
+    from . import i18n
     win = win or Windows()
     exe, sync = str(exe), str(sync_folder)
     if not exe or not sync or '"' in exe or '"' in sync:
@@ -194,7 +222,7 @@ def register(exe, sync_folder, win: Windows | None = None) -> bool:
     only_sync = f'System.ItemPathDisplay:="{sync}"'
     try:
         for path, words, arg, sync_only in KEYS.values():
-            _set_key(reg, path, words, f'"{exe}" {arg}', f'"{exe}",0', only_sync if sync_only else None)
+            _set_key(reg, path, i18n.say(lang, words), f'"{exe}" {arg}', f'"{exe}",0', only_sync if sync_only else None)
         return True
     except OSError:
         return False
@@ -207,19 +235,43 @@ def unregister(win: Windows | None = None) -> None:
         _delete_tree(reg, f"{ROOT}\\{path}")
 
 
+def _note(win: Windows, folder: str | None) -> None:
+    """Note the folder with Hoard's icon for the uninstaller (NOTE_KEY), or that there's none."""
+    try:
+        reg = win.registry()
+        if folder:
+            with reg.CreateKey(reg.HKEY_CURRENT_USER, NOTE_KEY) as key:
+                reg.SetValueEx(key, "SyncFolder", 0, reg.REG_SZ, folder)
+        else:
+            _delete_tree(reg, NOTE_KEY)
+            reg.DeleteKey(reg.HKEY_CURRENT_USER, NOTE_KEY.rsplit("\\", 1)[0])   # (Software\Hoard, when that leaves it empty)
+    except OSError:
+        pass
+
+
+def on(cfg: dict) -> bool:
+    """Whether Settings has Hoard shown in File Explorer (the explorer setting, on until it's turned off)."""
+    return cfg.get("explorer", True) is not False
+
+
 def apply(cfg: dict, exe: str | None, was: str | None = None, win: Windows | None = None) -> dict:
     """Make Explorer show what Hoard's settings say: the icon on the sync folder (and off the one it was, was), and the
-    right-click options while there's a sync folder, the menu isn't turned off (explorer_menu) and Hoard knows the
-    program to run (the Tauri shell's, from its hello). {"icon": bool, "menu": bool}: what's in place now."""
+    right-click options while there's a sync folder, Settings shows Hoard in Explorer (on), and Hoard knows the program
+    to run (the Tauri shell's, from its hello). {"icon": bool, "menu": bool}: what's in place now."""
     if not here() and win is None:
         return {"icon": False, "menu": False}
     win = win or Windows()
     sync = str(cfg.get("local_sync") or "").strip()
     if was and os.path.normcase(str(was)) != os.path.normcase(sync):
         unmark(was, win)
-    icon = mark(sync, win) if sync else False
-    if sync and exe and cfg.get("explorer_menu", True) is not False:
-        menu = register(exe, sync, win)
+    icon = False
+    if sync and on(cfg):
+        icon = mark(sync, win)
+    elif sync:
+        unmark(sync, win)
+    _note(win, sync if icon else None)
+    if sync and exe and on(cfg):
+        menu = register(exe, sync, win, language(cfg, win))
     else:
         unregister(win)
         menu = False
@@ -249,30 +301,72 @@ def actions(given) -> list[dict]:
     return out[:MAX_ACTIONS]
 
 
-def add(srv, path: str) -> str:
-    """Add to Hoard (the menu's): a file copied into the sync folder (never over one there: "name (2)"), which Hoard
-    then looks at; a folder (or a file, with no sync folder) added to Local as Add to Local does, a folder listed where
-    it is. What's said in Hoard, in words."""
+def do(srv, action: dict) -> dict | None:
+    """One of the menu's requests (checked by actions()), done. What Hoard says about it, for its page, as a code with
+    what goes in its words ({"said": "copied", "name": ...}: shared.js has the words); None: nothing to say."""
+    if action["do"] == "add":
+        return add(srv, action["path"])
+    if action["do"] == "sync":
+        from . import localsync
+        if not str(srv.cfg.get("local_sync") or "").strip():
+            return {"said": "no-sync"}
+        srv.start_worker("Look at the Local sync folder", localsync.tick, srv)
+        return {"said": "looking"}
+    return None   # ("local": Hoard at Local, where every request ends)
+
+
+def _inside(path: Path, folder: Path) -> bool:
+    """Whether path is the folder or in it."""
+    try:
+        p, f = path.resolve(), folder.resolve()
+    except OSError:
+        return False
+    return p == f or f in p.parents
+
+
+def _copy_new(source: Path, folder: Path) -> Path:
+    """Copy a file into folder under its own name, or "name (2)" and on when that's taken: never over a file there,
+    even one that appears meanwhile (each name is made, or found taken, in one step)."""
+    for n in range(1, 1000):
+        out = folder / (source.name if n == 1 else f"{source.stem} ({n}){source.suffix}")
+        try:
+            with open(out, "xb") as w, open(source, "rb") as r:
+                shutil.copyfileobj(r, w, 1 << 20)
+        except FileExistsError:
+            continue
+        try:
+            shutil.copystat(source, out)   # (its dates, as the file's own)
+        except OSError:
+            pass
+        return out
+    raise OSError(f"no free name for {source.name} in the sync folder")
+
+
+def add(srv, path: str) -> dict:
+    """Add to Hoard (the menu's): a file is copied into the sync folder (never over one there: "name (2)"), which Hoard
+    then looks at; a folder (or a file, when there's no sync folder) is added to Local as Add to Local does, a folder
+    listed where it is. What Hoard says about it (do's codes)."""
     from . import local, localsync
     from .config import root_dir
     p = Path(path)
+    name = p.name or str(p)
     if not p.exists():
-        return f"{p.name} isn't there any more."
+        return {"said": "gone", "name": name}
     sync = str(srv.cfg.get("local_sync") or "").strip()
-    if sync and p.is_file() and not p.is_symlink():
-        folder = Path(sync)
-        if p.resolve().parent == folder.resolve():
-            return f"{p.name} is in the sync folder already."
+    folder = Path(sync) if sync else None
+    if folder and _inside(p, folder):
+        return {"said": "there", "name": name}
+    if folder and folder.is_dir() and p.is_file() and not p.is_symlink():
         if p.stat().st_size > localsync.MAX_FILE:
-            return f"{p.name} is over {localsync.MAX_FILE // (1024 * 1024)} MB, so the sync folder doesn't take it."
-        out, n = folder / p.name, 2
-        while out.exists():
-            out, n = folder / f"{p.stem} ({n}){p.suffix}", n + 1
-        shutil.copy2(p, out)
+            return {"said": "big", "name": name, "mb": localsync.MAX_FILE // (1024 * 1024)}
+        out = _copy_new(p, folder)
         srv.start_worker("Look at the Local sync folder", localsync.tick, srv)
-        return f"{p.name} is in the sync folder: Hoard adds it to Local."
+        return {"said": "copied", "name": out.name}
     copy = not p.is_dir()
-    local.check_source(root_dir(srv.cfg), str(p), copy)   # (ValueError: said in Hoard)
+    try:
+        local.check_source(root_dir(srv.cfg), str(p), copy)
+    except ValueError as e:
+        return {"said": "refused", "name": name, "why": str(e)}
     started = srv.jobs.start("add-local", [], local={"path": str(p), "name": "", "creator": "", "note": "",
                                                       "copy": copy, "depth": 0})
-    return f"Adding {p.name} to Local." if started else f"{p.name} is waiting its turn already."
+    return {"said": {"started": "adding", "queued": "queued"}.get(started, "waiting"), "name": name}

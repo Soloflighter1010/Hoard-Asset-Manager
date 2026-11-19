@@ -2740,5 +2740,22 @@
  "You can download once its whole list is in.": "목록이 다 들어오면 다운로드할 수 있어요.",
  "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too.": "지금 실행 중인 것이 끝나면 Hoard가 목록을 읽어요(작업 참고). '모두 다운로드'도 차례를 기다려요.",
  "That isn't a product's WebP or AVIF picture.": "상품의 WebP나 AVIF 이미지가 아니에요.",
- "That isn't a PNG or JPEG picture.": "PNG나 JPEG 이미지가 아니에요."
+ "That isn't a PNG or JPEG picture.": "PNG나 JPEG 이미지가 아니에요.",
+ "{0} is in the sync folder: Hoard adds it to Local.": "{0}을(를) 동기화 폴더에 넣었어요. Hoard가 로컬에 추가해요.",
+ "{0} is in the sync folder already.": "{0}은(는) 이미 동기화 폴더에 있어요.",
+ "{0} is over {1} MB, so the sync folder doesn't take it.": "{0}은(는) {1} MB를 넘어서 동기화 폴더에 넣지 않아요.",
+ "{0} isn't there any more.": "{0}이(가) 더 이상 없어요.",
+ "Adding {0} to Local.": "{0}을(를) 로컬에 추가하고 있어요.",
+ "{0} is added to Local after what's running now.": "{0}은(는) 지금 실행 중인 작업이 끝난 뒤 로컬에 추가돼요.",
+ "{0} is waiting to be added already.": "{0}은(는) 이미 추가를 기다리고 있어요.",
+ "{0} couldn't be added: {1}": "{0}을(를) 추가하지 못했어요: {1}",
+ "{0} couldn't be added.": "{0}을(를) 추가하지 못했어요.",
+ "Hoard is looking at the sync folder.": "Hoard가 동기화 폴더를 살펴보고 있어요.",
+ "There's no sync folder yet: choose one in Settings, under Local sync folder.": "아직 동기화 폴더가 없어요. 설정의 '로컬 동기화 폴더'에서 골라 주세요.",
+ "Windows didn't let Hoard put its icon on this folder (a desktop.ini of another program's is in it, or the folder can't be changed).": "Windows가 이 폴더에 Hoard 아이콘을 붙이지 못하게 했어요(다른 프로그램의 desktop.ini가 있거나, 폴더를 바꿀 수 없어요).",
+ "Show it in File Explorer: Hoard's icon on the folder, and Add to Hoard when you right-click a file or folder": "파일 탐색기에 표시: 폴더에 Hoard 아이콘을 붙이고, 파일이나 폴더를 오른쪽 클릭하면 'Hoard에 추가'를 보여 줘요",
+ "On Windows 11, Hoard's options are under <0>Show more options</0>.": "Windows 11에서는 Hoard의 항목이 <0>추가 옵션 표시</0> 안에 있어요.",
+ "Add to Hoard": "Hoard에 추가",
+ "Sync with Hoard now": "지금 Hoard와 동기화",
+ "Open in Hoard": "Hoard에서 열기"
 }

@@ -33,6 +33,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   sets.py              Sets: products grouped to use together (sets.json), listed in catalog.json for Import set
   wishlists.py         wishlists: reading them from the stores and saved pages, and a product from its store link
   shortlinks.py        short links for shared sets: Hoard's share server (share/), through egress.send
+  explorer.py          Windows' File Explorer (issue #410): the Local sync folder's icon, and Hoard's right-click options
   backup.py            Backup and restore: settings, tags, sets, choices and the library list in one file
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
@@ -286,6 +287,16 @@ Both servers share the rules in their "web safety" section:
   pasted set code or store link is, lengths capped), keeps the latest in memory, and `/api/status` says one is
   waiting; the page takes it once from `/api/link` and opens the dialog you'd open yourself, with the link's part in
   it. Nothing is added until you confirm, and no link is written to the log or anywhere else.
+- File Explorer's right-click options (issue #410, `hoard/explorer.py`) are this account's alone (under
+  `HKEY_CURRENT_USER\Software\Classes`, never the whole computer's), each a command line Hoard writes from the
+  shell's own path and the sync folder's (one with a `"` in it is never written). They start the shell with
+  `--hoard-add <path>`, `--hoard-sync-now` or `--hoard-open-local`; the shell passes these on in its hello, and a
+  second start hands them to the running copy through `/api/show` (with its token), never as a `hoard://` link,
+  which any web page can fire. `explorer.actions` checks each (a known action, a full path, at most 20). Add to
+  Hoard does only what you'd do in Hoard yourself: a file is copied into the sync folder under a new name (each name
+  made in one step, so never over a file), and anything else goes through Add to Local's own checks
+  (`local.check_source`). The sync folder's `desktop.ini` and icon are made new (never through a link), and one
+  that isn't Hoard's is left as it is; the uninstaller (`shell/installer/hooks.nsh`) takes away only what's Hoard's.
 - Action endpoints only accept `Content-Type: application/json`, which other websites can't send
   without a CORS preflight that the servers never approve.
 - Every page carries a Content-Security-Policy that allows only its own inline script, by hash

@@ -64,6 +64,33 @@ fn start_link() -> Option<String> {
     std::env::args_os().skip(1).filter_map(|a| a.into_string().ok()).find(|a| is_link(a))
 }
 
+/// What File Explorer's right-click menu started this copy for (issue #410, hoard/explorer.py): Add to Hoard
+/// (--hoard-add, then the file or folder), Sync with Hoard now (--hoard-sync-now) and Open in Hoard
+/// (--hoard-open-local). Hoard checks each; a second start hands them to the Hoard that's running.
+fn start_actions() -> Vec<Value> {
+    let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < args.len() && out.len() < 20 {
+        match args[i].as_str() {
+            "--hoard-add" if i + 1 < args.len() => {
+                out.push(json!({"do": "add", "path": args[i + 1]}));
+                i += 1;
+            }
+            "--hoard-sync-now" => out.push(json!({"do": "sync"})),
+            "--hoard-open-local" => out.push(json!({"do": "local"})),
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// This program, for File Explorer's right-click menu to run (issue #410).
+fn own_program() -> Option<String> {
+    std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
 /// Can this copy update itself? Not without the updates' key, and never in the Flatpak, which Flatpak updates (its
 /// files are the .deb's, so Tauri's updater would take it for one).
 fn updates_here() -> bool {
@@ -273,9 +300,10 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
     }
     let mut child = command.spawn().map_err(|e| format!("{}: {e}", program.display()))?;
     *server.stdin.lock().unwrap() = child.stdin.take();
-    // (what this shell can do for Hoard, and the link it was started with: a second start hands it to the Hoard
-    // that's running, through its own server)
-    server.tell(json!({"event": "hello", "updates": updates_here(), "open": start_link()}));
+    // (what this shell can do for Hoard, the link or File Explorer's requests it was started with: a second start
+    // hands them to the Hoard that's running, through its own server; and this program, for Explorer's menu to run)
+    server.tell(json!({"event": "hello", "updates": updates_here(), "open": start_link(), "actions": start_actions(),
+                       "exe": own_program()}));
     let early = std::mem::take(&mut *server.links.lock().unwrap());   // (let go of it before telling Hoard)
     for url in early {
         server.tell(json!({"event": "open", "url": url}));

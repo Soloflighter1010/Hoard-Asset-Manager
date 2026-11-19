@@ -2740,5 +2740,22 @@
  "You can download once its whole list is in.": "一覧がすべてそろうと、ダウンロードできます。",
  "Hoard reads its list when what's running now is done (see Tasks). Download everything waits its turn too.": "今実行中のものが終わると、Hoardが一覧を読み込みます(タスクをご覧ください)。「すべてダウンロード」も順番を待ちます。",
  "That isn't a product's WebP or AVIF picture.": "それは商品のWebPやAVIFの画像ではありません。",
- "That isn't a PNG or JPEG picture.": "それはPNGやJPEGの画像ではありません。"
+ "That isn't a PNG or JPEG picture.": "それはPNGやJPEGの画像ではありません。",
+ "{0} is in the sync folder: Hoard adds it to Local.": "{0}を同期フォルダーに入れました。Hoardがローカルに追加します。",
+ "{0} is in the sync folder already.": "{0}はすでに同期フォルダーにあります。",
+ "{0} is over {1} MB, so the sync folder doesn't take it.": "{0}は{1} MBを超えるため、同期フォルダーには入れません。",
+ "{0} isn't there any more.": "{0}はもうありません。",
+ "Adding {0} to Local.": "{0}をローカルに追加しています。",
+ "{0} is added to Local after what's running now.": "{0}は今実行中のものが終わってからローカルに追加されます。",
+ "{0} is waiting to be added already.": "{0}はすでに追加の順番待ちです。",
+ "{0} couldn't be added: {1}": "{0}を追加できませんでした: {1}",
+ "{0} couldn't be added.": "{0}を追加できませんでした。",
+ "Hoard is looking at the sync folder.": "Hoardが同期フォルダーを見ています。",
+ "There's no sync folder yet: choose one in Settings, under Local sync folder.": "同期フォルダーがまだありません。設定の「ローカルの同期フォルダー」で選んでください。",
+ "Windows didn't let Hoard put its icon on this folder (a desktop.ini of another program's is in it, or the folder can't be changed).": "WindowsがこのフォルダーにHoardのアイコンを付けさせませんでした(ほかのプログラムのdesktop.iniがあるか、フォルダーを変更できません)。",
+ "Show it in File Explorer: Hoard's icon on the folder, and Add to Hoard when you right-click a file or folder": "エクスプローラーに表示: フォルダーにHoardのアイコンを付け、ファイルやフォルダーを右クリックしたときに「Hoardに追加」を出す",
+ "On Windows 11, Hoard's options are under <0>Show more options</0>.": "Windows 11では、Hoardの項目は<0>その他のオプションを確認</0>の中にあります。",
+ "Add to Hoard": "Hoardに追加",
+ "Sync with Hoard now": "今すぐHoardと同期",
+ "Open in Hoard": "Hoardで開く"
 }
