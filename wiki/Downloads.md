@@ -82,6 +82,15 @@ sign-in window or the browser download straight away, and keeps what finished. W
 kept between runs (the last 60), in `tasks.json`. While your hidden library is locked, hidden products' names are
 left out of it.
 
+**Tasks side by side** (5.2.0 beta 11). A small task runs beside what's running when they don't use the same
+thing: reading a product's list of files, adding to Local (and rescanning or taking out), bringing in from KonoAsset,
+deleting downloaded files and checking downloads. Each shows in Tasks with its own progress, **Stop** and **Force
+stop**. Two that use the same thing still take turns: a product's files are read beside a download from another
+store, not the same one, and a check of your downloads waits for a download, which it would read part way. A
+setting a running task uses waits for it too (the store it's reading, the store browser, the downloads folder),
+and the rest change at once: turning off a store a download isn't from, say. A set's prices are read beside
+whatever runs.
+
 **Stop** pauses safely within a few seconds, even part way through a big file. A file Hoard downloads itself
 (Gumroad, itch.io, and Booth and Jinxxy unless they turn Hoard away) resumes where it stopped next time; one the
 browser downloads (Booth or Jinxxy when they do) starts again. Everything that finished is recorded. If the store's

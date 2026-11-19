@@ -219,8 +219,8 @@ class Server(IsolatedTestCase):
             with capture_log(heard.append):
                 while not busy.wait(0.02):
                     log("the main lane's own")
-        self.srv.jobs._verify = verify
-        self.assertEqual(self.srv.jobs.start("verify", []), "started")
+        self.srv.jobs._routine = verify   # (the routine check: the main lane's, as a small task isn't, issue #403)
+        self.assertEqual(self.srv.jobs.start("routine", []), "started")
         step = threading.Event()
 
         def project(what):   # Projects' work, step by step, as hoard/vpm reports it
@@ -243,7 +243,7 @@ class Server(IsolatedTestCase):
             status = self.call("GET", "/api/status")[1]
             self.assertTrue(status["job"]["running"] and status["project_job"]["running"])
             tasks = self.call("GET", "/api/tasks")[1]
-            self.assertEqual((tasks["current"]["task"], tasks["project"]["task"]), ("verify", "project"))
+            self.assertEqual((tasks["current"]["task"], tasks["project"]["task"]), ("routine", "project"))
             waiting = [q for q in tasks["queue"] if q["lane"] == "projects"]
             self.assertTrue(waiting and waiting[0]["id"].startswith("p"))
             self.assertEqual(self.call("POST", "/api/queue/remove", {"id": waiting[0]["id"]})[1], {"ok": True})
@@ -258,7 +258,7 @@ class Server(IsolatedTestCase):
         self.assertEqual(len(self.srv.project_jobs.history), 2, "the refresh waiting its turn was taken off")
         busy.set()
         history = self.call("GET", "/api/tasks")[1]["history"]
-        self.assertEqual({h["lane"] for h in history}, {"projects", "main"} if any(h["task"] == "verify" for h in history) else {"projects"})
+        self.assertEqual({h["lane"] for h in history}, {"projects", "main"} if any(h["task"] == "routine" for h in history) else {"projects"})
 
     def test_projects_log(self):
         """Projects' log, as ALCOM and the Creator Companion keep theirs: what was done (a task's steps and how it

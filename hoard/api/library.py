@@ -14,7 +14,7 @@ def _library_folders(self, path: str, body: dict):
     stay where they are, and leave Hoard's library until it's added again. Not while a job runs, which may be
     using it."""
     srv = self.server
-    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+    if srv.task_running(waiting=True):
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     folders = [str(f) for f in app.libraries.other_folders(srv.cfg)]
     try:

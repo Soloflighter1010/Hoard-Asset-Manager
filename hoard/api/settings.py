@@ -128,8 +128,9 @@ def post_api_settings(self, path, body, query):
     """POST /api/settings. Serve this endpoint through the shared HTTP boundary."""
     srv = self.server
     u = app.urlparse(self.path)
+    # (only one that a running task uses waits for it, issue #403: turning off a store a download isn't from, say)
     busy = [k for k in app.JOB_SETTINGS if k in body]
-    if srv.jobs.state["running"] and busy:
+    if busy and srv.in_use(app.setting_uses(body)):
         return self._json({"error": "That setting can't change while Hoard is refreshing or downloading. It's "
                                     "put back: change it again once the current job has finished.",
                            "settings": app.public_settings(srv.cfg)}, 409)
@@ -209,7 +210,7 @@ def post_api_backup_check(self, path, body, query):
         return self._json({"error": str(e)}, 400)
     if path == "/api/backup/check":
         return self._json({"ok": True, **app.backup.summary(doc)})
-    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+    if srv.task_running(waiting=True):
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     replaces_hidden = isinstance((doc.get("marks") or {}).get("pin"), dict) if isinstance(doc.get("marks"), dict) else False
     if replaces_hidden and app.MarkStore().view()["pin"] and not self._unlocked():
@@ -301,7 +302,7 @@ def post_api_update_install(self, path, body, query):
     if not srv.can_update():
         return self._json({"error": "This copy of Hoard can't update itself. Download the new version from "
                                     "the releases page."}, 409)
-    if srv.jobs.state["running"]:
+    if srv.task_running():
         return self._json({"error": "Wait for the current job to finish (or stop it), then update."}, 409)
     why = srv.updates.start_install(srv.quit_app)
     return self._json({"error": why}, 409) if why else self._json({"ok": True}, 202)
@@ -432,7 +433,7 @@ def post_api_setup_migrate(self, path, body, query):
     """POST /api/setup/migrate. Serve this endpoint through the shared HTTP boundary."""
     srv = self.server
     u = app.urlparse(self.path)
-    if srv.jobs.state["running"]:   # it can change the downloads folder, which a running job is writing to
+    if srv.task_running():   # it can change the downloads folder, which a running job is writing to
         return self._json({"error": "Wait for Hoard to finish what it's doing (or stop it), then bring your "
                                     "library over."}, 409)
     folder = str(body.get("folder") or "").strip().strip('"')[:1000]

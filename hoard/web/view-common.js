@@ -255,14 +255,18 @@ async function watchJobs() {
   try {
     const r = await api("/api/status", { cache: "no-store" });
     if (r.ok) {
-      const st = await r.json(), j = st.job || {};
+      const st = await r.json(), j = st.job || {}, side = st.side_job || {};
       showRoutine(st.routine);
-      if (["verify", "add-local", "move", "rescan-local", "remove-local", "delete-files"].includes(lastTask) && j.task !== lastTask && typeof renderIntegrity === "function") load(true);
+      // a task that changed what Downloads shows has ended, in the main lane or beside it (issue #403)
+      const ended = (was, now) => DISK_TASKS.includes(was) && now.task !== was;
+      if ((ended(lastTask, j) || ended(lastSideTask, side)) && typeof renderIntegrity === "function") load(true);
       jobEnded(lastTask, j);
       lastTask = j.running ? j.task : null;
+      lastSideTask = side.running ? side.task : null;
       taskCount(jobCount(st));
-      const pill = $("#job");   // what's running, on the shelf
-      if (pill) { pill.hidden = !(j.running && j.message); pill.textContent = j.message || ""; }
+      const pill = $("#job");   // what's running, on the shelf (the main lane's, else the one beside it)
+      const said = (j.running && j.message) ? j : (side.running && side.message) ? side : null;
+      if (pill) { pill.hidden = !said; pill.textContent = said ? said.message : ""; }
       if (j.running && (j.sync || j.task === "download" || j.task === "check-updates") && !dlActive) pollDownload();
       if (st.link) takeLink();   // (a hoard:// link waiting, issue #396)
     }

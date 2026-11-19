@@ -3202,18 +3202,20 @@ function renderTasks(t) {
   const place = new Map([...document.querySelectorAll("#tasksBody details[data-id] pre")].map(pre =>
     [pre.closest("details").dataset.id, { top: pre.scrollTop, atEnd: pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4 }]));
   const win = $("#tasksWin"), winTop = win ? win.scrollTop : 0;
-  const cur = t.current, pj = t.project;   // (Projects' tasks run in a lane of their own, beside the rest)
+  // (Projects' tasks run in a lane of their own, beside the rest; so do small tasks that don't get in the way of
+  // what the main lane runs: the side lane, issue #403)
+  const cur = t.current, pj = t.project, side = t.side;
   // The problems a finished task reported.
   const problems = h => ((h.report && h.report.problems) || []);
   // A running task, with its progress and its Stop and Force stop buttons.
   const running = (c, lane) => `<div class="task run"><div class="task-top"><span class="spin" aria-hidden="true"></span><b>${esc(c.label)}</b>` +
-      (lane ? `<button class="ghost sm" data-task="stop" data-lane="${lane}" title="${esc(tr("Stop it at its next step: what it was changing is put back as it was"))}">Stop</button>`
-        : (STOPPABLE.includes(c.task) ? `<button class="ghost sm" data-task="stop">Stop</button>` : "") +
-          `<button class="ghost sm" data-task="force" title="End it now, whatever it's doing">Force stop</button>`) + `</div>` +
+      (lane === "projects" ? `<button class="ghost sm" data-task="stop" data-lane="${lane}" title="${esc(tr("Stop it at its next step: what it was changing is put back as it was"))}">Stop</button>`
+        : (STOPPABLE.includes(c.task) ? `<button class="ghost sm" data-task="stop" data-lane="${lane || ""}">Stop</button>` : "") +
+          `<button class="ghost sm" data-task="force" data-lane="${lane || ""}" title="End it now, whatever it's doing">Force stop</button>`) + `</div>` +
       (c.transfer ? transferHtml(c.transfer) : `<p class="task-msg">${esc(c.message || "Starting")}</p>`) +
       `<details class="live" data-id="${esc(c.id)}"${open.has(c.id) ? " open data-kept" : ""}><summary>Progress</summary><pre>${esc((c.log || []).join("\n"))}</pre></details></div>`;
   $("#tasksBody").innerHTML =
-    `<h3>Running</h3>` + (cur || pj ? (cur ? running(cur) : "") + (pj ? running(pj, "projects") : "")
+    `<h3>Running</h3>` + (cur || pj || side ? (cur ? running(cur) : "") + (side ? running(side, "side") : "") + (pj ? running(pj, "projects") : "")
       : `<p class="none">Nothing is running.</p>`) +
     `<h3>Waiting <span class="n">${t.queue.length || ""}</span>${t.queue.length > 1 ? `<button class="linkish" data-task="clear-queue">Clear</button>` : ""}</h3>` +
     (t.queue.length
@@ -3236,7 +3238,7 @@ function renderTasks(t) {
     pre.scrollTop = d.classList.contains("live") && (!was || was.atEnd) ? pre.scrollHeight : was ? was.top : 0;
   }
   if (win) win.scrollTop = winTop;
-  taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + t.queue.length);
+  taskCount((cur ? 1 : 0) + (pj ? 1 : 0) + (side ? 1 : 0) + t.queue.length);
 }
 // Background readers keep a quiet, separate group and use text nodes for all progress.
 function renderBackgroundTasks(tasks) {
@@ -3291,8 +3293,9 @@ document.addEventListener("toggle", e => {
   const pre = d.querySelector("pre");
   if (pre) pre.scrollTop = pre.scrollHeight;
 }, true);
-// What's running and waiting, in both lanes: Projects' tasks have a lane of their own (/api/status's project_job)
-const jobCount = st => [st.job || {}, st.project_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
+// What's running and waiting, in every lane: Projects' tasks have a lane of their own (/api/status's project_job), and
+// so do small tasks beside the main lane's (side_job, issue #403)
+const jobCount = st => [st.job || {}, st.project_job || {}, st.side_job || {}].reduce((n, j) => n + (j.running ? 1 : 0) + (j.queue || []).length, 0);
 // A job the page was watching has ended: what it changed is read again (both pages' watchers call this)
 function jobEnded(was, j) {
   if ((was === "wishlists" || was === "links") && j.task !== was) loadSets();   // (the wishlists read, or the products a link added, show without a reload)
@@ -6498,7 +6501,7 @@ function wireTasks() {
     else if (act === "force") {   // any task, now: its store browser or sign-in window is closed at once
       if (!await ask("Force stop this task now? Hoard closes its store browser or sign-in window straight away. What " +
                      "finished is kept, and a file part way through resumes next time where it can.", "Force stop", true)) return;
-      const r = await apiPost("/api/force-stop");
+      const r = await apiPost("/api/force-stop", { lane: b.dataset.lane || "" });
       if (!r.ok) toast(r.data.error || "Hoard didn't answer. Try again."); else if (!r.data.ok) toast("Nothing is running.");
     }
     else if (act === "remove") await apiPost("/api/queue/remove", { id: b.dataset.id });
@@ -6513,6 +6516,9 @@ function wireTasks() {
 }
 // Keeps the Tasks count up to date, and brings up a download or sync that was waiting its turn when it starts.
 let lastTask = null;   // a check of the downloads that just ended: the Downloads page shows what it found
+let lastSideTask = null;   // the same, in the side lane (issue #403)
+// The tasks whose end changes what Downloads shows (it reads its products again).
+const DISK_TASKS = ["verify", "add-local", "move", "rescan-local", "remove-local", "delete-files"];
 // Ask before Hoard closes (saying what's still running).
 async function askClose() {
   const d = $("#closeDialog");

@@ -488,8 +488,9 @@ def system_ending() -> bool:
 
 
 def _lanes(srv) -> list:
-    """The server's jobs: the main lane, and Projects' (see hoard/jobs.py)."""
-    return [jobs for jobs in (getattr(srv, "jobs", None), getattr(srv, "project_jobs", None)) if jobs is not None]
+    """The server's jobs: the main lane, Projects' and the side lane's (see hoard/jobs.py)."""
+    return [jobs for jobs in (getattr(srv, "jobs", None), getattr(srv, "project_jobs", None), getattr(srv, "side_jobs", None))
+            if jobs is not None]
 
 
 def close_decision(srv, quitting: bool = False) -> str:
@@ -517,7 +518,7 @@ def quit_when_done(srv, patience: float = 120.0) -> None:
     deadline = time.monotonic() + patience
     while any(jobs.state.get("running") for jobs in _lanes(srv)) and time.monotonic() < deadline:
         time.sleep(0.25)
-    if srv.jobs.state.get("running"):
+    if any(j.state.get("running") for j in _lanes(srv) if j is not getattr(srv, "project_jobs", None)):
         from .browser import end_browsers
         end_browsers(wait=True)   # (one left on its folder too, before Hoard goes)
     if srv.quit_app:

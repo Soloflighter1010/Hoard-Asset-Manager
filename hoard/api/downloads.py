@@ -30,14 +30,16 @@ def _product_files(self, body: dict) -> dict:
             names = [n for n in known[:500] if isinstance(n, str) and 0 < len(n) <= 500]
             files[k] = {"files": names, "read": False, "out": out(k, names)}
     missing = [k for k in keys if k not in files]
-    reading = srv.jobs.keys_of("list-files")   # (being read, or waiting its turn: asked for once, not again)
+    # (being read, or waiting its turn, in either lane: asked for once, not again; issue #403's side lane reads one
+    # beside a download from another store)
+    reading = srv.jobs.keys_of("list-files") | srv.side_jobs.keys_of("list-files")
     unread = [k for k in missing if k not in reading]
     if unread and body.get("read") is True:   # a read of its own, waiting its turn behind another's if need be
         stores = sorted({k.split(":", 1)[0] for k in unread} & set(app.DOWNLOADABLE))
         if stores and srv.jobs.start("list-files", stores, keys=unread):
             reading = reading | set(unread)
     # (waiting: its read hasn't started, as it waits its turn behind what's running now: issue #401)
-    waiting = srv.jobs.waiting_keys_of("list-files")
+    waiting = srv.jobs.waiting_keys_of("list-files") | srv.side_jobs.waiting_keys_of("list-files")
     return {"files": files, "reading": any(k in reading for k in missing), "waiting": any(k in waiting for k in missing)}
 
 
@@ -66,7 +68,7 @@ def _resolve_integrity(self, body: dict):
             return self._json({"ok": True, "in": app.reveal(target if target.is_file() else folder if folder.is_dir() else folder.parent)})
         except (app.UnsafePath, OSError):
             return self._json({"error": "That folder couldn't be opened."}, 400)
-    if srv.jobs.state.get("running"):   # (a sync or check holds its own copy of a store's records, and saves it)
+    if srv.task_running():   # (a sync or check holds its own copy of a store's records, and saves it)
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     done, failed, again = 0, [], {}
     for x in problems:
@@ -382,7 +384,7 @@ def post_api_previous_restore(self, path, body, query):
     """POST /api/previous/restore. Downloads: put a previous version of a file back (hoard/previous.py)"""
     srv = self.server
     u = app.urlparse(self.path)
-    if srv.jobs.state.get("running"):
+    if srv.task_running():
         return self._json({"error": "Wait for Hoard to finish what it's doing, then try again."}, 409)
     folder = app.open_target(srv.cfg, str(body.get("folder", "")))
     if not folder or not folder.is_dir():

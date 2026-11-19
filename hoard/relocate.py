@@ -169,7 +169,7 @@ def change(srv, pid: str, value: str | None, move: bool = False) -> dict:
 def _downloads(srv, old: Path, to: Path) -> dict:
     """The main downloads folder changed: the new one is where downloads go; the old one stays a library folder."""
     from . import libraries
-    if srv.jobs.state.get("running") or srv.jobs.state.get("queue"):
+    if any(j.state.get("running") or j.state.get("queue") for j in (srv.jobs, getattr(srv, "side_jobs", None)) if j):
         raise ValueError("Wait for Hoard to finish what it's doing, then try again.")
     to.mkdir(parents=True, exist_ok=True)
     folders = [str(f) for f in libraries.other_folders(srv.cfg) if not _inside(f, to)]

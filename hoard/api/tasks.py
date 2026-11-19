@@ -27,6 +27,7 @@ def get_api_tasks(self, path, body, query):
             return {**job, **app.public_job({k: job.get(k) for k in ("message", "log", "report", "label", "transfer") if k in job}, hidden)}
         tasks = {**tasks, "current": mask(tasks["current"]) if tasks["current"] else None,
                  "project": mask(tasks["project"]) if tasks["project"] else None,
+                 "side": mask(tasks["side"]) if tasks.get("side") else None,
                  "queue": [mask(q) for q in tasks["queue"]], "history": [mask(h) for h in tasks["history"]]}
     return self._json(tasks, compress=True)
 
@@ -44,6 +45,7 @@ def get_api_status(self, path, body, query):
     u = app.urlparse(self.path)
     said = {"job": app.public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
             "project_job": app.public_job(srv.project_jobs.state, self._hidden_names()),
+            "side_job": app.public_job(srv.side_jobs.state, self._hidden_names()),   # (issue #403)
             "routine": app.routine_record()["found"]}
     if srv.link_waiting():   # (a hoard:// link to open, issue #396: the page takes it from /api/link)
         said["link"] = True
@@ -74,7 +76,7 @@ def post_api_queue_remove(self, path, body, query):
     srv = self.server
     u = app.urlparse(self.path)
     job_id = str(body.get("id") or "")[:20]
-    return self._json({"ok": srv.lane(app.PROJECTS if job_id.startswith("p") else None).remove(job_id)})
+    return self._json({"ok": srv.lane_of(job_id).remove(job_id)})
 
 
 def post_api_queue_clear(self, path, body, query):

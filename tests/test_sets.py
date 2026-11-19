@@ -2,6 +2,7 @@
 import json
 import os
 import tempfile
+import threading
 import unittest
 from tests.isolation import IsolatedTestCase
 from pathlib import Path
@@ -1190,7 +1191,7 @@ class PricesOfASet(IsolatedTestCase):
             return {"price": {"text": "¥500", "amount": 500, "currency": "JPY"}}
 
         with mock.patch("hoard.wishlists.from_product_page", page), mock.patch("hoard.common.pause", lambda s: None), \
-                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+                mock.patch.object(self.srv, "start_beside", lambda name, target, *a: target(*a)):
             self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}))
             self.assertEqual(read, ["https://booth.pm/ja/items/111", "https://booth.pm/ja/items/222"])
             shown = next(s for s in self.call("GET", "/api/sets")[1]["sets"] if s["id"] == "a1")
@@ -1217,11 +1218,27 @@ class PricesOfASet(IsolatedTestCase):
                                   "url": "https://booth.pm/ja/items/222"}}}]}))
         found = {"price": {"text": "¥500", "amount": 500, "currency": "JPY"}, "thumbnail": BOOTH_PIC, "creator": "Kitsu"}
         with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: found), mock.patch("hoard.common.pause", lambda s: None), \
-                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+                mock.patch.object(self.srv, "start_beside", lambda name, target, *a: target(*a)):
             self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}))
         products = store.load()["sets"][0]["products"]
         self.assertEqual((products[RUSK]["creator"], products[RUSK]["thumbnail"]), ("Kitsu", BOOTH_PIC))
         self.assertEqual(products[HOODIE]["creator"], "Typed by its maker", "what it had is kept")
+
+    def test_prices_are_read_while_a_download_runs(self):
+        """Issue #403: a set's prices are read from their public pages beside a download, not after it."""
+        store = sets.SetStore()
+        store.path.parent.mkdir(parents=True, exist_ok=True)
+        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK],
+            "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
+        gate, read = threading.Event(), threading.Event()
+        self.addCleanup(gate.set)
+        with mock.patch.object(self.srv.jobs, "_download", lambda *a, **k: gate.wait(20)), \
+                mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: read.set() or {}):
+            self.assertEqual(self.srv.jobs.start("download", ["booth"]), "started")
+            self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}))
+            self.assertTrue(read.wait(10), "read while the download runs")
+            self.assertTrue(self.srv.jobs.state["running"])
+            gate.set()
 
     def test_a_date_that_isnt_one(self):
         store = sets.SetStore()
@@ -1229,7 +1246,7 @@ class PricesOfASet(IsolatedTestCase):
         store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK], "priced": "2026-99-99T99:99:99Z",
             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
         with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: {}), \
-                mock.patch.object(self.srv, "start_worker", lambda name, target, *a: target(*a)):
+                mock.patch.object(self.srv, "start_beside", lambda name, target, *a: target(*a)):
             self.assertEqual(self.call("POST", "/api/sets/prices", {"id": "a1"}), (200, {"started": True}), "read again")
 
 
