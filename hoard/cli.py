@@ -22,6 +22,7 @@ from .paths import CONFIG_FILE, DEBUG_DIR, LIBRARY_FILE
 from .safety import scrub
 from .kept_pages import open_library, read_found, reader_summary
 from .app import run_app, self_test
+from . import links
 from .server import serve
 from .setup import install_browser, migrate_from
 
@@ -217,6 +218,8 @@ def main(argv=None) -> None:
     ap.add_argument("--no-open", action="store_true", help="run Hoard as a server only, without opening it")
     ap.add_argument("--browser", action="store_true", help="open Hoard in your web browser instead of its own window")
     ap.add_argument("--shell", action="store_true", help=argparse.SUPPRESS)   # (its Tauri shell's window: hoard/shell.py)
+    ap.add_argument("--open", metavar="LINK", help="open a hoard:// link in Hoard: a shared set, a product to add to a "
+                    "wishlist, or a product in your library (in the Hoard that's running, if one is)")
     sub = ap.add_subparsers(dest="cmd", metavar="command")
     s = sub.add_parser("login", help="sign in to a store in a browser window (itch.io: with an API key)")
     s.add_argument("store", choices=list(STORES))
@@ -246,6 +249,9 @@ def main(argv=None) -> None:
     s = sub.add_parser("probe", help="record what the Jinxxy site loads, for troubleshooting (scrubbed of personal details)")
     s.add_argument("store", choices=["jinxxy"])
     s.add_argument("--raw", action="store_true", help="save pages as they are, with screenshots (contains your details)")
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if len(argv) == 1 and links.is_link(argv[0]):   # (a desktop entry's %u: a hoard:// link alone, issue #396)
+        argv = [f"--open={argv[0]}"]
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     try:
@@ -254,7 +260,7 @@ def main(argv=None) -> None:
             serve(cfg, args.host, args.port, not args.no_open, args.tls_cert, args.tls_key, args.plain_http,
                   config_path=args.config)
         elif args.cmd is None:
-            sys.exit(run_app(cfg, args.config, browser=args.browser, shell=args.shell))   # the app, in its own window
+            sys.exit(run_app(cfg, args.config, browser=args.browser, shell=args.shell, link=args.open))   # the app, in its own window
         elif args.cmd == "self-test":
             sys.exit(self_test())
         elif args.cmd == "login":

@@ -25,6 +25,10 @@ class _Server:
         self.cfg = {"close_to_taskbar": close_to_taskbar}
         self.jobs, self.project_jobs = _Jobs(running), _Jobs()
         self.show_window = self.hide_window = self.quit_app = self.pick_path = None
+        self.links = []
+
+    def ask_open(self, url):
+        self.links.append(url)
 
     def entry_url(self):
         return "http://127.0.0.1:8765/?once=abc"
@@ -131,6 +135,33 @@ class Protocol(IsolatedTestCase):
         os.close(self.to_hoard_w)
         t.join(5)
         self.assertFalse(t.is_alive())
+
+    def test_a_link_the_shell_was_started_with_waits_for_hoard(self):
+        """The hello comes first, with the hoard:// link the shell was started with (issue #396): run_app takes it at
+        once (a second start hands it to the Hoard that's running), and Hoard's page is given it once Hoard is up.
+        Events that come before then wait for it, in their order."""
+        self.shell.listen(hold=True)
+        self.event(event="hello", updates=False, open="hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv")
+        self.assertTrue(self.shell.hello.wait(5))
+        self.assertEqual(self.shell.link, "hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv")
+        self.event(event="open", url="hoard://open")   # (a Mac hands a link to the app that's open)
+        srv = _Server()
+        t = self.run_hoard(srv)
+        self.event(event="open", url="hoard://product/booth/123")
+        self.event(event="closing", quitting=True)
+        self.assertEqual(self.message(), {"do": "hide"})
+        t.join(5)
+        self.assertEqual(srv.links, ["hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv", "hoard://open",
+                                     "hoard://product/booth/123"])
+
+    def test_a_hello_without_a_link(self):
+        self.shell.listen(hold=True)
+        self.event(event="hello", updates=True, open=None)
+        self.assertTrue(self.shell.hello.wait(5))
+        self.assertIsNone(self.shell.link)
+        self.event(event="hello", updates=True, open=["hoard://open"])   # (only words)
+        threading.Event().wait(0.2)
+        self.assertIsNone(self.shell.link)
 
     def test_the_shell_says_whether_it_updates_this_copy(self):
         self.shell.listen()

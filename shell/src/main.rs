@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -26,6 +27,10 @@ const UPDATE_KEY: &str = include_str!("../updater.pub");
 const RELEASES: &str = "https://github.com/Soloflighter1010/Hoard-Asset-Manager/releases/download/";
 /// A link the page opens in a new window (or a target=_blank link), sent here by LINKS to open in your browser.
 const OPEN_HOST: &str = "hoard-open.invalid";
+/// Hoard's own links (issue #396): hoard://set/..., hoard://add?link=..., hoard://product/... and hoard:// itself.
+/// The shell only passes them on to Hoard, which checks each (hoard/links.py); a longer one isn't one.
+const SCHEME: &str = "hoard:";
+const MAX_LINK: usize = 300 * 1024;
 /// The page's links that would open a new window open in your browser instead, as in Hoard's pywebview window.
 const LINKS: &str = r#"(() => {
   const out = u => { try { location.assign("https://hoard-open.invalid/?u=" + encodeURIComponent(new URL(u, location.href).href)); } catch (e) {} };
@@ -45,6 +50,18 @@ struct Server {
     update: Mutex<Option<(Update, Vec<u8>)>>, // an update downloaded and checked against its signature
     updating: AtomicBool,          // one is being downloaded
     install: AtomicBool,           // Hoard is quitting for it: install it once Hoard has stopped, then open again
+    links: Mutex<Vec<String>>,     // hoard:// links that came before Hoard's server started (a Mac's, as it opens)
+}
+
+/// Is this one of Hoard's links (its scheme in any case, and not too long)?
+fn is_link(text: &str) -> bool {
+    text.len() <= MAX_LINK && text.get(..SCHEME.len()).is_some_and(|s| s.eq_ignore_ascii_case(SCHEME))
+}
+
+/// The hoard:// link this copy was started with, if any: Windows and Linux start Hoard with a link as its only
+/// argument (the installer's, or the desktop entry's %u). Nothing else on the command line is passed on.
+fn start_link() -> Option<String> {
+    std::env::args_os().skip(1).filter_map(|a| a.into_string().ok()).find(|a| is_link(a))
 }
 
 /// Can this copy update itself? Not without the updates' key, and never in the Flatpak, which Flatpak updates (its
@@ -106,6 +123,22 @@ impl Server {
         if let Some(stdin) = self.stdin.lock().unwrap().as_mut() {
             let _ = writeln!(stdin, "{event}").and_then(|_| stdin.flush());
         }
+    }
+
+    /// A hoard:// link for Hoard to open, now, or once its server has started (a Mac's: elsewhere a link comes as
+    /// the argument a new copy is started with, start_link).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    fn open_link(&self, url: String) {
+        if !is_link(&url) {
+            return;
+        }
+        let stdin = self.stdin.lock().unwrap();
+        if stdin.is_none() {
+            self.links.lock().unwrap().push(url);
+            return;
+        }
+        drop(stdin);
+        self.tell(json!({"event": "open", "url": url}));
     }
 }
 
@@ -240,7 +273,13 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
     }
     let mut child = command.spawn().map_err(|e| format!("{}: {e}", program.display()))?;
     *server.stdin.lock().unwrap() = child.stdin.take();
-    server.tell(json!({"event": "hello", "updates": updates_here()}));   // (what this shell can do for Hoard)
+    // (what this shell can do for Hoard, and the link it was started with: a second start hands it to the Hoard
+    // that's running, through its own server)
+    server.tell(json!({"event": "hello", "updates": updates_here(), "open": start_link()}));
+    let early = std::mem::take(&mut *server.links.lock().unwrap());   // (let go of it before telling Hoard)
+    for url in early {
+        server.tell(json!({"event": "open", "url": url}));
+    }
     let stdout = child.stdout.take().ok_or("no output from Hoard's server")?;
     {
         let (app, server) = (app.clone(), server.clone());
@@ -282,12 +321,14 @@ fn main() {
         update: Mutex::new(None),
         updating: AtomicBool::new(false),
         install: AtomicBool::new(false),
+        links: Mutex::new(Vec::new()),
     });
     let mut builder = tauri::Builder::default();
     if updates_here() {   // (only where this copy can update itself: with the updates' key, and not the Flatpak)
         builder = builder.plugin(tauri_plugin_updater::Builder::new().pubkey(UPDATE_KEY.trim()).build());
     }
     let app = builder
+        .plugin(tauri_plugin_deep_link::init())   // (hoard:// in the installers, from tauri.conf.json: issue #396)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -297,6 +338,12 @@ fn main() {
         )
         .manage(server.clone())
         .setup(move |app| {
+            // An AppImage isn't installed, so nothing told the desktop it opens hoard:// links: it says so itself,
+            // each time it starts (where it is may have changed).
+            #[cfg(target_os = "linux")]
+            if std::env::var_os("APPIMAGE").is_some() {
+                let _ = app.deep_link().register_all();
+            }
             let handle = app.handle().clone();
             let (watch, open) = (server.clone(), app.handle().clone());
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -342,6 +389,14 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Hoard's window couldn't start");
     app.run(|app, event| {
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls } = &event {
+            // (a Mac hands a link to the app that's open, or opens it for one: never as an argument)
+            let server = app.state::<Arc<Server>>();
+            for url in urls {
+                server.open_link(url.to_string());
+            }
+        }
         if let RunEvent::ExitRequested { api, code, .. } = event {
             let server = app.state::<Arc<Server>>();
             if code.is_none() && !server.leaving.load(Ordering::SeqCst) {

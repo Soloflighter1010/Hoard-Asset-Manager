@@ -280,6 +280,12 @@ Both servers share the rules in their "web safety" section:
   on a browser's command line; `hoard serve` prints an address with the key itself (`#key=...`), which
   is also what other devices open. The pages and fonts hold nothing private and need no key.
   `/api/show` (a second copy of Hoard) proves itself with the token in the running copy's private file.
+- A `hoard://` link (issue #396, `hoard/links.py`) is untrusted words from whatever web page fired it. The shell
+  passes on only an argument that is one (in its hello, or a Mac's open event); a second start hands it to the
+  running copy through `/api/show`. The server checks it (`links.parse`: four kinds of link, each part checked as a
+  pasted set code or store link is, lengths capped), keeps the latest in memory, and `/api/status` says one is
+  waiting; the page takes it once from `/api/link` and opens the dialog you'd open yourself, with the link's part in
+  it. Nothing is added until you confirm, and no link is written to the log or anywhere else.
 - Action endpoints only accept `Content-Type: application/json`, which other websites can't send
   without a CORS preflight that the servers never approve.
 - Every page carries a Content-Security-Policy that allows only its own inline script, by hash

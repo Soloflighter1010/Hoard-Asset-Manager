@@ -474,6 +474,7 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.cfg_lock = threading.RLock()
         self.quit_app = None
         self.show_token = None
+        self._link, self._link_lock = None, threading.Lock()   # a hoard:// link for the page, once (ask_open)
         self.last_seen = time.time()
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
         self.key = secrets.token_urlsafe(32)   # new on every start, in memory only
@@ -574,6 +575,34 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         if isinstance(sys.exc_info()[1], (ConnectionError, TimeoutError)):
             return
         super().handle_error(request, client_address)
+
+    def ask_open(self, url) -> None:
+        """A hoard:// link (issue #396), from a second start of Hoard or the shell: Hoard comes to the front, and its
+        page is given what the link asks for (hoard/links.py checks it), or why it can't be opened. Only the latest
+        is kept, in memory, until the page takes it (take_open), and it's never written down."""
+        from . import links
+        try:
+            asked = links.parse(url)
+        except links.Refused as e:
+            asked = {"do": "error", "error": str(e)}
+        if asked["do"] != "show":
+            with self._link_lock:
+                self._link = asked
+        if self.show_window:
+            try:
+                self.show_window()
+            except Exception:   # (a window that's gone: the page still takes it when it's back)
+                pass
+
+    def link_waiting(self) -> bool:
+        """Whether there's a link for the page to take (/api/status says so; only /api/link gives it)."""
+        return self._link is not None
+
+    def take_open(self) -> dict | None:
+        """The link the page is to open (ask_open), once: it's gone as soon as it's given."""
+        with self._link_lock:
+            asked, self._link = self._link, None
+        return asked
 
     def entry_url(self) -> str:
         """A one-time link to Hoard's page, for opening its window or a browser. The page trades the token in it for

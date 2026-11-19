@@ -1100,6 +1100,9 @@ class Tab(IsolatedTestCase):
             link = page.input_value("#makeLink")
             self.assertTrue(link.startswith("https://hoard.furryup.link/set.html#H1."))
             got = sets.from_code(link)   # (Hoard opens it as it opens any shared set)
+            self.assertEqual(page.get_attribute("#makeHoard", "href"), "hoard://set/" + link.split("#", 1)[1],
+                             "Open in Hoard (issue #396), with the same code")
+            self.assertTrue(page.locator("#makeHoardNote").is_hidden())
             self.assertEqual((got["name"], got["note"]), ("Winter <outfit>", "For snowy worlds"))
             products = [got["products"][k] for k in got["items"]]
             self.assertEqual([(p["store"], p["name"], p.get("creator", ""), p["url"]) for p in products], [
@@ -1115,6 +1118,7 @@ class Tab(IsolatedTestCase):
             page.locator("#setView").wait_for()
             self.assertEqual(page.inner_text("#setName"), "Winter <outfit>")
             self.assertEqual(page.locator(".sv-item").count(), 4)
+            self.assertEqual(page.get_attribute("#setHoard", "href"), "hoard://set/" + link.split("#", 1)[1])
             self.assertFalse(any(not u.startswith("https://hoard.furryup.link/") for u in asked), "nothing asked of any other site")
             self.assertFalse(any("H1." in u.split("#")[0] for u in asked), "the set never leaves the page")
             self.assertEqual(errors, [])

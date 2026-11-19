@@ -2697,5 +2697,20 @@
  "Its store refused Hoard's request, so its page is read in Hoard's browser (see Tasks): it's added when that's done.": "ストアがHoardのリクエストを断ったため、そのページはHoardのブラウザーで読みます(タスクをご覧ください)。終わると追加されます。",
  "Their store refused Hoard's request, so {0} pages are read in Hoard's browser (see Tasks): they're added when that's done.": "ストアがHoardのリクエストを断ったため、{0}件のページはHoardのブラウザーで読みます(タスクをご覧ください)。終わると追加されます。",
  "the store refused Hoard's request for its page": "ストアがページへのHoardのリクエストを断りました",
- "Hoard has too much waiting to read it in its browser now: try again later": "Hoardのブラウザーで読むのを待っているものが多すぎます。あとでもう一度お試しください"
+ "Hoard has too much waiting to read it in its browser now: try again later": "Hoardのブラウザーで読むのを待っているものが多すぎます。あとでもう一度お試しください",
+ "A link asked Hoard to add this product: {0}": "リンクから、この商品を追加するよう頼まれました: {0}",
+ "Add to which wishlist?": "どのほしい物リストに追加しますか？",
+ "Find a wishlist": "ほしい物リストを探す",
+ "Hoard couldn't read your wishlists. Try the link again in a moment.": "ほしい物リストを読めませんでした。少ししてから、もう一度リンクを開いてください。",
+ "New wishlist...": "新しいほしい物リスト...",
+ "That product isn't in your library.": "その商品はライブラリにありません。",
+ "That Hoard link couldn't be opened.": "そのHoardリンクは開けませんでした。",
+ "That isn't a Hoard link.": "Hoardのリンクではありません。",
+ "That Hoard link is too long to be one.": "そのHoardリンクは長すぎます。",
+ "Hoard doesn't know what that link asks for. Hoard links open a shared set, a product to add to a wishlist, or a product in your library.": "そのリンクが何を求めているのか、Hoardにはわかりません。Hoardリンクで開けるのは、共有されたセット、ほしい物リストに追加する商品、ライブラリにある商品です。",
+ "That link's short link is cut short, or has been changed: copy all of it, and try again.": "そのリンクの短縮リンクは途中で切れているか、変更されています。全体をコピーして、もう一度試してください。",
+ "That link has no set in it. A set's code starts with H1. or S1.": "そのリンクにはセットが入っていません。セットのコードはH1.かS1.で始まります。",
+ "That link doesn't name one product to add. It needs ?link= and a product's page on a store.": "そのリンクは、追加する商品を1つ示していません。?link= と、ストアの商品のページが必要です。",
+ "That link's product isn't a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io.": "そのリンクの商品は、Booth、Gumroad、Jinxxy、Payhip、itch.ioの商品のページではありません。",
+ "That link doesn't name a product on Booth, Gumroad, Jinxxy, Payhip or itch.io.": "そのリンクは、Booth、Gumroad、Jinxxy、Payhip、itch.ioの商品を示していません。"
 }

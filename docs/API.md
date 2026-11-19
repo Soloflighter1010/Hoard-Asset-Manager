@@ -49,6 +49,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/libraries/add` | key | yes | `n: any`, `path: string` | object |
 | POST | `/api/libraries/remove` | key | yes | `n: any`, `path: string` | object |
 | GET | `/api/library` | key | no | — | object |
+| POST | `/api/link` | key | yes | — | object |
 | GET | `/api/loading` | key | no | — | object |
 | POST | `/api/local/add` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/picture` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
@@ -90,7 +91,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/setup/browser` | key | yes | — | object |
 | POST | `/api/setup/done` | key | yes | `done: boolean` | object |
 | POST | `/api/setup/migrate` | key | yes | `folder: string` | object |
-| POST | `/api/show` | instance | no | `token: string` | object |
+| POST | `/api/show` | instance | no | `open: string`, `token: string` | object |
 | POST | `/api/signin-link` | key | yes | `url: string` | object |
 | GET | `/api/space` | key | no | — | object |
 | GET | `/api/status` | key | no | — | object |

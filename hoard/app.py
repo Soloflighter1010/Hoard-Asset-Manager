@@ -158,16 +158,19 @@ def running_file() -> Path:
     return data_dir() / "running.json"
 
 
-def show_running_copy(wait_s: float = 10.0) -> bool:
-    """Ask the Hoard that's already running to bring its window to the front. It proves this request comes from
-    another Hoard of the same user with the token it wrote in its private app-data folder."""
+def show_running_copy(wait_s: float = 10.0, link: str | None = None) -> bool:
+    """Ask the Hoard that's already running to bring its window to the front, with the hoard:// link this start was
+    given (issue #396) for its page to open. It proves this request comes from another Hoard of the same user with
+    the token it wrote in its private app-data folder."""
+    from . import links
+    body = {"open": link} if links.is_link(link) and len(link) <= links.MAX_LINK else {}
     deadline = time.time() + wait_s
     while time.time() < deadline:
         try:
             info = json.loads(running_file().read_text("utf-8"))
             url, token = info.get("url"), info.get("token")
             if isinstance(url, str) and url.startswith("http://127.0.0.1:") and isinstance(token, str):
-                with local_request(url + "api/show", {"token": token}, timeout=3) as r:
+                with local_request(url + "api/show", {**body, "token": token}, timeout=3) as r:
                     if r.status == 200:
                         return True
         except (OSError, ValueError):
@@ -190,13 +193,21 @@ def window_available() -> bool:
         return False
 
 
-def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: bool = False) -> int:
+def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: bool = False,
+            link: str | None = None) -> int:
     """Start Hoard for the person at the computer: its window (or the browser), until it's closed or quit. With
-    shell, the window is the Tauri shell's that started this Hoard (hoard/shell.py)."""
+    shell, the window is the Tauri shell's that started this Hoard (hoard/shell.py). link: a hoard:// link to open
+    (issue #396), given on the command line or, from the shell, in its hello."""
     from .server import serve
+    if shell:
+        from . import shell as tauri
+        tauri.SHELL = tauri.SHELL or tauri.claim_pipes()
+        tauri.SHELL.listen(hold=True)   # (its hello at once: what it can do, the link it was started with)
     lock = InstanceLock(data_dir() / "running.lock")
     if not lock.acquire():   # (before the log: a second copy only brings the first to the front, and keeps no log)
-        if show_running_copy():
+        if shell and not link and tauri.SHELL.hello.wait(5):
+            link = tauri.SHELL.link
+        if show_running_copy(link=link):
             return 0
         message("Hoard is already running, but isn't answering. Close it (or restart your computer) and open it again.")
         return 1
@@ -234,9 +245,10 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: b
         if os.name == "posix":
             os.chmod(running_file(), 0o600)
         opened = False
+        if link:   # (once the page has loaded, it takes this from /api/status)
+            srv.ask_open(link)
         if shell:
-            from . import shell as tauri
-            tauri.open_in_shell(srv, tauri.SHELL or tauri.claim_pipes())
+            tauri.open_in_shell(srv, tauri.SHELL)
             opened = True
         elif not browser and window_available():
             try:

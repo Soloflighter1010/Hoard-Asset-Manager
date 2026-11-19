@@ -14,8 +14,10 @@ From Hoard to the shell, each line starting with MARK (anything else the shell o
     {"do": "install"}                     Hoard is quitting for it: install it once Hoard has stopped, then open again
 
 From the shell to Hoard:
-    {"event": "hello", "updates": bool}   what the shell can do: update this copy itself (not without the updates' key,
-                                          and never in the Flatpak)
+    {"event": "hello", "updates": bool, "open": ... or null}   first, always: what the shell can do (update this
+                                          copy itself: not without the updates' key, and never in the Flatpak), and
+                                          the hoard:// link it was started with (issue #396)
+    {"event": "open", "url": ...}         a hoard:// link, while it runs (a Mac hands them to the app that's open)
     {"event": "closing", "quitting": bool}   the window's close button (quitting: Command-Q on a Mac)
     {"event": "picked", "id": n, "path": ... or null}
     {"event": "update", "state": "downloading", "got": bytes, "total": bytes or null}, then "ready", or "failed"
@@ -47,8 +49,14 @@ class Shell:
         self.on_closing = lambda quitting: None
         self.on_gone = lambda: None
         self.on_update = lambda event: None
+        self.on_link = lambda url: None
         self.gone = threading.Event()
         self.can_update = False   # (the shell's hello says: this copy can update itself)
+        self.hello = threading.Event()   # the shell's hello has come (its first line)
+        self.link: str | None = None     # the hoard:// link it was started with, from its hello
+        self._listening = False
+        self._order = threading.RLock()  # events in the order they came, those before start() held until then
+        self._started, self._early = False, []
 
     def send(self, **message) -> None:
         """One message to the shell (dropped once it's gone)."""
@@ -61,9 +69,21 @@ class Shell:
         except OSError:   # (the shell has gone)
             self._ended()
 
-    def listen(self) -> None:
-        """Read the shell's events until its input ends, on a thread of its own."""
+    def listen(self, hold: bool = False) -> None:
+        """Read the shell's events until its input ends, on a thread of its own (once: again does nothing). Its hello
+        is taken at once; with hold, the rest wait for start() (run_app listens for the hello before Hoard is up)."""
+        with self._order:
+            if self._listening:
+                return
+            self._listening, self._started = True, not hold
         threading.Thread(target=self._read, daemon=True, name="shell").start()
+
+    def start(self) -> None:
+        """Hoard is ready for the shell's events (its handlers are in place): those that came before go first."""
+        with self._order:
+            self._started, early, self._early = True, self._early, []
+            for event in early:
+                self._event(event)
 
     def _read(self) -> None:
         """Each line from the shell, as an event, until it ends."""
@@ -80,10 +100,28 @@ class Shell:
         self._ended()
 
     def _event(self, event: dict) -> None:
-        """One event from the shell: the close button, or a picker's answer."""
+        """One event from the shell: its hello, the close button, a picker's answer, or a link to open."""
         kind = event.get("event")
         if kind == "hello":
             self.can_update = event.get("updates") is True
+            link = event.get("open")
+            self.link = link if isinstance(link, str) and link else None
+            self.hello.set()
+            if self.link:
+                self._event({"event": "open", "url": self.link})
+            return
+        with self._order:
+            if not self._started:
+                self._early.append(event)
+                return
+            self._handle(kind, event)
+
+    def _handle(self, kind, event: dict) -> None:
+        """One event, once Hoard is ready for it."""
+        if kind == "open":
+            url = event.get("url")
+            if isinstance(url, str) and url:
+                self.on_link(url)
         elif kind == "update":
             self.on_update(event)
         elif kind == "closing":
@@ -199,6 +237,8 @@ def open_in_shell(srv, shell: Shell) -> None:
     srv.pick_path = shell.pick
     shell.on_closing = closing
     shell.on_gone = leaving.set
+    shell.on_link = srv.ask_open
     shell.listen()
+    shell.start()
     shell.send(do="open", url=srv.entry_url())
     leaving.wait()

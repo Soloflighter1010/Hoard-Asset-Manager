@@ -1560,6 +1560,7 @@ function wirePrivacy() {
 /* ---------- offline notice: everything here works offline except the store links and refreshing */
 const showConnection = () => { $("#offline").hidden = navigator.onLine; };
   return {
+    hasProduct: key => byKey.has(key),   // (in the library, as it's shown: a hoard:// link's product, issue #396)
     get STORE_ORDER() { return STORE_ORDER; },
     get shown() { return shown; },
     get usedStores() { return usedStores; },

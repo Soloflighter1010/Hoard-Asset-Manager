@@ -60,6 +60,11 @@ currency conversion and the others above) was done in PR #365.
 - [ ] [#390](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/390) — Projects: Get it ready imports a new project in the background, in Unity's batch mode (from #377's research).
 - [x] [#382](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/382) — Research: a .unitypackage from a Local asset without opening Unity: built as Make a Unity package ([docs/UNITYPACKAGE-FROM-LOCAL.md](docs/UNITYPACKAGE-FROM-LOCAL.md)).
 
+## Requested after beta 10
+
+- [x] [#396](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/396) — `hoard://` links: open a shared set, a product to add to a wishlist, or a product in your library, with **Open in Hoard** on the website's set viewer and set maker.
+- [ ] [#394](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/394) — Try Hoard on the website: a demo in the browser with a pretend sign-in and real products (waiting on the list of products to show).
+
 ## Later and research
 
 - [ ] [#306](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/306) — New products and sales from followed creators; previously deferred to Hoard V6.

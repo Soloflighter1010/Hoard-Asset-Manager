@@ -6179,14 +6179,7 @@ async function setAct(e) {
   if (act === "quickwish") { readWishlists([b.dataset.store], b.dataset.list); return; }
   if (act === "mix") { mixAndMatch(); return; }
   if (act === "importwish") { importWishlists(); return; }
-  if (act === "import") {
-    let code = await askName("Paste the set's link or code", "", { max: 262144 });
-    if (code && SHORT_LINK.test(code.replace(/\s+/g, ""))) code = await openShortLink(code);
-    if (!code) return;
-    const done = await changeSets({ action: "import", code });
-    if (done && done.made) { showSet(done.made); toast("Added the shared set. Products you don't own yet show where to buy them."); }
-    return;
-  }
+  if (act === "import") { addSharedSet(); return; }
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
   if (act === "addplaceholder") {
     const name = await askName("Describe the placeholder asset");
@@ -6359,12 +6352,21 @@ function wireSets() {
     wishChanged();
   });
 }
+// Add a shared set...: its link or code pasted (or given by a hoard:// link, already in the box), then kept.
+async function addSharedSet(given = "") {
+  let code = await askName("Paste the set's link or code", given, { max: 262144 });
+  if (code && SHORT_LINK.test(code.replace(/\s+/g, ""))) code = await openShortLink(code);
+  if (!code) return;
+  const done = await changeSets({ action: "import", code });
+  if (done && done.made) { showSet(done.made); toast("Added the shared set. Products you don't own yet show where to buy them."); }
+}
 // Add products by link: store pages pasted, one a line; Hoard reads each one's public page (its name, creator, price
-// and picture) and adds it to the set or wishlist, so a list of your own can hold what you don't own yet
-async function addByLinks(s) {
+// and picture) and adds it to the set or wishlist, so a list of your own can hold what you don't own yet. given: a
+// hoard:// link's, already in the box.
+async function addByLinks(s, given = "") {
   const res = await askForm({ icon: "link", title: tr("Add products by link"), ok: tr("Add them"),
     detail: tr("Paste the links of products on Booth, Gumroad, Jinxxy, Payhip or itch.io, one a line. Hoard reads each product's page, as anyone can see it, for its name, creator, price and picture."),
-    blocks: [{ type: "field", id: "addLinks", label: tr("Links"), rows: 6, placeholder: "https://booth.pm/en/items/..." }] });
+    blocks: [{ type: "field", id: "addLinks", label: tr("Links"), rows: 6, value: given, placeholder: "https://booth.pm/en/items/..." }] });
   const links = res.ok ? res.fields.addLinks.split(/\s+/).map(x => x.trim()).filter(Boolean) : [];
   if (!links.length) return;
   toast(tr(links.length === 1 ? "Reading the product's page..." : "Reading the {0} products' pages...", links.length));
@@ -6376,6 +6378,55 @@ async function addByLinks(s) {
          later.length ? tr(later.length === 1 ? "Its store refused Hoard's request, so its page is read in Hoard's browser (see Tasks): it's added when that's done."
                                               : "Their store refused Hoard's request, so {0} pages are read in Hoard's browser (see Tasks): they're added when that's done.", later.length) : "",
          failed.length ? tr("Not added: {0}", failed.map(x => `${x.link} (${tr(x.error)})`).join("; ")) : ""].filter(Boolean).join(" "));
+}
+/* hoard:// links (issue #396): what a link asked Hoard to open, given once by /api/link when /api/status says one is
+   waiting (hoard/links.py has checked it). It only opens what you'd open yourself, with the link's part already in it:
+   nothing is added until you say so here. One at a time: a link that comes while another is open is let go. */
+let linkOpen = false;
+// Take the link that's waiting (let go of, while another is open), and open it.
+async function takeLink() {
+  if (linkOpen) { apiPost("/api/link"); return; }
+  linkOpen = true;
+  let asked = null;
+  try { asked = (await apiPost("/api/link")).data.open; }
+  finally { linkOpen = false; }
+  return openLink(asked);
+}
+// Open what a link asked for: the dialog for it, with the link's part in it, or why it can't be opened.
+async function openLink(asked) {
+  if (!asked || typeof asked !== "object" || linkOpen) return;
+  linkOpen = true;
+  try {
+    if (asked.do === "error") toast(asked.error ? tr(String(asked.error)) : tr("That Hoard link couldn't be opened."));
+    else if (asked.do === "set" && typeof asked.code === "string") await addSharedSet(asked.code);
+    else if (asked.do === "add" && typeof asked.link === "string") await addFromLink(asked.link);
+    else if (asked.do === "product" && typeof asked.key === "string") await openFromLink(asked.key);
+  } finally { linkOpen = false; }
+}
+// hoard://add: a wishlist you choose (or a new one), then Add products by link... with the link in it.
+async function addFromLink(link) {
+  const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
+  if (!r || !r.ok) { toast(tr("Hoard couldn't read your wishlists. Try the link again in a moment.")); return; }
+  const wishes = ((await r.json()).sets || []).filter(isWish);
+  const value = await askChoice({ title: tr("Add to which wishlist?"), icon: "sets", find: wishes.length > 6 ? tr("Find a wishlist") : "",
+    detail: tr("A link asked Hoard to add this product: {0}", link), keep: [link],
+    groups: [{ title: tr("Wishlists"), items: wishes.map(s => setRow(s, setCounts(s).text)) },
+             { title: "", items: [{ value: "\u0000new", name: tr("New wishlist..."), letters: "+", hue: 40 }] }] });
+  let s = wishes.find(x => x.id === value);
+  if (value === "\u0000new") {
+    const name = await askName("Name the new wishlist");
+    if (!name) return;
+    const done = await changeSets({ action: "create", name, items: [], kind: "wishlist" });
+    s = done && done.made ? { id: done.made } : null;
+  }
+  if (!s) return;
+  showSet(s.id);
+  await addByLinks(s, link);
+}
+// hoard://product: its details in the library, or that it isn't there (a hidden one too, while Hidden is locked).
+async function openFromLink(key) {
+  await navigateApp("/#open=" + encodeURIComponent(key));
+  if (!hasProduct(key)) toast(tr("That product isn't in your library."));
 }
 // Open What's new.
 function openNews() {

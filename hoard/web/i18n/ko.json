@@ -2697,5 +2697,20 @@
  "Its store refused Hoard's request, so its page is read in Hoard's browser (see Tasks): it's added when that's done.": "스토어가 Hoard의 요청을 거절해서, 그 페이지는 Hoard의 브라우저에서 읽어요(작업을 보세요). 끝나면 추가돼요.",
  "Their store refused Hoard's request, so {0} pages are read in Hoard's browser (see Tasks): they're added when that's done.": "스토어가 Hoard의 요청을 거절해서, 페이지 {0}개는 Hoard의 브라우저에서 읽어요(작업을 보세요). 끝나면 추가돼요.",
  "the store refused Hoard's request for its page": "스토어가 페이지에 대한 Hoard의 요청을 거절했어요",
- "Hoard has too much waiting to read it in its browser now: try again later": "Hoard의 브라우저에서 읽으려고 기다리는 것이 너무 많아요. 나중에 다시 해 보세요"
+ "Hoard has too much waiting to read it in its browser now: try again later": "Hoard의 브라우저에서 읽으려고 기다리는 것이 너무 많아요. 나중에 다시 해 보세요",
+ "A link asked Hoard to add this product: {0}": "링크가 이 상품을 추가해 달라고 했어요: {0}",
+ "Add to which wishlist?": "어느 위시리스트에 추가할까요?",
+ "Find a wishlist": "위시리스트 찾기",
+ "Hoard couldn't read your wishlists. Try the link again in a moment.": "위시리스트를 읽을 수 없었어요. 잠시 후 링크를 다시 열어 보세요.",
+ "New wishlist...": "새 위시리스트...",
+ "That product isn't in your library.": "그 상품은 라이브러리에 없어요.",
+ "That Hoard link couldn't be opened.": "그 Hoard 링크를 열 수 없었어요.",
+ "That isn't a Hoard link.": "Hoard 링크가 아니에요.",
+ "That Hoard link is too long to be one.": "그 Hoard 링크는 너무 길어요.",
+ "Hoard doesn't know what that link asks for. Hoard links open a shared set, a product to add to a wishlist, or a product in your library.": "그 링크가 무엇을 요청하는지 Hoard가 몰라요. Hoard 링크로 열 수 있는 것은 공유된 세트, 위시리스트에 추가할 상품, 라이브러리에 있는 상품이에요.",
+ "That link's short link is cut short, or has been changed: copy all of it, and try again.": "그 링크의 짧은 링크가 잘렸거나 바뀌었어요. 전부 복사해서 다시 시도하세요.",
+ "That link has no set in it. A set's code starts with H1. or S1.": "그 링크에는 세트가 없어요. 세트 코드는 H1. 이나 S1. 로 시작해요.",
+ "That link doesn't name one product to add. It needs ?link= and a product's page on a store.": "그 링크는 추가할 상품 하나를 가리키지 않아요. ?link= 와 스토어의 상품 페이지가 있어야 해요.",
+ "That link's product isn't a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io.": "그 링크의 상품은 Booth, Gumroad, Jinxxy, Payhip, itch.io의 상품 페이지가 아니에요.",
+ "That link doesn't name a product on Booth, Gumroad, Jinxxy, Payhip or itch.io.": "그 링크는 Booth, Gumroad, Jinxxy, Payhip, itch.io의 상품을 가리키지 않아요."
 }

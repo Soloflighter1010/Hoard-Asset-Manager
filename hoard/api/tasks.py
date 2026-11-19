@@ -42,9 +42,17 @@ def get_api_status(self, path, body, query):
     """GET /api/status. Serve this endpoint through the shared HTTP boundary."""
     srv = self.server
     u = app.urlparse(self.path)
-    return self._json({"job": app.public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
-                       "project_job": app.public_job(srv.project_jobs.state, self._hidden_names()),
-                       "routine": app.routine_record()["found"]})
+    said = {"job": app.public_job(srv.jobs.state, self._hidden_names()), "stores": srv.lib.snapshot()[1],
+            "project_job": app.public_job(srv.project_jobs.state, self._hidden_names()),
+            "routine": app.routine_record()["found"]}
+    if srv.link_waiting():   # (a hoard:// link to open, issue #396: the page takes it from /api/link)
+        said["link"] = True
+    return self._json(said)
+
+
+def post_api_link(self, path, body, query):
+    """POST /api/link. the hoard:// link the page is to open (issue #396), checked: given once, then gone"""
+    return self._json({"open": self.server.take_open()})
 
 
 def post_api_cancel(self, path, body, query):
@@ -125,6 +133,7 @@ ROUTES = [
     Route('GET', '/api/tasks', get_api_tasks, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/loading', get_api_loading, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
     Route('GET', '/api/status', get_api_status, changes=False, auth='key', image_key=False, max_body=1048576, request=(), response='object'),
+    Route('POST', '/api/link', post_api_link, changes=True, auth='key', request=(), response='object'),
     Route('POST', '/api/cancel', post_api_cancel, changes=True, auth='key', image_key=False, max_body=1048576, request=(('lane', 'any'),), response='object'),
     Route('POST', '/api/force-stop', post_api_force_stop, changes=True, auth='key', image_key=False, max_body=1048576, request=(('lane', 'any'),), response='object'),
     Route('POST', '/api/queue/remove', post_api_queue_remove, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),

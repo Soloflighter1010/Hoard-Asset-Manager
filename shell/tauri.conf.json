@@ -54,12 +54,24 @@
         "displayLanguageSelector": false
       }
     },
+    "linux": {
+      "deb": {
+        "desktopTemplate": "linux/hoard.desktop"
+      }
+    },
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "hoard"
+        ]
+      }
+    },
     "updater": {
       "pubkey": "",
       "windows": {
