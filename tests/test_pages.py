@@ -3602,7 +3602,8 @@ class WindowsTabsAndTasks(IsolatedTestCase):
 
     def test_settings_save_as_they_change(self):
         from unittest import mock
-        self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2))
+        self.addCleanup(self.srv.cfg.update, new_days=self.srv.cfg.get("new_days", 7), download_retries=self.srv.cfg.get("download_retries", 2),
+                        root=self.srv.cfg.get("root"))   # (the downloads folder too: a failure here never leaves it changed)
         with mock.patch.object(server, "save_config"):
             page = self.open()
             menu(page, "#settingsBtn")
@@ -3616,7 +3617,11 @@ class WindowsTabsAndTasks(IsolatedTestCase):
                     break
                 page.wait_for_timeout(100)
             self.assertEqual((self.srv.cfg["new_days"], self.srv.cfg["download_retries"]), (14, 0))
-            # a setting a running job reads is put back while it runs, and the others still save
+            # a setting a running job reads is put back while it runs, and the others still save. Since #403 only a task
+            # that uses the setting holds it, so the running job is a download (which uses the downloads folder), not
+            # whatever task an earlier test in this class happened to leave behind
+            was = self.srv.jobs._spec
+            self.srv.jobs._spec = {"task": "download", "stores": ["booth"]}
             self.srv.jobs.state["running"] = True
             try:
                 page.fill("#setRoot", "/somewhere/else")
@@ -3631,6 +3636,7 @@ class WindowsTabsAndTasks(IsolatedTestCase):
                 self.assertEqual(self.srv.cfg["new_days"], 3)
             finally:
                 self.srv.jobs.state["running"] = False
+                self.srv.jobs._spec = was
             page.close()
 
     def test_the_sidebar_folds(self):
