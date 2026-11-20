@@ -1,4 +1,24 @@
 {
+  "downloads-details-dark": {
+    "id": "m7rjobodvwxeyelg",
+    "sha256": "1cc65521bdf38952c279613a67b73001bb6ebb1cc8e184ebad50895e2d0c77ff",
+    "url": "https://public-files.gumroad.com/p4pkjzrwm4gnnj6vs2eq3mevgea6"
+  },
+  "downloads-details-light": {
+    "id": "fruug64v30tqxv26",
+    "sha256": "3a0ec94851abce90d30da01fc27e541f00f2439d34dfd325f887146b7b4c634f",
+    "url": "https://public-files.gumroad.com/kmvci9s36ahfy4wj4c2tyf3c85z1"
+  },
+  "inside-dark": {
+    "id": "jvsa8hhhsjcd4vmp",
+    "sha256": "84703caeb1da6b7beb7b20d9f9f3ff43b371f1ca430003b8d8faff9cab14d608",
+    "url": "https://public-files.gumroad.com/0hnowoba0e04kjkx63vhm96goj0v"
+  },
+  "inside-light": {
+    "id": "lwmzysf05aprnfo5",
+    "sha256": "2a9f5846182c4a0a74607418cf53de494d4ee5a1689716d791131dd1fd877e24",
+    "url": "https://public-files.gumroad.com/evnotm3v1u8zod5gnsah3ior0hy7"
+  },
   "library-dark": {
     "id": "pvhca2cl1xfq1nnv",
     "sha256": "c0684006be83187745b429bcacfc2f0560ac1797f67896c22fc268d613afd607",
@@ -8,5 +28,95 @@
     "id": "x4rm2xckwaxgk46q",
     "sha256": "3da35a241a7ec604d9715691314d8c4e39d87ef100e9c7b6bd18b8a9b7e8ec3e",
     "url": "https://public-files.gumroad.com/3srn0bhqjm9qb1lpezsme1sacf7v"
+  },
+  "local-add-dark": {
+    "id": "xqxeif4bprgtd8sb",
+    "sha256": "19a03256639faf3a73a04743d000c6069c9ec34ea09422b25c77b87e8a53e1a7",
+    "url": "https://public-files.gumroad.com/qw4inqmknd6t9f8r1e6sfu5cgozo"
+  },
+  "local-add-light": {
+    "id": "icgkogtzvnpr22ih",
+    "sha256": "91523737d2dbb28642ac0e0bf206c7904fd44f43e0ba8b83090daa207b153fea",
+    "url": "https://public-files.gumroad.com/ozshqzgchbi095u2a99r39tkqxk4"
+  },
+  "mix-dark": {
+    "id": "hggxmzfawt2hcli4",
+    "sha256": "ccf695cc1c5d31b2731b1373df0a5d546e8fe469d740429c8d028b634ff402a4",
+    "url": "https://public-files.gumroad.com/vci2wamgov1nbllkyrgfysfgmbq8"
+  },
+  "mix-light": {
+    "id": "1bi7xsckb0qhzlfh",
+    "sha256": "181870c316607104e6f5068c5a95f82da655b887e78a3c4c85c464abe946409f",
+    "url": "https://public-files.gumroad.com/bxmknrbhjvn7xj57bed6f8gew3ne"
+  },
+  "project-details-dark": {
+    "id": "zulbk9ciq4qylozj",
+    "sha256": "9f3c6988dd60e7f4c49d7f8b396e1827e4250f63ea86ab3dbda754874ffb8815",
+    "url": "https://public-files.gumroad.com/jhxsv01b1mo50nnaj57sl5q9v16m"
+  },
+  "project-details-light": {
+    "id": "rcvq41yavrtf3jzt",
+    "sha256": "ade08ee9b43724a2028d7d6597abc8ad98a97cd8f35a48e11b70a7b404ad2851",
+    "url": "https://public-files.gumroad.com/h5rvrlr974ffw09j0lnt99flvykn"
+  },
+  "project-git-dark": {
+    "id": "is9h3qkx8jwisd8z",
+    "sha256": "a0643d8a6f623d038bf9ce592b2262e968a7b2f3b2c4890710f1e0b2c5cad879",
+    "url": "https://public-files.gumroad.com/w5ki0cvseuk8vog86stun8ypfygn"
+  },
+  "project-git-light": {
+    "id": "0gs995whfbljorj4",
+    "sha256": "603bb272d35a1475bad5836a7b070246aac259dc00b0800a66d6cddbbc25031c",
+    "url": "https://public-files.gumroad.com/yabsagwli7sf5outxm9y9hkophxg"
+  },
+  "project-manage-dark": {
+    "id": "q3vxa3ghkngo3xnd",
+    "sha256": "51b3813666eb0f630fc38abc0a74344b3edcd32050946e365a3b531a2f7f1799",
+    "url": "https://public-files.gumroad.com/63hdg6esoo3ugu549afaqa9ot30f"
+  },
+  "project-manage-light": {
+    "id": "iazemfihfg4syexk",
+    "sha256": "ffb1063f7fba4b5d0b2cc676dcea89305c39b1275ee508587308d677435af36b",
+    "url": "https://public-files.gumroad.com/f2o89hdu376ila9u6arbpitgtrww"
+  },
+  "projects-dark": {
+    "id": "7wzedsqrmzvaoqku",
+    "sha256": "860f721eecc09732aca2ad1244f8adbfbe2f0fa4676f2e3f48ab9570e8a43bb3",
+    "url": "https://public-files.gumroad.com/wn05o3iilnjj7m9gyz3idy5u52ie"
+  },
+  "projects-light": {
+    "id": "lqwtguvnvcr0cnlg",
+    "sha256": "355c24c1c93cd8fd9dee8771462dd2de524af89bdf9a37504493a686f7c19ee1",
+    "url": "https://public-files.gumroad.com/6z6v7wmfktsw8wybphtijl895c04"
+  },
+  "sets-dark": {
+    "id": "ql5if7vf9piynrvk",
+    "sha256": "1b5d5c9509f851ab3f1903ca812e275b51006a7e12b771381d6f5232f4c8f4fb",
+    "url": "https://public-files.gumroad.com/12yeiik87288o4ourxwo6dd8sw6u"
+  },
+  "sets-light": {
+    "id": "1bz5eaiwdcym7iff",
+    "sha256": "d5af6d91a6b965333281a5a6ae7b9c9fb509b9cf758e01d57a12fdabaafcb8c1",
+    "url": "https://public-files.gumroad.com/cz1nop9edqfyziofky7r5pojcm32"
+  },
+  "stores-dark": {
+    "id": "c5bvrymqfsbhmgit",
+    "sha256": "4376fbcd5e737e3aa585bc58db95e1c00c3d9bcd0f71da291c5a692ca5737564",
+    "url": "https://public-files.gumroad.com/336j9bz6rv2zi1un37gx71p0llhm"
+  },
+  "stores-light": {
+    "id": "8pfztkxt7zkxzfob",
+    "sha256": "e2288d44c98bc0c4d4d9b5d69f85778cb859ae0c76548a3799b7cf565de742cd",
+    "url": "https://public-files.gumroad.com/27z77gx3a1hno605aifjla29zl2t"
+  },
+  "wishlist-dark": {
+    "id": "szszdnl5k6l3gbxn",
+    "sha256": "49d5b7d0707f60111a88fcc5825ed7d4429daf3208d30368cbdba91d9cd63704",
+    "url": "https://public-files.gumroad.com/g8fpa2qnsok8ksqmhfcvd32geje1"
+  },
+  "wishlist-light": {
+    "id": "dt0wt7vlbhrws3g1",
+    "sha256": "98265bb7126d93036831f42e0e1cad7e235d2bf98f333e1e071a74b2407ffadf",
+    "url": "https://public-files.gumroad.com/gynm3jnp0ynrl14wr1wxjd9r4m45"
   }
 }
