@@ -31,6 +31,7 @@ namespace SoloFlighter.Hoard.Editor
         public static void Start(List<Item> items)
         {
             if (items.Count == 0) return;
+            Bundled.Forget();   // what this set's packages leave out is said together
             Write(items);
             SessionState.SetInt(TotalKey, items.Count);
             Next();
@@ -62,6 +63,7 @@ namespace SoloFlighter.Hoard.Editor
                     continue;
                 }
                 finally { EditorUtility.ClearProgressBar(); }
+                file = Bundled.Prepare(file, true);   // without a tool this project has already (issue #414)
                 PendingImport.Start(new HoardAsset { Store = it.Store, Name = it.Name, Creator = it.Creator }, file);
                 AssetDatabase.ImportPackage(file, true);   // Unity's own dialog: you choose what comes in
                 return;

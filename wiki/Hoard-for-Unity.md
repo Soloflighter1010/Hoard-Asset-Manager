@@ -26,7 +26,8 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
 - **Take it out of this project...** (0.10.0), in a product's details while it's in the project: deletes what its
   packages put in `Assets/` (to your system's trash, where Unity can) and the folders that leaves empty, but not a
   file another product in the project also uses (a creator's shared shader, say). It lists what goes and asks
-  first.
+  first. From 0.12.0 a tool the product carries (lilToon in `Assets/lilToon`, say: a folder with the tool's own
+  `package.json`) stays, as other things in the project may use it.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 - **Packages that came in a .zip** (0.8.0). Many products, on Booth especially, come as a `.zip` with the
@@ -55,6 +56,14 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   editor, which are from a tool Hoard knows, and where the rest goes; then **Import** or **Cancel**. **Import set**
   names the products in it with code. A product with none, or one Hoard hasn't read yet, says nothing of it. Hoard
   says what's there; it doesn't call it safe or unsafe. (Look inside, in Hoard's Downloads, lists each file.)
+- **A tool the project has already** (0.12.0). Many products carry their own copy of a shader or tool (lilToon,
+  Poiyomi Toon, Modular Avatar, VRCFury). When this project already has it at the same version or a newer one,
+  through the VCC or in `Assets`, **Import** and **Import set** leave the product's copy out, and the window says so
+  ("lilToon 1.7.3 in Rusk.unitypackage was left out: this project has 1.10.3."). Unity's import dialog offers the
+  rest of the package, from a copy in the project's `Library/Hoard/Trimmed` folder (never in `Assets`). Importing the
+  older copy over the newer one, or beside the VCC's, made Unity and the tool warn. A tool the project doesn't have,
+  or has an older version of, comes in with the product as before. A tool's copy is known by its own `package.json`,
+  so one without it (an old Poiyomi, say) is offered as before.
 - **Your note** (0.11.0, with Hoard 5.2.0). A note you wrote on a product in Hoard (its details) shows in its details
   here.
 - **Find which product a file came from** (0.6.0). Select files or folders in the Project window, right-click and

@@ -130,8 +130,8 @@ namespace SoloFlighter.Hoard
             return s.Length == 0 || !HoardCatalog.IsUnityPackage(s) ? "package.unitypackage" : s;
         }
 
-        /// <summary>Delete the copies taken out of zips more than a day ago, but keep's.</summary>
-        static void Tidy(string folder, string keep)
+        /// <summary>Delete the copies made in folder (taken out of zips, or trimmed) more than a day ago, but keep's.</summary>
+        internal static void Tidy(string folder, string keep)
         {
             try
             {

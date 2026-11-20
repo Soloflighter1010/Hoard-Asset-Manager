@@ -4,7 +4,9 @@
 //
 // A package is a file anyone could have made, so what its headers claim is checked before it's acted on: only
 // names are ever read into memory, and a name longer than any real path is refused before anything is set aside
-// for it; a package that would unpack to more than any real one does is refused rather than read to the end.
+// for it; a package that would unpack to more than any real one does is refused rather than read to the end. The one
+// exception is a package.json (issue #414: a tool's manifest, with its name and version), read when it's small, with
+// at most MaxPending bytes held for files whose names haven't been read yet.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -21,12 +23,23 @@ namespace SoloFlighter.Hoard
         const int MaxEntries = 500000;
         const int MaxPathname = 4096;
         const long MaxUnpacked = 64L << 30;   // 64 GiB, far beyond any real package: a gzip bomb stops here
+        const int MaxManifest = 64 * 1024;     // a package.json larger than this is no tool's
+        const int MaxPending = 4 * 1024 * 1024;
+        const string Manifest = "/package.json";
         static readonly Regex Guid32 = new Regex("^[0-9a-f]{32}$");
 
         /// <summary>GUID to project path, for every asset in the package. Throws InvalidDataException if it isn't one.</summary>
         public static Dictionary<string, string> ReadAssets(string packagePath)
         {
-            return ReadAssets(packagePath, null);
+            return Read(packagePath, null, null);
+        }
+
+        /// <summary>As ReadAssets, and the bytes of each package.json in the package (a VPM or Unity package's manifest,
+        /// which names it and says its version: issue #414), by its GUID.</summary>
+        public static Dictionary<string, string> ReadAssetsAndManifests(string packagePath, out Dictionary<string, byte[]> manifests)
+        {
+            manifests = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            return Read(packagePath, null, manifests);
         }
 
         /// <summary>GUID to project path, for the files in the package only: not its folders, which a project shares
@@ -34,16 +47,19 @@ namespace SoloFlighter.Hoard
         public static Dictionary<string, string> ReadFiles(string packagePath)
         {
             var files = new HashSet<string>(StringComparer.Ordinal);
-            var all = ReadAssets(packagePath, files);
+            var all = Read(packagePath, files, null);
             var result = new Dictionary<string, string>();
             foreach (var kv in all) if (files.Contains(kv.Key)) result[kv.Key] = kv.Value;
             return result;
         }
 
-        /// <summary>As ReadAssets; withFile (when given) gets each GUID that has a file in the package (a folder has none).</summary>
-        static Dictionary<string, string> ReadAssets(string packagePath, HashSet<string> withFile)
+        /// <summary>As ReadAssets; withFile (when given) gets each GUID that has a file in the package (a folder has none),
+        /// and manifests (when given) each package.json's bytes.</summary>
+        static Dictionary<string, string> Read(string packagePath, HashSet<string> withFile, Dictionary<string, byte[]> manifests)
         {
             var result = new Dictionary<string, string>();
+            var pending = new Dictionary<string, byte[]>(StringComparer.Ordinal);   // small files whose names come later
+            long held = 0;
             using (var file = PackageFile.OpenRead(packagePath))   // a .unitypackage, or one in a .zip
             using (var gz = new GZipStream(file, CompressionMode.Decompress))
             {
@@ -73,6 +89,28 @@ namespace SoloFlighter.Hoard
                         string path = Encoding.UTF8.GetString(ReadBytes(gz, size)).Split('\n')[0].Trim();
                         if (path.Length > 0) result[parts[0]] = path;
                         Skip(gz, Pad(size));
+                        byte[] early;
+                        if (pending.TryGetValue(parts[0], out early))   // its file came first: kept only if it's a package.json
+                        {
+                            pending.Remove(parts[0]);
+                            held -= early.Length;
+                            if (IsManifest(path)) manifests[parts[0]] = early;
+                        }
+                    }
+                    else if (manifests != null && parts.Length == 2 && parts[1] == "asset" && Guid32.IsMatch(parts[0]) && size <= MaxManifest)
+                    {
+                        if (withFile != null) withFile.Add(parts[0]);
+                        string known;
+                        bool named = result.TryGetValue(parts[0], out known);
+                        if (named ? IsManifest(known) : held + size <= MaxPending)
+                        {
+                            var bytes = new byte[size];
+                            if (size > 0 && !ReadFull(gz, bytes, (int)size)) throw new InvalidDataException("the package ends partway");
+                            if (named) manifests[parts[0]] = bytes;
+                            else { byte[] was; if (pending.TryGetValue(parts[0], out was)) held -= was.Length; pending[parts[0]] = bytes; held += size; }
+                            Skip(gz, Pad(size));
+                        }
+                        else Skip(gz, size + Pad(size));
                     }
                     else
                     {
@@ -84,11 +122,17 @@ namespace SoloFlighter.Hoard
             return result;
         }
 
+        /// <summary>Whether an asset's project path is a package.json: a VPM or Unity package's manifest.</summary>
+        static bool IsManifest(string path)
+        {
+            return path.Replace('\\', '/').EndsWith(Manifest, StringComparison.Ordinal);
+        }
+
         /// <summary>The padding after a tar entry of that size, to the next 512 bytes.</summary>
-        static long Pad(long size) { return (512 - size % 512) % 512; }
+        internal static long Pad(long size) { return (512 - size % 512) % 512; }
 
         /// <summary>A tar entry's name (with its ustar prefix).</summary>
-        static string TarName(byte[] h)
+        internal static string TarName(byte[] h)
         {
             string name = Field(h, 0, 100), prefix = Field(h, 345, 155);
             bool ustar = Field(h, 257, 6).StartsWith("ustar");
@@ -96,7 +140,7 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>A text field of a tar header, up to its first zero.</summary>
-        static string Field(byte[] h, int at, int len)
+        internal static string Field(byte[] h, int at, int len)
         {
             int end = at;
             while (end < at + len && h[end] != 0) end++;
@@ -104,7 +148,7 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>A number field of a tar header (octal, or base-256 for a big one).</summary>
-        static long Octal(byte[] h, int at, int len)
+        internal static long Octal(byte[] h, int at, int len)
         {
             string s = Field(h, at, len).Trim(' ', '\0');
             if (s.Length == 0) return 0;
@@ -112,10 +156,10 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>Whether a block is all zeros (the end of a tar).</summary>
-        static bool AllZero(byte[] b) { foreach (byte x in b) if (x != 0) return false; return true; }
+        internal static bool AllZero(byte[] b) { foreach (byte x in b) if (x != 0) return false; return true; }
 
         /// <summary>Read exactly n bytes. False when the stream ends first.</summary>
-        static bool ReadFull(Stream s, byte[] buf, int n)
+        internal static bool ReadFull(Stream s, byte[] buf, int n)
         {
             int got = 0;
             while (got < n)
@@ -138,7 +182,7 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>Skip n bytes of the stream.</summary>
-        static void Skip(Stream s, long n)
+        internal static void Skip(Stream s, long n)
         {
             var buf = new byte[81920];
             while (n > 0)
