@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from tests.isolation import IsolatedTestCase
 from html.parser import HTMLParser
 from urllib.parse import unquote
@@ -526,6 +527,20 @@ class TheOtherPages(IsolatedTestCase):
         app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
         self.assertIn('href="https://hoard.furryup.link/save-for-hoard.html" target="_blank"', app, "Hoard opens it in the browser")
         self.assertNotIn('draggable="true"', app.split('id="payhipSaver"', 1)[1][:200], "nothing to drag in Hoard's window")
+
+    def test_writing_the_bookmark_pages_is_all_or_nothing(self):
+        """A page that has lost its bookmark link stops --write before any page is written, so none is left half done."""
+        sys.path.insert(0, str(REPO / "scripts"))
+        import save_for_hoard
+        d = Path(tempfile.mkdtemp(prefix="hoard-bookmarks-"))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        first, second = (name for name, *_ in save_for_hoard.BOOKMARKS)
+        stale = (SITE / first).read_text("utf-8").replace('id="saver" href="javascript:', 'id="saver" href="javascript:stale')
+        (d / first).write_text(stale, "utf-8")
+        (d / second).write_text((SITE / second).read_text("utf-8").replace('id="sender"', 'id="gone"'), "utf-8")
+        with mock.patch.object(save_for_hoard, "SITE", d), mock.patch("builtins.print"):
+            self.assertEqual(save_for_hoard.main(["--write"]), 1)
+        self.assertEqual((d / first).read_text("utf-8"), stale, "written though another page had no link")
 
     def test_the_send_to_hoard_page_carries_hoards_own_bookmark(self):
         """Send to Hoard (issue #413), the same way: its page carries the very bookmark Hoard copies, and Hoard links to it."""

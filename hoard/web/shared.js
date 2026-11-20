@@ -6409,6 +6409,8 @@ const SEND_TO_HOARD = String.raw`(() => {
   const here = new URL(location.href), host = here.hostname.toLowerCase(), path = here.pathname.replace(/\/+$/, "");
   // A site, or a shop on it (shop.booth.pm, creator.gumroad.com).
   const on = site => host === site || host.endsWith("." + site);
+  // Jinxxy's own pages that look like a product's (jinxxy.com/my/wishlist): Hoard's JINXXY_NOT_CREATORS, in wishlists.py.
+  const jinxxyOwn = ["my", "market", "api", "files", "page", "login", "signup", "settings", "search", "discover", "checkout", "cart", "help", "terms", "privacy", "thank-you"];
   if (host === "hoard.furryup.link" && /^\/set(\.html)?$/.test(path)) {
     let code = "";
     try { code = decodeURIComponent(here.hash.slice(1)).replace(/\s+/g, ""); } catch (e) { /* a broken link: said below */ }
@@ -6422,7 +6424,7 @@ const SEND_TO_HOARD = String.raw`(() => {
     return;
   }
   const product = on("booth.pm") && path.includes("/items/") || on("gumroad.com") && path.includes("/l/") ||
-    (host === "jinxxy.com" || host === "www.jinxxy.com") && path.split("/").length === 3 ||
+    (host === "jinxxy.com" || host === "www.jinxxy.com") && path.split("/").length === 3 && !jinxxyOwn.includes(path.split("/")[1].toLowerCase()) ||
     (host === "payhip.com" || host === "www.payhip.com") && path.startsWith("/b/") ||
     host.endsWith(".itch.io") && path.length > 1;
   if (!product) {

@@ -20,7 +20,8 @@ namespace SoloFlighter.Hoard
         public string Version;       // the package's copy's version
         public string Folder;        // where the package puts it ("Assets/lilToon")
         public string ManifestGuid;  // the GUID of its package.json
-        public List<string> Guids = new List<string>();   // what the package puts in Folder, and Folder itself
+        public List<string> Guids = new List<string>();   // what the package puts in Folder, and Folder itself: what's left out
+        public List<string> Kept = new List<string>();    // in Folder, but a creator's own file the project hasn't got (Divide)
         public string InProject;     // the version this project has, or null for none
     }
 
@@ -109,6 +110,52 @@ namespace SoloFlighter.Hoard
             return left;
         }
 
+        // Files a creator adds to a product, as against a tool's code: what Divide lets come in from a tool's folder.
+        static readonly HashSet<string> ContentKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".asset", ".mat", ".prefab", ".controller", ".overridecontroller", ".anim", ".mask", ".playable", ".unity",
+            ".fbx", ".blend", ".obj", ".png", ".jpg", ".jpeg", ".tga", ".psd", ".exr", ".tif", ".tiff", ".physicmaterial",
+        };
+
+        /// <summary>Which of what a tool's folder holds in the package goes with the tool, and which comes in with the
+        /// product (issue #414, its review). Left out: what the project has already (the tool's own files, by GUID), and
+        /// code it hasn't got (an older version's scripts or shaders, which would break beside the project's). Kept: a
+        /// creator's own file the project hasn't got (a preset or material put in the tool's folder), with the folders
+        /// that lead to it the project hasn't got either, so it comes in where the creator put it, and the window names
+        /// it. files: the package's GUIDs that are files (the rest are folders); projectHas: whether the project has a
+        /// GUID.</summary>
+        public static void Divide(BundledTool tool, Dictionary<string, string> assets, ICollection<string> files, Func<string, bool> projectHas)
+        {
+            var leave = new List<string>();
+            var kept = new List<string>();
+            foreach (string g in tool.Guids)
+            {
+                if (!files.Contains(g)) continue;   // (folders: below, once it's known what's kept)
+                if (projectHas(g) || !ContentKinds.Contains(Extension(assets[g]))) leave.Add(g);
+                else kept.Add(g);
+            }
+            var keptPaths = kept.ConvertAll(g => assets[g].Replace('\\', '/'));
+            foreach (string g in tool.Guids)
+            {
+                if (files.Contains(g)) continue;
+                string folder = assets[g].Replace('\\', '/') + "/";
+                if (!projectHas(g) && keptPaths.Exists(p => p.StartsWith(folder, StringComparison.Ordinal))) kept.Add(g);
+                else leave.Add(g);
+            }
+            leave.Sort(StringComparer.Ordinal);
+            tool.Guids = leave;
+            keptPaths.Sort(StringComparer.Ordinal);
+            tool.Kept = keptPaths;
+        }
+
+        /// <summary>A path's extension (".mat"), or "" for none: read by hand, as a package's paths may hold characters
+        /// Path.GetExtension refuses.</summary>
+        static string Extension(string path)
+        {
+            int slash = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\')), dot = path.LastIndexOf('.');
+            return dot > slash + 1 ? path.Substring(dot) : "";
+        }
+
         /// <summary>The GUIDs of what's left out, each once.</summary>
         public static HashSet<string> GuidsOf(List<BundledTool> tools)
         {
@@ -126,8 +173,15 @@ namespace SoloFlighter.Hoard
             {
                 int c;
                 bool same = TryCompare(t.InProject, t.Version, out c) && c == 0;
-                lines.Add(t.Name + " " + t.Version + " in " + package + " was left out: this project has " +
-                          (same ? "it already." : t.InProject + "."));
+                string line = t.Name + " " + t.Version + " in " + package + " was left out: this project has " + (same ? "it already." : t.InProject + ".");
+                if (t.Kept.Count > 0)   // a creator's own files in its folder came in all the same: said, so none goes unseen
+                {
+                    var names = t.Kept.GetRange(0, Math.Min(3, t.Kept.Count)).ConvertAll(p => p.Substring(Math.Min(p.Length, t.Folder.Length + 1)));
+                    line += " " + (t.Kept.Count == 1 ? "1 file in its folder that this project hasn't got came in with the product: "
+                                                       : t.Kept.Count + " files in its folder that this project hasn't got came in with the product: ") +
+                            string.Join(", ", names.ToArray()) + (t.Kept.Count > 3 ? " and " + (t.Kept.Count - 3) + " more." : ".");
+                }
+                lines.Add(line);
             }
             return string.Join("\n", lines.ToArray());
         }
@@ -135,8 +189,10 @@ namespace SoloFlighter.Hoard
         /// <summary>Of the project paths taking a product out would remove (ProjectShare.Removable), those that aren't in
         /// a known tool's own folder: one with the tool's package.json, as lilToon's Assets/lilToon has. A tool stays,
         /// as other things in the project may use it, and an import may have left the product's copy out for it.
-        /// read gives a project file's bytes, or null; tools gets the name of each tool kept.</summary>
-        public static List<string> WithoutTools(List<string> paths, Func<string, byte[]> read, List<string> tools)
+        /// read gives a project file's bytes, or null; tools gets the name of each tool kept, and held the paths kept
+        /// for them (all of what's in a tool's folder, the product's own files there too), for Take it out to offer
+        /// taking those out as well.</summary>
+        public static List<string> WithoutTools(List<string> paths, Func<string, byte[]> read, List<string> tools, List<string> held)
         {
             var toolAt = new Dictionary<string, string>(StringComparer.Ordinal);   // folder -> the tool it is, or null
             Func<string, string> tool = folder =>
@@ -156,8 +212,9 @@ namespace SoloFlighter.Hoard
                 string found = tool(path);   // (a folder of its own: a tool's, when its package.json is in it)
                 for (int i = path.LastIndexOf('/'); found == null && i > "Assets".Length; i = path.LastIndexOf('/', i - 1))
                     found = tool(path.Substring(0, i));
-                if (found == null) left.Add(path);
-                else if (!tools.Contains(found)) tools.Add(found);
+                if (found == null) { left.Add(path); continue; }
+                held.Add(path);
+                if (!tools.Contains(found)) tools.Add(found);
             }
             return left;
         }

@@ -290,6 +290,25 @@ def build_bundled(d: Path) -> None:
         raw.write(info.tobuf(tarfile.GNU_FORMAT, "utf-8", "surrogateescape") + body + b"\0" * ((512 - len(body) % 512) % 512))
     raw.write(b"\0" * 1024)
     (d / "big_manifest.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+    # a GNU long link name ('K') before an entry of an asset that's left out: it goes with that entry, and never falls on
+    # the next one (the product's material, which would become a link)
+    raw = io.BytesIO()
+    for name, body, link in (("77777777777777777777777777777771/asset", b"tool", None),
+                             ("77777777777777777777777777777771/pathname", b"Assets/lilToon/x.shader\n00\n", None),
+                             ("77777777777777777777777777777771/preview.png", None, "t" * 120),
+                             ("77777777777777777777777777777772/asset", b"product", None),
+                             ("77777777777777777777777777777772/pathname", b"Assets/Kitsu/a.mat\n00\n", None)):
+        info = tarfile.TarInfo(name)
+        if link:
+            info.type, info.linkname = tarfile.SYMTYPE, link
+        else:
+            info.size = len(body)
+        raw.write(info.tobuf(tarfile.GNU_FORMAT, "utf-8", "surrogateescape"))
+        if body:
+            raw.write(body + b"\0" * ((512 - len(body) % 512) % 512))
+    raw.write(b"\0" * 1024)
+    assert b"././@LongLink" in raw.getvalue()   # (the 'K' header is there)
+    (d / "linked.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
 
 
 def tar_entries(path: Path) -> dict:
@@ -376,6 +395,10 @@ class UnityCore(IsolatedTestCase):
         self.assertTrue(any(len(n) > 100 for n in after), "a long name kept")
         for n, entry in after.items():
             self.assertEqual(entry, before[n], n)
+        with tarfile.open(d / "linked-trimmed.unitypackage", "r:gz") as tar:
+            kept = tar.getmembers()
+        self.assertEqual(sorted(m.name for m in kept), ["77777777777777777777777777777772/asset", "77777777777777777777777777777772/pathname"])
+        self.assertTrue(all(m.isfile() and not m.linkname for m in kept), "a left-out entry's long link name fell on the next entry")
         # issue #86: Hoard reads the report the window wrote, and makes the very credits list the window makes
         from hoard import projects
         report = projects.read_project(Path((d / "project_report_path.txt").read_text("utf-8")))

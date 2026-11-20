@@ -41,22 +41,26 @@ def link(link_id: str) -> re.Pattern:
 
 
 def main(argv: list[str]) -> int:
-    """Fill each bookmark page's link from the bookmark's source."""
-    stale = []
+    """Fill each bookmark page's link from the bookmark's source: every page is checked for its link first, so --write
+    writes all of them or none."""
+    filled = []
     for page_name, link_id, script, name in BOOKMARKS:
         page_file = SITE / page_name
         page, found = page_file.read_text("utf-8"), link(link_id)
         if len(found.findall(page)) != 1:
             print(f"{page_name}: no bookmark link (<a class=\"bookmarklet\" id=\"{link_id}\" href=...>) to fill")
             return 1
-        new = found.sub(lambda m: m.group(1) + bookmark(script, name) + m.group(3), page)
-        if new != page:
-            if "--write" in argv:
+        filled.append((page_file, page, found.sub(lambda m: m.group(1) + bookmark(script, name) + m.group(3), page)))
+    stale = [page_file for page_file, page, new in filled if new != page]
+    if stale and "--write" in argv:
+        for page_file, page, new in filled:
+            if new != page:
                 page_file.write_text(new, "utf-8")
-            else:
-                stale.append(page_name)
+        return 0
     if stale:
-        print(f"{', '.join(stale)} doesn't carry Hoard's bookmark as it is now. Run python3 scripts/save_for_hoard.py --write.")
+        names = ", ".join(f.name for f in stale)
+        print(f"{names} {'doesn' if len(stale) == 1 else 'don'}'t carry Hoard's bookmark as it is now. "
+              "Run python3 scripts/save_for_hoard.py --write.")
         return 1
     return 0
 

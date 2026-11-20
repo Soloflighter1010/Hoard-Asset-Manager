@@ -20,37 +20,67 @@ namespace SoloFlighter.Hoard.Editor
         /// <summary>The window's note was read: it goes.</summary>
         public static void Forget() { SessionState.EraseString(SaidKey); }
 
-        /// <summary>The file to import: the package as it is, or a copy of it without the tools this project has at
-        /// the same version or a newer one (in Library/Hoard/Trimmed). add: one of a set's packages, so what it leaves
-        /// out is said with what the others did.</summary>
-        public static string Prepare(string file, bool add)
+        /// <summary>What Prepare found: import the package as it is, import the copy without the tools, or don't
+        /// import it (cancelled).</summary>
+        public enum Outcome { AsItIs, Trimmed, Cancelled }
+
+        /// <summary>Before a package (a file, or one in a .zip) goes to Unity's dialog: a copy of it without the tools
+        /// this project has at the same version or a newer one, in Library/Hoard/Trimmed (made straight from the .zip,
+        /// for one in a zip), when it carries any. A package Hoard's index read and found no package.json in isn't read
+        /// again. Reading and copying show how far they've got and can be cancelled. add: one of a set's packages, so
+        /// what it leaves out is said with what the others did.</summary>
+        public static Outcome Prepare(string package, bool add, out string trimmed)
         {
+            trimmed = null;
             if (!add) Forget();
-            string name = Path.GetFileName(file);
+            if (PackageIndex.CarriesManifest(package) == false) return Outcome.AsItIs;   // no package.json: no tool in it
+            string name = PackageFile.Name(package);
+            List<BundledTool> left;
             try
             {
-                EditorUtility.DisplayProgressBar("Hoard", "Looking at what's in " + name, 0.3f);
                 Dictionary<string, byte[]> manifests;
-                var assets = UnityPackageReader.ReadAssetsAndManifests(file, out manifests);
+                HashSet<string> files;
+                var assets = UnityPackageReader.ReadAssetsAndManifests(package, out manifests, out files,
+                    f => EditorUtility.DisplayCancelableProgressBar("Hoard", "Looking at what's in " + name, (float)f));
+                bool any = false;
+                foreach (string p in assets.Values) if (p.Replace('\\', '/').EndsWith("/package.json", StringComparison.Ordinal)) any = true;
+                PackageIndex.Remember(package, any);   // (the next import of it needn't read it, when there's none)
                 var found = BundledTools.Find(assets, manifests);
-                if (found.Count == 0) return file;
+                if (found.Count == 0) return Outcome.AsItIs;
                 foreach (var tool in found) tool.InProject = ProjectVersion(tool);
-                var left = BundledTools.LeftOut(found);
-                if (left.Count == 0) return file;
-                EditorUtility.DisplayProgressBar("Hoard", "Leaving out what this project has already", 0.6f);
-                string trimmed = PackageTrim.Without(file, BundledTools.GuidsOf(left), Path.Combine("Library", "Hoard", "Trimmed"));
-                string said = BundledTools.Words(left, name);
-                UnityEngine.Debug.Log("Hoard: " + said);
-                string before = add ? Said : null;
-                SessionState.SetString(SaidKey, before == null ? said : before + "\n" + said);
-                return trimmed;
+                left = BundledTools.LeftOut(found);
+                if (left.Count == 0) return Outcome.AsItIs;
+                foreach (var tool in left) BundledTools.Divide(tool, assets, files, g => !string.IsNullOrEmpty(AssetDatabase.GUIDToAssetPath(g)));
             }
-            catch (Exception e)   // not a package Hoard can read, or the copy couldn't be made: Unity's dialog offers it as it is
+            catch (OperationCanceledException) { return Outcome.Cancelled; }
+            catch (Exception e)   // not a package Hoard can read: Unity's dialog offers it as it is, and says what's wrong
             {
                 UnityEngine.Debug.LogWarning("Hoard: couldn't look at the tools " + name + " carries (" + e.Message + "), so all of it is offered.");
-                return file;
+                return Outcome.AsItIs;
             }
             finally { EditorUtility.ClearProgressBar(); }
+            try
+            {
+                trimmed = PackageTrim.Without(package, BundledTools.GuidsOf(left), Path.Combine("Library", "Hoard", "Trimmed"),
+                    f => EditorUtility.DisplayCancelableProgressBar("Hoard", "Leaving out what this project has already", (float)f));
+            }
+            catch (OperationCanceledException) { return Outcome.Cancelled; }
+            catch (Exception e)
+            {
+                // the copy couldn't be made (a full disk, a locked file): importing it all would put the older tool over
+                // the project's, which is what this is for, so that's asked first
+                EditorUtility.ClearProgressBar();
+                var older = left.ConvertAll(t => t.Name + " " + t.Version + " (this project has " + t.InProject + ")");
+                return EditorUtility.DisplayDialog("Hoard", "Hoard couldn't make a copy of " + name + " without " + string.Join(", ", older.ToArray()) +
+                        ": " + e.Message + "\n\nImporting all of it offers the package's copy over this project's in Unity's dialog, where you can " +
+                        "untick it. Import all of it?", "Import all of it", "Cancel") ? Outcome.AsItIs : Outcome.Cancelled;
+            }
+            finally { EditorUtility.ClearProgressBar(); }
+            string said = BundledTools.Words(left, name);
+            UnityEngine.Debug.Log("Hoard: " + said);
+            string before = add ? Said : null;
+            SessionState.SetString(SaidKey, before == null ? said : before + "\n" + said);
+            return Outcome.Trimmed;
         }
 
         /// <summary>The newest version of a tool this project has: through the VCC or Unity's Package Manager (under

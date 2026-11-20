@@ -31,36 +31,59 @@ namespace SoloFlighter.Hoard
         /// <summary>GUID to project path, for every asset in the package. Throws InvalidDataException if it isn't one.</summary>
         public static Dictionary<string, string> ReadAssets(string packagePath)
         {
-            return Read(packagePath, null, null);
+            bool any;
+            return Read(packagePath, null, null, null, out any);
         }
 
         /// <summary>As ReadAssets, and the bytes of each package.json in the package (a VPM or Unity package's manifest,
         /// which names it and says its version: issue #414), by its GUID.</summary>
         public static Dictionary<string, string> ReadAssetsAndManifests(string packagePath, out Dictionary<string, byte[]> manifests)
         {
+            HashSet<string> files;
+            return ReadAssetsAndManifests(packagePath, out manifests, out files, null);
+        }
+
+        /// <summary>As ReadAssetsAndManifests, with the GUIDs that are files (the rest are folders). progress (when
+        /// given) is told how far through the package the reading is, from 0 to 1, now and then; when it says true, the
+        /// reading stops with an OperationCanceledException.</summary>
+        public static Dictionary<string, string> ReadAssetsAndManifests(string packagePath, out Dictionary<string, byte[]> manifests,
+                                                                        out HashSet<string> files, Func<double, bool> progress)
+        {
             manifests = new Dictionary<string, byte[]>(StringComparer.Ordinal);
-            return Read(packagePath, null, manifests);
+            files = new HashSet<string>(StringComparer.Ordinal);
+            bool any;
+            return Read(packagePath, files, manifests, progress, out any);
         }
 
         /// <summary>GUID to project path, for the files in the package only: not its folders, which a project shares
         /// with every other package that puts something in the same folder (a creator's own folder, say).</summary>
         public static Dictionary<string, string> ReadFiles(string packagePath)
         {
+            bool any;
+            return ReadFiles(packagePath, out any);
+        }
+
+        /// <summary>As ReadFiles; hasManifest says whether the package has a package.json anywhere in it (issue #414: one
+        /// without can't carry a tool Hoard for Unity knows, so an import needn't read it again).</summary>
+        public static Dictionary<string, string> ReadFiles(string packagePath, out bool hasManifest)
+        {
             var files = new HashSet<string>(StringComparer.Ordinal);
-            var all = Read(packagePath, files, null);
+            var all = Read(packagePath, files, null, null, out hasManifest);
             var result = new Dictionary<string, string>();
             foreach (var kv in all) if (files.Contains(kv.Key)) result[kv.Key] = kv.Value;
             return result;
         }
 
         /// <summary>As ReadAssets; withFile (when given) gets each GUID that has a file in the package (a folder has none),
-        /// and manifests (when given) each package.json's bytes.</summary>
-        static Dictionary<string, string> Read(string packagePath, HashSet<string> withFile, Dictionary<string, byte[]> manifests)
+        /// manifests (when given) each package.json's bytes, and anyManifest whether there's a package.json at all.</summary>
+        static Dictionary<string, string> Read(string packagePath, HashSet<string> withFile, Dictionary<string, byte[]> manifests,
+                                               Func<double, bool> progress, out bool anyManifest)
         {
             var result = new Dictionary<string, string>();
             var pending = new Dictionary<string, byte[]>(StringComparer.Ordinal);   // small files whose names come later
-            long held = 0;
-            using (var file = PackageFile.OpenRead(packagePath))   // a .unitypackage, or one in a .zip
+            long held = 0, total = progress == null ? 0 : PackageFile.Size(packagePath);
+            anyManifest = false;
+            using (var file = new Counted(PackageFile.OpenRead(packagePath)))   // a .unitypackage, or one in a .zip
             using (var gz = new GZipStream(file, CompressionMode.Decompress))
             {
                 var header = new byte[512];
@@ -68,6 +91,8 @@ namespace SoloFlighter.Hoard
                 long unpacked = 0;
                 for (int count = 0; count < MaxEntries; count++)
                 {
+                    if (progress != null && count % 256 == 0 && progress(total > 0 ? Math.Min(1.0, (double)file.Done / total) : 0))
+                        throw new OperationCanceledException();
                     if (!ReadFull(gz, header, 512)) break;
                     if (AllZero(header)) break;                                   // the end of the archive
                     string name = longName ?? TarName(header);
@@ -84,10 +109,13 @@ namespace SoloFlighter.Hoard
                         continue;
                     }
                     string[] parts = name.Replace('\\', '/').TrimStart('.', '/').Split('/');
+                    bool asset = parts.Length == 2 && parts[1] == "asset" && Guid32.IsMatch(parts[0]);
+                    if (asset && withFile != null) withFile.Add(parts[0]);
                     if (parts.Length == 2 && parts[1] == "pathname" && Guid32.IsMatch(parts[0]) && size <= MaxPathname)
                     {
                         string path = Encoding.UTF8.GetString(ReadBytes(gz, size)).Split('\n')[0].Trim();
                         if (path.Length > 0) result[parts[0]] = path;
+                        if (IsManifest(path)) anyManifest = true;
                         Skip(gz, Pad(size));
                         byte[] early;
                         if (pending.TryGetValue(parts[0], out early))   // its file came first: kept only if it's a package.json
@@ -97,9 +125,8 @@ namespace SoloFlighter.Hoard
                             if (IsManifest(path)) manifests[parts[0]] = early;
                         }
                     }
-                    else if (manifests != null && parts.Length == 2 && parts[1] == "asset" && Guid32.IsMatch(parts[0]) && size <= MaxManifest)
+                    else if (manifests != null && asset && size <= MaxManifest)
                     {
-                        if (withFile != null) withFile.Add(parts[0]);
                         string known;
                         bool named = result.TryGetValue(parts[0], out known);
                         if (named ? IsManifest(known) : held + size <= MaxPending)
@@ -112,11 +139,7 @@ namespace SoloFlighter.Hoard
                         }
                         else Skip(gz, size + Pad(size));
                     }
-                    else
-                    {
-                        if (withFile != null && parts.Length == 2 && parts[1] == "asset" && Guid32.IsMatch(parts[0])) withFile.Add(parts[0]);
-                        Skip(gz, size + Pad(size));
-                    }
+                    else Skip(gz, size + Pad(size));
                 }
             }
             return result;
@@ -126,6 +149,33 @@ namespace SoloFlighter.Hoard
         static bool IsManifest(string path)
         {
             return path.Replace('\\', '/').EndsWith(Manifest, StringComparison.Ordinal);
+        }
+
+        /// <summary>A stream that counts what's been read from it, for how far through a package a reading is.</summary>
+        internal sealed class Counted : Stream
+        {
+            readonly Stream inner;
+            readonly bool owns;
+            public long Done;
+            /// <summary>Count what's read from inner; owns: close inner when this is closed.</summary>
+            public Counted(Stream inner, bool owns = true) { this.inner = inner; this.owns = owns; }
+            /// <summary>Read from the package, counting.</summary>
+            public override int Read(byte[] buffer, int offset, int count) { int n = inner.Read(buffer, offset, count); if (n > 0) Done += n; return n; }
+            /// <summary>Close the package.</summary>
+            protected override void Dispose(bool disposing) { if (disposing && owns) inner.Dispose(); base.Dispose(disposing); }
+            public override bool CanRead { get { return true; } }
+            public override bool CanSeek { get { return false; } }
+            public override bool CanWrite { get { return false; } }
+            public override long Length { get { throw new NotSupportedException(); } }
+            public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
+            /// <summary>Nothing to flush: it only reads.</summary>
+            public override void Flush() { }
+            /// <summary>Not supported: it's read once, in order.</summary>
+            public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
+            public override void SetLength(long value) { throw new NotSupportedException(); }
+            /// <summary>Not supported: it only reads.</summary>
+            public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
         }
 
         /// <summary>The padding after a tar entry of that size, to the next 512 bytes.</summary>

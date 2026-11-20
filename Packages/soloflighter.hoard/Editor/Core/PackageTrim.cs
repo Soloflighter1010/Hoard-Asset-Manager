@@ -23,28 +23,28 @@ namespace SoloFlighter.Hoard
         const long MaxUnpacked = 64L << 30;
         static readonly Regex Guid32 = new Regex("^[0-9a-f]{32}$");
 
-        /// <summary>A copy of a package file without these assets, in folder: made once for each version of the package
-        /// and each set of left-out assets, under the package's own name (Unity's dialog and Hoard's import log name
-        /// it). Copies made more than a day ago go.</summary>
-        public static string Without(string package, ICollection<string> guids, string folder)
+        /// <summary>A copy of a package without these assets, in folder: made once for each version of the package and
+        /// each set of left-out assets, under the package's own name (Unity's dialog and Hoard's import log name it).
+        /// A package in a .zip is read from the .zip, so no unzipped copy is made beside it. Copies made more than a
+        /// day ago go. progress as Copy's.</summary>
+        public static string Without(string package, ICollection<string> guids, string folder, Func<double, bool> progress = null)
         {
-            var info = new FileInfo(package);
             var sorted = new List<string>(guids);
             sorted.Sort(StringComparer.Ordinal);
             string id;
             using (var sha = SHA256.Create())
-                id = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(info.FullName + "|" + info.Length + "|" +
-                     info.LastWriteTimeUtc.Ticks + "|" + string.Join(",", sorted.ToArray())))).Replace("-", "").Substring(0, 16).ToLowerInvariant();
-            string dir = Path.Combine(folder, id), dest = Path.Combine(dir, info.Name);
+                id = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(PackageFile.OnDisk(package)) + "|" +
+                     PackageFile.Stamp(package) + "|" + string.Join(",", sorted.ToArray())))).Replace("-", "").Substring(0, 16).ToLowerInvariant();
+            string dir = Path.Combine(folder, id), dest = Path.Combine(dir, PackageFile.SafeName(PackageFile.Name(package)));
             PackageFile.Tidy(folder, id);
             if (File.Exists(dest)) return dest;
             Directory.CreateDirectory(dir);
             string part = dest + ".part";
             try
             {
-                using (var from = File.OpenRead(package))
+                using (var from = PackageFile.OpenRead(package))
                 using (var into = new FileStream(part, FileMode.Create, FileAccess.Write))
-                    Copy(from, into, new HashSet<string>(sorted, StringComparer.Ordinal));
+                    Copy(from, into, new HashSet<string>(sorted, StringComparer.Ordinal), progress, progress == null ? 0 : PackageFile.Size(package));
             }
             catch (Exception) { File.Delete(part); throw; }   // never half a package left to import
             File.Move(part, dest);
@@ -52,21 +52,26 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>Copy a package (gzipped) without the assets whose GUIDs are in leaveOut, gzipped. Returns how many
-        /// entries were left out. Throws InvalidDataException for what isn't a package.</summary>
-        public static int Copy(Stream from, Stream into, ICollection<string> leaveOut)
+        /// entries were left out. Throws InvalidDataException for what isn't a package. progress (when given) is told
+        /// how far through the package's total bytes the copy is, from 0 to 1, now and then; when it says true, the copy
+        /// stops with an OperationCanceledException.</summary>
+        public static int Copy(Stream from, Stream into, ICollection<string> leaveOut, Func<double, bool> progress = null, long total = 0)
         {
             int skipped = 0;
-            using (var gz = new GZipStream(from, CompressionMode.Decompress, true))
+            using (var counted = new UnityPackageReader.Counted(from, false))   // (from is the caller's to close)
+            using (var gz = new GZipStream(counted, CompressionMode.Decompress, true))
             using (var output = new GZipStream(into, CompressionLevel.Fastest, true))
             {
                 var header = new byte[512];
-                var held = new MemoryStream();   // a long name or pax header, waiting for the entry it's for
+                var held = new MemoryStream();   // a long name, long link name or pax header, waiting for the entry it's for
                 string heldName = null;
                 long unpacked = 0;
                 bool ended = false;
                 for (int count = 0; ; count++)
                 {
                     if (count >= MaxEntries) throw new InvalidDataException("the package has more in it than any real one");
+                    if (progress != null && count % 256 == 0 && progress(total > 0 ? Math.Min(1.0, (double)counted.Done / total) : 0))
+                        throw new OperationCanceledException();
                     if (!UnityPackageReader.ReadFull(gz, header, 512)) break;
                     if (UnityPackageReader.AllZero(header)) { ended = true; break; }
                     long size = UnityPackageReader.Octal(header, 124, 12);
@@ -75,14 +80,17 @@ namespace SoloFlighter.Hoard
                     unpacked += 512 + padded;
                     if (unpacked > MaxUnpacked) throw new InvalidDataException("the package is larger than any real one");
                     char type = (char)header[156];
-                    if (type == 'L' || type == 'x')   // a long name (GNU) or a pax header: for the entry after it
+                    // what's said about the entry after it: a long name or long link name (GNU), or a pax header (the
+                    // POSIX one, or Solaris's): kept or left out with that entry, never left to fall on the next one
+                    if (type == 'L' || type == 'K' || type == 'x' || type == 'X')
                     {
                         if (size > MaxHeaderData) throw new InvalidDataException("not a Unity package");
                         var data = new byte[padded];
                         if (padded > 0 && !UnityPackageReader.ReadFull(gz, data, (int)padded)) throw new InvalidDataException("the package ends partway");
                         held.Write(header, 0, 512);
                         held.Write(data, 0, data.Length);
-                        string named = type == 'L' ? Encoding.UTF8.GetString(data, 0, (int)size).TrimEnd('\0') : PaxPath(data, (int)size);
+                        string named = type == 'L' ? Encoding.UTF8.GetString(data, 0, (int)size).TrimEnd('\0')
+                                     : type == 'K' ? null : PaxPath(data, (int)size);
                         if (named != null) heldName = named;
                         continue;
                     }

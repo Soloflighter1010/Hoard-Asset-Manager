@@ -27,7 +27,8 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   packages put in `Assets/` (to your system's trash, where Unity can) and the folders that leaves empty, but not a
   file another product in the project also uses (a creator's shared shader, say). It lists what goes and asks
   first. From 0.12.0 a tool the product carries (lilToon in `Assets/lilToon`, say: a folder with the tool's own
-  `package.json`) stays, as other things in the project may use it.
+  `package.json`) stays, as other things in the project may use it, and it says how many of the product's files are in
+  its folder; **Take it out, with lilToon** takes those out too.
 - **Import without downloading again.** **Import** opens Unity's own import dialog on the copy Hoard already
   downloaded, so you choose exactly what comes in. Other files (textures, archives) open in Explorer.
 - **Packages that came in a .zip** (0.8.0). Many products, on Booth especially, come as a `.zip` with the
@@ -63,7 +64,11 @@ Open **Hoard › Open Hoard** (Hoard has its own menu in Unity's menu bar, from 
   rest of the package, from a copy in the project's `Library/Hoard/Trimmed` folder (never in `Assets`). Importing the
   older copy over the newer one, or beside the VCC's, made Unity and the tool warn. A tool the project doesn't have,
   or has an older version of, comes in with the product as before. A tool's copy is known by its own `package.json`,
-  so one without it (an old Poiyomi, say) is offered as before.
+  so one without it (an old Poiyomi, say) is offered as before. A creator's own file in the tool's folder that the
+  project hasn't got (a preset or a material, say) comes in all the same, and the window names it; the tool's older
+  scripts and shaders never do. Looking at a package and making the copy show how far they've got, and **Cancel**
+  stops the import; a package Hoard found no `package.json` in isn't looked at again. A package in a `.zip` is copied
+  straight from it. If the copy can't be made (a full disk, say), Hoard asks before offering all of the package.
 - **Your note** (0.11.0, with Hoard 5.2.0). A note you wrote on a product in Hoard (its details) shows in its details
   here.
 - **Find which product a file came from** (0.6.0). Select files or folders in the Project window, right-click and

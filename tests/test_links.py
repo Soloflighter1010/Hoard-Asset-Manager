@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -82,9 +83,11 @@ class Parse(IsolatedTestCase):
     def test_add_products_by_link_checks_the_same(self):
         """The link an add link names is checked by the same function as a link pasted in Add products by link."""
         self.assertEqual(wishlists.product_page_link("https://booth.pm/ja/items/123"), ("booth", "https://booth.pm/ja/items/123"))
-        for bad in ("https://booth.pm/", "https://example.com/items/1", None, "https://[x/items/1", "https://[::1"):
-            with self.assertRaises(wishlists.LinkError):
+        for bad in ("https://booth.pm/", "https://example.com/items/1", None, "https://[x/items/1", "https://[::1",
+                    "https://jinxxy.com/my/wishlist", "https://jinxxy.com/MY/inventory", "https://jinxxy.com/market/new"):
+            with self.assertRaises(wishlists.LinkError, msg=bad):
                 wishlists.product_page_link(bad)
+        self.assertEqual(wishlists.product_page_link("https://jinxxy.com/Kitsu/FoxHat")[0], "jinxxy")
 
 
 class Running(IsolatedTestCase):
@@ -294,6 +297,7 @@ class SendToHoard(IsolatedTestCase):
         "https://kitsu.booth.pm/items/99?ref=x#pics": "hoard://add?link=https%3A%2F%2Fkitsu.booth.pm%2Fitems%2F99",
         "https://kitsu.gumroad.com/l/hat": "hoard://add?link=https%3A%2F%2Fkitsu.gumroad.com%2Fl%2Fhat",
         "https://jinxxy.com/Kitsu/FoxHat": "hoard://add?link=https%3A%2F%2Fjinxxy.com%2FKitsu%2FFoxHat",
+        "https://jinxxy.com/my/wishlist": None, "https://jinxxy.com/market/new": None,   # (Jinxxy's own pages, not products)
         "https://payhip.com/b/AbCd1": "hoard://add?link=https%3A%2F%2Fpayhip.com%2Fb%2FAbCd1",
         "https://kitsu.itch.io/fox-hat": "hoard://add?link=https%3A%2F%2Fkitsu.itch.io%2Ffox-hat",
         "https://hoard.furryup.link/set.html#S1.abcdefghij.abcdefghijklmnopqrstuv": "hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv",
@@ -302,6 +306,12 @@ class SendToHoard(IsolatedTestCase):
         "https://hoard.furryup.link/set.html#S1.%E0%A4%A": None,   # (a broken link's code: said, not thrown)
     }
 
+
+    def test_jinxxys_own_pages_are_hoards(self):
+        """The bookmark leaves out the Jinxxy pages Hoard's own check does (wishlists.JINXXY_NOT_CREATORS)."""
+        js = (Path(__file__).resolve().parent.parent / "hoard" / "web" / "shared.js").read_text("utf-8")
+        listed = re.search(r'const jinxxyOwn = \[([^\]]*)\]', js).group(1)
+        self.assertEqual(set(re.findall(r'"([^"]+)"', listed)), set(wishlists.JINXXY_NOT_CREATORS))
     def test_each_kind_of_page(self):
         try:
             from playwright.sync_api import sync_playwright
