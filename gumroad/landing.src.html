@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<style>
+{{CSS}}
+/* ---------- the Gumroad page's own pieces, in the site's style */
+/* each screenshot in the light or dark it's shown in (two pictures, as a data address can't go in a srcset) */
+.light-shot { display: none !important; }
+@media (prefers-color-scheme: light) { .dark-shot { display: none !important; } .light-shot { display: block !important; } }
+.bar-tools .price, .button .price { padding: 2px 9px; border-radius: 999px; background: rgb(0 0 0 / .14); font-size: .9em; }
+.poster { position: relative; display: block; max-width: min(1112px, max(480px, calc((100vh - 280px) * 16 / 9))); margin: 0 auto; }
+.poster img { display: block; width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--seam); box-shadow: 0 24px 60px rgb(0 0 0 / .35); }
+.poster .play { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%;
+  background: var(--gold); box-shadow: 0 10px 30px rgb(0 0 0 / .35); transition: transform .2s; }
+.poster .play::after { content: ""; position: absolute; left: 31px; top: 24px; border-style: solid; border-width: 14px 0 14px 22px;
+  border-color: transparent transparent transparent var(--gold-ink); }
+.poster:hover .play { transform: scale(1.08); }
+@media (prefers-color-scheme: light) { .poster img { box-shadow: 0 8px 20px rgb(60 40 20 / .1); } }
+@media (prefers-reduced-motion: reduce) { .poster .play { transition: none; } }
+.buy { display: grid; gap: 28px; grid-template-columns: 1.1fr 1fr; align-items: start; margin-bottom: 28px; }
+@media (max-width: 860px) { .buy { grid-template-columns: minmax(0, 1fr); } }
+.pwyw .copyrow { flex-wrap: wrap; } .pwyw .copyrow input { flex: 1 1 120px; } .pwyw .copyrow .button { flex: 0 0 auto; }
+.buy-main p { margin: 0 0 1em; }
+.buy-main .actions { justify-content: flex-start; }
+.price-big { font: 400 clamp(2.2rem, 5vw, 3rem)/1 var(--display); color: var(--gold-text); margin: 0 0 .25em; }
+.pwyw { background: var(--ledge); border: 1px solid var(--seam); border-radius: var(--radius); padding: 22px;
+  display: flex; flex-direction: column; gap: 12px; }
+.pwyw label { font-weight: 700; }
+.pwyw .copyrow span { align-self: center; font-weight: 700; color: var(--dust); }
+.pwyw input { font-size: 1.05rem; font-weight: 700; }
+.amounts { display: flex; flex-wrap: wrap; gap: 8px; }
+.amounts button { padding: 7px 15px; border-radius: 999px; border: 0; background: var(--cave); box-shadow: inset 0 0 0 1px var(--seam);
+  color: var(--dust); font: 700 .95rem var(--body); cursor: pointer; }
+.amounts button:hover { color: var(--bone); background: var(--stone); }
+.waitlist { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--seam); }
+.waitlist [data-gumroad-waitlist-message] { margin: 0; min-height: 1em; }
+html[data-gumroad-launched] form[data-gumroad-waitlist] { display: none; }
+.grid.three article h3 { margin: 0; }
+@media (max-width: 860px) { .grid.three { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="glow" aria-hidden="true"><div class="glow-in"></div></div>
+  <a class="skip" href="#main">Skip to the page</a>
+  <header class="bar" id="top">
+    <a class="brand" href="#top">{{BRAND_SVG}}</a>
+    <nav class="apptabs" aria-label="Page">
+      <a href="#top" aria-current="page">Home</a>
+      <a href="#watch">What is Hoard?</a>
+      <a href="#features">Features</a>
+      <a href="#tour">Tour</a>
+      <a href="#unity">Unity</a>
+      <a href="#trustTitle">Trust</a>
+    </nav>
+    <div class="bar-tools">
+      <a class="ghost star-us" href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener" title="Star Hoard on GitHub: it helps others find it"><svg class="star" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M8 1.2l2.05 4.3 4.7.55-3.47 3.22.92 4.65L8 11.6l-4.2 2.32.92-4.65L1.25 6.05l4.7-.55z"/></svg>Star on GitHub</a>
+      <a class="primary" data-gumroad-action="buy" href="#download">Get Hoard</a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <h1>Your VRChat assets and projects, in one place</h1>
+      <p class="lede">Hoard lists everything you've bought on <span class="store booth">Booth</span>,
+        <span class="store gumroad">Gumroad</span>, <span class="store jinxxy">Jinxxy</span>,
+        <span class="store payhip">Payhip</span> and <span class="store itch">itch.io</span>, downloads
+        it, and keeps your copies up to date when creators update them. Then it looks after the Unity projects you make
+        with them: VRChat's packages, your products put in, backups and Git. Open source, and it runs only on
+        your computer.</p>
+      <div class="actions">
+        <a class="button primary" data-gumroad-action="buy" href="#download">Get Hoard <span class="price" data-gumroad-field="price">$0+</span></a>
+        <a class="button" href="#unity">Get Hoard for Unity</a>
+      </div>
+      <p class="small">Pay what you want, from nothing. For Windows, macOS and Linux.</p>
+
+      <div class="window">
+        <div class="shelf">
+          <div class="seg" role="radiogroup" aria-label="The stores Hoard reads">
+            <button type="button" role="radio" aria-checked="true" data-store="">Everything<span class="n">5</span></button>
+            <button type="button" role="radio" aria-checked="false" data-store="booth" class="booth"><span class="dot"></span>Booth</button>
+            <button type="button" role="radio" aria-checked="false" data-store="gumroad" class="gumroad"><span class="dot"></span>Gumroad</button>
+            <button type="button" role="radio" aria-checked="false" data-store="jinxxy" class="jinxxy"><span class="dot"></span>Jinxxy</button>
+            <button type="button" role="radio" aria-checked="false" data-store="payhip" class="payhip"><span class="dot"></span>Payhip</button>
+            <button type="button" role="radio" aria-checked="false" data-store="itch" class="itch"><span class="dot"></span>itch.io</button>
+          </div>
+        </div>
+        <div class="store-notes" aria-live="polite">
+          <p data-for=""><strong>Five stores, one library.</strong> Hoard reads what you own on each, and keeps copies of
+            your files from all of them but Payhip.</p>
+          <p data-for="booth"><strong class="store booth">Booth:</strong> your library, your gifts and your free downloads,
+            and every file from each item's download buttons.</p>
+          <p data-for="gumroad"><strong class="store gumroad">Gumroad:</strong> your library, purchases you archived there
+            too, and the files on each one's download page.</p>
+          <p data-for="jinxxy"><strong class="store jinxxy">Jinxxy:</strong> your inventory, and each file, downloaded the
+            way Jinxxy hands them out.</p>
+          <p data-for="payhip"><strong class="store payhip">Payhip:</strong> what you bought in every shop, listed in one
+            place, with where to download it. You get the files from Payhip yourself.</p>
+          <p data-for="itch"><strong class="store itch">itch.io:</strong> your purchases, read with an API key you add, and
+            their files.</p>
+        </div>
+        <picture class="shot">
+          <img class="dark-shot" src="data:image/webp;base64,{{IMG_library-dark}}" width="780" height="463"
+               alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, and your tags grouped by kind down the side.">
+          <img class="light-shot" src="data:image/webp;base64,{{IMG_library-light}}" width="780" height="463"
+               alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, and your tags grouped by kind down the side.">
+        </picture>
+      </div>
+      <p class="small caption">Real products from the maintainer's own library, shown with their creators' pictures
+        (<a href="https://hoard.furryup.link/credits.html" target="_blank" rel="noopener">credits</a>). Yours shows what you've bought.</p>
+    </section>
+
+    <section id="watch" class="watch" aria-labelledby="watchTitle">
+      <h2 id="watchTitle" class="count">What is Hoard?</h2>
+      <a class="poster" href="https://hoard.furryup.link/#watch" target="_blank" rel="noopener">
+        <img loading="lazy" src="https://public-files.gumroad.com/ezf0kp5qs70rixt6h4304000sez2" width="1005" height="565"
+             alt="Hoard: your avatar assets and projects, in one pile. Booth, Gumroad, Jinxxy, Payhip and itch.io in one library you can search and keep, and the Unity projects you make with them. Downloaded and kept up to date; sets, and wishlists with their prices; projects: packages, backups and Git.">
+        <span class="play" aria-hidden="true"></span>
+      </a>
+      <div class="watch-picks">
+        <div class="picks" role="group" aria-label="Watch on Hoard's website">
+          <a href="https://hoard.furryup.link/#watch" target="_blank" rel="noopener">Hoard in 40 seconds</a>
+          <a href="https://hoard.furryup.link/#watch" target="_blank" rel="noopener">The whole tour, 2 minutes</a>
+        </div>
+      </div>
+      <p class="small caption">The videos are made in code from Hoard's own screens, with real products from the maintainer's own library
+        (<a href="https://hoard.furryup.link/credits.html" target="_blank" rel="noopener">credits</a>), in English, Japanese and Korean, and play on
+        <a href="https://hoard.furryup.link/#watch" target="_blank" rel="noopener">Hoard's website</a>.</p>
+    </section>
+
+    <section id="features" class="features" aria-labelledby="featuresTitle">
+      <h2 id="featuresTitle" class="count">11 things Hoard does</h2>
+      {{TILES}}
+      <p class="small langs">Hoard speaks English, Japanese (<span lang="ja">日本語</span>) and Korean
+        (<span lang="ko">한국어</span>): choose in <strong>Settings</strong>. Its docs do too:
+        <a href="https://hoard.furryup.link/docs/ja/" lang="ja" target="_blank" rel="noopener">日本語のドキュメント</a>, <a href="https://hoard.furryup.link/docs/ko/" lang="ko" target="_blank" rel="noopener">한국어 문서</a>.</p>
+    </section>
+
+    <section id="tour" class="tour" aria-labelledby="tourTitle">
+      <h2 id="tourTitle" class="count">11 places to look around</h2>
+      {{GALLERY}}
+      <p class="small">Products shown are from the maintainer's own library, with their creators' pictures:
+        <a href="https://hoard.furryup.link/credits.html" target="_blank" rel="noopener">see who made each one, and where to get it</a>. Thank you for making them. Click a
+        screenshot to see it bigger.</p>
+    </section>
+
+    {{UNITY}}
+
+    <section id="download" class="download" aria-labelledby="downloadTitle">
+      <h2 id="downloadTitle" class="count">Get Hoard</h2>
+      <div class="buy">
+        <div class="buy-main">
+          <p class="price-big" data-gumroad-field="price">$0+</p>
+          <p>Pay what you want, from nothing. Whatever you choose goes towards Hoard's development, and Hoard stays
+            open source either way.</p>
+          <div class="actions">
+            <a class="button primary" data-gumroad-action="buy" href="#download">Get <span data-gumroad-field="name">Hoard</span></a>
+          </div>
+        </div>
+        <div class="pwyw">
+          <label for="gr-price">Or name your price</label>
+          <div class="copyrow">
+            <span aria-hidden="true">$</span>
+            <input id="gr-price" type="number" min="0" step="0.01" placeholder="5.00" aria-describedby="gr-note">
+            <button class="button primary" id="gr-buy" type="button">I want this</button>
+          </div>
+          <div class="amounts" role="group" aria-label="Suggested amounts">
+            <button type="button" data-amt="3">$3</button><button type="button" data-amt="5">$5</button><button type="button" data-amt="10">$10</button><button type="button" data-amt="20">$20</button>
+          </div>
+          <p class="small" id="gr-note">Leave it empty to choose at checkout.</p>
+          <form class="waitlist" data-gumroad-waitlist>
+            <label for="wl-email">Not out yet? Hear the moment it is.</label>
+            <div class="copyrow">
+              <input id="wl-email" type="email" name="email" required placeholder="you@example.com" autocomplete="email">
+              <button class="button" type="submit">Notify me</button>
+            </div>
+            <p class="small" data-gumroad-waitlist-message role="status"></p>
+          </form>
+        </div>
+      </div>
+      <div class="grid three">
+        <article data-os="windows">
+          <h3>Windows</h3>
+          <p>Windows 10 or 11. Installs for you only, with no administrator prompt, and updates itself.</p>
+          <p class="small">Code-signed. Windows may still say it "protected your PC" while Hoard earns Microsoft's trust:
+            choose <strong>More info</strong> (the publisher shows as Hoard's maintainer), then <strong>Run anyway</strong>.</p>
+        </article>
+        <article data-os="mac">
+          <h3>macOS</h3>
+          <p>macOS 11 or newer, on Apple Silicon (M1 and newer) or Intel. Hoard goes in Applications.</p>
+          <p class="small">It isn't signed by Apple yet: open it, choose <strong>Done</strong>, then <strong>System
+            Settings › Privacy &amp; Security › Open Anyway</strong>.</p>
+        </article>
+        <article data-os="linux">
+          <h3>Linux</h3>
+          <p>x86_64: an AppImage, a .deb for Debian and Ubuntu, or a Flatpak.</p>
+          <p class="small">The Flatpak uses the GNOME runtime from <a href="https://flathub.org/setup" target="_blank" rel="noopener">Flathub</a>.</p>
+        </article>
+      </div>
+      <p class="small">Every file is built on GitHub from this project's code, with a signed record of how, and checked
+        by VirusTotal before it's published. <a href="https://hoard.furryup.link/docs/Installing-Hoard.html" target="_blank" rel="noopener">How to install, update and check a download</a>.</p>
+    </section>
+
+    <section class="trust" aria-labelledby="trustTitle">
+      <h2 id="trustTitle" class="count">Safe by design</h2>
+      <ul>
+        <li><strong>Your passwords stay yours.</strong> You type them into each store's own page, in a browser that
+          belongs to Hoard alone. Hoard keeps only the "stay signed in" pass, encrypted by Windows, your Mac's
+          Keychain or your Linux keyring.</li>
+        <li><strong>Downloads are checked.</strong> Files go only where they belong, a download that stops is
+          resumed and verified, and nothing a store sends can land outside your downloads folder.</li>
+        <li><strong>Nothing is sent anywhere.</strong> Hoard talks only to the stores you use, to GitHub if you
+          turn on update checks, to a photo site when you add a set's photo by its page there, to the notification
+          services you set up (if you do), to the package repositories and Git remotes your projects use, and to
+          Hoard's share server if you make a short link for a set, which it can't read.</li>
+        <li><strong>Open source.</strong> MIT licensed, with its code, security reviews and every release on
+          <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager" target="_blank" rel="noopener">GitHub</a>.</li>
+      </ul>
+    </section>
+  </main>
+
+  {{FOOTER}}
+
+<script>
+(() => {
+  "use strict";
+  document.documentElement.classList.add("js");
+  const STORES = ["booth", "gumroad", "jinxxy", "payhip", "itch"];
+  const motionOk = () => !matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // A moment's note at the foot of the window, as the app shows them
+  let toastTimer;
+  function toast(text) {
+    let t = document.querySelector(".toast");
+    if (!t) { t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); document.body.append(t); }
+    t.textContent = text; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+  }
+
+  // The store tabs: choosing one raises it, tints the glow with that store's colour, and says what Hoard does there.
+  const glow = document.querySelector(".glow-in"), tabs = document.querySelectorAll(".seg [data-store]");
+  function showStore(store) {
+    for (const b of tabs) b.setAttribute("aria-checked", String(b.dataset.store === store));
+    for (const p of document.querySelectorAll(".store-notes [data-for]")) p.classList.toggle("here", p.dataset.for === store);
+    if (glow) {
+      const at = x => `radial-gradient(ellipse 70% 95% at ${x}% 115%, color-mix(in srgb, var(--${store}) var(--glow), transparent) 0%, transparent 75%)`;
+      glow.style.backgroundImage = store ? [12.5, 37.5, 62.5, 87.5].map(at).join(", ") : "";
+      glow.style.animationPlayState = store ? "paused" : "";
+    }
+  }
+  if (tabs.length) {
+    showStore("");
+    for (const b of tabs) {
+      b.addEventListener("click", () => showStore(b.dataset.store));
+      b.addEventListener("keydown", e => {
+        const i = [...tabs].indexOf(b), step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        const next = tabs[(i + step + tabs.length) % tabs.length];
+        next.focus(); showStore(next.dataset.store);
+      });
+    }
+  }
+
+  // Copy the VCC listing's address
+  const copy = document.getElementById("copyListing"), field = document.getElementById("listingUrl");
+  if (copy && field) {
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(field.value); toast("Copied. Paste it into VCC › Settings › Packages › Add Repository."); }
+      catch (e) { field.focus(); field.select(); toast("Selected: press Ctrl+C (or ⌘C) to copy it."); }
+    });
+    field.addEventListener("focus", () => field.select());
+  }
+
+  // Name your price: post the amount to Gumroad's checkout (an empty box leaves the choice to checkout)
+  const price = document.getElementById("gr-price");
+  for (const b of document.querySelectorAll(".amounts [data-amt]")) b.addEventListener("click", () => { price.value = b.dataset.amt; price.focus(); });
+  document.getElementById("gr-buy").addEventListener("click", () => {
+    const v = (price.value || "").trim(), params = {};
+    if (v !== "") { const n = parseFloat(v); if (!isNaN(n) && n >= 0) params.price = String(n); }
+    parent.postMessage({ type: "gumroad:checkout", params }, "*");
+  });
+
+  // ---------- a few things to find, as in the app. Each stays still when motion is reduced.
+  function confetti(n = 90) {
+    if (!motionOk()) return;
+    const box = document.createElement("div");
+    box.className = "confetti heap-confetti"; box.setAttribute("aria-hidden", "true");
+    const colours = [...STORES.map(s => `var(--${s})`), "#F0B429"];
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement("i");
+      p.style.left = `${Math.random() * 100}vw`;
+      p.style.background = colours[i % colours.length];
+      p.style.animationDuration = `${1.6 + Math.random() * 1.6}s`;
+      p.style.animationDelay = `${Math.random() * 0.9}s`;
+      p.style.setProperty("--spin", `${Math.round(Math.random() * 1080 - 540)}deg`);
+      box.append(p);
+    }
+    document.body.append(box);
+    setTimeout(() => box.remove(), 4000);
+  }
+  const KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+  let konami = 0;
+  document.addEventListener("keydown", e => {
+    if (e.target.closest && e.target.closest("input, textarea, select, [role=radio]")) { konami = 0; return; }
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    konami = k === KONAMI[konami] ? konami + 1 : k === KONAMI[0] ? 1 : 0;
+    if (konami === KONAMI.length) { konami = 0; confetti(); toast("Every store at once. A fine hoard."); }
+  });
+
+  // A screenshot, clicked, opens bigger over the page, with the others a key away.
+  const shots = [...document.querySelectorAll(".hero .shot img, .gallery figure img")].filter(img => getComputedStyle(img).display !== "none");
+  if (shots.length && typeof HTMLDialogElement === "function") {
+    const make = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+    const box = make("dialog", "lightbox");
+    box.setAttribute("aria-label", "Screenshot");
+    const fig = make("figure"), big = make("img"), cap = make("figcaption"), count = make("p", "lb-count");
+    const close = make("button", "lb-close", "×"), prev = make("button", "lb-prev", "‹"), next = make("button", "lb-next", "›");
+    close.setAttribute("aria-label", "Close"); prev.setAttribute("aria-label", "The one before"); next.setAttribute("aria-label", "The next one");
+    for (const b of [close, prev, next]) b.type = "button";
+    fig.append(big, cap);
+    box.append(count, fig, prev, next, close);
+    document.body.append(box);
+    let at = 0, from = null;
+    const show = n => {
+      at = (n + shots.length) % shots.length;
+      const img = shots[at], words = img.closest("figure") && img.closest("figure").querySelector("figcaption");
+      big.src = img.currentSrc || img.src;
+      big.alt = img.alt;
+      cap.textContent = "";
+      if (words) for (const node of words.childNodes) cap.append(node.cloneNode(true));
+      count.textContent = `${at + 1} of ${shots.length}`;
+    };
+    const open = n => { from = shots[n]; show(n); box.showModal(); close.focus(); };
+    shots.forEach((img, n) => {
+      img.dataset.lightbox = "";
+      img.tabIndex = 0;
+      img.setAttribute("role", "button");
+      img.setAttribute("aria-label", `See it bigger: ${img.alt}`);
+      img.addEventListener("click", () => open(n));
+      img.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(n); } });
+    });
+    close.addEventListener("click", () => box.close());
+    prev.addEventListener("click", () => show(at - 1));
+    next.addEventListener("click", () => show(at + 1));
+    box.addEventListener("click", e => { if (e.target === box || e.target === fig) box.close(); });
+    box.addEventListener("keydown", e => {
+      if (e.key === "ArrowLeft") { e.preventDefault(); show(at - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); show(at + 1); }
+    });
+    box.addEventListener("close", () => { big.removeAttribute("src"); if (from) from.focus(); });
+  }
+
+  // the logo, poked five times
+  let pokes = [], tumbled = 0;
+  const brand = document.querySelector(".brand");
+  if (brand) {
+    brand.addEventListener("click", e => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: motionOk() ? "smooth" : "auto" });
+      const now = Date.now();
+      pokes = [...pokes.filter(t => now - t < 2500), now];
+      if (pokes.length < 5) return;
+      pokes = [];
+      clearTimeout(tumbled);
+      brand.classList.remove("tumble"); void brand.offsetWidth; brand.classList.add("tumble");
+      tumbled = setTimeout(() => brand.classList.remove("tumble"), 3600);
+      toast("Careful: everything in here is somebody's treasure.");
+    });
+  }
+})();
+</script>
+</body>
+</html>
