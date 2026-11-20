@@ -76,14 +76,17 @@ def screenshot(name: str, theme: str) -> str:
     return entry["url"]
 
 
-def gumroad(*args: str) -> dict:
-    """The Gumroad CLI's answer, as JSON (it stops here if Gumroad says no)."""
+def gumroad(*args: str, refused: str = "") -> dict:
+    """The Gumroad CLI's answer, as JSON. It stops here if Gumroad says no, unless its message has the words in refused:
+    then that answer is returned, to try another way."""
     run = subprocess.run(["gumroad", *args, "--json", "--no-input", "--non-interactive"], capture_output=True, text=True, check=False)
     try:
         answer = json.loads(run.stdout)
     except json.JSONDecodeError:
         sys.exit(f"gumroad {args[0]} {args[1]}: {run.stderr.strip() or run.stdout.strip()}")
     if not answer.get("success"):
+        if refused and refused in answer.get("error", {}).get("message", ""):
+            return answer
         sys.exit(f"gumroad {args[0]} {args[1]}: {answer.get('error', {}).get('message', answer)}")
     return answer
 
@@ -96,9 +99,14 @@ def upload(shots: list[tuple[str, str]]) -> None:
         if i:
             time.sleep(UPLOAD_GAP)
         key, path = f"{name}-{theme}", SITE / "img" / f"{name}-{theme}.webp"
-        # its display name: one word (Gumroad takes a name with spaces, hyphens or a file's extension for spam)
+        # its display name: one word (Gumroad takes a name with spaces, hyphens or a file's extension for spam, and some
+        # words too, such as Downloads); one it refuses is sent again as plain "Screenshot"
         label = "".join(part.capitalize() for part in key.split("-"))
-        got = gumroad("media", "upload", str(path), "--name", label)["media"]
+        answer = gumroad("media", "upload", str(path), "--name", label, refused="looks like spam")
+        if not answer.get("success"):
+            time.sleep(UPLOAD_GAP)
+            answer = gumroad("media", "upload", str(path), "--name", "Screenshot")
+        got = answer["media"]
         old = known.get(key)
         known[key] = {"sha256": fingerprint(path), "id": got["id"], "url": got["url"]}
         MEDIA.write_text(json.dumps(known, indent=2, sort_keys=True) + "\n", encoding="utf-8")

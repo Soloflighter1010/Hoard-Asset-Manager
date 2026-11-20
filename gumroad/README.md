@@ -32,7 +32,8 @@ size (`site/img`'s 1600-wide copies), are uploaded to the account's public media
 uses their addresses there. Each is there twice, dark and light, shown as the visitor's system is. `--upload` sends
 only the screenshots that are new or changed since `media.json` was written, 31 seconds apart (Gumroad takes 20
 uploads in 10 minutes), and deletes the copies they replace. A display name with spaces, hyphens or a file's extension
-is refused as spam, so each is one word (`LibraryDark`).
+is refused as spam, and some words are too (Downloads), so each is one word (`LibraryDark`), or `Screenshot` when
+that's refused.
 
 The build stops if a screenshot changed since it was uploaded, or if the page would break one of Gumroad's limits:
 500,000 characters, or 25 pictures (it has 25: the hero's and the tour's, dark and light, and the cover).
