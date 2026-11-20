@@ -1,0 +1,12 @@
+{
+  "library-dark": {
+    "id": "pvhca2cl1xfq1nnv",
+    "sha256": "c0684006be83187745b429bcacfc2f0560ac1797f67896c22fc268d613afd607",
+    "url": "https://public-files.gumroad.com/eb84m1ewsu4nnkexxi6pso5f8fo7"
+  },
+  "library-light": {
+    "id": "x4rm2xckwaxgk46q",
+    "sha256": "3da35a241a7ec604d9715691314d8c4e39d87ef100e9c7b6bd18b8a9b7e8ec3e",
+    "url": "https://public-files.gumroad.com/3srn0bhqjm9qb1lpezsme1sacf7v"
+  }
+}

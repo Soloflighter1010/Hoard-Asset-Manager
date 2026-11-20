@@ -7,6 +7,7 @@ page, as one file Gumroad can serve, with Gumroad's buy buttons where the site h
 |---|---|
 | `landing.src.html` | The template: the page's own parts (its bar, the hero, What is Hoard?, Get Hoard, Safe by design), and where the site's go |
 | `landing.html` | The page, built: what's published to Gumroad. Don't edit it; edit the template or the site, and build again |
+| `media.json` | Where each screenshot is in Gumroad's media library, with the fingerprint of the file it was uploaded from |
 | `../scripts/build_gumroad_page.py` | Builds `landing.html` from the template and `site/`, and checks what Gumroad would refuse |
 
 ## What comes from the site
@@ -26,18 +27,22 @@ What's the Gumroad page's own, in the template:
 
 ## What Gumroad allows
 
-A page is served whole from one file, sandboxed: nothing it links to loads, apart from the product's own covers. So
-the screenshots go in as data addresses, made smaller (`HERO` and `TOUR` in the script), each twice for dark and light
-(a data address can't go in a `srcset`, as its comma splits it). The script stops if the page would break one of
-Gumroad's limits: 500,000 characters, 25 pictures, or a data address in a `srcset`.
+A page is served from one file, sandboxed, and shows pictures only from Gumroad's own CDN. So the screenshots, at full
+size (`site/img`'s 1600-wide copies), are uploaded to the account's public media library (`gumroad media`), and the page
+uses their addresses there. Each is there twice, dark and light, shown as the visitor's system is. `--upload` sends
+only the screenshots that are new or changed since `media.json` was written, 31 seconds apart (Gumroad takes 20
+uploads in 10 minutes), and deletes the copies they replace. A display name with spaces, hyphens or a file's extension
+is refused as spam, so each is one word (`LibraryDark`).
+
+The build stops if a screenshot changed since it was uploaded, or if the page would break one of Gumroad's limits:
+500,000 characters, or 25 pictures (it has 25: the hero's and the tour's, dark and light, and the cover).
 
 ## Building and publishing
 
-Needs Python with Pillow (`promo/requirements.txt`), and the
-[Gumroad CLI](https://github.com/antiwork/gumroad-cli), signed in (`gumroad auth login`).
+Needs the [Gumroad CLI](https://github.com/antiwork/gumroad-cli), signed in (`gumroad auth login`).
 
 ```
-python3 scripts/build_gumroad_page.py
+python3 scripts/build_gumroad_page.py --upload
 gumroad products page preview knkwuq gumroad/landing.html --json --no-input --non-interactive
 gumroad products page publish knkwuq gumroad/landing.html --json --no-input --non-interactive
 ```

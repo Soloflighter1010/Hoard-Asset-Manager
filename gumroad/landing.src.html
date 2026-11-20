@@ -4,7 +4,7 @@
 <style>
 {{CSS}}
 /* ---------- the Gumroad page's own pieces, in the site's style */
-/* each screenshot in the light or dark it's shown in (two pictures, as a data address can't go in a srcset) */
+/* each screenshot in the light or dark it's shown in: two pictures, as the page can't have a srcset of each */
 .light-shot { display: none !important; }
 @media (prefers-color-scheme: light) { .dark-shot { display: none !important; } .light-shot { display: block !important; } }
 .bar-tools .price, .button .price { padding: 2px 9px; border-radius: 999px; background: rgb(0 0 0 / .14); font-size: .9em; }
@@ -99,9 +99,9 @@ html[data-gumroad-launched] form[data-gumroad-waitlist] { display: none; }
             their files.</p>
         </div>
         <picture class="shot">
-          <img class="dark-shot" src="data:image/webp;base64,{{IMG_library-dark}}" width="780" height="463"
+          <img class="dark-shot" src="{{IMG_library-dark}}" width="1600" height="950"
                alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, and your tags grouped by kind down the side.">
-          <img class="light-shot" src="data:image/webp;base64,{{IMG_library-light}}" width="780" height="463"
+          <img class="light-shot" src="{{IMG_library-light}}" width="1600" height="950"
                alt="Hoard's library: products from several stores as picture tiles, with store tabs, search, and your tags grouped by kind down the side.">
         </picture>
       </div>

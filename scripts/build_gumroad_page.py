@@ -1,6 +1,7 @@
 """Hoard's Gumroad page (soloflighter.gumroad.com/l/hoardvrc): the website's front page, as one file Gumroad can serve.
 
-    python3 scripts/build_gumroad_page.py      builds gumroad/landing.html from gumroad/landing.src.html
+    python3 scripts/build_gumroad_page.py --upload   puts any screenshot that's new or changed in Gumroad's media library
+    python3 scripts/build_gumroad_page.py            builds gumroad/landing.html from gumroad/landing.src.html
 
 The page is the front page's own pieces, taken from site/ each time: its stylesheet (the sections the front page
 uses, its fonts inlined), the logo, the 11 tiles, the 11 screenshots of the tour, Hoard for Unity and the footer. The
@@ -8,39 +9,41 @@ template holds what's the Gumroad page's own: its bar, the hero, What is Hoard? 
 can't be served from there), Get Hoard with Gumroad's buy buttons, and Safe by design. So run it again after changing
 the front page, and the Gumroad page follows.
 
-Gumroad serves a page whole, from one file, sandboxed: so the screenshots go in as data addresses, made smaller here
-(site/img's 1200-wide copies, shrunk and saved again), each twice, for dark and light (a data address can't go in a
-srcset: its comma splits it). It checks what Gumroad will refuse: more than 500,000 characters, more than 25 pictures,
-or a data address in a srcset. Then, with the Gumroad CLI (github.com/antiwork/gumroad-cli):
+Gumroad serves a page from one file, sandboxed, and shows pictures only from its own CDN. So the screenshots, at full
+size (site/img's 1600-wide copies), go in Gumroad's public media library with the Gumroad CLI
+(github.com/antiwork/gumroad-cli, signed in), and gumroad/media.json keeps each one's address and fingerprint: --upload
+sends only those that are new or changed since, 31 seconds apart (Gumroad takes 20 in 10 minutes), and deletes the
+copy each replaces. Each screenshot is there twice, dark and light, shown as the visitor's system is.
+
+It checks what Gumroad will refuse: more than 500,000 characters or more than 25 pictures. Then:
 
     gumroad products page preview knkwuq gumroad/landing.html --json --no-input --non-interactive
     gumroad products page publish knkwuq gumroad/landing.html --json --no-input --non-interactive
 
-The preview runs Gumroad's own sanitizer without publishing; its sanitization_report should be empty. Needs Pillow
-(promo/requirements.txt).
+The preview runs Gumroad's own sanitizer without publishing; its sanitization_report should be empty.
 """
 from __future__ import annotations
 
 import base64
-import io
+import hashlib
+import json
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
-
-from PIL import Image
 
 REPO = Path(__file__).resolve().parent.parent
 SITE = REPO / "site"
 SRC = REPO / "gumroad" / "landing.src.html"
 OUT = REPO / "gumroad" / "landing.html"
+MEDIA = REPO / "gumroad" / "media.json"
 BASE = "https://hoard.furryup.link/"
 
 LIMIT_CHARS = 500_000   # Gumroad's cap on a page
 LIMIT_IMAGES = 25       # the most pictures Gumroad reviews on a page
 
-# The hero's screenshot, and the tour's: (width, WebP quality). Small enough that all of them fit Gumroad's cap.
-HERO = (780, 48)
-TOUR = (500, 38)
+UPLOAD_GAP = 31          # seconds between uploads: Gumroad takes 20 in 10 minutes
 
 # The stylesheet's sections that style other pages than the front, left out (each starts with this comment)
 OTHER_PAGES = (
@@ -56,14 +59,54 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
-def screenshot(name: str, theme: str, size: tuple[int, int]) -> str:
-    """A screenshot from site/img, shrunk to its width here and saved again as WebP: its data address's base64."""
-    width, quality = size
-    im = Image.open(SITE / "img" / f"{name}-{theme}-1200.webp").convert("RGB")
-    im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
-    buf = io.BytesIO()
-    im.save(buf, "WEBP", quality=quality, method=6)
-    return b64(buf.getvalue())
+def media() -> dict:
+    return json.loads(MEDIA.read_text(encoding="utf-8")) if MEDIA.exists() else {}
+
+
+def fingerprint(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def screenshot(name: str, theme: str) -> str:
+    """A screenshot's address in Gumroad's media library (after --upload), checked against the file it was made from."""
+    key, path = f"{name}-{theme}", SITE / "img" / f"{name}-{theme}.webp"
+    entry = media().get(key)
+    if not entry or entry["sha256"] != fingerprint(path):
+        sys.exit(f"{key}.webp is new or changed since it was uploaded: run with --upload first")
+    return entry["url"]
+
+
+def gumroad(*args: str) -> dict:
+    """The Gumroad CLI's answer, as JSON (it stops here if Gumroad says no)."""
+    run = subprocess.run(["gumroad", *args, "--json", "--no-input", "--non-interactive"], capture_output=True, text=True, check=False)
+    try:
+        answer = json.loads(run.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f"gumroad {args[0]} {args[1]}: {run.stderr.strip() or run.stdout.strip()}")
+    if not answer.get("success"):
+        sys.exit(f"gumroad {args[0]} {args[1]}: {answer.get('error', {}).get('message', answer)}")
+    return answer
+
+
+def upload(shots: list[tuple[str, str]]) -> None:
+    """Each screenshot that's new or changed, into Gumroad's media library; the copy it replaces, deleted."""
+    known = media()
+    todo = [(n, t) for n, t in shots if known.get(f"{n}-{t}", {}).get("sha256") != fingerprint(SITE / "img" / f"{n}-{t}.webp")]
+    for i, (name, theme) in enumerate(todo):
+        if i:
+            time.sleep(UPLOAD_GAP)
+        key, path = f"{name}-{theme}", SITE / "img" / f"{name}-{theme}.webp"
+        # its display name: one word (Gumroad takes a name with spaces, hyphens or a file's extension for spam)
+        label = "".join(part.capitalize() for part in key.split("-"))
+        got = gumroad("media", "upload", str(path), "--name", label)["media"]
+        old = known.get(key)
+        known[key] = {"sha256": fingerprint(path), "id": got["id"], "url": got["url"]}
+        MEDIA.write_text(json.dumps(known, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if old:
+            gumroad("media", "delete", old["id"], "--yes")
+        print(f"uploaded {key} ({i + 1} of {len(todo)}): {got['url']}")
+    if not todo:
+        print("every screenshot is uploaded and unchanged")
 
 
 def absolute(html: str) -> str:
@@ -114,14 +157,17 @@ def main() -> None:
     index = (SITE / "index.html").read_text(encoding="utf-8")
     page = SRC.read_text(encoding="utf-8")
 
+    gallery = piece(index, r'(<div class="gallery">.*?</div>)\s*<p class="small">Products shown', "the tour's gallery")
+    tour = re.findall(r'<source srcset="img/([\w-]+)-light-800\.webp', gallery)
+    shots = [("library", theme) for theme in ("dark", "light")] + [(n, theme) for n in tour for theme in ("dark", "light")]
+    if "--upload" in sys.argv:
+        upload(shots)
+
     def tour_shot(m: re.Match) -> str:
         name, alt = m.group(1), m.group(2)
-        return "".join(
-            f'<img class="{theme}-shot" src="data:image/webp;base64,{screenshot(name, theme, TOUR)}" '
-            f'width="{TOUR[0]}" height="{round(TOUR[0] * 950 / 1600)}" loading="lazy" alt="{alt}">'
-            for theme in ("dark", "light"))
+        return "".join(f'<img class="{theme}-shot" src="{screenshot(name, theme)}" width="1600" height="950" loading="lazy" '
+                       f'alt="{alt}">' for theme in ("dark", "light"))
 
-    gallery = piece(index, r'(<div class="gallery">.*?</div>)\s*<p class="small">Products shown', "the tour's gallery")
     gallery = re.sub(r'<picture>\s*<source srcset="img/([\w-]+)-light-800\.webp[^>]*>\s*<img [^>]*alt="([^"]*)">\s*</picture>',
                      tour_shot, gallery)
     if "img/" in gallery:
@@ -137,7 +183,7 @@ def main() -> None:
     }
     for key, value in pieces.items():
         page = page.replace("{{" + key + "}}", value)
-    page = re.sub(r"\{\{IMG_([\w-]+)-(dark|light)\}\}", lambda m: screenshot(m.group(1), m.group(2), HERO), page)
+    page = re.sub(r"\{\{IMG_([\w-]+)-(dark|light)\}\}", lambda m: screenshot(m.group(1), m.group(2)), page)
     left = re.findall(r"\{\{\w+\}\}", page)
     if left:
         sys.exit(f"gumroad/landing.src.html: nothing fills {left[0]}")
@@ -146,7 +192,7 @@ def main() -> None:
     images = len(re.findall(r"<img\b", page))
     problems = []
     if len(page) > LIMIT_CHARS:
-        problems.append(f"{len(page):,} characters, over Gumroad's {LIMIT_CHARS:,}: make HERO or TOUR smaller")
+        problems.append(f"{len(page):,} characters, over Gumroad's {LIMIT_CHARS:,}")
     if images > LIMIT_IMAGES:
         problems.append(f"{images} pictures, over the {LIMIT_IMAGES} Gumroad reviews")
     if re.search(r'srcset="data:', page):
