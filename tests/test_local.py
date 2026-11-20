@@ -218,8 +218,13 @@ class LocalItems(IsolatedTestCase):
         self.assertEqual(call("/api/local/add", {"path": "nope"})[0], 400, "a path that can't be used is said straight away")
         status, data = call("/api/local/add", {"path": str(self.src), "copy": False})
         self.assertEqual((status, data.get("queued")), (200, False))
+
+        def idle():
+            """Nothing running or waiting in either lane: Add to Local runs in the side lane (issue #403) when the main
+            lane has nothing it clashes with, and the catalog can list what it added before it has ended."""
+            return not any(lane.state["running"] or lane.state["queue"] for lane in (srv.jobs, srv.side_jobs))
         for _ in range(100):
-            if not srv.jobs.state["running"] and self.catalog():
+            if idle() and self.catalog():
                 break
             time.sleep(0.1)
         [entry] = self.catalog()
@@ -267,7 +272,7 @@ class LocalItems(IsolatedTestCase):
         self.assertTrue(self.src.exists(), "your own folder isn't touched")
         status, data = call("/api/local/add", {"path": str(self.src), "copy": False})
         for _ in range(100):
-            if not srv.jobs.state["running"] and self.catalog():
+            if idle() and self.catalog():
                 break
             time.sleep(0.1)
         [entry] = self.catalog()
