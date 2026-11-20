@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.12.0
+
+- **A tool the project has already is left out of an import** (Hoard's issue #414). A product's package often
+  carries its own copy of a shader or tool (lilToon, Poiyomi Toon, Modular Avatar, VRCFury). When this project has
+  that tool at the same version or a newer one, through the VCC or in Assets, **Import** and **Import set** give
+  Unity's dialog a copy of the package without it (in `Library/Hoard/Trimmed`), and the window says what was left
+  out. Importing the older copy over the project's, or beside the VCC's, made Unity and the tool warn. A tool the
+  project doesn't have, or has an older version of, comes in as before. A tool's copy is known by its own
+  `package.json`.
+- **A creator's own files in a tool's folder** that the project hasn't got (a preset or material) still come in, and
+  the window names them. The tool's older scripts and shaders never do.
+- **Looking at a package shows how far it's got**, and **Cancel** stops the import. A package without a
+  `package.json` isn't looked at again. If the copy can't be made, Hoard asks before offering all of the package.
+- **Take it out of this project...** keeps a tool's own folder (one with its `package.json`), as other things in the
+  project may use it, and says how many of the product's files are in it; **Take it out, with** the tool takes those
+  too.
+
 ## 0.11.1
 
 - **Pictures don't flicker or go blank in a long list** (#407). A store's picture, which can be thousands of pixels

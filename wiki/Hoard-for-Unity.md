@@ -146,6 +146,7 @@ them or partly (not ones imported once and gone since), named for the project: t
   the window shows that once it reads Hoard's library again (when it opens, or **Reload**). Until then it uses one of the product's own images when there is one.
 - For pictures that don't flicker or go blank in a long list: 0.11.1 or newer. A picture is kept at the size it's
   drawn, one on screen is never let go, and one that couldn't be read is tried again a little later.
+- For leaving out a tool the project has already (lilToon, Poiyomi) when importing: 0.12.0 or newer.
 
 ## Installing
 

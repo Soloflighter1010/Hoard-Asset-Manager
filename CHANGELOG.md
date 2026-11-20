@@ -1,5 +1,33 @@
 # Changelog
 
+## 5.2.0-beta.12
+
+### Local and File Explorer
+
+- **The Local sync folder in Windows' File Explorer** (#410). The sync folder has Hoard's own icon, a gold folder
+  with the Heap in its corner, and a tip saying what it's for. The right-click menu has **Add to Hoard** on any file
+  or folder (a file is copied into the sync folder, a folder is listed in Local where it is), and **Sync with Hoard
+  now** and **Open in Hoard** on the sync folder. On Windows 11 they're under **Show more options**. Settings has
+  **Show it in File Explorer** under the Local sync folder, and uninstalling Hoard takes the icon and the menu away.
+  macOS and Linux are #411.
+
+### Sets and wishlists
+
+- **Send to Hoard, a bookmark for your browser** (#413). On a product's page on Booth, Gumroad, Jinxxy, Payhip or
+  itch.io it opens Hoard to add the product to a wishlist; on a set shared from Hoard's website it opens **Add a
+  shared set...** with the set in it. Get it from its page on the website, or copy it from a wishlist's **Find more
+  to add**. It reads only the page's address, and Hoard adds nothing until you say so. Jinxxy's own pages (your
+  wishlist, the market) are no longer taken for products' pages when added by link.
+
+### Hoard for Unity
+
+- **A tool the project has already is left out of an import** (#414, Hoard for Unity 0.12.0). Many products carry
+  their own copy of lilToon, Poiyomi Toon, Modular Avatar or VRCFury. When the project has that tool at the same
+  version or a newer one, through the VCC or in Assets, the product's copy is left out, so Unity and the tool no
+  longer warn about an older copy, and the window says what was left out. A creator's own files in the tool's folder
+  still come in. **Take it out of this project...** keeps a tool's folder unless you choose **Take it out, with**
+  the tool.
+
 ## 5.2.0-beta.11
 
 ### Tasks and downloads
