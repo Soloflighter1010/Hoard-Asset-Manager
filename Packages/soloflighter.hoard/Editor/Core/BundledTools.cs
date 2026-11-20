@@ -60,6 +60,8 @@ namespace SoloFlighter.Hoard
                 // a tool's own folder ("Assets/lilToon", "Assets/Creator/Shaders/lilToon"), never Assets/ or Packages/ itself
                 if (!(folder.StartsWith("Assets/", StringComparison.Ordinal) || folder.StartsWith("Packages/", StringComparison.Ordinal))) continue;
                 if (folder.EndsWith("/", StringComparison.Ordinal) || folder.Split('/').Length < 2) continue;
+                // a package is a file anyone could have made: a path that climbs out ("Assets/../x") is no tool's
+                if (Array.Exists(folder.Split('/'), part => part.Length == 0 || part == "." || part == "..") || folder.IndexOf(':') >= 0) continue;
                 string id, version;
                 if (!ReadManifest(m.Value, out id, out version)) continue;
                 string name;

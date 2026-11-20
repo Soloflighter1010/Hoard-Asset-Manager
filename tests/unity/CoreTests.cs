@@ -305,6 +305,12 @@ public static class CoreTests
               "22222222222222222222222222222221,22222222222222222222222222222222,22222222222222222222222222222223,22222222222222222222222222222224",
               string.Join(",", lil.Guids.ToArray()));
         Check("bundled: nothing found in a package without manifests", BundledTools.Find(assets, new Dictionary<string, byte[]>()).Count == 0);
+        var climbing = new Dictionary<string, string> { { "55555555555555555555555555555551", "Assets/../../Other/package.json" },
+                                                         { "55555555555555555555555555555552", "Assets//lilToon/package.json" },
+                                                         { "55555555555555555555555555555553", "Assets/C:/lilToon/package.json" } };
+        var climbingManifests = new Dictionary<string, byte[]>();
+        foreach (var g in climbing.Keys) climbingManifests[g] = manifests["22222222222222222222222222222222"];
+        Check("bundled: a folder that climbs out of the project is no tool's", BundledTools.Find(climbing, climbingManifests).Count == 0);
 
         // versions, as Unity's packages write them
         Func<string, string, int?> cmp = (a, b) => { int c; return BundledTools.TryCompare(a, b, out c) ? c : (int?)null; };
