@@ -2758,5 +2758,6 @@
  "Add to Hoard": "Hoard에 추가",
  "Sync with Hoard now": "지금 Hoard와 동기화",
  "Open in Hoard": "Hoard에서 열기",
- "That folder isn't Hoard's sync folder.": "그 폴더는 Hoard의 동기화 폴더가 아니에요."
+ "That folder isn't Hoard's sync folder.": "그 폴더는 Hoard의 동기화 폴더가 아니에요.",
+ "Or send a product's page here from your browser with the Send to Hoard bookmark: <0>get it from its page</0>, or <1>copy it</1> and make a bookmark with it as the address.": "Send to Hoard 북마크로 브라우저에서 연 상품 페이지를 여기로 보낼 수도 있어요. <0>전용 페이지에서 받거나</0>, <1>복사</1>해서 주소로 북마크를 만드세요."
 }

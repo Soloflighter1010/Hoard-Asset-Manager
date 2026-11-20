@@ -58,7 +58,7 @@ def built_site() -> Path:
 
 
 PAGES = ("index.html", "testers.html", "changelog.html", "credits.html", "how-it-works.html", "trust.html", "ai.html",
-         "stores.html", "set.html", "save-for-hoard.html", "press.html", "404.html")
+         "stores.html", "set.html", "save-for-hoard.html", "send-to-hoard.html", "press.html", "404.html")
 
 
 def every_page(site: Path) -> list[str]:
@@ -111,8 +111,8 @@ class TheSite(IsolatedTestCase):
                 if tag == "base":   # 404.html, shown at any address: its links from the site's root
                     self.assertEqual((name, value), ("404.html", "/"))
                     continue
-                if value.startswith("javascript:"):   # the Save for Hoard bookmark: a page of its own's, to drag
-                    self.assertEqual((name, tag), ("save-for-hoard.html", "a"), f"{name}: a javascript: link")
+                if value.startswith("javascript:"):   # Save for Hoard's and Send to Hoard's bookmarks: on their own pages, to drag
+                    self.assertIn((name, tag), {("save-for-hoard.html", "a"), ("send-to-hoard.html", "a")}, f"{name}: a javascript: link")
                     continue
                 if value.startswith("#"):
                     self.assertIn(value[1:], page.ids, f"{name}: {value}")
@@ -526,6 +526,18 @@ class TheOtherPages(IsolatedTestCase):
         app = (REPO / "hoard" / "web" / "library.html").read_text("utf-8")
         self.assertIn('href="https://hoard.furryup.link/save-for-hoard.html" target="_blank"', app, "Hoard opens it in the browser")
         self.assertNotIn('draggable="true"', app.split('id="payhipSaver"', 1)[1][:200], "nothing to drag in Hoard's window")
+
+    def test_the_send_to_hoard_page_carries_hoards_own_bookmark(self):
+        """Send to Hoard (issue #413), the same way: its page carries the very bookmark Hoard copies, and Hoard links to it."""
+        sys.path.insert(0, str(REPO / "scripts"))
+        import save_for_hoard
+        self.assertEqual(save_for_hoard.main([]), 0, "run python3 scripts/save_for_hoard.py --write")
+        page = (SITE / "send-to-hoard.html").read_text("utf-8")
+        href = re.search(r'<a class="bookmarklet" id="sender" href="([^"]+)"', page).group(1)
+        self.assertTrue(unquote(href).startswith("javascript:void (() =>"), href[:40])
+        self.assertIn("hoard://add?link=", unquote(href), "Send to Hoard itself")
+        app = (REPO / "hoard" / "web" / "shared.js").read_text("utf-8")
+        self.assertIn('href="https://hoard.furryup.link/send-to-hoard.html" target="_blank"', app, "Hoard opens it in the browser")
 
     def test_the_changelog_has_every_release_newest_first(self):
         md = (REPO / "CHANGELOG.md").read_text("utf-8")

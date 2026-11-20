@@ -2758,5 +2758,6 @@
  "Add to Hoard": "Hoardに追加",
  "Sync with Hoard now": "今すぐHoardと同期",
  "Open in Hoard": "Hoardで開く",
- "That folder isn't Hoard's sync folder.": "そのフォルダーはHoardの同期フォルダーではありません。"
+ "That folder isn't Hoard's sync folder.": "そのフォルダーはHoardの同期フォルダーではありません。",
+ "Or send a product's page here from your browser with the Send to Hoard bookmark: <0>get it from its page</0>, or <1>copy it</1> and make a bookmark with it as the address.": "Send to Hoardブックマークを使えば、ブラウザーで開いている商品ページをここに送れます。<0>専用ページから入手</0>するか、<1>コピー</1>してアドレスとしてブックマークを作ってください。"
 }

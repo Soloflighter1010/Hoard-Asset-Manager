@@ -284,6 +284,52 @@ class Page(IsolatedTestCase):
             browser.close()
 
 
+class SendToHoard(IsolatedTestCase):
+    """Issue #413: the Send to Hoard bookmark (SEND_TO_HOARD in hoard/web/shared.js), run on each kind of page as a
+    browser would run it: a product's page on each store becomes a hoard://add link, and a shared set a hoard://set
+    link, each one Hoard itself takes; anywhere else it only says what it works on."""
+
+    PAGES = {   # the page: the link, or None where it only says something
+        "https://booth.pm/ja/items/1234567": "hoard://add?link=https%3A%2F%2Fbooth.pm%2Fja%2Fitems%2F1234567",
+        "https://kitsu.booth.pm/items/99?ref=x#pics": "hoard://add?link=https%3A%2F%2Fkitsu.booth.pm%2Fitems%2F99",
+        "https://kitsu.gumroad.com/l/hat": "hoard://add?link=https%3A%2F%2Fkitsu.gumroad.com%2Fl%2Fhat",
+        "https://jinxxy.com/Kitsu/FoxHat": "hoard://add?link=https%3A%2F%2Fjinxxy.com%2FKitsu%2FFoxHat",
+        "https://payhip.com/b/AbCd1": "hoard://add?link=https%3A%2F%2Fpayhip.com%2Fb%2FAbCd1",
+        "https://kitsu.itch.io/fox-hat": "hoard://add?link=https%3A%2F%2Fkitsu.itch.io%2Ffox-hat",
+        "https://hoard.furryup.link/set.html#S1.abcdefghij.abcdefghijklmnopqrstuv": "hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv",
+        "https://booth.pm/ja/": None, "https://example.com/items/1": None, "https://hoard.furryup.link/set.html#new": None,
+        "https://hoard.furryup.link/set.html#H1." + "a" * 2100: None,   # (too long for a link: copy its code instead)
+    }
+
+    def test_each_kind_of_page(self):
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                pw.chromium.launch().close()
+        except Exception:
+            self.skipTest("no Playwright browser here")
+        code = (Path(__file__).resolve().parent.parent / "hoard" / "web" / "shared.js").read_text("utf-8")
+        code = code.split("const SEND_TO_HOARD = String.raw`", 1)[1].split("`;", 1)[0]
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            for href, want in self.PAGES.items():
+                got = page.evaluate("""([code, href]) => {   // (its location and alert stood in for)
+                    const loc = { href }, said = [];
+                    new Function("location", "alert", code)(loc, m => said.push(m));
+                    return { href: loc.href, said };
+                }""", [code, href])
+                with self.subTest(href=href[:80]):
+                    if want is None:
+                        self.assertEqual(got["href"], href, "it goes nowhere")
+                        self.assertTrue(got["said"] and got["said"][0].startswith("Send to Hoard: "))
+                        continue
+                    self.assertEqual((got["href"], got["said"]), (want, []))
+                    asked = links.parse(want)   # (and Hoard takes it, as it would from the browser)
+                    self.assertIn(asked["do"], ("add", "set"), asked)
+            browser.close()
+
+
 class Packaging(IsolatedTestCase):
     """Each of Hoard's apps says it opens hoard:// links, and hands one to Hoard."""
     REPO = Path(__file__).resolve().parent.parent
