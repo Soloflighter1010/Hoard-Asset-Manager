@@ -66,6 +66,8 @@ currency conversion and the others above) was done in PR #365.
 - [ ] [#394](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/394) — Try Hoard on the website: a demo in the browser with a pretend sign-in and real products (waiting on the list of products to show).
 - [x] [#410](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/410) — The Local sync folder in Windows' File Explorer: Hoard's icon on it, and Add to Hoard, Sync with Hoard now and Open in Hoard in the right-click menu.
 - [ ] [#411](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/411) — The same in macOS's Finder and on Linux.
+- [x] [#413](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/413) — Send to Hoard: a bookmark that sends a store's product page, or a set shared from the website, to Hoard as a `hoard://` link.
+- [x] [#414](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/414) — Hoard for Unity: a tool a product carries (lilToon, Poiyomi) is left out of the import when the project has it at the same version or a newer one.
 
 ### Beta 10 notes
 
