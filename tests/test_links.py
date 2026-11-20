@@ -299,6 +299,7 @@ class SendToHoard(IsolatedTestCase):
         "https://hoard.furryup.link/set.html#S1.abcdefghij.abcdefghijklmnopqrstuv": "hoard://set/S1.abcdefghij.abcdefghijklmnopqrstuv",
         "https://booth.pm/ja/": None, "https://example.com/items/1": None, "https://hoard.furryup.link/set.html#new": None,
         "https://hoard.furryup.link/set.html#H1." + "a" * 2100: None,   # (too long for a link: copy its code instead)
+        "https://hoard.furryup.link/set.html#S1.%E0%A4%A": None,   # (a broken link's code: said, not thrown)
     }
 
     def test_each_kind_of_page(self):

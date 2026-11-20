@@ -6410,7 +6410,8 @@ const SEND_TO_HOARD = String.raw`(() => {
   // A site, or a shop on it (shop.booth.pm, creator.gumroad.com).
   const on = site => host === site || host.endsWith("." + site);
   if (host === "hoard.furryup.link" && /^\/set(\.html)?$/.test(path)) {
-    const code = decodeURIComponent(here.hash.slice(1)).replace(/\s+/g, "");
+    let code = "";
+    try { code = decodeURIComponent(here.hash.slice(1)).replace(/\s+/g, ""); } catch (e) { /* a broken link: said below */ }
     if (!/^[SH]1\.[A-Za-z0-9_.-]+$/.test(code)) {
       alert("Send to Hoard: open a shared set's link first, then choose this bookmark again.");
     } else if (("hoard://set/" + code).length > 2000) {
