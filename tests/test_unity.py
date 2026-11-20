@@ -207,6 +207,7 @@ def build_material(d: Path) -> None:
     (d / "package_expected.txt").write_text("\n".join(sorted(f"{g} {p}" for g, p in expected.items())), "utf-8")
     (d / "not_a_package.unitypackage").write_bytes(gzip.compress(b"hello, this is not a tar file" * 3))
     build_zips(d, (d / "test.unitypackage").read_bytes())
+    build_bundled(d)
     # what a check for updates found, written by the app's own code, for Hoard for Unity's "Update in Hoard" mark
     from hoard.asset_updates import AssetUpdates
     AssetUpdates(d / "asset-updates.json").record_check(["booth", "itch"], None, [
@@ -217,6 +218,103 @@ def build_material(d: Path) -> None:
     (d / "huge_name.unitypackage").write_bytes(gzip.compress(tar_header("././@LongLink", 8 ** 11 - 1, b"L") + b"x" * 100))
     (d / "too_big.unitypackage").write_bytes(gzip.compress(tar_header("0123456789abcdef0123456789abcdef/asset",
                                                                        8 ** 12 - 1, b"0") + b"x" * 100))
+
+
+# Issue #414: a product's package carrying its own copies of lilToon and Poiyomi, for Hoard for Unity to leave out when
+# the project has them already. Its GUIDs, and the folder each tool's files are in.
+BUNDLED = {
+    "product": {"11111111111111111111111111111111": "Assets/Kitsu/Rusk",
+                "11111111111111111111111111111112": "Assets/Kitsu/Rusk/Rusk.prefab",
+                "11111111111111111111111111111113": "Assets/Kitsu/Rusk/" + "Long Material Name " * 6 + ".mat",
+                "11111111111111111111111111111114": "Assets/Kitsu/Rusk/package.json",      # the product's own manifest
+                "11111111111111111111111111111115": "Assets/package.json",                 # names lilToon, but isn't a folder
+                "11111111111111111111111111111116": "Assets/Kitsu/Rusk/Shaders/lilToonish/package.json"},  # no version
+    "liltoon": {"22222222222222222222222222222221": "Assets/lilToon",
+                "22222222222222222222222222222222": "Assets/lilToon/package.json",
+                "22222222222222222222222222222223": "Assets/lilToon/Shader/lts.shader",
+                "22222222222222222222222222222224": "Assets/lilToon/Editor/" + "lilInspector Partial " * 6 + ".cs"},
+    "poiyomi": {"33333333333333333333333333333331": "Assets/_PoiyomiShaders",
+                "33333333333333333333333333333332": "Assets/_PoiyomiShaders/package.json",
+                "33333333333333333333333333333333": "Assets/_PoiyomiShaders/Shaders/Poiyomi Toon.shader"},
+}
+
+
+def build_bundled(d: Path) -> None:
+    """bundled.unitypackage: a product with lilToon 1.7.3 and Poiyomi 9.2.0 in it, each with a package.json, as creators
+    ship them. Unity writes an asset's file before its pathname; the other way round is here too (Poiyomi's). Long
+    names are GNU long-name entries for some, pax headers for others, as tools other than Unity write them."""
+    manifests = {
+        "11111111111111111111111111111114": {"name": "com.kitsu.rusk", "version": "1.0.0"},
+        "11111111111111111111111111111115": {"name": "jp.lilxyzw.liltoon", "version": "1.7.3"},
+        "11111111111111111111111111111116": {"name": "jp.lilxyzw.liltoon"},
+        "22222222222222222222222222222222": {"name": "jp.lilxyzw.liltoon", "version": "1.7.3", "displayName": "lilToon"},
+        "33333333333333333333333333333332": {"name": "com.poiyomi.toon", "version": "9.2.0"},
+    }
+    raw = io.BytesIO()
+
+    def add(name: str, data: bytes | None, fmt: int) -> None:
+        info = tarfile.TarInfo(name)
+        if data is None:
+            info.type = tarfile.DIRTYPE
+        else:
+            info.size = len(data)
+        info.mtime = 1700000000
+        raw.write(info.tobuf(fmt, "utf-8", "surrogateescape"))
+        if data:
+            raw.write(data + b"\0" * ((512 - len(data) % 512) % 512))
+
+    for group, assets in BUNDLED.items():
+        for n, (guid, path) in enumerate(assets.items()):
+            fmt = tarfile.PAX_FORMAT if (n + len(group)) % 2 else tarfile.GNU_FORMAT
+            folder = path.rsplit("/", 1)[-1] in ("Rusk", "lilToon", "_PoiyomiShaders")
+            data = json.dumps(manifests[guid]).encode() if guid in manifests else (f"{group} {path}\n".encode() * 40)
+            name = guid + "/" + ("x" * 120 if guid.endswith("4") else "")   # a long name for some: an 'L' or pax entry
+            add(guid + "/", None, fmt)
+            entries = [("asset.meta", b"fileFormatVersion: 2\nguid: " + guid.encode() + b"\n"), ("pathname", (path + "\n00\n").encode())]
+            if not folder:
+                entries.insert(0, ("asset", data))
+            if group == "poiyomi":
+                entries.reverse()   # its pathname first
+            for entry, body in entries:
+                add(f"{guid}/{entry}", body, fmt)
+            if name != guid + "/":
+                add(name, b"preview", fmt)
+    add(".icon.png", b"\x89PNG", tarfile.GNU_FORMAT)   # not in an asset's folder: always kept
+    raw.write(b"\0" * 1024)
+    (d / "bundled.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+    big = {"name": "jp.lilxyzw.liltoon", "version": "9.9.9", "pad": "x" * (70 * 1024)}   # no tool's manifest is this big
+    raw = io.BytesIO()
+    for entry, body in (("asset", json.dumps(big).encode()), ("pathname", b"Assets/Big/package.json\n00\n")):
+        info = tarfile.TarInfo("44444444444444444444444444444441/" + entry)
+        info.size = len(body)
+        raw.write(info.tobuf(tarfile.GNU_FORMAT, "utf-8", "surrogateescape") + body + b"\0" * ((512 - len(body) % 512) % 512))
+    raw.write(b"\0" * 1024)
+    (d / "big_manifest.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+    # a GNU long link name ('K') before an entry of an asset that's left out: it goes with that entry, and never falls on
+    # the next one (the product's material, which would become a link)
+    raw = io.BytesIO()
+    for name, body, link in (("77777777777777777777777777777771/asset", b"tool", None),
+                             ("77777777777777777777777777777771/pathname", b"Assets/lilToon/x.shader\n00\n", None),
+                             ("77777777777777777777777777777771/preview.png", None, "t" * 120),
+                             ("77777777777777777777777777777772/asset", b"product", None),
+                             ("77777777777777777777777777777772/pathname", b"Assets/Kitsu/a.mat\n00\n", None)):
+        info = tarfile.TarInfo(name)
+        if link:
+            info.type, info.linkname = tarfile.SYMTYPE, link
+        else:
+            info.size = len(body)
+        raw.write(info.tobuf(tarfile.GNU_FORMAT, "utf-8", "surrogateescape"))
+        if body:
+            raw.write(body + b"\0" * ((512 - len(body) % 512) % 512))
+    raw.write(b"\0" * 1024)
+    assert b"././@LongLink" in raw.getvalue()   # (the 'K' header is there)
+    (d / "linked.unitypackage").write_bytes(gzip.compress(raw.getvalue()))
+
+
+def tar_entries(path: Path) -> dict:
+    """A package's entries: each one's name, kind, size and bytes."""
+    with tarfile.open(path, "r:gz") as tar:
+        return {m.name: (m.type, m.size, tar.extractfile(m).read() if m.isfile() else None) for m in tar.getmembers()}
 
 
 def build_zips(d: Path, package: bytes) -> None:
@@ -290,6 +388,17 @@ class UnityCore(IsolatedTestCase):
         failed = [line for line in run.stdout.splitlines() if line.startswith("FAIL")]
         self.assertEqual(failed, [], run.stdout[-3000:])
         self.assertIn("ALL PASSED", run.stdout, run.stdout + run.stderr)
+        # issue #414: the copy without lilToon is a package Python's tarfile reads, with every other entry as it was
+        before, after = tar_entries(d / "bundled.unitypackage"), tar_entries(d / "bundled-trimmed.unitypackage")
+        lil = set(BUNDLED["liltoon"])
+        self.assertEqual({n for n in after}, {n for n in before if n.lstrip("./").split("/")[0] not in lil})
+        self.assertTrue(any(len(n) > 100 for n in after), "a long name kept")
+        for n, entry in after.items():
+            self.assertEqual(entry, before[n], n)
+        with tarfile.open(d / "linked-trimmed.unitypackage", "r:gz") as tar:
+            kept = tar.getmembers()
+        self.assertEqual(sorted(m.name for m in kept), ["77777777777777777777777777777772/asset", "77777777777777777777777777777772/pathname"])
+        self.assertTrue(all(m.isfile() and not m.linkname for m in kept), "a left-out entry's long link name fell on the next entry")
         # issue #86: Hoard reads the report the window wrote, and makes the very credits list the window makes
         from hoard import projects
         report = projects.read_project(Path((d / "project_report_path.txt").read_text("utf-8")))

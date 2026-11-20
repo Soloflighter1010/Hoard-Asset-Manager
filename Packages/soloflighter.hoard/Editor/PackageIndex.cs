@@ -22,6 +22,27 @@ namespace SoloFlighter.Hoard.Editor
         // -2: files only (the first kept folders' GUIDs too, which a product shares with others in the same folder);
         // -3: not the files a tool makes again (Poiyomi's OptimizedShaders), which say nothing about what was imported
         static readonly string CacheFile = Path.Combine("Library", "Hoard", "package-guids-3.json");
+        // Issue #414: which packages have a package.json (so could carry a tool Hoard for Unity knows), by stamp: an
+        // import reads only those again. Static: Import set asks too, without the window.
+        static readonly string ManifestsFile = Path.Combine("Library", "Hoard", "package-manifests-1.json");
+        static readonly ConcurrentDictionary<string, bool> hasManifest = new ConcurrentDictionary<string, bool>();
+
+        static volatile bool manifestsDirty;
+
+        /// <summary>Whether a package has a package.json, as its reading in the background (or an import) found; null
+        /// when that isn't known (a package read before Hoard for Unity 0.12.0, or changed since).</summary>
+        public static bool? CarriesManifest(string package)
+        {
+            bool has;
+            return hasManifest.TryGetValue(SafeStamp(package), out has) ? has : (bool?)null;
+        }
+
+        /// <summary>Note what an import found: whether the package has a package.json, kept with the index.</summary>
+        public static void Remember(string package, bool carries)
+        {
+            hasManifest[SafeStamp(package)] = carries;
+            manifestsDirty = true;
+        }
         readonly ConcurrentDictionary<string, string[]> guids = new ConcurrentDictionary<string, string[]>();   // "path|size|time" -> GUIDs
         struct Counted { public InProject Status; public int Have, Total; }
         readonly Dictionary<string, Counted> status = new Dictionary<string, Counted>();   // path -> how much is here, until something changes
@@ -76,7 +97,10 @@ namespace SoloFlighter.Hoard.Editor
                             string stamp = Stamp(path);
                             if (!guids.ContainsKey(stamp))
                             {
-                                var found = UnityPackageReader.ReadFiles(path);   // not its folders (shared with other products)
+                                bool manifest;
+                                var found = UnityPackageReader.ReadFiles(path, out manifest);   // not its folders (shared with other products)
+                                hasManifest[stamp] = manifest;
+                                manifestsDirty = true;
                                 var kept = new List<string>();
                                 foreach (var kv in found) if (!ProjectShare.IsRegenerated(kv.Value)) kept.Add(kv.Key);
                                 guids[stamp] = kept.ToArray();
@@ -115,7 +139,7 @@ namespace SoloFlighter.Hoard.Editor
         /// since the last call are added to fresh (when given), so only their products need looking at again.</summary>
         public bool TakeChanges(List<string> freshPaths = null)
         {
-            if (cacheDirty && Waiting == 0 && DateTime.UtcNow >= saveAfter) SaveCache();
+            if ((cacheDirty || manifestsDirty) && Waiting == 0 && DateTime.UtcNow >= saveAfter) SaveCache();
             SharingChanged = false;
             if (!changed) return false;
             changed = false;
@@ -218,6 +242,15 @@ namespace SoloFlighter.Hoard.Editor
                     if (m.Value.Kind == JsonKind.Array) guids[m.Key] = m.Value.Items.ConvertAll(v => v.Text ?? "").FindAll(g => g.Length == 32).ToArray();
             }
             catch (Exception) { /* a damaged cache is just read again */ }
+            try
+            {
+                if (!File.Exists(ManifestsFile) || new FileInfo(ManifestsFile).Length > 64L * 1024 * 1024) return;
+                var doc = Json.Parse(File.ReadAllText(ManifestsFile, Encoding.UTF8));
+                if (doc.Kind != JsonKind.Object) return;
+                foreach (var m in doc.Members)
+                    if (m.Value.Kind == JsonKind.Bool) hasManifest[m.Key] = m.Value.Bool;
+            }
+            catch (Exception) { /* read again as packages are */ }
         }
 
         void SaveCache()
@@ -228,7 +261,11 @@ namespace SoloFlighter.Hoard.Editor
                 foreach (var kv in guids)
                     JsonBuild.Put(root, kv.Key, JsonBuild.Arr(new List<string>(kv.Value).ConvertAll(JsonBuild.Str)));
                 JsonBuild.WriteFile(CacheFile, Json.Canonical(root));
-                cacheDirty = false;
+                var manifests = JsonBuild.Obj();
+                foreach (var kv in hasManifest)
+                    if (guids.ContainsKey(kv.Key)) JsonBuild.Put(manifests, kv.Key, new JsonValue { Kind = JsonKind.Bool, Bool = kv.Value });
+                JsonBuild.WriteFile(ManifestsFile, Json.Canonical(manifests));
+                cacheDirty = manifestsDirty = false;
             }
             catch (Exception) { saveAfter = DateTime.UtcNow.AddMinutes(1); }   // can't be written now: tried again in a minute, not every tick
         }

@@ -185,6 +185,11 @@ for. The set viewer's and the set maker's **Open in Hoard** button is one.
   (which tells your desktop each time it starts) say that Hoard opens `hoard://` links.
 - **A long link:** a browser won't hand another program a link much longer than 2,000 characters, so a set made on
   the website with many products has no **Open in Hoard**. Copy its link and paste it into **Add a shared set...**.
+- **Send to Hoard**, a bookmark for your usual browser, sends the page you're on as one of these links: on a product's
+  page on Booth, Gumroad, Jinxxy, Payhip or itch.io, `hoard://add?link=` with that page; on a set shared from Hoard,
+  `hoard://set/` with it. Anywhere else it says what it works on. Get it from
+  [its page](https://hoard.furryup.link/send-to-hoard.html), where you drag it to your bookmarks bar, or under a
+  wishlist's **Find more to add**, where **copy it** copies it. It sends only the page's address.
 
 ## Its picture
 

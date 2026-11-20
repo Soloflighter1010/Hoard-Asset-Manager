@@ -273,6 +273,195 @@ public static class CoreTests
         Check("remove: deepest first, never Assets itself", string.Join("|", folders) == "Assets/Kitsu/Fox/a|Assets/Kitsu/Fox|Assets/Kitsu", string.Join("|", folders));
     }
 
+    // Issue #414: a tool a package carries a copy of (lilToon, Poiyomi), left out when the project has it at the same
+    // version or a newer one; the rest of the package copied as it was.
+    /// <summary>The checks of what a package carries, and the copy without it.</summary>
+    static void BundledChecks(string dir)
+    {
+        string package = Path.Combine(dir, "bundled.unitypackage");
+        Dictionary<string, byte[]> manifests;
+        var assets = UnityPackageReader.ReadAssetsAndManifests(package, out manifests);
+        var names = new List<string>(manifests.Keys);
+        names.Sort(StringComparer.Ordinal);
+        Check("bundled: every package.json is read, its file before its name or after", string.Join(",", names.ToArray()) ==
+              "11111111111111111111111111111114,11111111111111111111111111111115,11111111111111111111111111111116,22222222222222222222222222222222,33333333333333333333333333333332",
+              string.Join(",", names.ToArray()));
+        Check("bundled: a manifest's bytes", Encoding.UTF8.GetString(manifests["33333333333333333333333333333332"]).Contains("\"com.poiyomi.toon\""));
+        Check("bundled: the paths are read as before", assets.Count == 13 && assets["22222222222222222222222222222223"] == "Assets/lilToon/Shader/lts.shader",
+              assets.Count.ToString());
+        Check("bundled: no other file is kept", !manifests.ContainsKey("22222222222222222222222222222223"));
+        Dictionary<string, byte[]> bigOnes;
+        UnityPackageReader.ReadAssetsAndManifests(Path.Combine(dir, "big_manifest.unitypackage"), out bigOnes);
+        Check("bundled: a package.json bigger than any tool's isn't read", bigOnes.Count == 0);
+
+        var found = BundledTools.Find(assets, manifests);
+        Check("bundled: the tools Hoard knows, by their package.json, not the product's own or Assets/ itself",
+              found.Count == 2 && found[0].Id == "com.poiyomi.toon" && found[1].Id == "jp.lilxyzw.liltoon", string.Join(",", found.ConvertAll(t => t.Id + "@" + t.Folder).ToArray()));
+        var lil = found.Find(t => t.Id == "jp.lilxyzw.liltoon");
+        var poi = found.Find(t => t.Id == "com.poiyomi.toon");
+        Check("bundled: a tool's name, version, folder and manifest", lil.Name == "lilToon" && lil.Version == "1.7.3" && lil.Folder == "Assets/lilToon"
+              && lil.ManifestGuid == "22222222222222222222222222222222" && poi.Name == "Poiyomi Toon" && poi.Folder == "Assets/_PoiyomiShaders");
+        Check("bundled: everything in its folder, and the folder", string.Join(",", lil.Guids.ToArray()) ==
+              "22222222222222222222222222222221,22222222222222222222222222222222,22222222222222222222222222222223,22222222222222222222222222222224",
+              string.Join(",", lil.Guids.ToArray()));
+        Check("bundled: nothing found in a package without manifests", BundledTools.Find(assets, new Dictionary<string, byte[]>()).Count == 0);
+        var climbing = new Dictionary<string, string> { { "55555555555555555555555555555551", "Assets/../../Other/package.json" },
+                                                         { "55555555555555555555555555555552", "Assets//lilToon/package.json" },
+                                                         { "55555555555555555555555555555553", "Assets/C:/lilToon/package.json" } };
+        var climbingManifests = new Dictionary<string, byte[]>();
+        foreach (var g in climbing.Keys) climbingManifests[g] = manifests["22222222222222222222222222222222"];
+        Check("bundled: a folder that climbs out of the project is no tool's", BundledTools.Find(climbing, climbingManifests).Count == 0);
+
+        // versions, as Unity's packages write them
+        Func<string, string, int?> cmp = (a, b) => { int c; return BundledTools.TryCompare(a, b, out c) ? c : (int?)null; };
+        Check("versions: by number, not by text", cmp("1.10.3", "1.7.3") == 1 && cmp("1.7.3", "1.10.3") == -1 && cmp("2.0.0", "10.0.0") == -1);
+        Check("versions: the same", cmp("1.7.3", "1.7.3") == 0 && cmp("1.7", "1.7.0") == 0 && cmp("v1.7.3", "1.7.3") == 0 && cmp("1.7.3+build.5", "1.7.3") == 0);
+        Check("versions: a pre-release before its release", cmp("2.0.0-beta.2", "2.0.0") == -1 && cmp("2.0.0", "2.0.0-beta.2") == 1
+              && cmp("2.0.0-beta.2", "2.0.0-beta.10") == -1 && cmp("2.0.0-alpha", "2.0.0-beta") == -1 && cmp("1.0.0-1", "1.0.0-alpha") == -1
+              && cmp("1.0.0-alpha", "1.0.0-alpha.1") == -1 && cmp("1.0.1-beta", "1.0.0") == 1);
+        Check("versions: what isn't one can't be compared", cmp("latest", "1.0.0") == null && cmp("1.0.0", "") == null && cmp(null, "1.0.0") == null
+              && cmp("1..0", "1.0") == null && cmp("1.0.0-", "1.0.0") == null && cmp("1.x", "1.0") == null && cmp("1.0.0.0.0", "1.0") == null);
+
+        // what's left out: the same version or a newer one in the project, never an older one or one that can't be read
+        Func<string, string, bool> leaves = (have, carried) =>
+            BundledTools.LeftOut(new List<BundledTool> { new BundledTool { Id = "jp.lilxyzw.liltoon", Name = "lilToon", Version = carried, InProject = have } }).Count == 1;
+        Check("left out: the project's is newer", leaves("1.10.3", "1.7.3"));
+        Check("left out: the project's is the same", leaves("1.7.3", "1.7.3"));
+        Check("kept: the package's is newer", !leaves("1.7.3", "1.10.3") && !leaves("2.0.0-beta.1", "2.0.0"));
+        Check("kept: the project hasn't got it", !leaves(null, "1.7.3"));
+        Check("kept: a version that can't be read", !leaves("main", "1.7.3"));
+
+        lil.InProject = "1.10.3";
+        poi.InProject = "9.1.0";
+        var left = BundledTools.LeftOut(found);
+        Check("left out: only what the project has newer", left.Count == 1 && left[0] == lil);
+        Check("left out: said", BundledTools.Words(left, "Rusk.unitypackage") == "lilToon 1.7.3 in Rusk.unitypackage was left out: this project has 1.10.3.",
+              BundledTools.Words(left, "Rusk.unitypackage"));
+        poi.InProject = "9.2.0";
+        Check("left out: the same version, said", BundledTools.Words(BundledTools.LeftOut(found), "Rusk.unitypackage") ==
+              "Poiyomi Toon 9.2.0 in Rusk.unitypackage was left out: this project has it already.\n" +
+              "lilToon 1.7.3 in Rusk.unitypackage was left out: this project has 1.10.3.", BundledTools.Words(BundledTools.LeftOut(found), "Rusk.unitypackage"));
+
+        // taking a product out leaves a tool's own folder (one with its package.json), wherever it is
+        var files = new Dictionary<string, byte[]>
+        {
+            { "Assets/lilToon/package.json", manifests["22222222222222222222222222222222"] },
+            { "Assets/Creator/Shaders/lilToon/package.json", manifests["22222222222222222222222222222222"] },
+            { "Assets/Kitsu/Rusk/package.json", manifests["11111111111111111111111111111114"] },
+        };
+        var tools = new List<string>();
+        var held = new List<string>();
+        var goes = BundledTools.WithoutTools(new List<string> { "Assets/lilToon", "Assets/lilToon/Shader/lts.shader", "Assets/Kitsu/Rusk/Rusk.prefab",
+                                                                "Assets/Creator/Shaders/lilToon/Editor/x.cs", "Assets/Kitsu/Rusk/package.json" },
+                                             f => { byte[] b; return files.TryGetValue(f, out b) ? b : null; }, tools, held);
+        Check("take out: a tool stays, the product goes", string.Join(",", goes.ToArray()) == "Assets/Kitsu/Rusk/Rusk.prefab,Assets/Kitsu/Rusk/package.json"
+              && string.Join(",", tools.ToArray()) == "lilToon", string.Join(",", goes.ToArray()) + " / " + string.Join(",", tools.ToArray()));
+        Check("take out: what stays with a tool is counted, to offer taking it too", string.Join(",", held.ToArray()) ==
+              "Assets/lilToon,Assets/lilToon/Shader/lts.shader,Assets/Creator/Shaders/lilToon/Editor/x.cs", string.Join(",", held.ToArray()));
+        var noTools = new List<string>();
+        Check("take out: a file that can't be read is no tool's", BundledTools.WithoutTools(new List<string> { "Assets/A/b.mat" },
+              f => { throw new IOException("locked"); }, noTools, new List<string>()).Count == 1 && noTools.Count == 0);
+
+        // a creator's own file in the tool's folder comes in with the product, and is named; the tool's code doesn't
+        var mixed = new Dictionary<string, string>
+        {
+            { "66666666666666666666666666666661", "Assets/lilToon" },
+            { "66666666666666666666666666666662", "Assets/lilToon/package.json" },
+            { "66666666666666666666666666666663", "Assets/lilToon/Shader/lts.shader" },          // the tool's: the project has it
+            { "66666666666666666666666666666664", "Assets/lilToon/Editor/lilOld.cs" },           // an older version's code: never in
+            { "66666666666666666666666666666665", "Assets/lilToon/Presets" },                    // the tool's folder, the project has it
+            { "66666666666666666666666666666666", "Assets/lilToon/Presets/Rusk.asset" },         // the creator's: comes in
+            { "66666666666666666666666666666667", "Assets/lilToon/Rusk Extras" },                // the creator's folder, for its files
+            { "66666666666666666666666666666668", "Assets/lilToon/Rusk Extras/Body.mat" },
+            { "66666666666666666666666666666669", "Assets/lilToon/Texture/lil_ramp.png" },       // the project has it
+        };
+        var mixedFiles = new HashSet<string> { "66666666666666666666666666666662", "66666666666666666666666666666663", "66666666666666666666666666666664",
+                                               "66666666666666666666666666666666", "66666666666666666666666666666668", "66666666666666666666666666666669" };
+        var projectHas = new HashSet<string> { "66666666666666666666666666666661", "66666666666666666666666666666662", "66666666666666666666666666666663",
+                                               "66666666666666666666666666666665", "66666666666666666666666666666669" };   // lilToon in Assets/
+        var mixedTool = new BundledTool { Name = "lilToon", Version = "1.7.3", InProject = "1.10.3", Folder = "Assets/lilToon",
+                                          Guids = new List<string>(mixed.Keys) };
+        BundledTools.Divide(mixedTool, mixed, mixedFiles, projectHas.Contains);
+        Check("divide: the tool's files, its code and its folders go", string.Join(",", mixedTool.Guids.ToArray()) ==
+              "66666666666666666666666666666661,66666666666666666666666666666662,66666666666666666666666666666663,66666666666666666666666666666664," +
+              "66666666666666666666666666666665,66666666666666666666666666666669", string.Join(",", mixedTool.Guids.ToArray()));
+        Check("divide: a creator's own files come in, said", string.Join(",", mixedTool.Kept.ToArray()) ==
+              "Assets/lilToon/Presets/Rusk.asset,Assets/lilToon/Rusk Extras/Body.mat", string.Join(",", mixedTool.Kept.ToArray()));
+        Check("divide: and named in what the window says", BundledTools.Words(new List<BundledTool> { mixedTool }, "Rusk.unitypackage") ==
+              "lilToon 1.7.3 in Rusk.unitypackage was left out: this project has 1.10.3. 2 files in its folder that this project hasn't got " +
+              "came in with the product: Presets/Rusk.asset, Rusk Extras/Body.mat.", BundledTools.Words(new List<BundledTool> { mixedTool }, "Rusk.unitypackage"));
+        var lonely = new BundledTool { Name = "lilToon", Version = "1.7.3", InProject = "1.7.3", Folder = "Assets/lilToon", Guids = new List<string>(mixed.Keys) };
+        BundledTools.Divide(lonely, mixed, mixedFiles, g => false);   // a project with lilToon through the VCC: none of these GUIDs in Assets
+        Check("divide: with the tool under Packages/, the creator's file brings the folders that lead to it",
+              lonely.Guids.Contains("66666666666666666666666666666664") && !lonely.Guids.Contains("66666666666666666666666666666661")
+              && !lonely.Guids.Contains("66666666666666666666666666666665") && lonely.Guids.Contains("66666666666666666666666666666662"),
+              string.Join(",", lonely.Guids.ToArray()));
+        Check("divide: what the project hasn't got that isn't code comes in, each said", lonely.Kept.Count == 3 && BundledTools.Words(new List<BundledTool> { lonely }, "R.unitypackage").Contains("3 files in its folder"),
+              string.Join(",", lonely.Kept.ToArray()));
+
+        // reading and copying say how far they've got, and stop when asked
+        var seen = new List<double>();
+        Dictionary<string, byte[]> m2;
+        HashSet<string> f2;
+        UnityPackageReader.ReadAssetsAndManifests(package, out m2, out f2, x => { seen.Add(x); return false; });
+        Check("progress: reading says how far, from the start", seen.Count >= 1 && seen[0] >= 0 && seen.TrueForAll(x => x >= 0 && x <= 1), string.Join(",", seen));
+        Check("progress: which GUIDs are files", f2.Contains("22222222222222222222222222222223") && !f2.Contains("22222222222222222222222222222221"));
+        bool stopped = false;
+        try { UnityPackageReader.ReadAssetsAndManifests(package, out m2, out f2, x => true); }
+        catch (OperationCanceledException) { stopped = true; }
+        Check("progress: reading stops when cancelled", stopped);
+        bool any;
+        UnityPackageReader.ReadFiles(package, out any);
+        bool none;
+        UnityPackageReader.ReadFiles(Path.Combine(dir, "test.unitypackage"), out none);
+        Check("index: whether a package has a package.json", any && !none);
+
+        // the copy without them: the rest of the package as it was (test_unity.py compares it entry by entry)
+        string trimmedDir = Path.Combine(dir, "trimmed");
+        stopped = false;
+        try { PackageTrim.Without(package, BundledTools.GuidsOf(left), trimmedDir, x => true); }
+        catch (OperationCanceledException) { stopped = true; }
+        Check("progress: copying stops when cancelled, leaving nothing", stopped && (!Directory.Exists(trimmedDir) ||
+              Directory.GetFiles(trimmedDir, "*", SearchOption.AllDirectories).Length == 0));
+        string made = PackageTrim.Without(package, BundledTools.GuidsOf(left), trimmedDir);
+        Check("trimmed: in the folder given, under the package's own name", Path.GetFileName(made) == "bundled.unitypackage"
+              && Path.GetDirectoryName(Path.GetDirectoryName(made)) == trimmedDir && File.Exists(made) && !File.Exists(made + ".part"), made);
+        File.Copy(made, Path.Combine(dir, "bundled-trimmed.unitypackage"));
+        var kept = UnityPackageReader.ReadAssets(made);
+        Check("trimmed: everything but the tool", kept.Count == 9 && !kept.ContainsKey("22222222222222222222222222222223")
+              && kept.ContainsKey("33333333333333333333333333333333") && kept.ContainsKey("11111111111111111111111111111113"), kept.Count.ToString());
+        Dictionary<string, byte[]> keptManifests;
+        UnityPackageReader.ReadAssetsAndManifests(made, out keptManifests);
+        Check("trimmed: nothing of it found again", BundledTools.Find(kept, keptManifests).Count == 1);
+        Check("trimmed: made once", PackageTrim.Without(package, BundledTools.GuidsOf(left), trimmedDir) == made
+              && Directory.GetDirectories(trimmedDir).Length == 1);
+        string both = PackageTrim.Without(package, BundledTools.GuidsOf(found), trimmedDir);
+        Check("trimmed: another set left out is another copy", both != made && UnityPackageReader.ReadAssets(both).Count == 6);
+        using (var empty = new MemoryStream())
+        {
+            using (var from = File.OpenRead(package)) PackageTrim.Copy(from, empty, new HashSet<string>());
+            string tmp = Path.Combine(dir, "untrimmed.unitypackage");
+            File.WriteAllBytes(tmp, empty.ToArray());
+            Check("trimmed: nothing left out, nothing lost", UnityPackageReader.ReadAssets(tmp).Count == 13);
+        }
+        Check("trimmed: an entry's asset", PackageTrim.GuidOf("./22222222222222222222222222222223/asset") == "22222222222222222222222222222223"
+              && PackageTrim.GuidOf("22222222222222222222222222222223/") == "22222222222222222222222222222223"
+              && PackageTrim.GuidOf(".icon.png") == null && PackageTrim.GuidOf("Assets/x") == null && PackageTrim.GuidOf(null) == null);
+        string linked = PackageTrim.Without(Path.Combine(dir, "linked.unitypackage"), new[] { "77777777777777777777777777777771" }, trimmedDir);
+        File.Copy(linked, Path.Combine(dir, "linked-trimmed.unitypackage"));
+        // a package in a .zip is copied straight from the .zip, under its own name
+        string zipped = PackageFile.InZip(Path.Combine(dir, "stored.zip"), "Rusk.unitypackage");
+        string fromZip = PackageTrim.Without(zipped, new[] { "0123456789abcdef0123456789abcdef" }, trimmedDir);
+        Check("trimmed: from a .zip, without unzipping it first", Path.GetFileName(fromZip) == "Rusk.unitypackage"
+              && !UnityPackageReader.ReadAssets(fromZip).ContainsKey("0123456789abcdef0123456789abcdef") && UnityPackageReader.ReadAssets(fromZip).Count > 0);
+        foreach (string hostile in new[] { "not_a_package.unitypackage", "huge_name.unitypackage", "too_big.unitypackage" })
+        {
+            string bad = Path.Combine(dir, hostile);
+            try { PackageTrim.Without(bad, new[] { "22222222222222222222222222222223" }, trimmedDir); Check("trimmed: " + hostile + " refused", false, "no error"); }
+            catch (InvalidDataException) { Check("trimmed: " + hostile + " refused, nothing left behind", Directory.GetFiles(trimmedDir, "*.part", SearchOption.AllDirectories).Length == 0); }
+        }
+    }
+
     /// <summary>Print whether a check passed, counting failures.</summary>
     static void Check(string name, bool ok, string detail = "")
     {
@@ -543,6 +732,8 @@ public static class CoreTests
         byte[] plainReport = ProjectReport.Build(dir, "P", "2022.3", new List<ProjectAsset>(), new CreditsFile(), "2026-10-07T00:00:00+00:00", out stampedReport);
         Check("report: built once, with and without when", Encoding.UTF8.GetString(plainReport).Contains("\"updated\":\"\"")
               && Encoding.UTF8.GetString(stampedReport).Contains("\"updated\":\"2026-10-07T00:00:00+00:00\""));
+
+        BundledChecks(dir);
 
         // a Unity package: every GUID and path, nothing extracted
         var assets = UnityPackageReader.ReadAssets(Path.Combine(dir, "test.unitypackage"));

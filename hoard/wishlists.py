@@ -160,6 +160,12 @@ def refused_page(text: str) -> bool:
     return bool(_REFUSED.search(str(text or "")[:20000]))
 
 
+# Jinxxy's own pages that look like a creator's product page (jinxxy.com/<creator>/<product>): yours (/my/wishlist),
+# the market and its files. Never a product's page. Send to Hoard's bookmark (shared.js) leaves out the same ones.
+JINXXY_NOT_CREATORS = frozenset({"my", "market", "api", "files", "page", "login", "signup", "settings", "search",
+                                 "discover", "checkout", "cart", "help", "terms", "privacy", "thank-you"})
+
+
 def product_page_link(link) -> tuple[str, str]:
     """(store, its page) for a link to one product's page on a store, as Add products by link takes it (https on
     the store's own site, without its query); raises LinkError for anything else."""
@@ -172,7 +178,8 @@ def product_page_link(link) -> tuple[str, str]:
         store = url = None
     path = urlparse(url or "").path
     is_product = url and (store == "booth" and "/items/" in path or store == "gumroad" and "/l/" in path
-                          or store == "jinxxy" and path.count("/") == 2 or store == "payhip" and "/b/" in path
+                          or store == "jinxxy" and path.count("/") == 2 and path.split("/")[1].lower() not in JINXXY_NOT_CREATORS
+                          or store == "payhip" and "/b/" in path
                           or store == "itch" and len(path) > 1)
     if not is_product:
         raise LinkError("not a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io")

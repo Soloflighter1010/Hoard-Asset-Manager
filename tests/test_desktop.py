@@ -134,20 +134,28 @@ class _Harness(IsolatedTestCase):
         t = threading.Thread(target=lambda: result.update(code=app.run_app(config.load_config(), None, **kw)), daemon=True)
         t.start()
         # running.json announces the server before the window opens. Wait for the actual UI boundary too;
-        # otherwise a fast poll can inspect an empty fake window list and leave the instance lock held.
-        for _ in range(100):
-            view = sys.modules.get("webview")
+        # otherwise a fast poll can inspect an empty fake window list and leave the instance lock held. Up to 30
+        # seconds, as long as Hoard waits for its own server: a start that recovers its metadata first (a lost or
+        # foreign integrity key) can take more than 10 on a busy Windows runner.
+        view = sys.modules.get("webview")
+        self.addCleanup(self.finish_window, t, view)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
             if app.running_file().exists() and (self.opened or getattr(view, "start_kw", None)):
                 break
             time.sleep(0.1)
-        self.addCleanup(self.finish_window, t, view)
+        else:
+            self.fail("Hoard didn't announce its server and open its window within 30 seconds")
         return t, result, json.loads(app.running_file().read_text())
 
     def finish_window(self, thread, view):
-        """Release the fake desktop and its instance lock even when an assertion fails before Quit."""
-        for window in getattr(view, "windows", []):
-            window.destroy()
-        thread.join(15)
+        """Release the fake desktop and its instance lock even when an assertion fails before Quit: its windows are
+        closed until Hoard has stopped, a window that opens late too, so the lock is never left held."""
+        deadline = time.monotonic() + 30
+        while thread.is_alive() and time.monotonic() < deadline:
+            for window in list(getattr(view, "windows", [])):
+                window.destroy()
+            thread.join(0.2)
 
 
 class MetadataRecovery(_Harness):

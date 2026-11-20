@@ -31,6 +31,7 @@ namespace SoloFlighter.Hoard.Editor
         public static void Start(List<Item> items)
         {
             if (items.Count == 0) return;
+            Bundled.Forget();   // what this set's packages leave out is said together
             Write(items);
             SessionState.SetInt(TotalKey, items.Count);
             Next();
@@ -51,17 +52,22 @@ namespace SoloFlighter.Hoard.Editor
                 Write(items);
                 if (!PackageFile.Exists(it.Path)) continue;   // gone since: on to the next
                 string file;
-                try
+                // without a tool this project has already (issue #414); Cancel skips this package, as in Unity's dialog
+                if (Bundled.Prepare(it.Path, true, out file) == Bundled.Outcome.Cancelled) continue;
+                if (file == null)
                 {
-                    if (PackageFile.IsZipped(it.Path)) EditorUtility.DisplayProgressBar("Hoard", "Unpacking " + PackageFile.Name(it.Path) + " from its .zip", 0.5f);
-                    file = PackageFile.ForImport(it.Path, Path.Combine("Library", "Hoard", "Unzipped"));
+                    try
+                    {
+                        if (PackageFile.IsZipped(it.Path)) EditorUtility.DisplayProgressBar("Hoard", "Unpacking " + PackageFile.Name(it.Path) + " from its .zip", 0.5f);
+                        file = PackageFile.ForImport(it.Path, Path.Combine("Library", "Hoard", "Unzipped"));
+                    }
+                    catch (Exception e)
+                    {
+                        UnityEngine.Debug.LogWarning("Hoard: " + PackageFile.Name(it.Path) + " couldn't be unpacked from its .zip (" + e.Message + "), so it was skipped.");
+                        continue;
+                    }
+                    finally { EditorUtility.ClearProgressBar(); }
                 }
-                catch (Exception e)
-                {
-                    UnityEngine.Debug.LogWarning("Hoard: " + PackageFile.Name(it.Path) + " couldn't be unpacked from its .zip (" + e.Message + "), so it was skipped.");
-                    continue;
-                }
-                finally { EditorUtility.ClearProgressBar(); }
                 PendingImport.Start(new HoardAsset { Store = it.Store, Name = it.Name, Creator = it.Creator }, file);
                 AssetDatabase.ImportPackage(file, true);   // Unity's own dialog: you choose what comes in
                 return;

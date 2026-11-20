@@ -302,9 +302,11 @@ namespace SoloFlighter.Hoard.Editor
         }
 
         /// <summary>What a product needs, as a list in words.</summary>
-        static string Listed(List<HoardNeed> needs)
+        static string Listed(List<HoardNeed> needs) { return Listed(needs.ConvertAll(n => n.Label)); }
+
+        /// <summary>Names as a list in words: "lilToon, VRCFury and NDMF".</summary>
+        static string Listed(List<string> names)
         {
-            var names = needs.ConvertAll(n => n.Label);
             return names.Count <= 1 ? string.Join("", names.ToArray())
                 : string.Join(", ", names.GetRange(0, names.Count - 1).ToArray()) + " and " + names[names.Count - 1];
         }
@@ -775,6 +777,16 @@ namespace SoloFlighter.Hoard.Editor
                               "computer's key, then choose Reload.", Look.Gold);
             if (catalog.Problem == null && catalog.LeftOut > 0)
                 y = Notice(y, catalog.LeftOut + " entries in catalog.json didn't look right and were left out.", Look.Dust);
+            string said = Bundled.Said;   // what the last import left out, as the project has it already (issue #414)
+            if (said != null)
+            {
+                float top = y;
+                y = Notice(y, said + "\nEverything else was offered in Unity's import dialog, as usual.", Look.Dust, true);
+                var hide = Look.Style("clear", Look.Styles.Dust);
+                hide.alignment = TextAnchor.MiddleCenter;
+                hide.fontSize = 15;
+                if (GUI.Button(new Rect(position.width - Pad - 30, top + 12, 22, 22), new GUIContent("×", "Hide this"), hide)) Bundled.Forget();
+            }
             return y;
         }
 
@@ -895,15 +907,15 @@ namespace SoloFlighter.Hoard.Editor
             return all;
         }
 
-        float Notice(float y, string text, Color accent)
+        float Notice(float y, string text, Color accent, bool closable = false)
         {
             float w = position.width - Pad * 2;
             var s = Look.Style(Look.Styles.Wrapped);
-            float th = s.CalcHeight(new GUIContent(text), w - 30);
+            float th = s.CalcHeight(new GUIContent(text), w - (closable ? 60 : 30));
             var box = new Rect(Pad, y + 8, w, th + 20);
             if (Event.current.type == EventType.Repaint) Look.Box("notice", Look.Ledge, Look.Seam).Draw(box, false, false, false, false);
             Look.Fill(new Rect(box.x, box.y + 8, 3, box.height - 16), accent, 1.5f);
-            GUI.Label(new Rect(box.x + 16, box.y + 10, w - 30, th), text, s);
+            GUI.Label(new Rect(box.x + 16, box.y + 10, w - (closable ? 60 : 30), th), text, s);
             return box.yMax;
         }
 
@@ -1326,18 +1338,23 @@ namespace SoloFlighter.Hoard.Editor
                     needs != null ? "Import anyway" : "Import", "Cancel"))
                 return;
             string file;
-            try
+            // without a tool this project has already (issue #414): a copy made straight from the package, or its .zip
+            if (Bundled.Prepare(path, false, out file) == Bundled.Outcome.Cancelled) return;
+            if (file == null)
             {
-                // a package in a .zip is unpacked first, into the project's Library folder (never into Assets)
-                if (PackageFile.IsZipped(path)) EditorUtility.DisplayProgressBar("Hoard", "Unpacking " + PackageFile.Name(path) + " from its .zip", 0.5f);
-                file = PackageFile.ForImport(path, Path.Combine("Library", "Hoard", "Unzipped"));
+                try
+                {
+                    // a package in a .zip is unpacked first, into the project's Library folder (never into Assets)
+                    if (PackageFile.IsZipped(path)) EditorUtility.DisplayProgressBar("Hoard", "Unpacking " + PackageFile.Name(path) + " from its .zip", 0.5f);
+                    file = PackageFile.ForImport(path, Path.Combine("Library", "Hoard", "Unzipped"));
+                }
+                catch (Exception e)
+                {
+                    EditorUtility.DisplayDialog("Hoard", PackageFile.Name(path) + " couldn't be unpacked from its .zip (" + e.Message + ").", "OK");
+                    return;
+                }
+                finally { EditorUtility.ClearProgressBar(); }
             }
-            catch (Exception e)
-            {
-                EditorUtility.DisplayDialog("Hoard", PackageFile.Name(path) + " couldn't be unpacked from its .zip (" + e.Message + ").", "OK");
-                return;
-            }
-            finally { EditorUtility.ClearProgressBar(); }
             PendingImport.Start(a, file);
             AssetDatabase.ImportPackage(file, true);   // Unity's own dialog: you choose what comes in
         }
@@ -1383,19 +1400,48 @@ namespace SoloFlighter.Hoard.Editor
                 if (other == a || ProjectStatus(other) < InProject.Partly) continue;
                 foreach (string p in other.PackagePaths) theirs.UnionWith(packages.Guids(p));
             }
-            var paths = ProjectShare.Removable(mine, theirs, AssetDatabase.GUIDToAssetPath);
-            if (paths.Count == 0)
+            // a tool it carries (lilToon, say) stays unless you choose otherwise (issue #414): other things here may use
+            // it, and an import may have left the product's copy out for the project's. What stays with it is counted.
+            var tools = new List<string>();
+            var held = new List<string>();
+            var all = ProjectShare.Removable(mine, theirs, AssetDatabase.GUIDToAssetPath);
+            var paths = BundledTools.WithoutTools(all, ProjectFile, tools, held);
+            string toolNames = Listed(tools);
+            string stays = tools.Count == 0 ? "" : " " + toolNames + (tools.Count == 1 ? " stays" : " stay") + " (" + held.Count +
+                    (held.Count == 1 ? " file" : " files") + " of " + a.Name + "'s in " + (tools.Count == 1 ? "its folder" : "their folders") +
+                    "), as other things here may use " + (tools.Count == 1 ? "it" : "them") + ".";
+            if (all.Count == 0)
             {
                 EditorUtility.DisplayDialog("Hoard", "Nothing of " + a.Name + " is in this project's Assets folder to take out.", "OK");
                 return;
             }
             var shown = new StringBuilder();
-            for (int i = 0; i < paths.Count && i < 12; i++) shown.Append("\n").Append(paths[i]);
-            if (paths.Count > 12) shown.Append("\n...and ").Append(paths.Count - 12).Append(" more");
-            if (!EditorUtility.DisplayDialog("Hoard", "Take " + a.Name + " out of this project? " + paths.Count +
-                    (paths.Count == 1 ? " file goes" : " files go") + ", and the folders that leaves empty. Files another product here " +
-                    "also uses stay." + shown, "Take it out", "Cancel"))
-                return;
+            var listed = paths.Count > 0 ? paths : held;
+            for (int i = 0; i < listed.Count && i < 12; i++) shown.Append("\n").Append(listed[i]);
+            if (listed.Count > 12) shown.Append("\n...and ").Append(listed.Count - 12).Append(" more");
+            if (tools.Count == 0)
+            {
+                if (!EditorUtility.DisplayDialog("Hoard", "Take " + a.Name + " out of this project? " + paths.Count + (paths.Count == 1 ? " file goes" : " files go") +
+                        ", and the folders that leaves empty. Files another product here also uses stay." + shown, "Take it out", "Cancel"))
+                    return;
+            }
+            else if (paths.Count == 0)   // all that's left of it is in a tool's folder
+            {
+                if (!EditorUtility.DisplayDialog("Hoard", "Take " + a.Name + " out of this project? What's left of it is in " + toolNames + "'s " +
+                        (tools.Count == 1 ? "folder" : "folders") + " (" + held.Count + (held.Count == 1 ? " file" : " files") + "), which other things here may use." +
+                        shown, "Take it out, with " + toolNames, "Cancel"))
+                    return;
+                paths = all;
+            }
+            else
+            {
+                // 0: without the tools, 1: cancel, 2: with them (what's in their folders goes too)
+                int chosen = EditorUtility.DisplayDialogComplex("Hoard", "Take " + a.Name + " out of this project? " + paths.Count +
+                        (paths.Count == 1 ? " file goes" : " files go") + ", and the folders that leaves empty. Files another product here also uses stay." +
+                        stays + shown, "Take it out", "Cancel", "Take it out, with " + toolNames);
+                if (chosen == 1) return;
+                if (chosen == 2) paths = all;
+            }
             var failed = new List<string>();
             AssetDatabase.StartAssetEditing();
             try
@@ -1410,6 +1456,13 @@ namespace SoloFlighter.Hoard.Editor
             if (failed.Count > 0)
                 EditorUtility.DisplayDialog("Hoard", failed.Count + (failed.Count == 1 ? " file" : " files") + " of " + a.Name +
                     " couldn't be taken out (open elsewhere, or read-only), for example " + failed[0] + ".", "OK");
+        }
+
+        /// <summary>A small file in the project (a tool's package.json), or null when there's none.</summary>
+        static byte[] ProjectFile(string path)
+        {
+            try { return File.Exists(path) && new FileInfo(path).Length <= 64 * 1024 ? File.ReadAllBytes(path) : null; }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { return null; }
         }
 
         void SelectInProject(string packagePath)

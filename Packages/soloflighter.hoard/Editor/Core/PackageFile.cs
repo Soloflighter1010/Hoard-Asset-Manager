@@ -77,6 +77,23 @@ namespace SoloFlighter.Hoard
             return found;
         }
 
+        /// <summary>How many bytes the package's (gzipped) file is: the file's size, or for a package in a zip, its size
+        /// once unzipped. 0 when it can't be had.</summary>
+        public static long Size(string package)
+        {
+            string file, member;
+            try
+            {
+                if (!Split(package, out file, out member)) return new FileInfo(file).Length;
+                using (var zip = File.OpenRead(file))
+                {
+                    var entry = ZipReader.List(zip).Find(e => e.Name == member);
+                    return entry == null ? 0 : entry.Size;
+                }
+            }
+            catch (Exception) { return 0; }
+        }
+
         /// <summary>Read the package's (gzipped) bytes. The caller disposes the stream.</summary>
         public static Stream OpenRead(string package)
         {
@@ -122,7 +139,7 @@ namespace SoloFlighter.Hoard
         }
 
         /// <summary>A package's name as a file name of its own: no folders, nothing Windows refuses.</summary>
-        static string SafeName(string name)
+        internal static string SafeName(string name)
         {
             var sb = new StringBuilder();
             foreach (char c in name) sb.Append(c < 32 || "<>:\"/\\|?*".IndexOf(c) >= 0 ? '_' : c);
@@ -130,8 +147,8 @@ namespace SoloFlighter.Hoard
             return s.Length == 0 || !HoardCatalog.IsUnityPackage(s) ? "package.unitypackage" : s;
         }
 
-        /// <summary>Delete the copies taken out of zips more than a day ago, but keep's.</summary>
-        static void Tidy(string folder, string keep)
+        /// <summary>Delete the copies made in folder (taken out of zips, or trimmed) more than a day ago, but keep's.</summary>
+        internal static void Tidy(string folder, string keep)
         {
             try
             {

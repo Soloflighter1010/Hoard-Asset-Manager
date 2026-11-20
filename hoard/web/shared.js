@@ -5560,7 +5560,10 @@ function wishFindHTML() {
       `aria-label="${esc(tr("Words to search the stores for"))}" autocomplete="off">` +
       STORE_SEARCHES.map(([k, name]) => `<a class="ghost sm" data-findon="${k}" href="${esc(safeUrl(storeSearch(k, "")))}" target="_blank" ` +
         `rel="noopener noreferrer" translate="no">${esc(name)}</a>`).join("") + `</div>` +
-    `<p class="hint">${esc(tr("Searches in your browser. Copy the link of a product you want there, then add it here with Add products by link."))}</p>`;
+    `<p class="hint">${esc(tr("Searches in your browser. Copy the link of a product you want there, then add it here with Add products by link."))}</p>` +
+    `<p class="hint">Or send a product's page here from your browser with the Send to Hoard bookmark: ` +
+    `<a class="bookmarklet" href="https://hoard.furryup.link/send-to-hoard.html" target="_blank" rel="noopener noreferrer">get it from its page</a>, ` +
+    `or <button class="linkish" data-setx="copysender">copy it</button> and make a bookmark with it as the address.</p>`;
 }
 // An open set's heading: where you are, its counts and its buttons.
 function setHead(s) {
@@ -6205,6 +6208,11 @@ async function setAct(e) {
   if (act === "mix") { mixAndMatch(); return; }
   if (act === "importwish") { importWishlists(); return; }
   if (act === "import") { addSharedSet(); return; }
+  if (act === "copysender") {   // Send to Hoard (issue #413), for a bookmark in your usual browser
+    try { await navigator.clipboard.writeText(sendToHoardUrl()); toast(tr("Copied. Make a bookmark in your usual browser, and paste it as its address.")); }
+    catch (e) { toast(tr("Couldn't copy it here. Get it from its page instead, and drag it to your bookmarks bar there.")); }
+    return;
+  }
   const s = SETS && SETS.sets.find(x => x.id === state.set); if (!s) return;
   if (act === "addplaceholder") {
     const name = await askName("Describe the placeholder asset");
@@ -6391,6 +6399,42 @@ async function addSharedSet(given = "") {
   const done = await changeSets({ action: "import", code });
   if (done && done.made) { showSet(done.made); toast("Added the shared set. Products you don't own yet show where to buy them."); }
 }
+// Send to Hoard (issue #413): a bookmark for your usual browser that sends the page you're on to Hoard as a hoard://
+// link (issue #396): a product's page on a store, to add to a wishlist you choose, or a set shared from Hoard's
+// website, to add as a set. Only the page's address goes, and Hoard adds nothing until you say so there. Anywhere else
+// it says what it works on. A link can't be dragged out of Hoard's own window into another browser, so "get it from
+// its page" opens the website's page for it (site/send-to-hoard.html, the same bookmark: scripts/save_for_hoard.py),
+// or it's copied from here. Its checks are Hoard's own (wishlists.product_page_link), which checks the link again.
+const SEND_TO_HOARD = String.raw`(() => {
+  const here = new URL(location.href), host = here.hostname.toLowerCase(), path = here.pathname.replace(/\/+$/, "");
+  // A site, or a shop on it (shop.booth.pm, creator.gumroad.com).
+  const on = site => host === site || host.endsWith("." + site);
+  // Jinxxy's own pages that look like a product's (jinxxy.com/my/wishlist): Hoard's JINXXY_NOT_CREATORS, in wishlists.py.
+  const jinxxyOwn = ["my", "market", "api", "files", "page", "login", "signup", "settings", "search", "discover", "checkout", "cart", "help", "terms", "privacy", "thank-you"];
+  if (host === "hoard.furryup.link" && /^\/set(\.html)?$/.test(path)) {
+    let code = "";
+    try { code = decodeURIComponent(here.hash.slice(1)).replace(/\s+/g, ""); } catch (e) { /* a broken link: said below */ }
+    if (!/^[SH]1\.[A-Za-z0-9_.-]+$/.test(code)) {
+      alert("Send to Hoard: open a shared set's link first, then choose this bookmark again.");
+    } else if (("hoard://set/" + code).length > 2000) {
+      alert("Send to Hoard: this set is too big for a hoard:// link. Copy its code on this page, and add it in Hoard with Add a shared set.");
+    } else {
+      location.href = "hoard://set/" + code;
+    }
+    return;
+  }
+  const product = on("booth.pm") && path.includes("/items/") || on("gumroad.com") && path.includes("/l/") ||
+    (host === "jinxxy.com" || host === "www.jinxxy.com") && path.split("/").length === 3 && !jinxxyOwn.includes(path.split("/")[1].toLowerCase()) ||
+    (host === "payhip.com" || host === "www.payhip.com") && path.startsWith("/b/") ||
+    host.endsWith(".itch.io") && path.length > 1;
+  if (!product) {
+    alert("Send to Hoard: open a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io, or a set shared from Hoard, then choose this bookmark again.");
+    return;
+  }
+  location.href = "hoard://add?link=" + encodeURIComponent(here.origin + here.pathname);
+})()`;
+// Send to Hoard's address, for a bookmark: "javascript:void " and the code.
+const sendToHoardUrl = () => "javascript:void " + encodeURIComponent(SEND_TO_HOARD);
 // Add products by link: store pages pasted, one a line; Hoard reads each one's public page (its name, creator, price
 // and picture) and adds it to the set or wishlist, so a list of your own can hold what you don't own yet. given: a
 // hoard:// link's, already in the box.
