@@ -1772,6 +1772,11 @@ function showSyncFolder(v) {
   $("#syncSkipped").innerHTML = v.folder && v.skipped.length
     ? `<p class="hint">${esc(tr("Not added:"))}</p><ul class="sync-skipped">${v.skipped.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted">${esc(tr(x.why))}</span></li>`).join("")}</ul>` : "";
   $("#syncMsg").textContent = v.folder && (v.last || {}).error ? v.last.error : "";
+  const ex = v.explorer || {};   // (issue #410: Windows' File Explorer only)
+  $("#syncExplorerRow").hidden = !ex.here;
+  $("#syncExplorer").checked = ex.on !== false;
+  if (ex.here && ex.on !== false && v.folder && !ex.icon && !$("#syncMsg").textContent)
+    $("#syncMsg").textContent = tr("Windows didn't let Hoard put its icon on this folder (a desktop.ini of another program's is in it, or the folder can't be changed).");
 }
 async function loadSyncFolder(body = {}) {   // (body: a change, or a look now)
   const r = await apiPost("/api/local/sync", body);
@@ -1792,6 +1797,7 @@ function wireSyncFolder() {
   $("#syncOff").addEventListener("click", async () => {
     if (await loadSyncFolder({ folder: "" })) toast(tr("The sync folder is off. What it added stays in Local."));
   });
+  $("#syncExplorer").addEventListener("change", e => loadSyncFolder({ explorer: e.target.checked }));
 }
 let PLACES_SEEN = [];   // (Hoard's folders as last read)
 // Issue #385: one of Hoard's folders somewhere else. Where (typed, or chosen), or back where it started; then what
@@ -6426,6 +6432,7 @@ async function openLink(asked) {
     else if (asked.do === "set" && typeof asked.code === "string") await addSharedSet(asked.code);
     else if (asked.do === "add" && typeof asked.link === "string") await addFromLink(asked.link);
     else if (asked.do === "product" && typeof asked.key === "string") await openFromLink(asked.key);
+    else if (asked.do === "local") await openFromExplorer(asked.said);
   } finally { linkOpen = false; }
 }
 // hoard://add: a wishlist you choose (or a new one), then Add products by link... with the link in it.
@@ -6454,6 +6461,29 @@ async function openFromLink(key) {
   if (hasProduct(key)) return;
   closeDetail();   // (nothing to show: no details stay open, and no open= stays in the address)
   toast(tr("That product isn't in your library."));
+}
+// Issue #410: what Hoard did for File Explorer's right-click menu (Add to Hoard, Sync with Hoard now), by its code
+// (hoard/explorer.py's do), in your language.
+const EXPLORER_SAID = {
+  copied: x => tr("{0} is in the sync folder: Hoard adds it to Local.", x.name),
+  there: x => tr("{0} is in the sync folder already.", x.name),
+  big: x => tr("{0} is over {1} MB, so the sync folder doesn't take it.", x.name, x.mb),
+  gone: x => tr("{0} isn't there any more.", x.name),
+  adding: x => tr("Adding {0} to Local.", x.name),
+  queued: x => tr("{0} is added to Local after what's running now.", x.name),
+  waiting: x => tr("{0} is waiting to be added already.", x.name),
+  refused: x => tr("{0} couldn't be added: {1}", x.name, tr(String(x.why || ""))),
+  failed: x => tr("{0} couldn't be added.", x.name),
+  looking: () => tr("Hoard is looking at the sync folder."),
+  "no-sync": () => tr("There's no sync folder yet: choose one in Settings, under Local sync folder."),
+  "not-sync": () => tr("That folder isn't Hoard's sync folder."),
+};
+// File Explorer's menu brought Hoard to the front: Local, and what it did (the first few, when it was many).
+async function openFromExplorer(said) {
+  await navigateApp("/downloads#store=Local");
+  const words = (Array.isArray(said) ? said : []).filter(x => x && Object.prototype.hasOwnProperty.call(EXPLORER_SAID, x.said))
+    .map(x => EXPLORER_SAID[x.said]({ name: String(x.name || ""), mb: Number(x.mb) || 0, why: x.why }));
+  if (words.length) toast(words.slice(0, 4).join(" ") + (words.length > 4 ? " " + tr("And {0} more.", words.length - 4) : ""));
 }
 // Open What's new.
 function openNews() {

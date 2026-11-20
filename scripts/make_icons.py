@@ -6,8 +6,10 @@ together by hand, as each kind of file holds them (PNG pictures inside, which Wi
 writes packaging/icons/hoard-128.png, -256.png and -512.png (Linux's, the Flatpak's), packaging/hoard.ico (Windows:
 16 to 256), packaging/hoard.icns (macOS: 16 to 1024, with its table of contents), the website's and the VCC
 listing's favicon.ico (64), the VCC listing's banner (Website/banner.png: the logo, "for Unity" and a line
-under it, in the site's fonts), and Hoard for Unity's logo (its Look.cs, as base64: the package ships code only). The
-files are kept in the repository: run it after the logo changes. Needs Playwright (as the tests do); with Pillow
+under it, in the site's fonts), Hoard for Unity's logo (its Look.cs, as base64: the package ships code only) and the
+sync folder's icon (hoard/web/icons/sync-folder.ico, issue #410: heap.folder, which Hoard puts on the Local sync
+folder in File Explorer). The files are kept in the repository: run it after the logo changes; --folder writes only
+the sync folder's icon. Needs Playwright (as the tests do); with Pillow
 too, Hoard for Unity's logo is made smaller, in 64 colours.
 """
 from __future__ import annotations
@@ -90,9 +92,30 @@ def unity_logos(page) -> None:
     LOOK.write_text(text, "utf-8")
 
 
+FOLDER_ICON = REPO / "hoard" / "web" / "icons" / "sync-folder.ico"
+
+
+def folder_icon(page) -> None:
+    """The sync folder's icon (issue #410), drawn at each of Windows' sizes and written as one .ico."""
+    pictures = {}
+    for s in ICO_SIZES:
+        page.set_viewport_size({"width": s, "height": s})
+        page.set_content(f'<body style="margin:0;background:transparent">{heap.folder(size=s)}</body>')
+        pictures[s] = page.screenshot(clip={"x": 0, "y": 0, "width": s, "height": s}, omit_background=True)
+    FOLDER_ICON.parent.mkdir(parents=True, exist_ok=True)
+    FOLDER_ICON.write_bytes(ico(pictures))
+
+
 def main() -> int:
-    """Draw the icons and the banner, and write them."""
+    """Draw the icons and the banner, and write them (with --folder, only the sync folder's icon)."""
     from playwright.sync_api import sync_playwright
+    if "--folder" in sys.argv[1:]:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            folder_icon(browser.new_page())
+            browser.close()
+        print("The sync folder's icon written.")
+        return 0
     sizes = sorted({*ICO_SIZES, *(s for _k, s in ICNS), 512})
     pictures: dict[int, bytes] = {}
     with sync_playwright() as p:
@@ -107,6 +130,7 @@ def main() -> int:
         page.evaluate("document.fonts.ready")
         (REPO / "Website" / "banner.png").write_bytes(page.screenshot(clip={"x": 0, "y": 0, "width": 1280, "height": 256}))
         unity_logos(page)
+        folder_icon(page)
         browser.close()
     for s in (128, 256, 512):
         (REPO / "packaging" / "icons" / f"hoard-{s}.png").write_bytes(pictures[s])

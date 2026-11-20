@@ -391,7 +391,7 @@ class DesktopApp(_Harness):
         self.assertTrue(lock.acquire())
         self.addCleanup(lock.release)
         before = set(paths.log_files())
-        with unittest.mock.patch.object(app, "show_running_copy", lambda link=None: True):
+        with unittest.mock.patch.object(app, "show_running_copy", lambda *a, **k: True):
             self.assertEqual(app.run_app(config.load_config(), None), 0)
         self.assertEqual(set(paths.log_files()), before)
 

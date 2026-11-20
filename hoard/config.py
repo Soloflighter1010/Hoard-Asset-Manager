@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "edits_root": "",              # where editable copies go (issue #82); "" = "Hoard Edits" beside the downloads
     "local_copy": True,            # Local (issue #80): copy what you add into Hoard (False: list it where it is); your last choice
     "local_sync": "",              # issue #388: the Local sync folder, whose contents Hoard adds to Local ("" = off)
+    "explorer": True,              # issue #410: the sync folder's icon, and Hoard in File Explorer's right-click menu
     "request_delay": 1.0,          # seconds between page loads on a store, to stay polite
     "browser_channel": "",         # "" = automatic (Microsoft Edge on Windows); "msedge", "chrome", "brave", "vivaldi",
                                    # "opera", "opera_gx", "custom" (browser_path) or "chromium" (Hoard's own)

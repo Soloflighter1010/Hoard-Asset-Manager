@@ -56,7 +56,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/local/preview` | key | no | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/remove` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/rescan` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
-| POST | `/api/local/sync` | key | yes | `folder: string`, `look: boolean` | object |
+| POST | `/api/local/sync` | key | yes | `explorer: boolean`, `folder: string`, `look: boolean` | object |
 | POST | `/api/local/unitypackage` | key | no | `folder: string` | object |
 | POST | `/api/lock` | key | yes | `confirm: boolean`, `current: any`, `keys: array`, `kind: any`, `on: any`, `phrase: string`, `pin: string` | object |
 | POST | `/api/login` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
@@ -91,7 +91,7 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/setup/browser` | key | yes | — | object |
 | POST | `/api/setup/done` | key | yes | `done: boolean` | object |
 | POST | `/api/setup/migrate` | key | yes | `folder: string` | object |
-| POST | `/api/show` | instance | no | `open: string`, `token: string` | object |
+| POST | `/api/show` | instance | no | `actions: array`, `open: string`, `token: string` | object |
 | POST | `/api/signin-link` | key | yes | `url: string` | object |
 | GET | `/api/space` | key | no | — | object |
 | GET | `/api/status` | key | no | — | object |

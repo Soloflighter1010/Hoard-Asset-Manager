@@ -99,10 +99,13 @@ def _local(self, path: str, body: dict):
 
 
 def post_api_local_sync(self, path, body, query):
-    """POST /api/local/sync {folder ("" turns it off), look}. Issue #388: the Local sync folder, checked (on this
-    computer, answering, not inside a library folder); look: look at it now. What it holds and skipped, as view()."""
-    from .. import localsync
+    """POST /api/local/sync {folder ("" turns it off), look, explorer}. Issue #388: the Local sync folder, checked (on
+    this computer, answering, not inside a library folder); look: look at it now; explorer: show it in File Explorer
+    (issue #410: its icon, and Hoard in the right-click menu). What it holds and skipped, as view(), and explorer:
+    whether that's on, can be here (Windows), and what's in place."""
+    from .. import explorer, localsync
     srv = self.server
+    was = str(srv.cfg.get("local_sync") or "")
     if "folder" in body:
         value = str(body.get("folder") or "").strip()[:1000]
         try:
@@ -110,10 +113,16 @@ def post_api_local_sync(self, path, body, query):
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         srv.save_settings()
+    if isinstance(body.get("explorer"), bool):
+        srv.cfg["explorer"] = body["explorer"]
+        srv.save_settings()
+    if "folder" in body or "explorer" in body:
+        srv.apply_explorer(was)
+    shown = {"explorer": {"here": explorer.here(), "on": explorer.on(srv.cfg), **srv.explorer_state}}
     if srv.cfg.get("local_sync") and (body.get("look") is True or "folder" in body):
         if localsync.tick(srv) is None:
-            return self._json({"ok": True, "busy": True, **localsync.view(srv.cfg)})
-    return self._json({"ok": True, **localsync.view(srv.cfg)})
+            return self._json({"ok": True, "busy": True, **localsync.view(srv.cfg), **shown})
+    return self._json({"ok": True, **localsync.view(srv.cfg), **shown})
 
 
 MAX_PACKAGE_BYTES = 2 << 30   # a Local item bigger than this isn't packed by Hoard: export it from Unity (issue #382)
@@ -183,7 +192,7 @@ ROUTES = [
     Route('POST', '/api/local/rescan', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/local/remove', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/local/preview', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
-    Route('POST', '/api/local/sync', post_api_local_sync, changes=True, auth='key', image_key=False, max_body=1048576, request=(('folder', 'string'), ('look', 'boolean')), response='object'),
+    Route('POST', '/api/local/sync', post_api_local_sync, changes=True, auth='key', image_key=False, max_body=1048576, request=(('explorer', 'boolean'), ('folder', 'string'), ('look', 'boolean')), response='object'),
     Route('POST', '/api/local/unitypackage', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('folder', 'string'),), response='object'),
     Route('POST', '/api/local/picture', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/konoasset/preview', post_api_konoasset_preview, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),

@@ -46,6 +46,7 @@
         "uninstallerIcon": "../packaging/hoard.ico",
         "headerImage": "installer/header.bmp",
         "sidebarImage": "installer/sidebar.bmp",
+        "installerHooks": "installer/hooks.nsh",
         "languages": [
           "English",
           "Japanese",

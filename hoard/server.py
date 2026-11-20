@@ -494,6 +494,9 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.quit_app = None
         self.show_token = None
         self._link, self._link_lock = None, threading.Lock()   # a hoard:// link for the page, once (ask_open)
+        self.explorer_exe = None   # (issue #410) the program Explorer's right-click menu runs: the shell's, from its hello
+        self.explorer_state = {"icon": False, "menu": False}   # what's in place in File Explorer (explorer.apply)
+        self._explorer_lock = threading.Lock()   # (one change to it at a time: as Hoard starts, and from Settings)
         self.last_seen = time.time()
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
         self.key = secrets.token_urlsafe(32)   # new on every start, in memory only
@@ -642,6 +645,48 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
                 self.show_window()
             except Exception:   # (a window that's gone: the page still takes it when it's back)
                 pass
+
+    def apply_explorer(self, was: str | None = None) -> dict:
+        """Issue #410: make File Explorer show what Settings says (the sync folder's icon, Hoard in its right-click
+        menu), taking the icon off the folder that was the sync folder (was). Never stops what asked for it."""
+        from . import explorer
+        with self._explorer_lock:
+            try:
+                self.explorer_state = explorer.apply(self.cfg, self.explorer_exe, was)
+            except Exception as e:   # (Windows refused: Hoard carries on without them)
+                print(f"File Explorer's icon and menu couldn't be set: {type(e).__name__}: {e}", flush=True)
+                self.explorer_state = {"icon": False, "menu": False}
+            return self.explorer_state
+
+    def explorer_do(self, actions: list) -> None:
+        """Issue #410: what File Explorer's right-click menu asked for (explorer.actions has checked it: from the shell's
+        hello, or a second start over /api/show), done in the background, since copying a file takes a while. Then
+        Hoard comes to the front at Local, and its page says what was done (take_open gives it, as a link's is)."""
+        from . import explorer
+        if not actions:
+            return
+
+        def run():
+            """Each request in turn, then what they did for the page."""
+            said = []
+            for action in actions:
+                try:
+                    one = explorer.do(self, action)
+                except Exception as e:   # (a file that couldn't be copied, say: said, and the rest carry on)
+                    print(f"Hoard in File Explorer: {action['do']} failed: {type(e).__name__}: {e}", flush=True)
+                    one = {"said": "failed", "name": Path(action.get("path") or "").name}
+                if one:
+                    said.append(one)
+            with self._link_lock:   # (Explorer starts Hoard once for each file chosen: what they did adds up)
+                if isinstance(self._link, dict) and self._link.get("do") == "local":
+                    said = self._link["said"] + said
+                self._link = {"do": "local", "said": said[-100:]}
+            if self.show_window:
+                try:
+                    self.show_window()
+                except Exception:   # (a window that's gone: the page still takes it when it's back)
+                    pass
+        threading.Thread(target=run, daemon=True, name="explorer").start()
 
     def link_waiting(self) -> bool:
         """Whether there's a link for the page to take (/api/status says so; only /api/link gives it)."""
