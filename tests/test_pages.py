@@ -357,7 +357,7 @@ class AccessKey(IsolatedTestCase):
             page.click("#views [data-view='updates']")
             self.assertIn("1 download has newer files", page.locator("#viewBar").inner_text())
             self.assertIn("Last checked", page.locator("#viewBar").inner_text())
-            page.locator("#grid .slot .flag.upd").wait_for()
+            page.locator("#grid .slot .badge.upd").wait_for()
             page.click("#grid .slot")
             self.assertIn("Rusk_v2.zip", page.locator("#detail .update").inner_text())
             page.click("#detail [data-act='update-one']")
@@ -379,6 +379,46 @@ class AccessKey(IsolatedTestCase):
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
         page.close()   # (left open, it carried on beside the tests after it)
+
+    def test_the_update_mark_leaves_the_selection_box_clear(self):
+        """Issue #418: Downloads' Update mark sat in a tile's top-right corner, where its selection box shows, so the
+        box couldn't be seen or clicked. It's in the tile's column of marks, as the Library's are: in every style and
+        tile size, the mark and the box don't overlap, and a click on the box reaches it."""
+        from hoard import tags
+        from hoard.asset_updates import AssetUpdates
+        store = AssetUpdates()
+        store.record_check(["booth"], None, [{"store": "booth", "key": tags.tag_key("booth", "Rusk"), "name": "Rusk",
+                                              "creator": "Kitsu Studio", "file": "Rusk_v2.zip", "kind": "new"}])
+        self.addCleanup(storage.remove, store.path, missing_ok=True)
+        page, refused = self.open(self.srv.entry_url())
+        goto(page, f"{self.srv.url}downloads")
+        tile = page.locator("#grid .slot", has=page.locator(".badge.upd"))
+        tile.wait_for()
+        rects = """s => { const r = e => e && e.getBoundingClientRect(), b = r(s.querySelector('.badge.upd')), t = r(s.querySelector('.tick'));
+                         const x = t.left + t.width / 2, y = t.top + t.height / 2;
+                         return {badge: b && b.width ? [b.left, b.top, b.right, b.bottom] : null, tick: [t.left, t.top, t.right, t.bottom],
+                                 hit: document.elementFromPoint(x, y) === s.querySelector('.tick')}; }"""
+        for style in ("", "treasure", "workbench"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            for size in (120, 300):
+                page.evaluate("v => setZoom(v)", size)
+                tile.hover()
+                got = tile.evaluate(rects)
+                self.assertGreater(got["tick"][2] - got["tick"][0], 0, (style, size, "the box shows"))
+                self.assertTrue(got["hit"], (style, size, "a click on the box reaches it"))
+                if style == "workbench":
+                    self.assertIsNone(got["badge"], "Workbench says it in the tile's row")
+                    continue
+                b, t = got["badge"], got["tick"]
+                self.assertIsNotNone(b, (style, size))
+                self.assertTrue(b[2] <= t[0] or t[2] <= b[0] or b[3] <= t[1] or t[3] <= b[1], (style, size, b, t))
+        page.evaluate("delete document.documentElement.dataset.style")
+        tile.hover()   # (the box shows as the tile is pointed at)
+        tile.locator(".tick").click()
+        page.wait_for_function("() => document.body.classList.contains('selecting')")
+        self.assertEqual(tile.get_attribute("aria-pressed"), "true", "the box chose its tile")
+        self.assertEqual(refused, [])
+        page.close()
 
     def test_download_more_of_it(self):
         """Issue #225: a product downloaded with some of its files left out: Download more of it asks again, with

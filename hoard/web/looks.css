@@ -9,6 +9,9 @@
 .background-task { background: transparent; }
 .background-task progress { width: min(260px, 70%); margin-right: 12px; accent-color: var(--gold); }
 html.hoard-dragging, html.hoard-dragging * { cursor: grabbing !important; user-select: none !important; }
+/* Issue #420: one tab marked in the bar, what's in front: Projects' or Tasks' window open over the page (markBar)
+   takes the page's mark. Here, as it's for both views and every style. */
+.bar[data-front] .apptabs a[aria-current="page"]:not(:hover) { color: var(--dust); background: none; box-shadow: none; }
 /* a window's scroll stays in it (issue #264): scrolled to its end, Settings carried on scrolling the page behind it;
    and while Settings or Projects fills the window, the page behind doesn't scroll at all */
 .win-body, .setjump { overscroll-behavior: contain; }
@@ -362,8 +365,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
   padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-style="treasure"] .badges { top: auto; bottom: 10px; left: 10px; flex-direction: row; flex-wrap: wrap; }
-[data-style="treasure"] .badge, [data-style="treasure"] .flag { border-radius: 999px; padding: 2px 9px; }
-[data-style="treasure"] .flag.count { top: auto; bottom: 10px; left: 10px; }
+[data-style="treasure"] .badge { border-radius: 999px; padding: 2px 9px; }
 [data-style="treasure"] .ondisk-mark { border-radius: 999px; }
 [data-style="treasure"] .slot:not(.stacked):is(:hover, [aria-current="true"]) .art { box-shadow: 0 6px 24px -6px var(--c, var(--gold)); }
 [data-style="treasure"] .slot[aria-current="true"] .art { outline-offset: 4px; }
@@ -464,7 +466,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .grid .slot.stacked .art > img, [data-style="workbench"] .grid .slot.stacked .art > .ph { border-radius: 6px; }
 [data-style="workbench"] .grid .ph b { font-size: 14px; }
 [data-style="workbench"] .grid .ph small { display: none; }
-[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .note-mark, .flag) { display: none; }
+[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .note-mark) { display: none; }
 [data-style="workbench"] .grid :is(.nm-t, .slot .nm) { grid-area: nm; align-self: end; font-size: 14px; -webkit-line-clamp: 1; }
 [data-style="workbench"] .grid .cr { grid-area: cr; align-self: start; margin-top: 0; font-size: 12.5px; }
 /* the columns fit their longest words: "Not downloaded yet", and a date in Korean ("2026년 9월 28일"), whole; wider

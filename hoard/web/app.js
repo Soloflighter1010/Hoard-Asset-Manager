@@ -94,8 +94,7 @@ async function activateView(restoreWindows = true) {
   $("#downloadsStyles").media = next === "downloads" ? "all" : "not all";
   for (const node of document.querySelectorAll("[data-app-view]")) if (node !== document.documentElement)
     node.hidden = node.dataset.appView !== next;
-  for (const link of document.querySelectorAll('.apptabs a[href="/"], .apptabs a[href="/downloads"], .apptabs a[href="/downloads#store=Local"]')) link.removeAttribute("aria-current");
-  if (next === "library") $('.apptabs a[href="/"]').setAttribute("aria-current", "page");
+  markBar(next === "library" ? "/" : "/downloads");   // (until the view says which of its pages it's on)
   if (next === "downloads" && !$("#drives")) $("#storeSeg").replaceChildren($("#downloadsStores").content.cloneNode(true));
   const tile = UI[next === "downloads" ? "dl_tile_size" : "tile_size"];
   if (tile) setZoom(tile);

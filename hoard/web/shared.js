@@ -1958,6 +1958,7 @@ function takeFiles() { const f = DL_FILES; DL_FILES = null; return f; }
 const CONTENT_KINDS = [   // [kind, the ends of its files' names, one, many]
   ["unitypackage", [".unitypackage"], "1 Unity package", "{0} Unity packages"],
   ["substance", [".spp", ".sbsar", ".sbs"], "1 Substance Painter project", "{0} Substance Painter projects"],
+  ["pawpaint", [".pawpaint"], "1 PawPaint project", "{0} PawPaint projects"],
   ["blender", [".blend", ".blend1"], "1 Blender file", "{0} Blender files"],
   ["model", [".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae"], "1 3D model", "{0} 3D models"],
   ["layered", [".psd", ".psb", ".clip", ".kra", ".sai", ".sai2", ".xcf"], "1 layered image", "{0} layered images"],
@@ -3074,7 +3075,7 @@ function savePart(part) {
 // one; each product's own are chosen in Download new's list, and remembered (hoard/downloader.py: left_out)
 const FILE_KINDS = { unitypackage: "Unity packages", archive: "Archives (ZIP, 7z, RAR)",
   layered: "Layered images (Photoshop, Clip Studio, Krita, SAI)", picture: "Pictures and textures", blender: "Blender files",
-  substance: "Substance Painter projects",
+  substance: "Substance Painter projects", pawpaint: "PawPaint projects",
   model: "3D models (FBX, OBJ, VRM, glTF)", audio: "Sound", video: "Video", document: "Documents (PDF, text)" };
 const RULE_STORES = { all: "from every store", booth: "from Booth", gumroad: "from Gumroad", jinxxy: "from Jinxxy", itch: "from itch.io" };
 // Draw the rules for which files to download.
@@ -3170,12 +3171,26 @@ function showTransfer(box, t) {   // updates the bar in place, so it slides rath
   box.querySelector(".xfer-stats").replaceWith(fresh.querySelector(".xfer-stats"));
 }
 
+// Issue #420: the bar marks one tab, what's in front: Projects or Tasks while its window is open over the page (one
+// window at a time: winOpened), else the page the view is on (Library, Downloads, Local, or Sets and Wishlists, by its
+// link). The views say which page they're on, and the windows mark the bar as they open and close; nothing else marks
+// a tab, so one marked by the page before can't stay marked.
+let barPage = null;
+function markBar(page) {
+  if (page) barPage = page;
+  for (const a of document.querySelectorAll(".apptabs a"))
+    if (a.getAttribute("href") === barPage) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  const bar = $(".bar"), front = ["projects", "tasks"].find(w => $(`#${w}Win`) && !$(`#${w}Win`).hidden);
+  if (bar && front) bar.dataset.front = front; else if (bar) delete bar.dataset.front;
+}
+
 let tasksTimer = null, tasksShown = "";
 // Open the tasks window or close it (open: which; else the other way).
 function openTasks(open) {
   const w = $("#tasksWin"), show = open ?? w.hidden;
   w.hidden = !show;
   $("#tasksTab").setAttribute("aria-expanded", String(show));
+  markBar();
   clearTimeout(tasksTimer);
   if (show) { tasksShown = ""; loadTasks(); }
 }
@@ -3400,6 +3415,7 @@ function openProjects(open) {   // Projects takes the whole window below the bar
   const w = $("#projectsWin"), show = open ?? w.hidden;
   w.hidden = !show;
   $("#projectsTab").setAttribute("aria-expanded", String(show));
+  markBar();
   if (show) { loadProjects(); pjWatch(); }
 }
 let pjSplashing = null;

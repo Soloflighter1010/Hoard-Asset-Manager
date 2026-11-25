@@ -655,8 +655,7 @@ function renderStatus(list) {
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
   // Local, from the bar, is a place of its own: the bar says so, and so do the heading and the window's title
   const local = state.store === "Local";
-  for (const [a, here] of [[$('.apptabs a[href="/downloads"]'), !local], [$('.apptabs a[href="/downloads#store=Local"]'), local]])
-    if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+  markBar(local ? "/downloads#store=Local" : "/downloads");
   document.title = local ? tr("Hoard: Local") : tr("Hoard: Downloads");
   $("#count").hidden = !total || (inSets() && !!state.set);   // (a set open has its own heading)
   $("#count").innerHTML = inSets() ? esc(setsCountText()) : local && pills.length === 1 && state.view === "downloads"

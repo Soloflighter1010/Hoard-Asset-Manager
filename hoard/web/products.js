@@ -121,11 +121,13 @@ function productTile(a, model) {
     productIcon("M3.5 2.5h6.2l2.8 2.8v8.2h-9zM6 7.5h4M6 10h4")));
   if (model.downloaded) art.append(productElement("span", { class: "ondisk-mark", title: tr("Downloaded"), "aria-hidden": "true" },
     productIcon("M8 2v7.5M4.8 6.5 8 9.7l3.2-3.2M2.5 11v2.5h11V11")));
-  const badges = model.key === "key" ? productElement("span", { class: "badges" }) : art;
+  // its marks (New, Update, ×2...) in one column, the same in both views (issue #418: Downloads' were in the corner the
+  // selection box takes)
+  const badges = productElement("span", { class: "badges" });
   for (const badge of model.badges) if (badge) badges.append(productElement("span", {
-    class: `${model.key === "key" ? "badge" : "flag"} ${badge.kind || ""}`, "aria-hidden": badge.hidden ? "true" : null,
+    class: `badge ${badge.kind || ""}`, "aria-hidden": badge.hidden ? "true" : null,
   }, badge.text));
-  if (badges !== art) art.append(badges);
+  art.append(badges);
   button.append(art, productElement("span", { class: model.key === "key" ? "nm-t" : "nm", translate: "no" }, a.name),
     productElement("span", { class: "cr" }, model.size ? model.size + " · " : "", productElement("span", { translate: "no" }, a.creator)),
     productElement("span", { class: "row-meta", "aria-hidden": "true" },

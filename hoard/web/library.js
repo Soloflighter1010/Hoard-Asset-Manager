@@ -286,8 +286,7 @@ function renderStatus(list) {
   const total = DATA.items.filter(a => inView(a) && shown(a.store)).length;   // this view: Library, Archive, ...
   // "1 thing" or "n things".
   const things = n => `${n} ${n === 1 ? "thing" : "things"}`;
-  for (const [a, here] of [[$('.apptabs a[href="/"]'), !inSets()], [$('.apptabs a[href="/#store=Sets"]'), inSets()]])
-    if (a) { if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); }
+  markBar(inSets() ? "/#store=Sets" : "/");
   document.title = inSets() ? tr("Hoard: Sets") : "Hoard";
   $("#count").hidden = !total || (inSets() && !!state.set);   // (a set open has its own heading)
   $("#count").innerHTML = inSets() ? esc(setsCountText()) : filtersActive()
