@@ -1146,6 +1146,9 @@ function wirePointerDragging() {
     if (target) target.run();
   });
   document.addEventListener("pointercancel", () => { reset(); dragDone(); });
+  // the window let go of mid-drag (another program taken up, the button let go there): nothing is dropped, and what
+  // was dragged doesn't stay on the page
+  addEventListener("blur", () => { if (POINTER_DRAG.source) { reset(); dragDone(); } });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && POINTER_DRAG.source) { reset(); dragDone(); }
   });
@@ -6197,27 +6200,34 @@ const SET_TILE_ACTIONS = () => {
 /* Issue #417: a set's or wishlist's JSON file (Export JSON..., #354) comes in as Import JSON... brings one, chosen
    there or dropped anywhere on Hoard's window (several at once each come in), and Hoard opens it. What's in a file
    says whether it's one ("format": "hoard-set"), so a .json that isn't (a creator's settings) is left to the rest of
-   the drop. Only the first few .json files dropped are looked in: a folder of a Unity project has hundreds. */
+   the drop. Only the first few .json files dropped are looked in: a folder of a Unity project has hundreds. What came
+   in and what didn't is said at the end, together, so one message never hides another. */
 const SET_FILE_MOST = 16000000, SET_FILES_LOOKED_IN = 50;
-// Import the sets and wishlists among these files, and open the one imported last; returns the files that aren't sets.
-async function importSetFiles(files) {
-  const rest = [];
+// Import the sets and wishlists among these files, open the one imported last, and say what came in and what was
+// refused (with also, when there are files that aren't sets); returns the files that aren't sets.
+async function importSetFiles(files, also = "") {
+  const rest = [], refused = [];
   let looked = 0, made = null, n = 0;
   for (const file of files) {
+    const json = /\.json$/i.test(file.name);
+    if (json && file.size > SET_FILE_MOST) { refused.push(`${file.name}: ${tr("That JSON file is too large.")}`); continue; }
     let raw = null;
-    if (/\.json$/i.test(file.name) && file.size <= SET_FILE_MOST && looked++ < SET_FILES_LOOKED_IN) {
+    if (json && looked++ < SET_FILES_LOOKED_IN) {
       try { raw = JSON.parse(await file.text()); } catch (e) { raw = null; }   // (not JSON: not a set)
     }
     if (!raw || typeof raw !== "object" || raw.format !== "hoard-set") { rest.push(file); continue; }
     const r = await apiPost("/api/sets", { action: "import-json", file: raw });
-    if (!r.ok) { toast(`${file.name}: ${tr(r.data.error || "The set couldn't be imported.")}`); continue; }
+    if (!r.ok) { refused.push(`${file.name}: ${tr(r.data.error || "The set couldn't be imported.")}`); continue; }
     made = { id: r.data.made, name: String((raw.set || {}).name || "") };
     n++;
   }
-  if (!n) return rest;
-  await T.reload();   // (the Sets tab reads its sets again with the page)
-  if (made) showSet(made.id);
-  toast(n === 1 ? tr("Imported {0}.", made ? made.name : "") : tr("Imported {0} sets and wishlists.", n));
+  if (n) {
+    await T.reload();   // (the Sets tab reads its sets again with the page)
+    showSet(made.id);
+  }
+  const said = [n === 1 ? tr("Imported {0}.", made.name) : n ? tr("Imported {0} sets and wishlists.", n) : "", ...refused,
+                rest.length ? also : ""].filter(Boolean);
+  if (said.length) toast(said.join(" "));
   return rest;
 }
 // Do what a click in Sets and Wishlists says: open a set, select one, or one of its buttons.
@@ -6231,8 +6241,7 @@ async function setAct(e) {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".json,application/json";
     input.onchange = async () => {
       const file = input.files[0]; if (!file) return;
-      if ((await importSetFiles([file])).length)
-        toast(tr(file.size > SET_FILE_MOST ? "That JSON file is too large." : "Choose a Hoard set JSON file (version 1)."));
+      await importSetFiles([file], tr("Choose a Hoard set JSON file (version 1)."));
     };
     input.click(); return;
   }

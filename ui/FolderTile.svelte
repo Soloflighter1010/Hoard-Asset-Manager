@@ -8,7 +8,7 @@
 </script>
 
 <button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i={index} data-folder={name} data-hay={hay}
-        aria-label={tr("Folder {0}, {1} projects", name, count)}>
+        aria-label={count === 1 ? tr("Folder {0}, 1 project", name) : tr("Folder {0}, {1} projects", name, count)}>
   <span class="pj-tile-art folder" aria-hidden="true">
     <span class="back"></span>
     <span class="papers">
@@ -32,7 +32,8 @@
   .papers i { display: grid; place-items: center; width: 34%; aspect-ratio: 2 / 1; margin: 0 -2%; border-radius: 6px;
     font: 400 clamp(11px, 1.6vw, 17px) var(--display); font-style: normal; color: var(--bone);
     background: color-mix(in srgb, var(--c) 40%, var(--stone)); box-shadow: inset 0 -3px 0 var(--c), 0 2px 6px rgb(0 0 0 / .25);
-    transform: translateY(calc(var(--at) * var(--at) * 9%)) rotate(calc(var(--at) * 7deg)); transition: transform .15s ease-out; }
+    transform: translateY(calc(var(--at) * var(--at) * 9%)) rotate(calc(var(--at) * 7deg));
+    transition: transform .15s ease-out, translate .15s ease-out; }
   .k-avatars { --c: var(--pj-avatars); } .k-worlds { --c: var(--pj-worlds); } .k-other { --c: var(--pj-other); }
   .front { position: absolute; inset: 38% 2% 0; border-radius: 10px; transform-origin: 50% 100%; transition: transform .15s ease-out;
     background: linear-gradient(color-mix(in srgb, var(--gold) 92%, #fff), var(--gold));

@@ -774,8 +774,13 @@ class Tab(IsolatedTestCase):
             page.evaluate(drop, [[["Fox outfit.json", json.dumps(fox), "application/json"],
                                   ["Wanted.json", json.dumps(wish), "application/json"],
                                   ["settings.json", json.dumps({"format": "lilToon", "version": 1}), "application/json"],
+                                  ["Broken.json", json.dumps({"format": "hoard-set", "version": 1, "set": {"name": "B", "items": [42]}}),
+                                   "application/json"],
                                   ["Booth.html", "<html><body>not a library</body></html>", "text/html"]], "#grid"])
+            # what came in and what was refused, said together (one never hides the other)
             page.locator("#toast", has_text="Imported 2 sets and wishlists.").wait_for()
+            self.assertIn("Broken.json: That JSON file contains too many products or invalid product keys.",
+                          page.locator("#toast").inner_text())
             page.wait_for_function("() => document.title === 'Hoard: Sets'")
             names = [s["name"] for s in self.api("/api/sets")["sets"]]
             self.assertEqual(sorted(names), ["Fox outfit", "Fox outfit", "Wanted"], "both came in, as new ones")
@@ -789,6 +794,7 @@ class Tab(IsolatedTestCase):
             page.evaluate(drop, [[["Fox outfit.json", json.dumps(fox), "application/json"],
                                   ["photo.png", "x", "image/png"]], "main"])
             page.locator("#toast", has_text="Saved store pages are imported in the Library").wait_for()
+            self.assertIn("Imported Fox outfit.", page.locator("#toast").inner_text(), "with what came in")
             self.assertEqual(len(self.api("/api/sets")["sets"]), 4)
             self.assertEqual(len(imported), 1, "Downloads imports no pages")
             self.assertEqual(errors, [])

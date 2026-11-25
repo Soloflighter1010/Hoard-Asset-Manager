@@ -360,6 +360,8 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
   padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-style="treasure"] .badges { top: auto; bottom: 10px; left: 10px; flex-direction: row; flex-wrap: wrap; }
+/* ...above a product for adults' 18+ mark, which has that corner (issue #418: Downloads' Update mark was under it) */
+[data-style="treasure"] .slot.adult .badges { bottom: 37px; }
 [data-style="treasure"] .badge { border-radius: 999px; padding: 2px 9px; }
 [data-style="treasure"] .ondisk-mark { border-radius: 999px; }
 [data-style="treasure"] .slot:not(.stacked):is(:hover, [aria-current="true"]) .art { box-shadow: 0 6px 24px -6px var(--c, var(--gold)); }

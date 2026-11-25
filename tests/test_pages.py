@@ -412,6 +412,14 @@ class AccessKey(IsolatedTestCase):
                 b, t = got["badge"], got["tick"]
                 self.assertIsNotNone(b, (style, size))
                 self.assertTrue(b[2] <= t[0] or t[2] <= b[0] or b[3] <= t[1] or t[3] <= b[1], (style, size, b, t))
+        # a product for adults: its 18+ mark has the bottom-left corner, where Treasure puts the column
+        page.evaluate("() => { DATA.assets.find(a => a.name === 'Rusk').adult = true; T.render(); }")
+        tile.locator(".adult-mark").wait_for()
+        for style in ("", "treasure"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            b, m = [tile.locator(c).bounding_box() for c in (".badge.upd", ".adult-mark")]
+            self.assertTrue(b["x"] + b["width"] <= m["x"] or m["x"] + m["width"] <= b["x"] or b["y"] + b["height"] <= m["y"]
+                            or m["y"] + m["height"] <= b["y"], (style or "standard", "Update and 18+ apart", b, m))
         page.evaluate("delete document.documentElement.dataset.style")
         tile.hover()   # (the box shows as the tile is pointed at)
         tile.locator(".tick").click()
@@ -2828,6 +2836,14 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         page.mouse.move(5, 5, steps=3)   # let go where nothing takes it
         page.mouse.up()
         ghost.wait_for(state="detached")
+        self.assertEqual(page.locator("dialog[open]").count(), 0)
+        # the window let go of mid-drag (another program taken up): it ends, and nothing stays on the page
+        drag("Rusk", "Anko")
+        ghost.wait_for()
+        page.evaluate("dispatchEvent(new Event('blur'))")
+        ghost.wait_for(state="detached")
+        self.assertNotIn("drop-on", tile("Anko").get_attribute("class") or "")
+        page.mouse.up()
         self.assertEqual(page.locator("dialog[open]").count(), 0)
         page.keyboard.press("Escape")
         self.assertEqual(self.errors, [])

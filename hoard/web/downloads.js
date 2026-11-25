@@ -1746,9 +1746,8 @@ viewListen("downloads", document, "dragover", e => { if (fromOutside(e)) e.preve
 viewListen("downloads", document, "drop", e => {
   if (DRAG.what || !e.dataTransfer.files.length) return;
   e.preventDefault(); dropDepth = 0; $("#drop").hidden = true;
-  importSetFiles([...e.dataTransfer.files]).then(rest => {
-    if (rest.length) toast(tr("Downloads takes a set's or wishlist's JSON file. Saved store pages are imported in the Library: drop them there."));
-  });
+  importSetFiles([...e.dataTransfer.files],
+                 tr("Downloads takes a set's or wishlist's JSON file. Saved store pages are imported in the Library: drop them there."));
 });
 viewListen("downloads", document, "keydown", e => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);

@@ -327,7 +327,7 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertEqual(page.evaluate("document.querySelector('.pj-folder-tile').parentElement.className"), "pj-tiles",
                          "a tile of the grid's own, like a project's")
         self.assertNotEqual(folder.locator(".front").evaluate("e => getComputedStyle(e).backgroundImage"), "none", "in Hoard's gold")
-        self.assertEqual(folder.get_attribute("aria-label"), "Folder Avatars WIP, 1 projects")   # (the words the plain tile had)
+        self.assertEqual(folder.get_attribute("aria-label"), "Folder Avatars WIP, 1 project")
         # a project dragged onto it goes in it: what's dragged follows the pointer (issue #419), and the folder opens
         old = page.locator(".pj-tile:not(.pj-folder-tile)", has_text="Old World")
         old.hover(position={"x": 30, "y": 20})
@@ -346,6 +346,7 @@ class ProjectsPanel(IsolatedTestCase):
         page.locator(".pj-folder-tile .papers i").nth(1).wait_for()
         self.assertEqual(sorted(folder.locator(".papers i").all_inner_texts()), ["OW", "RA"])
         self.assertEqual(folder.locator(".front .n").inner_text(), "2")
+        self.assertEqual(folder.get_attribute("aria-label"), "Folder Avatars WIP, 2 projects")
         self.assertEqual(server.ui_settings({"ui": {"pj_layout": "tiles"}})["pj_layout"], "tiles")
         self.assertNotIn("pj_layout", server.ui_settings({"ui": {"pj_layout": "grid"}}))
 
