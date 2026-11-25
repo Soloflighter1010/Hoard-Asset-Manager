@@ -745,6 +745,55 @@ class Tab(IsolatedTestCase):
         with mock.patch.object(server, "reveal", shown.append):
             self.assertEqual(self.api("/api/sets", {"action": "export-json", "id": con})["saved"], "_CON.json")
 
+    def test_set_files_dropped_on_the_window(self):
+        """Issue #417: a set's or wishlist's JSON file dropped anywhere on Hoard's window comes in as Import JSON...
+        brings one, several at once each, and the last is opened. A .json that isn't one, and a saved page, go on to
+        what a drop did before: the Library imports saved pages; Downloads says where they go."""
+        from playwright.sync_api import sync_playwright
+        made = self.api("/api/sets", {"action": "create", "name": "Fox outfit", "items": [RUSK]})["made"]
+        with mock.patch("hoard.server.reveal"):
+            fox = self.api("/api/sets", {"action": "export-json", "id": made})["file"]
+        wish = {"format": "hoard-set", "version": 1, "image": None,
+                "set": {"name": "Wanted", "kind": "wishlist", "items": [HOODIE]}}
+        drop = """([files, where]) => {
+            const dt = new DataTransfer();
+            for (const [name, text, type] of files) dt.items.add(new File([text], name, {type}));
+            const at = document.querySelector(where);
+            for (const kind of ["dragenter", "dragover", "drop"])
+                at.dispatchEvent(new DragEvent(kind, {bubbles: true, cancelable: true, dataTransfer: dt}));
+        }"""
+        imported = []
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.on("request", lambda r: imported.append(r.post_data_json) if r.url.endswith("/api/import") else None)
+            page.goto(self.srv.entry_url())
+            page.locator("#grid .slot").first.wait_for()
+            page.evaluate(drop, [[["Fox outfit.json", json.dumps(fox), "application/json"],
+                                  ["Wanted.json", json.dumps(wish), "application/json"],
+                                  ["settings.json", json.dumps({"format": "lilToon", "version": 1}), "application/json"],
+                                  ["Booth.html", "<html><body>not a library</body></html>", "text/html"]], "#grid"])
+            page.locator("#toast", has_text="Imported 2 sets and wishlists.").wait_for()
+            page.wait_for_function("() => document.title === 'Hoard: Sets'")
+            names = [s["name"] for s in self.api("/api/sets")["sets"]]
+            self.assertEqual(sorted(names), ["Fox outfit", "Fox outfit", "Wanted"], "both came in, as new ones")
+            self.assertIn("Wanted", page.locator("main").inner_text(), "the one imported last is open")
+            page.locator("#impProblems", has_text="1 file isn't a saved page").wait_for()   # (settings.json, left alone)
+            self.assertEqual([f["filename"] for f in imported[0]["files"]], ["Booth.html"], "only the page went to be imported")
+            page.click("#impClose")
+            # in Downloads: the set comes in; anything else is left alone, and it says where saved pages go
+            page.click("nav.apptabs a[href='/downloads']")
+            page.wait_for_function("() => document.title === 'Hoard: Downloads'")
+            page.evaluate(drop, [[["Fox outfit.json", json.dumps(fox), "application/json"],
+                                  ["photo.png", "x", "image/png"]], "main"])
+            page.locator("#toast", has_text="Saved store pages are imported in the Library").wait_for()
+            self.assertEqual(len(self.api("/api/sets")["sets"]), 4)
+            self.assertEqual(len(imported), 1, "Downloads imports no pages")
+            self.assertEqual(errors, [])
+            browser.close()
+
     def test_a_picture_follows_its_product_when_one_is_taken_out(self):
         """A wishlist's products that aren't yours had their pictures at /setpic/<set>/<place>. Taking one out moved
         every product after it up a place, so the browser, which keeps those pictures, showed each of them with the

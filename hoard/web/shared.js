@@ -1090,6 +1090,17 @@ function dropShow(t) {
 }
 // The drag is over: nothing marked any more.
 function dragDone() { dropShow(null); DRAG.what = ""; DRAG.ids = []; }
+// What's dragged looks like, under the pointer (issue #419): the first product's picture (blurred where its tile's is)
+// and name, and how many more go with it; or a project's initials in its kind's colour, and its name.
+function dragLooks(source) {
+  if (DRAG.what === "project") {
+    const p = (PJ.data.projects || []).find(x => x.path === DRAG.ids[0]) || { name: pjNamed(DRAG.ids[0]) };
+    return { kind: "project", name: p.name || "", initials: initials(p.name || ""), hue: pjHue(p.type) };
+  }
+  const first = T.byId(tileId(source)) || T.byId(DRAG.ids[0]) || {}, img = source.querySelector(".art img");
+  return { kind: "product", name: first.name || "", src: img ? img.currentSrc || img.src : "", initials: initials(first.name || ""),
+           blur: !!first.adult && document.documentElement.dataset.adult !== "show", more: Math.max(0, DRAG.ids.length - 1) };
+}
 // Internal grouping uses pointer events too: native desktop drop interception can swallow HTML drag events.
 function wirePointerDragging() {
   // Release the captured pointer and forget the source without changing the user's selection.
@@ -1098,6 +1109,7 @@ function wirePointerDragging() {
     if (source && source.hasPointerCapture(POINTER_DRAG.id)) source.releasePointerCapture(POINTER_DRAG.id);
     POINTER_DRAG.source = null; POINTER_DRAG.id = null; POINTER_DRAG.active = false;
     document.documentElement.classList.remove("hoard-dragging");
+    HoardUI.drag.end();
   };
   document.addEventListener("pointerdown", e => {
     if (e.button !== 0 || e.pointerType === "touch") return;   // touch keeps normal scrolling
@@ -1117,7 +1129,9 @@ function wirePointerDragging() {
       } else Object.assign(DRAG, { what: "project", ids: [source.dataset.path] });
       POINTER_DRAG.active = true; source.setPointerCapture(e.pointerId);
       document.documentElement.classList.add("hoard-dragging");
+      HoardUI.drag.start(dragLooks(source), e.clientX, e.clientY);
     }
+    HoardUI.drag.move(e.clientX, e.clientY);
     e.preventDefault();
     dropShow(dropTarget(document.elementFromPoint(e.clientX, e.clientY)));
   });
@@ -3176,6 +3190,7 @@ function showTransfer(box, t) {   // updates the bar in place, so it slides rath
 // link). The views say which page they're on, and the windows mark the bar as they open and close; nothing else marks
 // a tab, so one marked by the page before can't stay marked.
 let barPage = null;
+// Mark the bar's tab for what's in front (page: the view's page, by its link, when it's changed).
 function markBar(page) {
   if (page) barPage = page;
   for (const a of document.querySelectorAll(".apptabs a"))
@@ -3465,7 +3480,9 @@ function drawProjects() {
   // keeps where you are while it's still empty: what's typed just then went nowhere, and Enter added nothing)
   const tagBox = $("#pjTagInput"), tagFocused = !!tagBox && document.activeElement === tagBox;
   const tagTyped = tagBox && (tagBox.value || tagFocused) ? [tagBox.value, tagFocused] : null;
+  PJ.folderTiles = [];
   body.innerHTML = (views[PJ.view] || pjList)();
+  HoardUI.projects.folders(body, PJ.folderTiles, tr);   // (the folders' tiles in their places, before Find looks at them)
   pjDrawn = PJ.view;
   for (const [id, v] of typed) {
     const el = document.getElementById(id);
@@ -3523,15 +3540,14 @@ function pjList() {
     const grouped = PJ.folder == null && !PJ.tag;
     const folders = grouped ? pjFolders(list) : [];
     const loose = grouped ? ordered.filter(p => !p.folder) : ordered;
-    body = `<div class="pj-tiles">` + folders.map(([f, n]) => {
-      const inside = list.filter(p => p.folder === f), ups = inside.reduce((t, p) => t + pjUpdateCount(p), 0);
-      return `<button class="pj-tile pj-folder-tile" data-pj="folderpick" data-i="${pjFolders(list).findIndex(([x]) => x === f)}" data-folder="${esc(f)}" ` +
-        `data-hay="${esc(norm([f, ...inside.map(p => p.name)].join(" ")))}" aria-label="${esc(tr("Folder {0}, {1} projects", f, n))}">` +
-        `<span class="pj-tile-art folder">${FOLDER_ICON}<span class="pj-mini">${inside.slice(0, 4).map(p =>
-          `<i class="k-${pjHue(p.type)}">${esc(initials(p.name))}</i>`).join("")}</span></span>` +
-        `<span class="nm-t" translate="no">${esc(f)}</span><span class="cr">${esc(tr(n === 1 ? "1 project" : "{0} projects", n))}` +
-        `${ups ? ` · ${esc(tr("updates inside"))}` : ""}</span></button>`;
-    }).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
+    // a folder's tile is Svelte's (ui/FolderTile.svelte, issue #424): a place for it here, filled once it's drawn
+    PJ.folderTiles = folders.map(([f, n], i) => {
+      const inside = list.filter(p => p.folder === f);
+      return { name: f, index: i, count: n, hay: norm([f, ...inside.map(p => p.name)].join(" ")),
+               projects: inside.slice(0, 3).map(p => ({ initials: initials(p.name), hue: pjHue(p.type) })),
+               updates: inside.reduce((t, p) => t + pjUpdateCount(p), 0) };
+    });
+    body = `<div class="pj-tiles">` + folders.map((f, i) => `<span data-folder-slot="${i}" hidden></span>`).join("") + loose.map(p => `<button class="pj-tile k-${pjHue(p.type)}${p.exists ? "" : " gone"}${PJ.selected === p.path ? " on" : ""}${pjLastMark(p) ? " last" : ""}" ` +
         `data-pj="details" data-path="${esc(p.path)}" data-hay="${hay(p)}" aria-pressed="${PJ.selected === p.path}" draggable="true">` +
         `<span class="pj-tile-art">${p.favorite ? `<i class="pj-fav" aria-label="${esc(tr("Favourite"))}">★</i>` : ""}<b translate="no">${esc(initials(p.name))}</b></span>` +
         `<span class="nm-t" translate="no">${esc(p.name)}</span>${pjLastMark(p)}<span class="cr">${p.exists ? pjChips(p) : esc(tr("The folder isn't there"))}</span>` +
@@ -6178,6 +6194,32 @@ const SET_TILE_ACTIONS = () => {
     ...(one ? [{ label: "Choose a picture...", run: list => setPicture(list[0]) }, { label: "Rename", run: list => renameSet(list[0]) }] : []),
     { label: one ? "Delete" : "Delete these sets", danger: true, run: deleteSets }] }] };
 };
+/* Issue #417: a set's or wishlist's JSON file (Export JSON..., #354) comes in as Import JSON... brings one, chosen
+   there or dropped anywhere on Hoard's window (several at once each come in), and Hoard opens it. What's in a file
+   says whether it's one ("format": "hoard-set"), so a .json that isn't (a creator's settings) is left to the rest of
+   the drop. Only the first few .json files dropped are looked in: a folder of a Unity project has hundreds. */
+const SET_FILE_MOST = 16000000, SET_FILES_LOOKED_IN = 50;
+// Import the sets and wishlists among these files, and open the one imported last; returns the files that aren't sets.
+async function importSetFiles(files) {
+  const rest = [];
+  let looked = 0, made = null, n = 0;
+  for (const file of files) {
+    let raw = null;
+    if (/\.json$/i.test(file.name) && file.size <= SET_FILE_MOST && looked++ < SET_FILES_LOOKED_IN) {
+      try { raw = JSON.parse(await file.text()); } catch (e) { raw = null; }   // (not JSON: not a set)
+    }
+    if (!raw || typeof raw !== "object" || raw.format !== "hoard-set") { rest.push(file); continue; }
+    const r = await apiPost("/api/sets", { action: "import-json", file: raw });
+    if (!r.ok) { toast(`${file.name}: ${tr(r.data.error || "The set couldn't be imported.")}`); continue; }
+    made = { id: r.data.made, name: String((raw.set || {}).name || "") };
+    n++;
+  }
+  if (!n) return rest;
+  await T.reload();   // (the Sets tab reads its sets again with the page)
+  if (made) showSet(made.id);
+  toast(n === 1 ? tr("Imported {0}.", made ? made.name : "") : tr("Imported {0} sets and wishlists.", n));
+  return rest;
+}
 // Do what a click in Sets and Wishlists says: open a set, select one, or one of its buttons.
 async function setAct(e) {
   const open = e.target.closest("[data-setopen]");
@@ -6189,11 +6231,8 @@ async function setAct(e) {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".json,application/json";
     input.onchange = async () => {
       const file = input.files[0]; if (!file) return;
-      try {
-        if (file.size > 16000000) throw new Error(tr("That JSON file is too large."));
-        const done = await changeSets({ action: "import-json", file: JSON.parse(await file.text()) });
-        if (done && done.made) showSet(done.made);
-      } catch (error) { toast(error.message); }
+      if ((await importSetFiles([file])).length)
+        toast(tr(file.size > SET_FILE_MOST ? "That JSON file is too large." : "Choose a Hoard set JSON file (version 1)."));
     };
     input.click(); return;
   }

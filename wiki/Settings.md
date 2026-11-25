@@ -65,7 +65,7 @@ box or a list straight away, a folder or the Payhip shops when you leave the fie
   [Downloads](Downloads#which-files-to-save).
 - **Files to leave out** (5.2.0): files to leave out of every download, from every store or one: a kind of file
   (**Unity packages**, **Archives**, **Layered images** such as PSDs, **Pictures and textures**, **Blender files**,
-  **Substance Painter projects**, **3D models**, **Sound**, **Video** or **Documents**), or files whose names have
+  **Substance Painter projects**, **PawPaint projects**, **3D models**, **Sound**, **Video** or **Documents**), or files whose names have
   words you give (such as `quest, android`). Sync, Download new and the routine check follow them; a file you tick
   in Download new's list, or when Hoard asks which files to save, is downloaded all the same. See
   [Downloads](Downloads#which-files-to-save).

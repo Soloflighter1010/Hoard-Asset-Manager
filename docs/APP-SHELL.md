@@ -39,10 +39,12 @@ one of the former pages alone. Subsequent tab changes avoid document, script and
 product reloads. This tradeoff is covered by request-count and DOM-identity tests,
 not a claim that every initial-load workload is faster.
 
-## Svelte: Look inside and the pop-ups
+## Svelte: the pages move over a part at a time
 
 `ui/` holds the pages' Svelte components; `ui/main.js` exposes them as one global, `HoardUI`, with a small boundary
-for each:
+for each. **A part of the pages that's redone is redone in Svelte**, as a component here with its own styles, so the
+pages move over to Svelte a part at a time rather than in one rewrite. A fix to a part that's still in `shared.js` or
+a view's script stays there. The parts so far:
 
 - **Look inside** (`ui/LookInside.svelte`, `HoardUI.inside`): the window's filename, code summary, search field and
   extraction controls. It mounts once and updates its model without replacing the search field or open folders. The
@@ -62,8 +64,15 @@ for each:
   (`web/looks.css`). The pages' own dialogs in their HTML (the support report, PIN, the itch.io key, closing Hoard,
   a download's files, the check's results) take the same ground, outline, corners and backdrop from the pages' CSS.
   The style guide draws the component itself, in place (`dialogs.example`).
+- **A folder's tile in Projects** (`ui/FolderTile.svelte`, `HoardUI.projects`, issue #424): a folder in Hoard's gold
+  with its first projects' tiles tucked into it, its name and how many it holds. `shared.js` draws Projects' list as
+  markup with a placeholder for each folder's tile, and `projects.folders(box, tiles, tr)` puts the tiles in their
+  places (letting go of the ones drawn before). The tile keeps the data Projects' clicks, Find and drops read from it.
+- **What's dragged** (`ui/DragGhost.svelte`, `HoardUI.drag`, issue #419): a small copy of a dragged product's or
+  project's tile under the pointer, with how many more go with it. `shared.js`'s pointer drag starts, moves and ends
+  it; it never takes the pointer, so what's under it still says what a drop will do.
 
-Neither uses `{@html}` or accepts user text as markup. `node scripts/build_ui.mjs` compiles `ui/main.js` into
+None uses `{@html}` or accepts user text as markup. `node scripts/build_ui.mjs` compiles `ui/main.js` into
 `hoard/web/ui.generated.js` and copies the licenses of the bundled runtime packages to `hoard/web/ui.LICENSE.txt`. The
 bundle is checked in; Python launches and the Nuitka builds need no Node runtime. Changes to the components require
 `npm ci --ignore-scripts` and a rebuild. CI runs the builder with `--check`, including license drift. The parser for

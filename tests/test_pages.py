@@ -2791,6 +2791,48 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         self.assertEqual(self.errors, [])
         page.close()
 
+    def test_what_is_dragged_follows_the_pointer(self):
+        """Issue #419: only an outline on what's under the pointer showed a drag. A small copy of what's dragged
+        (its picture and name, and how many more go with it) follows the pointer, without hiding what a drop will
+        do; Escape or letting go ends it."""
+        page = self.open()
+        tile = lambda name: page.locator("#grid .slot", has_text=name)  # noqa: E731
+        ghost = page.locator("[data-drag-ghost]")
+
+        def drag(name, to, steps=8):
+            tile(name).hover(position={"x": 30, "y": 30})   # (once it's what's under the pointer: the splash has gone)
+            b = tile(to).bounding_box()
+            page.mouse.down()
+            x, y = b["x"] + b["width"] / 2, b["y"] + b["height"] / 3
+            page.mouse.move(x, y, steps=steps)
+            return x, y
+        x, y = drag("Rusk", "Anko")
+        ghost.wait_for()
+        self.assertIn("Rusk", ghost.inner_text())
+        box = ghost.bounding_box()
+        self.assertTrue(x < box["x"] < x + 40 and y < box["y"] < y + 40, ("beside the pointer", x, y, box))
+        self.assertIn("drop-on", tile("Anko").get_attribute("class"), "what a drop will do still shows under it")
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('[data-drag-ghost]')).pointerEvents"), "none")
+        page.mouse.move(x + 30, y + 20)
+        self.assertAlmostEqual(ghost.bounding_box()["x"], box["x"] + 30, delta=2, msg="it follows the pointer")
+        page.keyboard.press("Escape")
+        ghost.wait_for(state="detached")
+        page.mouse.up()
+        self.assertEqual(page.locator("dialog[open]").count(), 0, "Escape: nothing done")
+        # several chosen: the one taken, and how many more
+        tile("Rusk").click(modifiers=["Control"])
+        tile("Mochi").click(modifiers=["Control"])
+        drag("Rusk", "Anko")
+        ghost.wait_for()
+        self.assertIn("+1", ghost.inner_text())
+        page.mouse.move(5, 5, steps=3)   # let go where nothing takes it
+        page.mouse.up()
+        ghost.wait_for(state="detached")
+        self.assertEqual(page.locator("dialog[open]").count(), 0)
+        page.keyboard.press("Escape")
+        self.assertEqual(self.errors, [])
+        page.close()
+
     def test_one_panel_at_a_time(self):
         """Issue #84: Tags, Stores, Settings and Tasks open in one panel over the page, one at a time, instead of
         floating windows that pile up; Escape, the × or a click around it closes it."""

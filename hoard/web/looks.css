@@ -106,8 +106,7 @@ dl.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110p
 .pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
 .pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
   text-align: left; font: inherit; cursor: pointer; }
-.pj-tile.k-avatars, .pj-mini i.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds, .pj-mini i.k-worlds { --c: var(--pj-worlds); }
-.pj-tile.k-other, .pj-mini i.k-other { --c: var(--pj-other); }
+.pj-tile.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds { --c: var(--pj-worlds); } .pj-tile.k-other { --c: var(--pj-other); }
 .pj-tile-art { position: relative; aspect-ratio: 2 / 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
   background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--ledge)); box-shadow: inset 0 -5px 0 var(--c, var(--seam)); }
 .pj-tile-art b { font: 400 34px var(--display); color: var(--bone); }
@@ -119,11 +118,7 @@ dl.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110p
 .pj-tile .cr { font-size: 12px; color: var(--dust); }
 .pj-tile .pj-ups { justify-content: flex-start; }
 .pj-fav { position: absolute; top: 8px; left: 10px; font-style: normal; color: var(--gold-text); }
-.pj-folder-tile .pj-tile-art { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.pj-folder-tile .pj-tile-art > svg { position: absolute; inset: 12% 0; margin: auto; width: auto; height: 76%; color: var(--dust); }
-.pj-mini { position: absolute; inset: 42% 39% 22%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-.pj-mini i { display: grid; place-items: center; border-radius: 4px; font: 700 10px var(--body); font-style: normal;
-  background: color-mix(in srgb, var(--c) 45%, var(--stone)); color: var(--bone); }
+/* (a folder's tile, issue #424, is drawn in ui/FolderTile.svelte) */
 body.less-motion .pj-tile-art { transition: none; }
 /* building an Apprise address (issue #239): a service, and its fields one under another */
 .apprise-build { margin: 8px 0; }

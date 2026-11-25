@@ -1743,8 +1743,10 @@ viewListen("library", document, "drop", e => {
   // What was dropped can only be read while the drop is happening, so take it now; folders are read after
   const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
   const files = [...e.dataTransfer.files];
-  if (entries.some(x => x.isDirectory)) filesIn(entries).then(found => importPages(found, null));
-  else importPages(files, null);
+  // a set's or wishlist's file comes in as one (issue #417); the rest are imported as saved pages
+  const take = found => importSetFiles(found).then(rest => { if (rest.length || !found.length) importPages(rest, null); });
+  if (entries.some(x => x.isDirectory)) filesIn(entries).then(take);
+  else take(files);
 });
 viewListen("library", $("#filtersToggle"), "click", e => {
   const open = $("#filters").classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));

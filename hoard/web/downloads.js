@@ -1735,6 +1735,21 @@ viewListen("downloads", detail, "click", e => {
   else if (act === "tag") { toggle(state.tags, b.dataset.tag); b.setAttribute("aria-pressed", String(state.tags.has(b.dataset.tag))); render(); }
 });
 viewListen("downloads", $("#scrim"), "click", closeDetail);
+// Files brought in from outside the window (issue #417): a set's or wishlist's JSON file comes in as one, as it does
+// in the Library; saved store pages are imported there, so they're left alone here, and it says so
+let dropDepth = 0;
+// Whether a drag is of files from outside the window (never a product or project dragged in Hoard).
+const fromOutside = e => !DRAG.what && e.dataTransfer.types.includes("Files");
+viewListen("downloads", document, "dragenter", e => { if (fromOutside(e)) { dropDepth++; $("#drop").hidden = false; } });
+viewListen("downloads", document, "dragleave", () => { if (--dropDepth <= 0) { dropDepth = 0; $("#drop").hidden = true; } });
+viewListen("downloads", document, "dragover", e => { if (fromOutside(e)) e.preventDefault(); });
+viewListen("downloads", document, "drop", e => {
+  if (DRAG.what || !e.dataTransfer.files.length) return;
+  e.preventDefault(); dropDepth = 0; $("#drop").hidden = true;
+  importSetFiles([...e.dataTransfer.files]).then(rest => {
+    if (rest.length) toast(tr("Downloads takes a set's or wishlist's JSON file. Saved store pages are imported in the Library: drop them there."));
+  });
+});
 viewListen("downloads", document, "keydown", e => {
   const typing = /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
   if (e.key === "/" && !typing) { e.preventDefault(); $("#q").focus(); $("#q").select(); }
