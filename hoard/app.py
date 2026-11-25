@@ -88,8 +88,14 @@ def log_to_file() -> Path:
 
 
 def message(text: str, title: str = "Hoard") -> None:
-    """Tell the person something when there's no window yet: a message box on Windows, otherwise the log."""
+    """Tell the person something when there's no window yet: a message box on Windows, otherwise the log. In the
+    Tauri shell's window it's the shell's to show, as it says why Hoard ended before its page opened (issue #423:
+    it said only to look in a log, without saying where)."""
     print(f"{title}: {text}")
+    from . import shell as tauri
+    if tauri.SHELL is not None:
+        tauri.SHELL.send(do="say", text=text)
+        return
     if sys.platform == "win32":
         try:
             import ctypes
@@ -216,6 +222,8 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: b
         message("Hoard is already running, but isn't answering. Close it (or restart your computer) and open it again.")
         return 1
     log_path = log_to_file() if not has_console() else None
+    if shell and log_path:   # (where it is, for the shell to say if Hoard's window can't go on: issue #423)
+        tauri.SHELL.send(do="log", path=str(log_path))
     from . import diagnostics
     diagnostics.install_exception_hooks()
 

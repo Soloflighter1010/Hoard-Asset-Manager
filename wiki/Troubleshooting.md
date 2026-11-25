@@ -13,8 +13,17 @@ the front), or, if you started it as a server, open the address it printed. See
 
 ### "Hoard is already running, but isn't answering"
 
-Another copy of Hoard is open but not responding. Close it (in Task Manager, end **Hoard**), or restart your
-computer, then open Hoard again.
+Another copy of Hoard is open but not responding. Close it (in Task Manager, end **Hoard**; on Linux, end
+**hoard-server** in your system monitor, or run `pkill -f hoard-server`), or restart your computer, then open Hoard
+again.
+
+### Hoard's window is blank, or closes by itself (Linux)
+
+The AppImage carries its own WebKit, which can't draw through some graphics drivers (NVIDIA's, and some Wayland
+desktops): its window stayed blank or closed, and Hoard couldn't be opened again (issue #423). Since 5.2.0 beta 13
+the AppImage draws without them. If Hoard's window stops working all the same, it opens Hoard's page again; if it
+keeps stopping, Hoard says so, with where its log is, and quits, so it opens again next time. To try the graphics
+card's way again, start the AppImage with `WEBKIT_DISABLE_DMABUF_RENDERER=0` before it.
 
 ### "Hoard's window couldn't open on this PC"
 

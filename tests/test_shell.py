@@ -203,6 +203,30 @@ class Protocol(IsolatedTestCase):
         self.assertIsNone(self.shell.exe)
         self.assertEqual(self.shell.actions, [])
 
+    def test_why_hoard_couldnt_start_is_the_shells_to_say(self):
+        """Issue #423: Hoard ending before its page opened left the shell to say only that a log somewhere says why.
+        What Hoard would tell you (already running and not answering, its server not starting) goes to the shell to
+        show, and never as a second dialog of its own on Windows."""
+        from hoard import app
+        with mock.patch.object(shell, "SHELL", self.shell), mock.patch.object(sys, "platform", "win32"), \
+                mock.patch("builtins.print"):
+            app.message("Hoard is already running, but isn't answering.")
+        self.assertEqual(self.message(), {"do": "say", "text": "Hoard is already running, but isn't answering."})
+        with mock.patch.object(shell, "SHELL", None), mock.patch("builtins.print") as said:
+            app.message("Hoard's local server didn't start.")   # (no shell: the log, as before)
+        said.assert_called_once_with("Hoard: Hoard's local server didn't start.")
+
+    def test_the_shell_is_told_where_the_log_is(self):
+        """Issue #423: the shell's dialog says where this start's log is, so Hoard tells it as it starts."""
+        from hoard import app
+        source = Path(app.__file__).read_text(encoding="utf-8")
+        start = source[source.index("def run_app("):]
+        self.assertRegex(start[:start.index("token = secrets")],
+                         r"log_path = log_to_file\(\)[^\n]*\n\s*if shell and log_path:[^\n]*\n\s*tauri\.SHELL\.send\(do=\"log\", path=str\(log_path\)\)")
+        main = (Path(__file__).resolve().parent.parent / "shell" / "src" / "main.rs").read_text(encoding="utf-8")
+        for part in ('Some("log") =>', 'Some("say") =>', "why_not_started(&server)"):
+            self.assertIn(part, main)
+
     def test_the_shell_says_whether_it_updates_this_copy(self):
         self.shell.listen()
         self.assertFalse(self.shell.can_update, "not until it says so")
