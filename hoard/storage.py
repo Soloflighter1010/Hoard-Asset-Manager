@@ -676,8 +676,14 @@ class Database:
                 out["ids"] = {kind: {i: ref(k) for i, k in entries.items()} if isinstance(entries, dict) else entries
                               for kind, entries in out["ids"].items()}
         elif isinstance(out.get("sets"), list):
+            def marks(found):
+                """A set's marks on its photos ({photo: [[product key, x, y], ...]}), by the same ids, so a product
+                renamed keeps its place on them (issue #416)."""
+                return {url: [[ref(m[0]), *m[1:]] if isinstance(m, list) and m else m for m in ms] if isinstance(ms, list) else ms
+                        for url, ms in found.items()}
             out["sets"] = [{**s, "items": [ref(k) for k in s.get("items", [])],
-                            **({"products": mapping(s["products"])} if "products" in s else {})}
+                            **({"products": mapping(s["products"])} if "products" in s else {}),
+                            **({"marks": marks(s["marks"])} if isinstance(s.get("marks"), dict) else {})}
                            if isinstance(s, dict) and isinstance(s.get("items", []), list) else s for s in out["sets"]]
         return out
 

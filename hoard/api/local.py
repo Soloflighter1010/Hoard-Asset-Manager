@@ -46,6 +46,50 @@ def _bblm(self, path: str, body: dict):
     return self._json({"ok": True, "queued": started == "queued"})
 
 
+# Local's tasks that change its records: Edit... and Fill in wait for them (and for its records, local.WRITING).
+LOCAL_TASKS = ("add-local", "rescan-local", "remove-local", "move", "konoasset", "bblm", "verify", "delete-files")
+
+
+def _local_busy(srv) -> bool:
+    """Whether one of Local's tasks is running, in either lane (Local's tasks can run in the side lane: issue #403)."""
+    return any(j.state["running"] and j.state.get("task") in LOCAL_TASKS for j in (srv.jobs, srv.side_jobs))
+
+
+def _edit(srv, path: str, found: tuple, body: dict) -> tuple[dict, int]:
+    """Edit... (its name, creator, note and page on a store) and Fill in from its page, for a Local product (issue
+    #416): each changes its record only while nothing else is changing Local's (local.WRITING), and says so when
+    something is. Fill in reads its page first, as anyone sees it (nothing of yours is sent)."""
+    from .. import local
+    wait = ({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
+    if _local_busy(srv):
+        return wait
+    got = None
+    if path == "/api/local/from-page":
+        if not found[1].get("page"):
+            return {"error": "Give it its page on a store first, with Edit..."}, 400
+        try:
+            got = app.wishlists.from_product_page(found[1]["page"], app.read_store_page)
+        except app.wishlists.LinkError as e:   # (its reason, as a sentence the translations have)
+            return {"error": f"{str(e)[:1].upper()}{str(e)[1:]}."}, 400
+        if not got:
+            return {"error": "Its page doesn't say what it is."}, 400
+    if _local_busy(srv) or not local.WRITING.acquire(timeout=2):   # (read again after the page: a task may have begun)
+        return wait
+    try:
+        if got is not None:
+            done = local.fill_from_page(srv.cfg, app.root_dir(srv.cfg), found[0], got)
+        else:
+            given = {k: str(body[k])[:2000] for k in ("name", "creator", "note", "link") if isinstance(body.get(k), str)}
+            rec = local.edit(srv.cfg, app.root_dir(srv.cfg), found[0], **given)
+            done = {"name": rec["name"], "creator": rec["creator"], "note": rec.get("note"), "link": rec.get("page")}
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    finally:
+        local.WRITING.release()
+    srv.forget_index()
+    return {"ok": True, **done}, 200
+
+
 def _local(self, path: str, body: dict):
     """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
     it is, or take one out."""
@@ -94,44 +138,8 @@ def _local(self, path: str, body: dict):
             return self._json({"error": f"Couldn't save the picture: {e.strerror or e}."}, 500)
         srv.forget_index()
         return self._json({"ok": True})
-    if path == "/api/local/edit":   # its name, creator, note and store page (issue #416)
-        if any(j.state["running"] and j.state.get("task") in ("add-local", "rescan-local", "remove-local", "move")
-               for j in (srv.jobs, srv.side_jobs)):
-            return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
-        given = {k: str(body[k])[:2000] for k in ("name", "creator", "note", "link") if isinstance(body.get(k), str)}
-        try:
-            rec = local.edit(srv.cfg, app.root_dir(srv.cfg), found[0], **given)
-        except ValueError as e:
-            return self._json({"error": str(e)}, 400)
-        srv.forget_index()
-        return self._json({"ok": True, "name": rec["name"], "creator": rec["creator"], "note": rec.get("note"),
-                           "link": rec.get("page")})
-    if path == "/api/local/from-page":   # its name, creator, tags, 18+ and picture, from its page on a store (#416)
-        if any(j.state["running"] and j.state.get("task") in ("add-local", "rescan-local", "remove-local", "move")
-               for j in (srv.jobs, srv.side_jobs)):
-            return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
-        if not found[1].get("page"):
-            return self._json({"error": "Give it its page on a store first, with Edit..."}, 400)
-        try:   # (its public page, as anyone can see it: nothing of yours is sent)
-            got = app.wishlists.from_product_page(found[1]["page"], app.read_store_page)
-        except app.wishlists.LinkError as e:   # (its reason, as a sentence the translations have)
-            return self._json({"error": f"{str(e)[:1].upper()}{str(e)[1:]}."}, 400)
-        if not got:
-            return self._json({"error": "Its page doesn't say what it is."}, 400)
-        picture = None
-        url = app.sets.product_picture(got["store"], got.get("thumbnail"))   # (only from its store's own image host)
-        if url and got["store"] in app.STORES:
-            fetched = app.fetch_picture(url, app.STORES[got["store"]]["referer"], hosts=app.sets.STORE_IMAGE_HOSTS[got["store"]])
-            picture = fetched[0] if fetched and fetched[1] in ("image/png", "image/jpeg") else None
-        try:
-            rec = local.fill_in(srv.cfg, app.root_dir(srv.cfg), found[0], got, picture)
-        except ValueError as e:
-            return self._json({"error": str(e)}, 400)
-        if got.get("adult") is True:   # (its store says so: as a store's own mark does, issue #311)
-            app.MarkStore().change("adult", {app.tag_key("local", rec["name"], rec.get("key"))}, True)
-        srv.forget_index()
-        return self._json({"ok": True, "name": rec["name"], "creator": rec["creator"],
-                           "tags": len(rec.get("suggested_tags") or []), "picture": bool(picture), "adult": got.get("adult") is True})
+    if path in ("/api/local/edit", "/api/local/from-page"):   # its name, creator, note and store page (issue #416)
+        return self._json(*_edit(srv, path, found, body))
     if path == "/api/local/unitypackage":   # a Unity package of it, made without Unity (issue #382)
         return self._json(*_unitypackage(srv, found[1]))
     if path == "/api/local/remove" and body.get("confirm") is not True:

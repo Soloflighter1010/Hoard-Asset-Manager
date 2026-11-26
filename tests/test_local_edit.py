@@ -97,7 +97,7 @@ class Edit(IsolatedTestCase):
     def test_filled_in_from_its_page(self):
         local.edit(self.cfg, self.root, self.key, link="https://booth.pm/en/items/42")
         got = {"store": "booth", "name": "Fox Hoodie", "creator": "Kitsu Works", "store_tags": ["hoodie", "Fox", "  "]}
-        local.fill_in(self.cfg, self.root, self.key, got, PNG)
+        self.assertTrue(local.fill_in(self.cfg, self.root, self.key, got, PNG)[1], "its picture used")
         a = self.asset()
         self.assertEqual((a["name"], a["creator"]), ("Fox Hoodie", "Kitsu Works"))
         self.assertEqual(sorted(a["suggested"]), ["fox", "hoodie"])
@@ -107,6 +107,65 @@ class Edit(IsolatedTestCase):
         self.assertEqual((entry["name"], sorted(entry.get("suggested_tags") or [])), ("Fox Hoodie", ["fox", "hoodie"]),
                          "catalog.json, as written, has them")
 
+    def test_its_suggested_tags_go_with_its_page(self):
+        local.edit(self.cfg, self.root, self.key, link="https://booth.pm/en/items/42")
+        local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "store_tags": ["hoodie", "fox"]})
+        self.assertEqual(sorted(self.asset()["suggested"]), ["fox", "hoodie"])
+        local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "store_tags": []})
+        self.assertEqual(self.asset()["suggested"], [], "a page with none: the old ones go")
+        local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "store_tags": ["hoodie"]})
+        local.edit(self.cfg, self.root, self.key, link="https://ash.gumroad.com/l/hat")
+        self.assertEqual(self.asset()["suggested"], [], "another page: its old page's go")
+
+    def test_a_picture_you_chose_stays(self):
+        local.choose_picture(self.cfg, self.root, self.key, __import__("base64").b64encode(PNG).decode())
+        chosen = local._chosen(self.key).read_bytes()
+        other = PNG[:-12] + b"\x00" * 12   # (another picture, as far as Hoard can tell)
+        _, used = local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "name": "Kit"}, other)
+        self.assertFalse(used)
+        self.assertEqual(local._chosen(self.key).read_bytes(), chosen, "yours, still")
+
+    def test_a_manifests_suggested_tags_are_checked(self):
+        for bad in (1, True, "fox", {"a": 1}, [1, None, "  "]):
+            with self.subTest(bad=bad):
+                manifest = downloader.Manifest(local.local_dir(self.root))
+                manifest.assets[self.key]["suggested_tags"] = bad
+                manifest.save()
+                self.assertEqual(self.asset()["suggested"], [], "left out, and the catalog still made")
+
+    def test_page_tags_you_refused_arent_suggested(self):
+        self.cfg["tags"] = {**self.cfg["tags"], "blocklist": ["free"]}
+        TagStore().change({"action": "hide", "name": "secret"})
+        local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "store_tags": ["free", "fox", "secret"]})
+        self.assertEqual(self.asset()["suggested"], ["fox"], "neither a word you blocked nor a suggestion you hid")
+
+    def test_a_rename_is_all_or_none(self):
+        old = legacy_tag_key("local", "Kit")
+        TagStore().change({"action": "assign", "keys": [old], "add": ["fox"]})
+        with mock.patch.object(MarkStore, "rekey", side_effect=TimeoutError("tags.lock is busy")):
+            with self.assertRaises(ValueError):
+                local.edit(self.cfg, self.root, self.key, name="Fox Kit")
+        self.assertEqual(self.asset()["name"], "Kit", "not renamed")
+        self.assertEqual(TagStore().load()["items"].get(old), ["fox"], "its tags put back")
+        self.assertNotIn(legacy_tag_key("local", "Fox Kit"), TagStore().load()["items"])
+
+    def test_a_rename_onto_a_choice_the_other_way(self):
+        old, new = legacy_tag_key("local", "Kit"), legacy_tag_key("local", "Fox Kit")
+        MarkStore().change("adult", {old}, True)
+        MarkStore().change("not_adult", {new}, True)   # (a leftover, from a product gone)
+        local.edit(self.cfg, self.root, self.key, name="Fox Kit")
+        self.assertIn(new, MarkStore().keys("adult"))
+        self.assertNotIn(new, MarkStore().keys("not_adult"), "one or the other: what it had wins")
+
+    def test_filled_in_keeps_it_isnt_for_adults(self):
+        local.edit(self.cfg, self.root, self.key, link="https://booth.pm/en/items/42")
+        mark = tag_key("local", "Kit", self.key)
+        MarkStore().change("not_adult", {mark}, True)
+        done = local.fill_from_page(self.cfg, self.root, self.key, {"store": "booth", "name": "Kit", "adult": True})
+        self.assertFalse(done["adult"])
+        self.assertIn(mark, MarkStore().keys("not_adult"), "your word wins over its store's")
+        self.assertNotIn(mark, MarkStore().keys("adult"))
+
     def test_a_name_another_product_in_local_has(self):
         src = self.base / "Other"
         src.mkdir()
@@ -114,9 +173,16 @@ class Edit(IsolatedTestCase):
         local.add(self.cfg, self.root, str(src), name="Hat", creator="Me", copy=True)
         with self.assertRaises(ValueError):
             local.edit(self.cfg, self.root, self.key, name="hat")
+        fox = self.base / "Fox"
+        fox.mkdir()
+        (fox / "Fox.unitypackage").write_bytes(b"pkg")
+        local.add(self.cfg, self.root, str(fox), name="Fox Kit", creator="Me", copy=True)
+        with self.assertRaises(ValueError, msg="kept in JSON, 'Fox Kit [v2]' is known as Fox Kit: it'd take on its tags"):
+            local.edit(self.cfg, self.root, self.key, name="Fox Kit [v2]")
         self.assertEqual(local.edit(self.cfg, self.root, self.key, name="KIT")["name"], "KIT", "its own name in another case")
         got = {"store": "booth", "name": "Hat", "creator": "Kitsu Works"}
-        rec = local.fill_in(self.cfg, self.root, self.key, got)
+        rec, used = local.fill_in(self.cfg, self.root, self.key, got)
+        self.assertFalse(used, "no picture given")
         self.assertEqual((rec["name"], rec["creator"]), ("KIT", "Kitsu Works"), "the rest filled in all the same")
 
     def test_renamed_from_a_name_another_product_shares(self):
@@ -229,10 +295,16 @@ class BringInFromBBLM(IsolatedTestCase):
         status, data = call("/api/local/edit", {"folder": folder, "name": "Ash's Hat", "link": "https://ash.gumroad.com/l/hat"})
         self.assertEqual((status, data["name"], data["link"]), (200, "Ash's Hat", "https://ash.gumroad.com/l/hat"))
         self.assertEqual(call("/api/local/edit", {"folder": folder, "link": "https://example.com"})[0], 400)
+        with mock.patch.dict(srv.side_jobs.state, {"running": True, "task": "bblm"}):   # (an import changing Local)
+            self.assertEqual(call("/api/local/edit", {"folder": folder, "name": "Busy Hat"})[0], 409)
+        with local.WRITING:   # (Local's records being changed elsewhere: the sync folder's look, say)
+            held = threading.Thread(target=lambda: self.assertEqual(call("/api/local/edit", {"folder": folder, "name": "Busy Hat"})[0], 409))
+            held.start()
+            held.join(10)
         page = {"store": "gumroad", "name": "Felt Hat", "creator": "ash", "thumbnail": "https://public-files.gumroad.com/x.png",
                 "store_tags": [], "adult": True}
         with mock.patch.object(server.wishlists, "from_product_page", lambda link, fetch: page), \
-                mock.patch.object(server, "fetch_picture", lambda url, referer, hosts=None: (PNG, "image/png")):
+                mock.patch("hoard.library.fetch_picture", lambda url, referer, hosts=None: (PNG, "image/png")):
             status, data = call("/api/local/from-page", {"folder": folder})
         self.assertEqual((status, data["name"], data["picture"], data["adult"]), (200, "Felt Hat", True, True))
         self.assertIn(tag_key("local", "Felt Hat"), MarkStore().keys("adult"))

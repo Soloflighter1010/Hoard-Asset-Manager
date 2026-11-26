@@ -169,7 +169,7 @@ namespace SoloFlighter.Hoard
             a.Tags = a.Tags.FindAll(t => CleanText(t, 40));
             a.SuggestedTags = a.SuggestedTags.FindAll(t => CleanText(t, 40));
             if (!trustLinks || !StoreLink(a.Store, a.Url)) a.Url = null;
-            a.Page = trustLinks ? PublicPage(a.Store, e.Str("page")) : null;
+            a.Page = !trustLinks ? null : a.Store == "Local" ? LocalPage(e.Str("page")) : PublicPage(a.Store, e.Str("page"));
             string location = e.Str("location");
             if (location != null)
             {
@@ -360,6 +360,18 @@ namespace SoloFlighter.Hoard
             // a Booth item's page that names no language doesn't open the item for everyone: its English page does
             if (ok && store == "Booth" && On(host, "booth.pm") && path.StartsWith("/items/")) path = "/en" + path;
             return ok ? "https://" + host + path : null;
+        }
+
+        /// <summary>A Local product's page on a store (Hoard 5.2, issue #416): a public page on whichever of the stores it's
+        /// on, as Hoard decides it for that store; null for anything else.</summary>
+        public static string LocalPage(string url)
+        {
+            foreach (string store in new[] { "Booth", "Gumroad", "Jinxxy", "Payhip", "Itch" })
+            {
+                string page = PublicPage(store, url);
+                if (page != null) return page;
+            }
+            return null;
         }
 
         /// <summary>Whether a host is a store's site.</summary>

@@ -452,11 +452,13 @@ class Metadata(IsolatedTestCase):
         db.write("library.json", {"items": [product]})
         db.write("tags.json", {"items": {old: ["winter"]}, "notes": {old: "My note"}})
         db.write("marks.json", {"hidden": [old]})
-        db.write("sets.json", {"sets": [{"id": "a", "items": [old]}]})
+        db.write("sets.json", {"sets": [{"id": "a", "items": [old], "marks": {"photo.png": [[old, 0.25, 0.5]]}}]})
         db.write("library.json", {"items": [{**product, "name": "New Hoodie"}]})
         self.assertEqual(db.read("tags.json"), {"items": {new: ["winter"]}, "notes": {new: "My note"}})
         self.assertEqual(db.read("marks.json")["hidden"], [new])
         self.assertEqual(db.read("sets.json")["sets"][0]["items"], [new])
+        self.assertEqual(db.read("sets.json")["sets"][0]["marks"], {"photo.png": [[new, 0.25, 0.5]]},
+                         "its place on the set's photo too (issue #416)")
         raw = db.connection.execute("SELECT body FROM documents WHERE name='tags.json'").fetchone()[0]
         self.assertIn("product:booth:1", raw)
 

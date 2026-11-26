@@ -130,6 +130,9 @@ function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
   if (!inSets()) state.set = "";
   wishScope();
+  // (Local's tab by store, issue #416: only in Local, and only while one of its products is from that store)
+  if (state.source && (state.store !== "Local" ||
+      !DATA.assets.some(a => a.store === "Local" && inView(a) && (a.source || "none") === state.source))) state.source = "";
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
   drawSets();
@@ -1055,7 +1058,8 @@ function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
   state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
-  state.source = Object.prototype.hasOwnProperty.call(LOCAL_SOURCES, p.get("from") || "") ? p.get("from") : "";
+  state.source = state.store === "Local" && Object.prototype.hasOwnProperty.call(LOCAL_SOURCES, p.get("from") || "") ? p.get("from") : "";
+  if (state.store === "Local") state.lib = "";   // (Local's tabs are by store, not by library folder)
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
@@ -1723,7 +1727,8 @@ viewListen("downloads", $("#storeSeg"), "click", e => {
   const from = e.target.closest("[data-source]");   // one of Local's tabs (issue #416): the same, for every store
   if (from) { state.source = state.source === from.dataset.source ? "" : from.dataset.source; render(); return; }
   const b = e.target.closest("[data-store]");
-  if (b) { state.store = b.dataset.store; state.set = ""; if (!b.dataset.store) state.lib = ""; render(); }   // (Sets: every set)
+  // (Sets: every set. Local has its own tabs, by store, in place of the library folders': neither carries over, #416)
+  if (b) { state.store = b.dataset.store; state.set = ""; state.source = ""; if (!b.dataset.store || b.dataset.store === "Local") state.lib = ""; render(); }
 });
 viewListen("downloads", $("#sort"), "change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 viewListen("downloads", $("#creatorFind"), "input", e => { state.creatorFind = e.target.value; render(); });

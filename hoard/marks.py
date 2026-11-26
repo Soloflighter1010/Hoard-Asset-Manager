@@ -230,15 +230,19 @@ class MarkStore:
             return False
         with self._lock:
             data = self.load()
-            changed = False
+            changed, moved = False, []
             for kind in KINDS:
                 if old in data[kind]:
                     data[kind] = (data[kind] - ({old} if not keep else set())) | {new}
                     changed = True
+                    moved.append(kind)
                 for i, t in list(data["ids"][kind].items()):
                     if t == old and not keep:
                         data["ids"][kind][i] = new
                         changed = True
+            for kind in moved:   # (one or the other, as change keeps them: what it brings wins over what was there)
+                if kind in OPPOSITES and new in data[OPPOSITES[kind]]:
+                    self._unmark(data, OPPOSITES[kind], {new})
             if changed:
                 self._save(data)
             return changed

@@ -82,6 +82,13 @@ def clean_manifest(data, store_dir: Path, trust_links: bool = True) -> tuple[dic
                 rec.pop("location")
         if rec.get("note") is not None:
             rec["note"] = clean_text(rec["note"], 300) or None
+        if "suggested_tags" in rec:   # the tags its page gave it (issue #416): a list of clean tags, or none
+            given = rec["suggested_tags"] if store == "local" and isinstance(rec["suggested_tags"], list) else []
+            tidy = [t for t in dict.fromkeys(clean_tag(t) for t in given[:30] if isinstance(t, str)) if t]
+            if tidy:
+                rec["suggested_tags"] = tidy
+            else:
+                rec.pop("suggested_tags")
         if "page" in rec or "page_store" in rec:   # a Local product's page on a store (issue #416): a public one only
             from .sets import product_link
             ps = rec.get("page_store")
@@ -1135,6 +1142,7 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     stop = STOPWORDS | {w.lower() for w in tcfg.get("extra_stopwords", [])}
     tagdata = TagStore().load()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
+    refused = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"])   # (a page's tags: never these)
     assets = read_library(cfg, root)
     if not assets:
         return [], {}
@@ -1160,7 +1168,7 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
         folder = f"{a['store']}/{a['folder']}"
         key = tag_key(a["store"], a["name"], a.get("library_id") or a.get("key"))
         mine = TagStore.tags_for(tagdata, key, a["name"], matcher)
-        a_tags = (ts & tags) | ({t for t in a.get("suggested_tags") or [] if isinstance(t, str) and clean_tag(t) == t}
+        a_tags = (ts & tags) | ({t for t in a.get("suggested_tags") or [] if isinstance(t, str) and clean_tag(t) == t} - refused
                                if a["store"] == "Local" else set())   # (a Local product's from its page: issue #416)
         a_tags = sorted(a_tags - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
