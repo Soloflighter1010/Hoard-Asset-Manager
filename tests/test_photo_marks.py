@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests.isolation import IsolatedTestCase
-from hoard import config, library, server, sets
+from hoard import config, library, server, sets, storage
 from hoard.tags import tag_key
 
 try:
@@ -109,7 +109,7 @@ class InHoard(IsolatedTestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
-        sets.SetStore().path.unlink(missing_ok=True)
+        storage.remove(sets.SetStore().path, missing_ok=True)   # (each test from no sets)
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(self.tmp / "dl"), "setup_done": True,
                                                       "ui": {"toured": True}}, lan=False)
         with self.srv.lib.lock:   # (in memory only)

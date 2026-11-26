@@ -13,8 +13,8 @@ trial is compiled with `node scripts/build_ui.mjs` and checked in, so running Ho
 See [APP-SHELL.md](APP-SHELL.md) for its scope and measured cost. It runs a small web server on this computer, and its
 window (or your browser) shows the pages that server serves. Everything else is a part of that program.
 
-Private metadata is the JSON files in the table below. A sealed SQLite database for them is written and tested but
-held back behind `HOARD_METADATA=sqlite`: see [STORAGE.md](STORAGE.md) for why, and what it needs first.
+Private metadata is the documents in the table below, kept in a sealed SQLite database (`metadata.sqlite3`) since
+5.2.0 beta 14, with each one's JSON file kept beside it for earlier releases: see [STORAGE.md](STORAGE.md).
 
 | Part | What it does | Code | Its files |
 | --- | --- | --- | --- |
@@ -44,9 +44,9 @@ Where the app-data folder is: `%LOCALAPPDATA%\Hoard` on Windows, `~/Library/Appl
 `~/.local/share/Hoard` on Linux (`hoard/paths.py`: `data_dir()`). The downloads folder is yours to choose
 (`hoard/config.py`: `root_dir()`).
 
-Private settings and metadata are JSON files in Hoard's app-data folder, as are the public catalog, asset and tag
-exports in the downloads folder. With `HOARD_METADATA=sqlite` (off by default, and not for everyday use yet) the
-private ones move into the sealed `metadata.sqlite3` instead. See [STORAGE.md](STORAGE.md).
+Private settings and metadata are kept in the sealed `metadata.sqlite3` in Hoard's app-data folder (with JSON copies
+beside it, for earlier releases); the public catalog, asset and tag exports in the downloads folder are JSON files.
+`HOARD_METADATA=json` keeps the private ones in JSON files too. See [STORAGE.md](STORAGE.md).
 
 The server dispatches requests through the registry in `hoard/api/`. Store parsers and capabilities live together
 in `hoard/stores/`; see [STORES.md](STORES.md). One `Scheduler` owns foreground and maintenance work, including

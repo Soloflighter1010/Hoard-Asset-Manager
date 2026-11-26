@@ -76,9 +76,9 @@ Tests enforce most of these, so a change that breaks one fails its check.
   by its hash, which is worked out as the page is served.
 - **New UI uses text nodes and DOM attributes.** Older sections escape text with `esc()`; store links pass `safeUrl()` and `storeUrl()` in the page, as well as
   `safe_url()` and `store_link()` in Python.
-- **Private documents go through `hoard/storage.py`** (`read_document`, `write_document`): JSON files written with
-  `write_file_safely`, as public files are. Its SQLite database is held back behind `HOARD_METADATA=sqlite`
-  (docs/STORAGE.md).
+- **Private documents go through `hoard/storage.py`** (`read_document`, `write_document`, `exists`, `remove`):
+  they're kept in SQLite (`metadata.sqlite3`), so a test or tool that writes or deletes `tags.json` itself changes
+  only its JSON copy. `HOARD_METADATA=json` keeps them in JSON files (docs/STORAGE.md).
 - **Shared code has one owner:** the shell mounts common windows once, both views use the same product
   components, and each piece of security code is defined exactly once.
 - **Dependencies are hash-locked,** and workflows pin every action to a commit.

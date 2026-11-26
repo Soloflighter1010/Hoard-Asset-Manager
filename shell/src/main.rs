@@ -402,8 +402,10 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
         }
         let failed = !matches!(&status, Ok(s) if s.success());
         if failed && !server.opened.load(Ordering::SeqCst) {   // (one that ended well never opened: a second start)
+            let why = why_not_started(&server);
+            eprintln!("Hoard: {why} ({status:?})");   // (said where it was started from too: a dialog no one sees, in CI)
             app.dialog()
-                .message(why_not_started(&server))
+                .message(why)
                 .title("Hoard")
                 .kind(MessageDialogKind::Error)
                 .blocking_show();
@@ -481,6 +483,7 @@ fn main() {
             #[cfg(target_os = "linux")]
             watch_page(&window, app.handle().clone(), server.clone());
             if let Err(why) = start_server(&handle, &server) {
+                eprintln!("Hoard couldn't start its server ({why}).");   // (and where it was started from)
                 handle
                     .dialog()
                     .message(format!("Hoard couldn't start its server ({why})."))

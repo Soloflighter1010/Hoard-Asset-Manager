@@ -13,6 +13,10 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 
 | What | What it's for |
 |---|---|
+| `metadata.sqlite3` | Your settings, library list, tags, marks, sets and most of the `.json` files below, kept together in one database (5.2.0 beta 14). A change is saved whole or not at all, even if Hoard is stopped part way through. The `.json` files are still kept up to date beside it, as copies an earlier Hoard can read, so going back to one keeps your library, and what it changes in them comes in the next time this Hoard starts. Close one before starting the other |
+| `<name>.json.pre-sqlite-v1` | Each of those files as it was when Hoard first put it in `metadata.sqlite3`, kept as it was. Hoard never deletes them |
+| `metadata.before-recovery-<id>.sqlite3` | The database as it was, kept when Hoard couldn't verify it (its `integrity.key` lost or replaced) before Hoard went on with what was in it: its links and pictures are hidden until you refresh your stores, and automatic work is turned off until you turn it on again |
+| `<name>.json.legacy-conflict-<time>` | A `.json` copy that something else changed in a way Hoard couldn't bring in (it isn't valid JSON, say), kept as it was |
 | `sign-ins/` | Your store sign-ins, one folder per store, encrypted by your operating system. Never share this folder |
 | `config.json` | Your settings. See [Settings](Settings) |
 | `library.json` | Your library list: names, creators, links and picture addresses for what you own |
@@ -91,7 +95,7 @@ on macOS and Linux.
 
 ## Seals
 
-Every record Hoard writes (its library list and marks, and in the downloads folder each store's `_manifest.json`,
+Every record Hoard writes (each one in `metadata.sqlite3`, its library list and marks, and in the downloads folder each store's `_manifest.json`,
 `catalog.json`, `tags.json` and every `asset.json`) carries a seal made with `integrity.key`. When a record was changed by something other than
 Hoard, the seal shows it, and Hoard:
 
@@ -111,8 +115,8 @@ copy `integrity.key` from Hoard's app-data folder on one computer to the same pl
 ## Backing up, and moving to a new computer
 
 - **Your downloads folder** is ordinary files, with Hoard's records alongside: back it up, or move it, as a whole.
-- **Hoard's app-data folder** holds your settings, library list, tags, marks and `integrity.key`. Copy it to the
-  same place on a new computer to keep them, with valid seals.
+- **Hoard's app-data folder** holds your settings, library list, tags, marks (all in `metadata.sqlite3`) and
+  `integrity.key`. Copy it, with Hoard closed, to the same place on a new computer to keep them, with valid seals.
 - **Sign-ins don't move.** They're encrypted for your account on the computer they were made on, so on a new
   computer, sign in to your stores again.
 

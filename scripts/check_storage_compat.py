@@ -89,7 +89,7 @@ def request(origin, method, path, body=None, key=None):
 
 def shell_check(root, home, *, sqlite=False, recovered=False, command=None):
     """Exercise startup, authentication and clean shutdown through the real shell protocol."""
-    env = {**os.environ, "HOARD_DATA_DIR": str(home), "HOARD_METADATA": "sqlite" if sqlite else "", "PYTHONPATH": str(root)}
+    env = {**os.environ, "HOARD_DATA_DIR": str(home), "HOARD_METADATA": "sqlite" if sqlite else "json", "PYTHONPATH": str(root)}
     messages = queue.Queue()
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errors:
         process = subprocess.Popen(command or [sys.executable, "-m", "hoard", "--shell"], cwd=root, env=env,
@@ -183,7 +183,7 @@ def main():
                 subprocess.run([sys.executable, str(Path(__file__).resolve()), "--worker", phase, "--home", str(home)],
                                cwd=ROOT, check=True, capture_output=True, text=True, encoding="utf-8", timeout=60)
             current("seed")
-            env = {**os.environ, "HOARD_DATA_DIR": str(home), "HOARD_METADATA": "", "PYTHONPATH": str(release)}
+            env = {**os.environ, "HOARD_DATA_DIR": str(home), "HOARD_METADATA": "json", "PYTHONPATH": str(release)}
             result = subprocess.run([sys.executable, "-c", LEGACY], cwd=release, env=env, check=True,
                                     capture_output=True, text=True, encoding="utf-8", timeout=60)
             current("verify")

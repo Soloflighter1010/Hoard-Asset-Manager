@@ -19,7 +19,7 @@ KEY = b"test metadata key, never a secret"
 
 class Metadata(IsolatedTestCase):
     def setUp(self):
-        on = mock.patch.dict(os.environ, {"HOARD_METADATA": "sqlite"})   # (off unless asked for: OffByDefault)
+        on = mock.patch.dict(os.environ, {"HOARD_METADATA": "sqlite"})   # (on by default too: OnByDefault)
         on.start()
         self.addCleanup(on.stop)
         self.tmp = tempfile.TemporaryDirectory()
@@ -154,7 +154,7 @@ class Metadata(IsolatedTestCase):
                         "stores": {"booth": {"count": 1}}}
         current.save()
         storage.close_all()
-        with mock.patch.dict(os.environ, {"HOARD_METADATA": ""}):
+        with mock.patch.dict(os.environ, {"HOARD_METADATA": "json"}):
             old_cfg = config.load_config()
             self.assertTrue(old_cfg["setup_done"])
             self.assertEqual(old_cfg["new_days"], 11)
@@ -611,27 +611,45 @@ class Metadata(IsolatedTestCase):
         self.assertFalse(list(self.home.glob("*.pre-sqlite-v1")))
 
 
-class OffByDefault(IsolatedTestCase):
-    """Until the database can recover a lost sealing key and project ambiguous product identities safely,
-    private metadata stays the JSON files it was: nothing is moved, and no database is made."""
+class OnByDefault(IsolatedTestCase):
+    """Private metadata is kept in SQLite with nothing set (#320, #348): a JSON-only home moves into it as it's first
+    read, keeping the originals and JSON copies."""
+
+    def test_a_json_home_moves_into_sqlite(self):
+        from hoard import config, paths, storage
+        self.assertNotIn("HOARD_METADATA", os.environ)
+        home = paths.data_dir()
+        with mock.patch.dict(os.environ, {"HOARD_METADATA": "json"}):
+            config.save_config({**config.load_config(), "setup_done": True, "new_days": 9})
+        self.assertFalse((home / "metadata.sqlite3").exists())
+        self.assertTrue(storage.enabled())
+        self.assertEqual(config.load_config()["new_days"], 9)
+        self.assertTrue((home / "metadata.sqlite3").is_file())
+        self.assertTrue((home / "config.json.pre-sqlite-v1").is_file(), "the original, kept")
+        self.assertEqual(json.loads((home / "config.json").read_text("utf-8"))["new_days"], 9, "its JSON copy")
+        self.assertTrue(storage.managed(home / "config.json"))
+
+
+class JsonWhenAsked(IsolatedTestCase):
+    """With HOARD_METADATA=json, private metadata stays the JSON files it was: nothing is moved, and no database is
+    made."""
 
     def test_documents_stay_json_files(self):
         from hoard import config, paths, storage
         from hoard.tags import TagStore
-        self.assertNotIn("HOARD_METADATA", os.environ)
         home = paths.data_dir()
-        cfg = config.load_config()
-        config.save_config({**cfg, "setup_done": True})
-        TagStore().change({"action": "create", "name": "avatars"})
-        storage.identify_local({"a": {"name": "Rusk", "creator": "Kitsu"}})
-        with storage.transaction():
-            self.assertEqual(storage.current_references("config.json", {"download_skip": ["booth:rusk"]}),
-                             {"download_skip": ["booth:rusk"]})
-        self.assertTrue(json.loads((home / "config.json").read_text("utf-8"))["setup_done"])
-        self.assertTrue((home / "tags.json").is_file())
-        self.assertFalse((home / "metadata.sqlite3").exists(), "no database")
-        self.assertEqual(list(home.glob("*.pre-sqlite-v1")), [], "nothing set aside")
-        self.assertFalse(storage.managed(home / "config.json"))
-        with mock.patch.dict(os.environ, {"HOARD_METADATA": "sqlite"}):
-            self.assertTrue(storage.managed(home / "config.json"))
+        with mock.patch.dict(os.environ, {"HOARD_METADATA": "json"}):
+            cfg = config.load_config()
+            config.save_config({**cfg, "setup_done": True})
+            TagStore().change({"action": "create", "name": "avatars"})
+            storage.identify_local({"a": {"name": "Rusk", "creator": "Kitsu"}})
+            with storage.transaction():
+                self.assertEqual(storage.current_references("config.json", {"download_skip": ["booth:rusk"]}),
+                                 {"download_skip": ["booth:rusk"]})
+            self.assertTrue(json.loads((home / "config.json").read_text("utf-8"))["setup_done"])
+            self.assertTrue((home / "tags.json").is_file())
+            self.assertFalse((home / "metadata.sqlite3").exists(), "no database")
+            self.assertEqual(list(home.glob("*.pre-sqlite-v1")), [], "nothing set aside")
+            self.assertFalse(storage.managed(home / "config.json"))
+        self.assertTrue(storage.managed(home / "config.json"))
 

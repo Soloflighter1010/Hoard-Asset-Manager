@@ -11,7 +11,7 @@ machine or CI run. It is not a claim that every acceptance criterion is complete
 | #317 | Versioned public export [schemas](DATA-FORMATS.md), shared Python/C# acceptance examples and generated-bundle drift checks; existing older catalog compatibility is preserved. |
 | #318 | Acorn parses JavaScript translation calls; Svelte's parser covers the trial component. Conditional branches contribute keys while condition literals do not. Diagnostics identify similar obsolete English keys. |
 | #319 | Domain handlers and one route registry own method, path, authentication, mutation status and request/response descriptions. [API.md](API.md) is generated from that registry. |
-| #320 | **Held back behind `HOARD_METADATA=sqlite`; JSON files remain the default.** Per-document seals, distinct product references, resumable legacy migration, current JSON mirrors and quarantined key recovery are implemented; native packaged validation and beta activation remain. Public exports retain their formats. [STORAGE](STORAGE.md) documents recovery limits and the measured 50,000-product benchmark. |
+| #320 | **On by default since 5.2.0 beta 14; `HOARD_METADATA=json` keeps the JSON files.** Per-document seals, distinct product references, resumable legacy migration, current JSON mirrors and quarantined key recovery are implemented, and `scripts/check_native_storage.py` checks the installed app on Windows, macOS and Linux (migration, interruption, rollback to beta 12 and back, lost/foreign keys). Public exports retain their formats. [STORAGE](STORAGE.md) documents recovery limits and the measured 50,000-product benchmark. |
 | #321 | One persistent Library/Downloads shell, cached projections, history, common windows and product components. [APP-SHELL](APP-SHELL.md) records the bounded Svelte trial, costs and migration boundaries. |
 | #322 | One adapter per store, explicit capabilities and request pacing, sanitized offline fixtures and safe health reporting. Login pages, saved-page data, persisted store status, direct links and file-selection naming also go through adapter policy hooks. See [STORES](STORES.md). |
 | #323 | One priority scheduler owns background workers and recurring checks; package checkpoints and waiting user intents survive restart. Tasks exposes progress and Pause/Stop/Resume. See [SCHEDULER](SCHEDULER.md). |
@@ -21,7 +21,7 @@ machine or CI run. It is not a claim that every acceptance criterion is complete
 
 Private metadata migration happens on first access. Keep the retained
 `.json.pre-sqlite-v1` files until at least the following release; do not run an old
-experimental SQLite binary with `HOARD_METADATA=sqlite` against a newer schema. Older JSON releases read current mirrors; close releases separately and reopen current SQLite after a crash to finish pending mirrors.
+experimental SQLite build (before beta 14, with `HOARD_METADATA=sqlite`) against a newer schema. Older JSON releases read current mirrors; close releases separately and reopen current SQLite after a crash to finish pending mirrors.
 Read the storage recovery section before rolling back. External download files
 and Unity project operations retain their existing safety and recovery paths;
 the SQLite transaction is not a cross-filesystem crash journal.

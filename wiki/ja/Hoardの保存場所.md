@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 11a0728378f1). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 3da0110e529c). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <b>日本語</b> · <a href="Hoard가-저장하는-곳">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 Hoardが保管するものは2つに分かれます。あなたが選んだフォルダーにあるダウンロードと、それ以外のすべてを入れた、あなたのユーザーアカウント専用の非公開のアプリデータフォルダーです。
@@ -13,6 +13,10 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 
 | もの | 何のためか |
 |---|---|
+| `metadata.sqlite3` | 設定、ライブラリの一覧、タグ、印、セット、そして下の `.json` ファイルのほとんどを、1つのデータベースにまとめて保存したもの(5.2.0ベータ14から)。変更は全部が保存されるか、まったく保存されないかのどちらかで、途中でHoardが止まっても半分だけ保存されることはありません。`.json` ファイルもその横で最新のまま保たれ、前のHoardが読めるコピーになります。前のHoardに戻してもライブラリはそのままで、前のHoardがそこで変えたことは、このHoardを次に起動したときに取り込まれます。一方を閉じてからもう一方を起動してください |
+| `<name>.json.pre-sqlite-v1` | それぞれのファイルの、Hoardが初めて `metadata.sqlite3` に入れたときのままのもの。Hoardが消すことはありません |
+| `metadata.before-recovery-<id>.sqlite3` | Hoardがデータベースを確かめられなかったとき(`integrity.key` がなくなったり、別のものに替わったりしたとき)に、中身を使い続ける前に残した、そのままのデータベース。リンクと画像はストアを更新するまで隠され、自動の作業は自分でオンにするまでオフになります |
+| `<name>.json.legacy-conflict-<time>` | Hoard以外のものが、Hoardが取り込めない形で変えた `.json` のコピー(正しいJSONではない、など)。そのまま残します |
 | `sign-ins/` | ストアのサインイン。ストアごとに1つのフォルダーで、オペレーティングシステムによって暗号化されます。このフォルダーは決して共有しないでください |
 | `config.json` | 設定。[設定](設定)をご覧ください |
 | `library.json` | ライブラリの一覧。持っているものの名前、クリエイター、リンク、画像のアドレス |
@@ -86,7 +90,7 @@ LinuxのFlatpakも `~/.local/share/Hoard` を使います(`~/.var/app` の下の
 
 ## 封印
 
-Hoardが書くすべての記録(ライブラリの一覧と印、ダウンロードフォルダーの各ストアの `_manifest.json`、`catalog.json`、`tags.json`、すべての `asset.json`)には、`integrity.key` で作った封印がついています。記録がHoard以外のものに変更されると、封印でそれが分かり、Hoardは次のようにします。
+Hoardが書くすべての記録(`metadata.sqlite3` の中のそれぞれ、ライブラリの一覧と印、ダウンロードフォルダーの各ストアの `_manifest.json`、`catalog.json`、`tags.json`、すべての `asset.json`)には、`integrity.key` で作った封印がついています。記録がHoard以外のものに変更されると、封印でそれが分かり、Hoardは次のようにします。
 
 - それを伝え、変更されたファイルのコピーを見られるように残します(`_manifest.changed-<date>.json` など)。
 - 記録は残しますが、リンクは残さず、次の更新や同期のときにストアからリンクを取得し直します(編集された `marks.json` は、選択は残しますが、非表示のライブラリのPINは消します)。
@@ -100,7 +104,7 @@ Hoardが書くすべての記録(ライブラリの一覧と印、ダウンロ�
 ## バックアップと、新しいコンピューターへの引っ越し
 
 - **ダウンロードフォルダー** は、Hoardの記録が横にある、ふつうのファイルです。まるごとバックアップしたり移動したりしてください。
-- **Hoardのアプリデータフォルダー** には、設定、ライブラリの一覧、タグ、印、`integrity.key` があります。新しいコンピューターの同じ場所にコピーすると、封印が有効なまま引き継げます。
+- **Hoardのアプリデータフォルダー** には、設定、ライブラリの一覧、タグ、印(すべて `metadata.sqlite3` の中)と `integrity.key` があります。Hoardを閉じてから新しいコンピューターの同じ場所にコピーすると、封印が有効なまま引き継げます。
 - **サインインは移せません。** 作ったコンピューターのあなたのアカウント用に暗号化されているので、新しいコンピューターではストアにもう一度サインインしてください。
 
 新しいコンピューターでダウンロードフォルダーが別の場所にある場合は、[設定](設定)で選んでください。

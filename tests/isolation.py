@@ -15,6 +15,31 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+def _close_metadata_in(folder) -> None:
+    """Close the database of every home inside a folder about to be deleted. Hoard keeps its metadata in SQLite, and
+    Windows won't delete a file that's open: a test that gives Hoard a data folder of its own (HOARD_DATA_DIR in a
+    TemporaryDirectory) would otherwise fail as its folder is cleaned up."""
+    storage = sys.modules.get("hoard.storage")
+    if storage is None:
+        return
+    folders = {Path(os.path.abspath(folder)), Path(folder).resolve()}
+    with storage._instances_lock:
+        for home in [h for h in storage._instances
+                     if any(h == f or f in h.parents or f in h.resolve().parents for f in folders)]:
+            storage._instances.pop(home).close()
+
+
+_cleanup = tempfile.TemporaryDirectory.cleanup
+
+
+def _closing_cleanup(self) -> None:
+    """TemporaryDirectory.cleanup, after closing any database in it (_close_metadata_in)."""
+    _close_metadata_in(self.name)
+    _cleanup(self)
+
+
+tempfile.TemporaryDirectory.cleanup = _closing_cleanup
+
 _bootstrap = tempfile.TemporaryDirectory(prefix="hoard-test-imports-")
 atexit.register(_bootstrap.cleanup)
 os.environ["HOARD_DATA_DIR"] = str(Path(_bootstrap.name) / "data")
@@ -158,3 +183,11 @@ class IsolatedTestCase(unittest.TestCase):
             original(current)
         isolated_setup.__func__._hoard_original = original
         cls.setUpClass = isolated_setup
+
+    def fresh_home(self) -> Path:
+        """A home of this test's own, inside its class's: for a test whose metadata must start from nothing. (In SQLite
+        a product's identity outlives what's kept about it, so in a class's one home its tests would meet each other's
+        products: a Local "Kit" added by each is a new product, with a key of its own.) Returns its folder."""
+        home = TestHome().__enter__()
+        self.addCleanup(home.close)
+        return home.root

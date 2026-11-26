@@ -3,6 +3,7 @@ tabs by store, and a BB's Library Manager library brought in."""
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -33,7 +34,15 @@ PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08
 
 
 class Edit(IsolatedTestCase):
+    """With the metadata in SQLite, as Hoard keeps it; EditKeptInJson runs each again with it kept in JSON."""
+    in_json = False
+
     def setUp(self):
+        if self.in_json:
+            kept = mock.patch.dict(os.environ, {"HOARD_METADATA": "json"})
+            kept.start()
+            self.addCleanup(kept.stop)
+        self.fresh_home()   # (each test's own products: in SQLite, a Kit added before is another product)
         self.base = Path(tempfile.mkdtemp()).resolve()
         self.addCleanup(shutil.rmtree, self.base, True)
         self.root = self.base / "Hoard"
@@ -139,7 +148,36 @@ class Edit(IsolatedTestCase):
         local.fill_in(self.cfg, self.root, self.key, {"store": "booth", "store_tags": ["free", "fox", "secret"]})
         self.assertEqual(self.asset()["suggested"], ["fox"], "neither a word you blocked nor a suggestion you hid")
 
+    def known_by_name(self):
+        """Kept in JSON, a Local product is known by its name, so a rename moves what's kept about it; in SQLite it's
+        known by its folder, and nothing moves (test_in_sqlite_nothing_moves)."""
+        if not self.in_json:
+            self.skipTest("kept in JSON only: in SQLite a Local product is known by its folder")
+
+    def test_in_sqlite_nothing_moves(self):
+        if self.in_json:
+            self.skipTest("in SQLite only")
+        src = self.base / "Kit2"
+        src.mkdir()
+        (src / "Kit.unitypackage").write_bytes(b"pkg")
+        other = local.add(self.cfg, self.root, str(src), name="Kit", creator="Me", copy=True)["key"]
+        mine, theirs = tag_key("local", "Kit", self.key), tag_key("local", "Kit", other)
+        self.assertNotEqual(mine, theirs, "two of the same name are two products")
+        TagStore().change({"action": "assign", "keys": [theirs], "add": ["fox"]})
+        MarkStore().change("adult", {mine}, True)
+        with mock.patch.object(TagStore, "rekey", side_effect=AssertionError("moved")), \
+                mock.patch.object(MarkStore, "rekey", side_effect=AssertionError("moved")), \
+                mock.patch.object(SetStore, "rekey", side_effect=AssertionError("moved")):
+            local.edit(self.cfg, self.root, self.key, name="Fox Kit")
+        mine = tag_key("local", "Fox Kit", self.key)
+        self.assertEqual(TagStore().load()["items"].get(theirs), ["fox"], "the other Kit keeps its tags")
+        self.assertNotIn(mine, TagStore().load()["items"], "and they aren't this one's")
+        self.assertIn(mine, MarkStore().keys("adult"), "its own mark follows it")
+        [shown] = [a for a in index(self.cfg, self.root)["assets"] if a["name"] == "Fox Kit"]
+        self.assertEqual(shown["tag_key"], mine, "the catalog knows it by the same key")
+
     def test_a_rename_is_all_or_none(self):
+        self.known_by_name()
         old = legacy_tag_key("local", "Kit")
         TagStore().change({"action": "assign", "keys": [old], "add": ["fox"]})
         with mock.patch.object(MarkStore, "rekey", side_effect=TimeoutError("tags.lock is busy")):
@@ -150,6 +188,7 @@ class Edit(IsolatedTestCase):
         self.assertNotIn(legacy_tag_key("local", "Fox Kit"), TagStore().load()["items"])
 
     def test_a_rename_onto_a_choice_the_other_way(self):
+        self.known_by_name()
         old, new = legacy_tag_key("local", "Kit"), legacy_tag_key("local", "Fox Kit")
         MarkStore().change("adult", {old}, True)
         MarkStore().change("not_adult", {new}, True)   # (a leftover, from a product gone)
@@ -186,6 +225,7 @@ class Edit(IsolatedTestCase):
         self.assertEqual((rec["name"], rec["creator"]), ("KIT", "Kitsu Works"), "the rest filled in all the same")
 
     def test_renamed_from_a_name_another_product_shares(self):
+        self.known_by_name()
         src = self.base / "Kit2"
         src.mkdir()
         (src / "Kit.unitypackage").write_bytes(b"pkg")
@@ -202,6 +242,11 @@ class Edit(IsolatedTestCase):
         s = next(x for x in SetStore().load()["sets"] if x["id"] == made)
         self.assertEqual(s["items"], [old, new])
 
+
+
+class EditKeptInJson(Edit):
+    """Edit's tests again, with the metadata kept in JSON (HOARD_METADATA=json), as a JSON-only Hoard keeps it."""
+    in_json = True
 
 def _meta(folder: Path, **fields) -> None:
     folder.mkdir(parents=True)
