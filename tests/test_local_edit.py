@@ -227,6 +227,35 @@ class BringInFromBBLM(IsolatedTestCase):
         self.assertIn(tag_key("local", "Felt Hat"), MarkStore().keys("adult"))
         self.assertEqual(rec["key"], local.by_folder(self.root, folder)[0])
 
+    def test_with_local_turned_off_it_asks_first(self):
+        import threading
+        import unittest
+        if not BROWSER:
+            raise unittest.SkipTest("needs Playwright's Chromium")
+        from playwright.sync_api import sync_playwright
+        from hoard import server
+        cfg = {**self.cfg, "setup_done": True, "ui": {"toured": True, "features": {"local": False}}}
+        srv = server.AppServer(("127.0.0.1", 0), cfg, lan=False)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.server_close)
+        self.addCleanup(srv.shutdown)
+        with mock.patch.object(server, "save_config"), sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            started = []
+            page.on("request", lambda r: started.append(r.url) if "/api/bblm/bring-in" in r.url else None)
+            page.goto(srv.entry_url())
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
+            page.goto(srv.url)
+            page.wait_for_function("() => typeof bblmBringIn === 'function' && typeof featureOn === 'function'")
+            page.evaluate("p => { window.askFolder = async () => p; bblmBringIn(); }", str(self.lib))
+            page.locator("#askDialog", has_text="Local is turned off").wait_for()
+            page.locator("#askDialog button", has_text="Cancel").click()
+            page.wait_for_timeout(300)
+            self.assertEqual(started, [], "not brought in")
+            self.assertFalse(page.evaluate("() => featureOn('local')"), "and Local left off")
+            browser.close()
+
 
 try:
     from tests.test_packages import BROWSER

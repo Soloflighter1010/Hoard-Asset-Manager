@@ -3455,6 +3455,7 @@ async function konoBringIn(path = "") {
   const r = await apiPost("/api/konoasset/preview", { path });
   if (!r.ok) { toast(tr(r.data.error || "That folder couldn't be read.")); return konoBringIn(path); }
   const s = r.data;
+  if (s.local && !await featureNeeded("local")) return;   // (what it makes Local products of needs Local on)
   if (!s.matched && !s.local) {
     await ask(tr("Nothing new to bring in from KonoAsset.") + "\n\n" + konoSummary(s), "OK", false, "");
     return;
@@ -3485,6 +3486,7 @@ async function bblmBringIn(path = "") {
   const r = await apiPost("/api/bblm/preview", { path });
   if (!r.ok) { toast(tr(r.data.error || "That folder couldn't be read.")); return bblmBringIn(path); }
   const s = r.data;
+  if (s.local && !await featureNeeded("local")) return;   // (what it makes Local products of needs Local on)
   if (!s.matched && !s.local) {
     await ask(tr("Nothing new to bring in from BB's Library Manager.") + "\n\n" + bblmSummary(s), "OK", false, "");
     return;
