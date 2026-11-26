@@ -37,6 +37,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from . import vault
 from .common import log
+from .config import feature_on
 
 EVENTS = ("new", "updates", "prices", "tasks", "routine", "other")
 SECRET = "apprise"   # (the name the addresses are kept under)
@@ -390,6 +391,8 @@ def send(cfg: dict, event: str, body: str, title: str = TITLE, link: str | None 
     global _worker
     if event not in chosen(cfg) or not available() or _kept == 0:   # (none kept, as far as Hoard knows)
         return False
+    if not feature_on(cfg, "notifications") or (event == "prices" and not feature_on(cfg, "prices")):
+        return False   # (turned off in Settings, Features: issue #422)
     with _lock:
         if _worker is None or not _worker.is_alive():
             _worker = threading.Thread(target=_work, name="apprise", daemon=True)

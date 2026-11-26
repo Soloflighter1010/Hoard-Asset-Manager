@@ -31,7 +31,7 @@ const art = a => a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="" loa
 
 /* ---------- data */
 async function refreshView(response) {
-  DATA = response;
+  DATA = featureData(response, "assets");   // (what a part of Hoard turned off has is left out: issue #422)
   for (const a of DATA.assets) {
     withStoreTags(a).hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path), a.your_note].join(" "));
   }
@@ -696,7 +696,7 @@ function showDetail(a, focus = true) {
   openId = a.id;
   markCurrent(`.slot[data-id="${a.id}"]`);
   const sections =
-    ((a.used_in || []).length ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
+    ((a.used_in || []).length && featureOn("projects") ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
     otherCopies(a).map(o => `<p class="also"><span translate="no">${esc(tr(o.store === a.store ? (o.creator !== a.creator ? "You also have this again (by {1})." : "You also have this again.")
                                                                          : (o.creator !== a.creator ? "You also have this from {0} (by {1})." : "You also have this from {0}."),
@@ -1053,6 +1053,8 @@ function readHash() {
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
+  // (an address for a part turned off in Settings, Features, as Back gives one: Everything instead, issue #422)
+  if ((state.store === "Local" && !featureOn("local")) || (state.store === "Sets" && !featureOn("sets"))) { state.store = ""; state.set = ""; }
   state.sort = sortFrom(p.get("sort"), SORTS);
   state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";

@@ -20,7 +20,7 @@ from .tags import tag_key
 from .setup import browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
 from . import diagnostics
-from .config import payhip_shops
+from .config import feature_on, payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
 from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
@@ -1525,6 +1525,9 @@ class Jobs:
         from .sets import SetStore
         from .wishlists import READERS, pictures_from_pages, read_store_page, store_pages
         stores = [s for s in stores if s in READERS]
+        if not feature_on(self.cfg, "wishlists"):   # (turned off while it waited its turn, or before Hoard started again)
+            self._set(task="wishlists", message="Wishlists are turned off in Settings, Features, so they weren't read.")
+            return
         self._set(task="wishlists", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
         failed = {s: unreachable_message(s, "read") for s in stores if s not in online}
@@ -1572,7 +1575,7 @@ class Jobs:
             raise stopped
         cheaper = done.get("cheaper") or []
         if cheaper:
-            self._news("cheaper", {"count": len(cheaper), "items": (done.get("cheaper_items") or [])[:10]})
+            self._news("cheaper", {"count": len(cheaper), "items": done.get("cheaper_items") or []})   # (the news names 10)
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
@@ -1596,6 +1599,10 @@ class Jobs:
         store = (stores or ["payhip"])[0]
         label = STORES[store]["label"]
         sid, links = str(what.get("set") or ""), [str(x)[:2000] for x in (what.get("links") or [])[:30]]
+        target = next((x for x in SetStore().load()["sets"] if x.get("id") == sid), {})
+        if not feature_on(self.cfg, "wishlists" if target.get("kind") == "wishlist" else "sets"):   # (turned off since: #422)
+            self._set(task="links", message="That's turned off in Settings, Features, so nothing was added.")
+            return
         wait = float(self.cfg.get(store, {}).get("check_wait", 60))
         got, failed = [], []
         self._set(task="links", store=store, message=f"Reading {label}'s pages in Hoard's browser")
@@ -1632,7 +1639,7 @@ class Jobs:
         from .sets import SetStore
         from .wishlists import READERS
         unread = self._refresh(stores, skip_imported=True, quick=True)
-        if self._forced or self.state.get("error"):
+        if self._forced or self.state.get("error") or not feature_on(self.cfg, "wishlists"):   # (Wishlists turned off: #422)
             return
         try:
             kept = {(s.get("source") or {}).get("store") for s in SetStore().load()["sets"] if s.get("kind") == "wishlist"}

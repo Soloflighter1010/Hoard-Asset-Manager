@@ -222,6 +222,16 @@ def photo_from_page(value, fetch) -> str:
     return found
 
 
+def holds_adult(s: dict, adult_keys: set, not_adult) -> bool:
+    """Whether a set holds a product for adults, as /api/sets works it out (an Adult set, issue #337), for the views'
+    lists of sets: one of its products for adults in your library (adult_keys), or one its store or whoever shared it
+    said is (what's known of it), unless you said it isn't (not_adult). Settings' Products for adults, turned off,
+    leaves such a set out everywhere (issue #422)."""
+    known = s.get("products") if isinstance(s.get("products"), dict) else {}
+    return any(k in adult_keys or (isinstance(known.get(k), dict) and known[k].get("adult") is True and k not in not_adult)
+               for k in s.get("items") or [])
+
+
 def product_picture(store, value) -> str | None:
     """A product's picture: an https address on its store's own image host, or None."""
     return _https_on(value, STORE_IMAGE_HOSTS.get(store, ())) if isinstance(store, str) else None
@@ -721,7 +731,7 @@ class SetStore:
                             cheaper.append((s["name"], clean["name"], old["price"]["text"], clean["price"]["text"]))
                             cheaper_items.append({"key": k, "store": clean["store"], "name": clean["name"], "url": clean.get("url"),
                                                   "thumbnail": clean.get("thumbnail"), "was": old["price"]["text"],
-                                                  "now": clean["price"]["text"]})
+                                                  "now": clean["price"]["text"], "adult": clean.get("adult") is True})
                     elif old.get("was") and clean.get("price"):
                         clean["was"] = old["was"]
                     added += k not in s["items"]

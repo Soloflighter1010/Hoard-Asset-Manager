@@ -18,6 +18,7 @@ DISCORD = re.compile(r'<a href="https://discord\.gg/[A-Za-z0-9]+" target="_blank
 KOFI = re.compile(r'<a class="ghost sm" id="tipKofi" href="https://ko-fi\.com/[A-Za-z0-9_]+" target="_blank" '
                   r'rel="noopener noreferrer">Tip on Ko-fi</a>')
 PAGES = [REPO / "hoard" / "web" / n for n in ("library.html",)]
+SETTINGS_PARTS = REPO / "ui" / "settings.js"   # (Settings' cards, issue #421)
 
 
 class CommunityLinks(IsolatedTestCase):
@@ -42,15 +43,20 @@ class CommunityLinks(IsolatedTestCase):
         for page in PAGES:
             text = page.read_text("utf-8")
             self.assertRegex(text, KOFI, page.name)
-            self.assertIn('<button data-jump="part-tip">Support Hoard</button>', text, "listed down Settings' side")
             self.assertLess(text.index('id="part-tip"'), text.index('id="part-thanks"'))
+        self.assertIn("'part-help', 'part-tip', 'part-thanks'", SETTINGS_PARTS.read_text("utf-8"), "in Settings' Help card")
 
-    def test_every_part_of_settings_is_listed_down_its_side(self):
+    def test_every_setting_is_in_one_of_settings_cards(self):
+        # (#421: Settings' parts are cards, ui/settings.js's PARTS, each setting a row in one by its heading's id. A
+        # setting in none would be lost from the page)
+        parts = SETTINGS_PARTS.read_text("utf-8").split("export const PARTS", 1)[1].split("];", 1)[0]
+        rows = [r for line in re.findall(r"rows: \[([^\]]*)\]", parts) for r in re.findall(r"'([a-z-]+)'", line)]
         for page in PAGES:
             text = page.read_text("utf-8")
-            parts = re.findall(r'<h3 id="(part-[a-z]+)"', text)
-            listed = re.findall(r'data-jump="(part-[a-z]+)"', text)
-            self.assertEqual(listed, parts, page.name)
+            body = text.split('<div class="set-body"', 1)[1].split('</section>', 1)[0]
+            headings = re.findall(r'<h4 id="([a-z-]+)"', body)
+            self.assertGreater(len(headings), 20, page.name)
+            self.assertEqual(sorted(rows), sorted(headings), "each setting in one card, once")
 
 
 if __name__ == "__main__":

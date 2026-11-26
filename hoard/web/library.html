@@ -583,14 +583,16 @@ body.selecting .toast { bottom: 96px; }
 .apptabs a { padding: 7px 12px; border-radius: 9px; font-weight: 700; font-size: 14px; color: var(--dust); text-decoration: none; }
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
+.settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }   /* (Add to Local's, and the other panels') */
+.settings h4 { font: 700 14.5px var(--body); color: var(--bone); margin: 0 0 6px; }   /* a setting's name (its card's is an h3) */
+.set-frame { display: contents; }   /* (Settings' frame, ui/Settings.svelte: its list of parts and its cards sit in the window as they were) */
 .setjump { position: sticky; top: -1px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; margin: -4px -4px 10px; padding: 6px 4px 8px;
   background: var(--ledge); border-bottom: 1px solid var(--seam); box-shadow: 0 -24px 0 0 var(--ledge); }
 .setjump button { border: 0; border-radius: 999px; padding: 5px 11px; background: var(--stone); color: var(--bone);
   font: 600 12.5px var(--body); cursor: pointer; }
 .setjump button:hover { background: var(--seam); }
 .setjump button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-.settings h3[id] { scroll-margin-top: 64px; }
+.settings h4[id] { scroll-margin-top: 64px; }
 /* Settings is a page of its own, the whole window below the bar (as Projects is), its parts listed down the side to
    jump to, and what you change in a column wide enough to read */
 #settingsPanel.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
@@ -603,15 +605,13 @@ body.selecting .toast { bottom: 96px; }
 #settingsPanel.win .setjump button { padding: 7px 12px; border-radius: 9px; background: none; color: var(--dust); text-align: left; font: 700 14px var(--body); }
 #settingsPanel.win .setjump button:hover { color: var(--bone); background: var(--stone); }
 #settingsPanel.win .set-body { flex: 1 1 auto; min-width: 0; max-width: 780px; }
-#settingsPanel.win .set-body > p:first-child { margin-top: 0; }
-#settingsPanel.win h3[id] { scroll-margin-top: 12px; margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--seam);
-  font: 700 16px var(--body); color: var(--bone); }
+#settingsPanel.win h4[id] { scroll-margin-top: 12px; }
 @media (max-width: 860px) {   /* a narrow window: its parts in a row along the top again */
   #settingsPanel.win > .win-body { display: block; padding: 0 16px 40px; }
   #settingsPanel.win .setjump { top: 0; z-index: 2; flex-direction: row; flex-wrap: wrap; width: auto; margin: 0 -16px 10px; padding: 10px 16px;
     background: var(--cave); border-bottom: 1px solid var(--seam); max-height: none; overflow: visible; }
   #settingsPanel.win .setjump button { padding: 5px 11px; border-radius: 999px; background: var(--stone); color: var(--bone); font: 600 12.5px var(--body); }
-  #settingsPanel.win h3[id] { scroll-margin-top: 64px; }
+  #settingsPanel.win :is(h4[id], .set-card) { scroll-margin-top: 64px; }
 }
 /* Hoard's folders: each with what it's for, where it is, and Open */
 .places .librow small + small { margin-top: 1px; }
@@ -1358,8 +1358,8 @@ body.less-motion .tour-try::before { animation: none; }
   <g transform="translate(39.4 32.19) rotate(7)"><g class="hb" data-box="gumroad" style="--i:5;--fx:9px;--fr:55deg"><rect x="-6.55" y="-6.55" width="13.11" height="13.11" rx="3.55" fill="#FF8AD8" style="stroke: var(--cave)" stroke-width="2"/></g></g>
   <g transform="translate(32.15 19.93) rotate(-4)"><g class="hb" data-box="gold" style="--i:6;--fx:9px;--fr:55deg"><rect x="-6.94" y="-6.94" width="13.88" height="13.88" rx="3.55" fill="#F0B429" style="stroke: var(--cave)" stroke-width="2"/><path class="spark" d="M2.78 -4.44 L3.54 -2.43 L5.55 -1.67 L3.54 -0.9 L2.78 1.11 L2.01 -0.9 L0 -1.67 L2.01 -2.43Z" fill="#FFF8E6"/></g></g>
 </g><g class="word"><path transform="translate(74.00 47.00) scale(0.04400 -0.04400)" d="M430 0Q436 147 436 271Q436 315 414.5 341.0Q393 367 360 367Q325 367 300.5 333.0Q276 299 276 240L275 242Q275 79 279 0H40Q48 144 48 390Q48 636 40 780H278L279 472L278 419Q302 489 349.5 522.5Q397 556 457 556Q517 556 561.0 529.5Q605 503 627.5 458.0Q650 413 650 357V213Q650 80 655 0Z"/><path transform="translate(103.70 47.00) scale(0.04400 -0.04400)" d="M30 275Q30 400 110.5 478.0Q191 556 362 556Q477 556 554.5 518.5Q632 481 669.0 417.5Q706 354 706 275Q706 146 620.5 68.0Q535 -10 362 -10Q191 -10 110.5 68.5Q30 147 30 275ZM495 274Q495 323 463.0 354.5Q431 386 366 386Q301 386 271.0 355.0Q241 324 241 274Q241 222 271.0 191.0Q301 160 366 160Q431 160 463.0 191.0Q495 222 495 274Z"/><path transform="translate(135.20 47.00) scale(0.04400 -0.04400)" d="M681 166Q681 132 689.0 118.0Q697 104 721 98L717 4Q685 -1 661.5 -3.0Q638 -5 599 -5Q513 -5 485.0 33.5Q457 72 457 132V157Q428 75 372.5 35.0Q317 -5 231 -5Q131 -5 80.5 35.0Q30 75 30 154Q30 219 73.0 256.0Q116 293 206 307Q130 361 54 401Q114 477 191.0 516.5Q268 556 378 556Q532 556 606.5 489.5Q681 423 681 285ZM239 312Q299 319 389 319Q426 319 441.0 328.0Q456 337 456 351Q456 363 441.0 371.5Q426 380 399 380Q348 380 309.0 363.0Q270 346 239 312ZM457 236V262Q433 250 404.0 243.5Q375 237 334 231L298 225Q242 214 242 187Q242 158 294 158Q350 158 395.0 179.5Q440 201 457 236Z"/><path transform="translate(166.93 47.00) scale(0.04400 -0.04400)" d="M272 398Q314 549 481 549Q510 549 537 545L505 321Q433 348 387 348Q330 348 303.0 314.0Q276 280 276 223V224L275 158Q275 87 279 0H40Q48 144 48 272Q48 400 40 546Q106 543 141 543Q178 543 242 546Z"/><path transform="translate(191.44 47.00) scale(0.04400 -0.04400)" d="M688 389Q688 188 694 0H468L471 120Q442 53 387.0 21.5Q332 -10 257 -10Q192 -10 140.0 27.0Q88 64 59.0 127.5Q30 191 30 267Q30 342 59.0 408.5Q88 475 140.5 515.5Q193 556 260 556Q338 556 393.5 523.5Q449 491 476 423Q476 480 472 606Q468 728 468 778H694Q688 592 688 389ZM473 273Q473 326 442.0 351.0Q411 376 364 376Q319 376 288.5 347.5Q258 319 258 273Q258 222 286.0 190.0Q314 158 362 158Q411 158 442.0 185.5Q473 213 473 273Z"/></g></svg></a>
-  <nav class="apptabs" aria-label="Your hoard"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local">Local</a></nav>
-  <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
+  <nav class="apptabs" aria-label="Your hoard"><a href="/" aria-current="page">Library</a><a href="/downloads">Downloads</a><a href="/downloads#store=Local" data-feature="local">Local</a></nav>
+  <nav class="apptabs" aria-label="Sets, tasks and projects"><a href="/#store=Sets" data-feature="sets">Sets and Wishlists</a><button id="tasksTab" aria-expanded="false" aria-controls="tasksWin">Tasks<span class="tab-n" id="tasksCount" hidden></span></button><button id="projectsTab" data-feature="projects" aria-expanded="false" aria-controls="projectsWin">Projects</button></nav>
 </div>
   <div class="search">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg>
@@ -1400,7 +1400,7 @@ body.less-motion .tour-try::before { animation: none; }
 <div class="shelf">
   <div class="seg" role="radiogroup" aria-label="Store" id="storeSeg"></div>
   <div class="shelf-tools">
-    <button id="localAdd" class="ghost sm" aria-expanded="false" aria-controls="localPanel" title="Add your own packages, textures or materials" data-app-view="downloads">Add your own</button>
+    <button id="localAdd" data-feature="local" class="ghost sm" aria-expanded="false" aria-controls="localPanel" title="Add your own packages, textures or materials" data-app-view="downloads">Add your own</button>
 <button id="job" class="job" aria-live="polite" title="See it in Tasks" hidden></button>
     <label>Sort
       <select id="sort">
@@ -1525,15 +1525,14 @@ body.less-motion .tour-try::before { animation: none; }
 <aside id="detail" class="detail" aria-label="Asset details"></aside>
 <section id="settingsPanel" class="stores settings" hidden aria-labelledby="settingsTitle">
   <h2 id="settingsTitle">Settings</h2>
-  <nav class="setjump" aria-label="Parts of Settings"><button data-jump="part-folders">Folders</button><button data-jump="part-places">Hoard's folders</button><button data-jump="part-sync">Local sync folder</button><button data-jump="part-stores">Stores</button><button data-jump="part-downloading">Downloading</button><button data-jump="part-apprise">Notifications</button><button data-jump="part-look">Look</button><button data-jump="part-signins">Sign-ins</button><button data-jump="part-updates">Hoard updates</button><button data-jump="part-backup">Backup</button><button data-jump="part-help">Troubleshooting</button><button data-jump="part-tip">Support Hoard</button><button data-jump="part-thanks">Acknowledgements</button></nav>
-  <div class="set-body">
-  <p>Changes are saved as you make them.</p>
-  <h3 id="part-folders">Downloads folder</h3>
+  <div id="setFrame" class="set-frame"></div>
+  <div class="set-body" hidden>
+  <h4 id="part-folders">Downloads folder</h4>
   <div class="field"><input id="setRoot" spellcheck="false" autocomplete="off" aria-label="Downloads folder">
     <button class="ghost sm" id="setRootBrowse" data-browse hidden>Browse…</button>
     <button class="ghost sm" id="setRootDefault" title="Use a Hoard folder in Documents">Default</button></div>
   <p class="hint">Where downloaded files are saved. Changing it doesn't move files you've already downloaded.</p>
-  <h3>Library folders</h3>
+  <h4 id="set-libs">Library folders</h4>
   <p class="hint">Your downloads can live on more than one drive. Add a folder on another drive (an external disk,
     say) and Hoard reads it as part of your library, with a tab of its own in Downloads.</p>
   <div id="setLibs" class="libs"></div>
@@ -1545,9 +1544,9 @@ body.less-motion .tour-try::before { animation: none; }
     there. To move products between folders, open one in Downloads, or select several. Removing a folder only stops
     Hoard reading it: its files stay where they are.</p>
   <p class="hint" id="libMsg" role="status"></p>
-  <h3 id="part-places">Hoard's folders</h3>
+  <h4 id="part-places">Hoard's folders</h4>
   <div id="setPlaces" class="libs places"></div>
-  <h3 id="part-sync">Local sync folder</h3>
+  <h4 id="part-sync">Local sync folder</h4>
   <p class="hint">A folder on this computer whose contents are added to Local by themselves, each as a tile of its own:
     each folder in it is listed where it is, each file in it is copied in. A file over 100 MB, or a folder over 1 GB,
     isn't added. It's off until you choose one; a network drive or NAS can't be one.</p>
@@ -1563,23 +1562,23 @@ body.less-motion .tour-try::before { animation: none; }
   </div>
   <p class="hint" id="syncMsg" role="status"></p>
   <div id="syncSkipped"></div>
-  <h3 id="part-stores">Stores</h3>
+  <h4 id="part-stores">Stores</h4>
   <div id="setStores"></div>
-  <h3>Payhip shops</h3>
+  <h4 id="set-shops">Payhip shops</h4>
   <textarea id="setShops" rows="3" spellcheck="false" autocomplete="off" aria-label="Payhip shops"
     placeholder="myshop.store&#10;payhip.com/AnotherShop"></textarea>
   <p class="hint">Payhip keeps your purchases in each shop you bought from, not in one library. Add each shop's
     address (it's in your purchase email), one per line. A shop at payhip.com/… usually lists what you bought from
     every shop, but Hoard only opens the links of the shops listed here. Importing a shop's saved page adds it for
     you. Hoard lists what you bought on Payhip; you download it from Payhip yourself.</p>
-  <h3>Store tags</h3>
+  <h4 id="set-tags">Store tags</h4>
   <label class="check"><input type="checkbox" id="setStoreTags"> Read the tags creators give their products</label>
   <p class="hint">On Booth, Jinxxy and itch.io: a few products' public pages each time a store is read, until each one
     has been read once. Their tags show as suggestions on them, and you can filter by them; they never change yours.</p>
-  <h3 id="part-downloading">Offline</h3>
+  <h4 id="part-downloading">Offline</h4>
   <label class="check"><input type="checkbox" id="setOffline"> Save product images, so the library works offline</label>
   <label class="check"><input type="checkbox" id="setAskFiles"> Ask which files to save, before a product downloads</label>
-  <h3>Files to leave out</h3>
+  <h4 id="set-rules">Files to leave out</h4>
   <p class="hint">Every download leaves these out, from every store or one: Sync, Download new, and a product's own
     Download. When a product downloads, Hoard asks which of its files to save (above): what you leave out of it, it
     remembers, and asks again next time.</p>
@@ -1587,7 +1586,7 @@ body.less-motion .tour-try::before { animation: none; }
   <div class="rule-add"><select id="ruleWhat" aria-label="What to leave out"></select>
     <input id="ruleWords" maxlength="200" placeholder="quest, android" aria-label="Words in a file's name" hidden>
     <select id="ruleStore" aria-label="From which store"></select><button class="ghost sm" id="ruleAdd">Add</button></div>
-  <h3>New in your library</h3>
+  <h4 id="set-new">New in your library</h4>
   <select id="setNewDays" aria-label="Mark new things as New for">
     <option value="0">Don't mark anything New</option>
     <option value="1">Mark new things for a day</option>
@@ -1598,7 +1597,7 @@ body.less-motion .tour-try::before { animation: none; }
   </select>
   <p class="hint">Things that appear in your library after a refresh get a <strong>New</strong> badge for this long.
     <strong>Recently added</strong> (in Sort) lists the newest first.</p>
-  <h3>Failed downloads</h3>
+  <h4 id="set-retries">Failed downloads</h4>
   <select id="setRetries" aria-label="Try a failed download again">
     <option value="0">Don't try again</option>
     <option value="1">Try again once</option>
@@ -1607,7 +1606,7 @@ body.less-motion .tour-try::before { animation: none; }
   </select>
   <p class="hint">A download that fails (a dropped connection, a busy server) is tried again after a short wait
     before it counts as failed.</p>
-  <h3>Previous versions</h3>
+  <h4 id="set-previous">Previous versions</h4>
   <select id="setPrevious" aria-label="Previous versions to keep">
     <option value="0">Don't keep them</option>
     <option value="1">Keep the last one</option>
@@ -1617,7 +1616,7 @@ body.less-motion .tour-try::before { animation: none; }
   </select>
   <p class="hint">When an update replaces a file, the old one is kept in <strong>_Previous versions</strong> in the
     product's folder, and <strong>Restore</strong> in Downloads puts it back.</p>
-  <h3>Routine check</h3>
+  <h4 id="set-routine">Routine check</h4>
   <select id="setRoutine" aria-label="Routine check">
     <option value="0">Off: only when I ask (the default)</option>
     <option value="6">Every 6 hours</option>
@@ -1629,8 +1628,8 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint">While Hoard is open, it does this often: reads your stores (not Payhip, which needs you there for
     its bot check), checks your downloads are as it downloaded them, and checks for updates. Then it asks you which
     of what it found to download: nothing downloads without you. Anything you start goes first.</p>
-  <label class="check" id="notifyRow" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
-  <h3 id="part-apprise">Notifications through Apprise</h3>
+  <label class="check" id="notifyRow" data-feature="notifications" hidden><input type="checkbox" id="setNotify"> Tell me when it finds something to download, with a notification from my system</label>
+  <h4 id="part-apprise">Notifications through Apprise</h4>
   <p class="hint">Send the news you choose to Discord, Telegram, ntfy, email and many more, through
     <a href="https://appriseit.com/services/" target="_blank" rel="noopener noreferrer">Apprise</a>: an address
     for each. Each holds its service's token, so Hoard keeps them as it keeps API keys, never in config.json, and shows
@@ -1656,12 +1655,12 @@ body.less-motion .tour-try::before { animation: none; }
   <div id="appriseEvents" class="apprise-events" role="group" aria-label="What to send">
     <label class="check"><input type="checkbox" data-apprise-event="new"> New products the routine check finds</label>
     <label class="check"><input type="checkbox" data-apprise-event="updates"> Updates the routine check finds</label>
-    <label class="check"><input type="checkbox" data-apprise-event="prices"> Products on my wishlists that got cheaper</label>
+    <label class="check" data-feature="prices"><input type="checkbox" data-apprise-event="prices"> Products on my wishlists that got cheaper</label>
     <label class="check"><input type="checkbox" data-apprise-event="tasks"> Tasks that finish or fail</label>
     <label class="check"><input type="checkbox" data-apprise-event="routine"> The routine check, when it's done</label>
     <label class="check"><input type="checkbox" data-apprise-event="other"> Other news: a new version of Hoard, files the check of my downloads found changed or missing</label>
   </div>
-  <h3 id="part-look">Appearance</h3>
+  <h4 id="part-look">Appearance</h4>
   <label class="check">Language
     <select id="setLanguage" aria-label="Language">
       <option value="system">Match my computer</option>
@@ -1678,7 +1677,7 @@ body.less-motion .tour-try::before { animation: none; }
   <div id="themeChoices" class="theme-choices" role="radiogroup" aria-label="Theme"></div>
   <p class="hint">Style</p>
   <div id="styleChoices" class="style-choices" role="radiogroup" aria-label="Style"></div>
-  <h3>Accessibility</h3>
+  <h4 id="set-access">Accessibility</h4>
   <label class="check">Text size
     <select id="setTextSize" aria-label="Text size">
       <option value="100">Normal</option><option value="115">Larger</option>
@@ -1691,7 +1690,7 @@ body.less-motion .tour-try::before { animation: none; }
     </select></label>
   <label class="check"><input type="checkbox" id="setSpacing"> More space between letters, words and lines</label>
   <label class="check"><input type="checkbox" id="setCardOutlines"> Give product cards an outline and a faint background</label>
-  <label class="check"><input type="checkbox" id="setBlurAdult"> Blur the pictures of products for adults (18+)</label>
+  <label class="check" data-feature="adult"><input type="checkbox" id="setBlurAdult"> Blur the pictures of products for adults (18+)</label>
   <label class="check"><input type="checkbox" id="setPause"> Pause animated pictures</label>
   <label class="check"><input type="checkbox" id="setMotion"> Reduce motion</label>
   <label class="check"><input type="checkbox" id="setGlowOn"> Coloured glow behind the page</label>
@@ -1704,7 +1703,7 @@ body.less-motion .tour-try::before { animation: none; }
     </select></label>
   <div id="customColours" class="custom-colours" role="group" aria-label="Your store colours" hidden></div>
   <p class="hint">Motion is also reduced when your computer's settings ask for less of it.</p>
-  <h3 id="part-signins">Browser for store sign-ins</h3>
+  <h4 id="part-signins">Browser for store sign-ins</h4>
   <select id="setBrowser" aria-label="Browser for store sign-ins">
     <option value="">Automatic (Microsoft Edge on Windows)</option>
     <option value="msedge">Microsoft Edge</option>
@@ -1724,12 +1723,12 @@ body.less-motion .tour-try::before { animation: none; }
     by its program (Arc, Thorium...); not Firefox or Safari. It keeps its own sign-ins, apart from the browser you
     browse with. A store you've signed in to keeps the browser it was signed in with until you sign in to it again.</p>
   <div id="backgroundRow" hidden>
-    <h3>Closing Hoard</h3>
+    <h4 id="set-closing">Closing Hoard</h4>
     <label class="check"><input type="checkbox" id="setBackground"> Closing the window minimizes Hoard to the taskbar (the Dock on a Mac), and it keeps working</label>
     <p class="hint">Downloads, syncs and automatic syncs carry on with the window closed. Open Hoard again (from the
       Start menu) to bring the window back, and quit it here, with <strong>Quit Hoard</strong>.</p>
   </div>
-  <h3 id="part-updates">Hoard updates</h3>
+  <h4 id="part-updates">Hoard updates</h4>
   <label class="check"><input type="checkbox" id="setUpdates"> Check for updates automatically</label>
   <p class="hint">Each time Hoard starts, and once a day while it's open, it asks GitHub (where Hoard is published)
     whether there's a newer version, in the background. GitHub sees your IP address, as with any website; nothing else
@@ -1742,18 +1741,18 @@ body.less-motion .tour-try::before { animation: none; }
     <button class="primary sm" id="updInstall" hidden></button>
     <a class="linkish" id="updLink" hidden target="_blank" rel="noopener noreferrer">What's new</a></div>
   <p class="hint"><button class="linkish" id="newsOpen">What's new in Hoard</button></p>
-  <h3 id="part-backup">Backup</h3>
+  <h4 id="part-backup">Backup</h4>
   <div class="field"><button class="ghost sm" id="backupMake">Make a backup</button>
     <button class="ghost sm" id="backupRestore">Restore a backup...</button>
     <input type="file" id="backupFile" accept=".json,application/json" hidden></div>
   <p class="hint" id="backupNote">Your settings, tags, sets, choices and library list in one file, in Documents ›
     Hoard backups: to keep, or to move to another computer. Never your sign-ins, keys or downloads.</p>
-  <h3>Bring in from another tool</h3>
+  <h4 id="set-import">Bring in from another tool</h4>
   <p class="hint">Coming from KonoAsset? Hoard can bring in its library: what you own is matched by its BOOTH item, and
     the rest come in as Local products, left where they are, with their tags and memos. Nothing in KonoAsset's folder
     is changed.</p>
   <div class="field"><button class="ghost sm" data-konoasset>Bring in from KonoAsset...</button></div>
-  <h3 id="part-help">Troubleshooting</h3>
+  <h4 id="part-help">Troubleshooting</h4>
   <p class="hint">Something isn't working? Create a local, anonymized support report. Nothing is uploaded automatically, and the report can be reviewed before you share it.</p>
   <button class="ghost sm" id="makeSupportReport">Create support report</button>
   <button class="ghost sm" id="openLogs">Open logs folder</button>
@@ -1761,10 +1760,10 @@ body.less-motion .tour-try::before { animation: none; }
   <p class="hint"><button class="linkish" id="setupAgain">Set up Hoard again</button>: stores, sign-ins, Payhip shops and folders, step by step.</p>
   <p class="hint"><button class="linkish" id="tourAgain">Take the tour</button></p>
   <p class="hint" id="quitRow" hidden><button class="linkish" id="quitHoard">Quit Hoard</button>: stops Hoard (a download in progress resumes next time).</p>
-  <h3 id="part-tip">Support Hoard</h3>
+  <h4 id="part-tip">Support Hoard</h4>
   <p class="hint">Hoard is free, and made in spare time. If it's useful to you, a tip helps keep it going.</p>
   <div class="field"><a class="ghost sm" id="tipKofi" href="https://ko-fi.com/knowbodyonline" target="_blank" rel="noopener noreferrer">Tip on Ko-fi</a></div>
-  <h3 id="part-thanks">Acknowledgements</h3>
+  <h4 id="part-thanks">Acknowledgements</h4>
   <details id="acks" class="acks"><summary>Show them all</summary><div id="acksList" aria-live="polite"></div></details>
   </div>
 </section>

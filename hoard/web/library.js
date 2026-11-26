@@ -34,7 +34,7 @@ const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURICompone
 
 /* ---------- data */
 async function refreshView(response) {
-  DATA = response;
+  DATA = featureData(response, "items");   // (what a part of Hoard turned off has is left out: issue #422)
   for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested, a.your_note].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   if (APP.active !== "library") return;
@@ -133,7 +133,7 @@ function renderStoreSeg() {
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("") +
-    `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
+    `<button role="radio" class="sets" data-store="Sets" data-feature="sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
 // The Stores panel: each store, whether you're signed in, its count, and its buttons.
@@ -468,6 +468,8 @@ function readHash() {
   state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";
+  // (an address for a part turned off in Settings, Features, as Back gives one: Everything instead, issue #422)
+  if ((state.store === "Local" && !featureOn("local")) || (state.store === "Sets" && !featureOn("sets"))) { state.store = ""; state.set = ""; }
   if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
 }
 

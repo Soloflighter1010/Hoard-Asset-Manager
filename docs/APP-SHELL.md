@@ -71,6 +71,14 @@ a view's script stays there. The parts so far:
 - **What's dragged** (`ui/DragGhost.svelte`, `HoardUI.drag`, issue #419): a small copy of a dragged product's or
   project's tile under the pointer, with how many more go with it. `shared.js`'s pointer drag starts, moves and ends
   it; it never takes the pointer, so what's under it still says what a drop will do.
+- **Settings' frame** (`ui/Settings.svelte`, `ui/settings.js`, `HoardUI.settings`, issues #421 and #422): its parts as
+  cards (`PARTS`, each setting by its heading's id), **Find a setting**, and **Features**, a switch for each part of
+  Hoard you can turn off (`FEATURES`, with the part each is in). The settings themselves are still `library.html`'s
+  markup, filled and saved by `shared.js`: `frame(panel, {on, change, tr})` moves each setting (its `h4` and what follows
+  it) whole into its card's row, as Look inside's tree is, so its ids and handlers stay. A part turned off is named in
+  `html`'s `data-off`, and its pieces in the pages carry `data-feature` (`looks.css` hides them); `shared.js`'s
+  `featureData` leaves what's its own out of each view's data, and the server (`config.feature_on`) stops what it
+  sends and reads for it.
 
 None uses `{@html}` or accepts user text as markup. `node scripts/build_ui.mjs` compiles `ui/main.js` into
 `hoard/web/ui.generated.js` and copies the licenses of the bundled runtime packages to `hoard/web/ui.LICENSE.txt`. The

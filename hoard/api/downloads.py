@@ -252,7 +252,9 @@ def get_api_assets(self, path, body, query):
                            "used_in": used.get(a.get("catalog_folder") or a.get("folder"), [])})
     shown = {a["id"] for a in assets}   # a hidden product isn't named as one another needs while it's locked
     keys = {a["tag_key"] for a in assets}   # nor kept in a set while it's locked
-    grouped = [{**s, "items": [k for k in s["items"] if k in keys]} for s in app.sets.SetStore().load()["sets"]]
+    grown = {a["tag_key"] for a in assets if a.get("adult")} | (set(marks["adult"]) - set(marks["not_adult"]))
+    grouped = [{**s, "items": [k for k in s["items"] if k in keys], "adult": app.sets.holds_adult(s, grown, marks["not_adult"])}
+               for s in app.sets.SetStore().load()["sets"]]
     for a in assets:
         if a["needs"]:
             a["needs"] = {**a["needs"], "products": [o for o in a["needs"]["products"] if o["id"] in shown]}
