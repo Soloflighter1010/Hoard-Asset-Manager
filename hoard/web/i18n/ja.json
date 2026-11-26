@@ -2840,5 +2840,10 @@
  "Turn on {0} first.": "先に「{0}」をオンにしてください。",
  "{0} is turned off, in Settings, Features. Turn it on?": "「{0}」は設定の「機能」でオフになっています。オンにしますか?",
  "Turn it on": "オンにする",
- "Wishlists are turned off in Settings, Features.": "ほしい物リストは設定の「機能」でオフになっています。"
+ "Wishlists are turned off in Settings, Features.": "ほしい物リストは設定の「機能」でオフになっています。",
+ "{0} is turned off, so it wasn't imported.": "「{0}」がオフになっているため、取り込みませんでした。",
+ "Local was turned off, so nothing was added. Choose it in File Explorer again.": "ローカルがオフになっていたため、何も追加しませんでした。エクスプローラーでもう一度選んでください。",
+ "Local is turned off in Settings, Features.": "ローカルは設定の「機能」でオフになっています。",
+ "Wishlists are turned off in Settings, Features, so they weren't read.": "ほしい物リストは設定の「機能」でオフになっているため、読み込みませんでした。",
+ "That's turned off in Settings, Features, so nothing was added.": "設定の「機能」でオフになっているため、何も追加しませんでした。"
 }

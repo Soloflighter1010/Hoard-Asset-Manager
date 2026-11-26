@@ -58,8 +58,7 @@ export function frame(panel, { on = {}, change = () => {}, tr = s => s } = {}) {
     ...part, feature: typeof part.feature === 'string' ? part.feature : '',
     rows: (part.rows || []).filter(id => rows.has(id)).map(id => {
       const r = rows.get(id);
-      return { ...r, pair: (part.pair || []).includes(id), feature: (part.feature || {})[id] || '',
-               text: () => r.nodes.map(n => n.textContent).join(' ') };
+      return { ...r, pair: (part.pair || []).includes(id), feature: (part.feature || {})[id] || '' };
     }),
   }));
   flushSync(() => {
@@ -68,7 +67,12 @@ export function frame(panel, { on = {}, change = () => {}, tr = s => s } = {}) {
   return shown;
 }
 
-// The parts of Hoard turned on or off from elsewhere (a backup put back): the switches show it.
+// The parts of Hoard turned on or off from elsewhere (one turned on where something needed it): the switches show it.
 export function features(on) {
   if (shown) flushSync(() => shown.setFeatures(on));
+}
+
+// Settings opened or closed: Find a setting starts empty again.
+export function clearFind() {
+  if (shown) flushSync(() => shown.clearFind());
 }

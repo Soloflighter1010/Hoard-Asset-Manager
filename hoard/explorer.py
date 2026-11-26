@@ -329,6 +329,9 @@ def actions(given) -> list[dict]:
 def do(srv, action: dict) -> dict | None:
     """One of the menu's requests (checked by actions()), done. What Hoard says about it, for its page, as a code with
     what goes in its words ({"said": "copied", "name": ...}: shared.js has the words); None: nothing to say."""
+    from .config import feature_on
+    if action["do"] in ("add", "sync") and not feature_on(srv.cfg, "local"):
+        return {"said": "local-off"}   # (Local turned off in Settings, Features, issue #422: nothing's added)
     if action["do"] == "add":
         return add(srv, action["path"])
     if action["do"] == "sync":

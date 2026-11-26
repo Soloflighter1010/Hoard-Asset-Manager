@@ -1464,12 +1464,14 @@ let searchProjects = null;   // Projects' list, read when project: is first type
 function settingsPlaces() {   // each part and setting of Settings, by the words it shows (in the page's language)
   const panel = $("#settingsPanel"), out = [];
   if (!panel) return out;
-  let part = "";
-  for (const el of panel.querySelectorAll("h3, label, [role=radiogroup][aria-label]")) {
+  let card = "", part = "";   // (a card's title, issue #421, then each of its settings' names, their h4s)
+  for (const el of panel.querySelectorAll("h3, h4, label, [role=radiogroup][aria-label]")) {
     const shut = el.closest("[hidden]");
     if (shut && shut !== panel) continue;   // (not on this computer, or not now)
-    if (el.tagName === "H3") { part = el.textContent.trim(); out.push({ el, name: part, part: "" }); continue; }
+    if (el.tagName === "H3") { card = part = el.textContent.trim(); out.push({ el, name: card, part: "" }); continue; }
+    if (el.tagName === "H4") { part = el.textContent.trim(); out.push({ el, name: part, part: card }); continue; }
     if (el.tagName === "LABEL" && el.closest("[role=radiogroup]")) continue;   // (one choice of a group: the group is enough)
+    if (el.matches(".set-switch")) { out.push({ el, name: el.querySelector("b").textContent.trim(), part: card }); continue; }
     const words = el.cloneNode(true);
     for (const n of words.querySelectorAll("select, option, textarea, .hint, button")) n.remove();
     const name = (el.getAttribute("aria-label") || words.textContent).replace(/\s+/g, " ").trim();
@@ -2316,6 +2318,7 @@ async function copySupportPath() {
 }
 // Close Settings.
 function closeSettings() {
+  HoardUI.settings.clearFind();   // (what was typed in Find a setting goes with it)
   $("#settingsPanel").hidden = true;
   $("#settingsBtn").setAttribute("aria-expanded", "false");
 }
@@ -2355,6 +2358,7 @@ async function openSettings(open) {
   } catch (e) {
     toast("Hoard isn't running. Open it again."); return;
   }
+  HoardUI.settings.clearFind();   // (Find a setting starts empty: every card shows)
   $("#settingsPanel").hidden = false;
   $("#settingsBtn").setAttribute("aria-expanded", "true");
   winNote("settingsPanel", "");
@@ -3168,7 +3172,7 @@ function featureData(response, field) {
 function featureSets(got) {
   if (!got || !Array.isArray(got.sets) || !featuresOff()) return got;
   return { ...got, sets: got.sets.filter(x => !featureHidesSet(x)).map(x => ({ ...x,
-    items: (x.items || []).filter(i => !(i.adult && !featureOn("adult")) && !(i.local && !featureOn("local"))) })) };
+    items: (x.items || []).filter(i => !(i.adult && !featureOn("adult")) && !(i.local && !i.placeholder && !featureOn("local"))) })) };
 }
 // Draw Settings' frame, once, as the page starts (its switches show the parts turned off once the page has them).
 function wireSettingsFrame() {
@@ -3190,12 +3194,17 @@ function setFeature(key, on) {
   applyFeatures();
   load(false, true);   // (each view's products again, from what the app has: what's turned off left out)
 }
+// The part of Hoard to ask about turning on for this one: it, or the part it's in, as far up as is turned off.
+function featureAsked(key) {
+  let want = key;
+  while (featureNeeds(want) && !featureOn(featureNeeds(want))) want = featureNeeds(want);
+  return want;
+}
 // Something asked for a part of Hoard that's turned off (a hoard:// link, a file dropped): it says so, and turns it on
 // if you say so. Resolves whether it's on now.
 async function featureNeeded(key) {
   if (featureOn(key)) return true;
-  let want = key;   // (the part it's in first, when that's off)
-  while (featureNeeds(want) && !featureOn(featureNeeds(want))) want = featureNeeds(want);
+  const want = featureAsked(key);   // (the part it's in first, when that's off)
   const f = featureList().find(x => x.key === want);
   if (!await ask(tr("{0} is turned off, in Settings, Features. Turn it on?", tr(f.title)), "Turn it on")) return false;
   setFeature(want, true);
@@ -5375,6 +5384,7 @@ function setOptions(first, withNew = true) {
     (withNew ? `<option value="new">${esc(tr("New set..."))}</option>` : "");
 }
 function setsSection(a) {   // a product's details: the sets it's in, and Add it to one
+  if (!featureOn("sets")) return "";   // (Sets and Wishlists turned off, issue #422: none, and none made here)
   const mine = (DATA.sets || []).filter(s => s.items.includes(a.tag_key));
   return `<h3>Sets</h3><div class="chips">${mine.map(s => `<span class="tagpill"><button class="chip" data-act="showset" data-set="${esc(s.id)}" translate="no">${esc(s.name)}</button>` +
       `<button class="untag" data-act="unset" data-set="${esc(s.id)}" aria-label="${esc(tr("Take it out of {0}", s.name))}">×</button></span>`).join("") ||
@@ -5498,9 +5508,9 @@ async function mixAndMatch() {
   redraw();
   const res = await HoardUI.dialogs.open({ kind: "host", cls: "mixdlg", icon: "shuffle", title: tr("Mix and match"), content: box, tr,
     detail: tr("An outfit from what you own, picked at random. Keep the picks you like, and pick the rest again."),
-    cancel: tr("Close"), ok: tr("Make a set of them"),
+    cancel: tr("Close"), ok: featureOn("sets") ? tr("Make a set of them") : "",   // (none with Sets turned off: #422)
     buttons: [{ label: tr("Pick again"), attrs: { "data-mix": "again" }, act: () => { mixRoll(); redraw(); } }] });
-  if (res.ok) await addToSet(MIX.picks.map(p => p.item), "new");
+  if (res.ok && featureOn("sets")) await addToSet(MIX.picks.map(p => p.item), "new");
 }
 async function takeOutOfSet(list) {   // from the set that's open
   const s = setById(state.set), items = keysOf(list.filter(Boolean));
@@ -6327,7 +6337,12 @@ async function importSetFiles(files, also = "") {
     }
     if (!raw || typeof raw !== "object" || raw.format !== "hoard-set") { rest.push(file); continue; }
     const needs = raw.set && raw.set.kind === "wishlist" ? "wishlists" : "sets";   // (a set's file: its part, on)
-    if (off.has(needs) || !await featureNeeded(needs)) { off.add(needs); continue; }
+    if (!featureOn(needs) && (off.has(featureAsked(needs)) || !await featureNeeded(needs))) {
+      const asked = featureAsked(needs);   // (the part asked about, and left off: not asked about again in this drop)
+      off.add(asked);
+      refused.push(`${file.name}: ${tr("{0} is turned off, so it wasn't imported.", tr(featureList().find(f => f.key === asked).title))}`);
+      continue;
+    }
     const r = await apiPost("/api/sets", { action: "import-json", file: raw });
     if (!r.ok) { refused.push(`${file.name}: ${tr(r.data.error || "The set couldn't be imported.")}`); continue; }
     made = { id: r.data.made, name: String((raw.set || {}).name || "") };
@@ -6701,6 +6716,7 @@ const EXPLORER_SAID = {
   looking: () => tr("Hoard is looking at the sync folder."),
   "no-sync": () => tr("There's no sync folder yet: choose one in Settings, under Local sync folder."),
   "not-sync": () => tr("That folder isn't Hoard's sync folder."),
+  "local-off": () => tr("Local was turned off, so nothing was added. Choose it in File Explorer again."),
 };
 // File Explorer's menu brought Hoard to the front: Local, and what it did (the first few, when it was many).
 async function openFromExplorer(said) {

@@ -9,23 +9,37 @@
   let q = $state('');
   let on = $state(untrack(() => ({ ...initial })));   // a part's key: false when it's turned off
 
-  // The parts turned on or off from elsewhere (a backup put back): the switches show it.
+  // The parts turned on or off from elsewhere (one turned on where something needed it): the switches show it.
   export function setFeatures(next) { on = { ...next }; }
+  // Settings opened or closed: what was typed in Find a setting goes, so every card shows again (and the bar's
+  // settings: search, which leaves out what's hidden, finds them all).
+  export function clearFind() { q = ''; }
 
   // Whether a part of Hoard is on: it, and the part it's in (a feature's needs). '' (not a part's): always.
-  const isOn = key => !key || (on[key] !== false && isOn((features.find(f => f.key === key) || {}).needs));
+  const isOn = key => !key || (on[key] !== false && isOn(needsOf(key)));
+  // The part a part is in ('' for none).
+  const needsOf = key => (features.find(f => f.key === key) || {}).needs || '';
+  // The part to turn on first for this one: the one it's in, or the one that's in, as far up as is off (Prices, with
+  // Sets and Wishlists off, needs that turned on first, not Wishlists, whose own switch is greyed then).
+  const firstOff = key => { let k = needsOf(key); while (needsOf(k) && !isOn(needsOf(k))) k = needsOf(k); return k; };
   // Words as Find compares them: the same width and case however they were typed.
   const norm = s => String(s || '').normalize('NFKC').toLowerCase();
-  // What a row says, for Find: its words, and its boxes' names, placeholders and tips.
-  const said = row => norm([row.text(), ...row.nodes.flatMap(n => n.querySelectorAll ?
-    [...n.querySelectorAll('[aria-label], [placeholder], [title]')].map(e =>
-      [e.getAttribute('aria-label'), e.getAttribute('placeholder'), e.getAttribute('title')].join(' ')) : [])].join(' '));
+  // Whether a setting's piece shows: not hidden (Closing Hoard outside Hoard's window), nor a part turned off's.
+  const shows = el => !el.hidden && !(el.dataset.feature || '').split(' ').some(k => k && !isOn(k));
+  // What a node says that shows, for Find: its words, and its boxes' names, placeholders and tips.
+  const words = n => n.nodeType === 3 ? n.textContent : n.nodeType !== 1 || !shows(n) ? '' :
+    [n.getAttribute('aria-label'), n.getAttribute('placeholder'), n.getAttribute('title'), ...[...n.childNodes].map(words)]
+      .filter(Boolean).join(' ');
+  // What a row says, for Find (what's hidden in it isn't found: a card with nothing showing that matches stays out).
+  const said = row => norm(row.nodes.map(words).join(' '));
+  // Whether anything in a row shows now (Closing Hoard doesn't, outside Hoard's own window).
+  const showing = row => row.nodes.some(n => n.nodeType === 1 ? shows(n) : n.textContent.trim() !== '');
   const found = $derived.by(() => {
     const want = norm(q.trim());
     return parts.map(part => {
       const whole = !want || norm(tr(part.title) + ' ' + tr(part.about)).includes(want);
       const rows = part.features ? features.map(f => whole || norm(tr(f.title) + ' ' + tr(f.about)).includes(want))
-                                 : part.rows.map(r => isOn(r.feature) && (whole || said(r).includes(want)));
+                                 : part.rows.map(r => isOn(r.feature) && (!want || (showing(r) && (whole || said(r).includes(want)))));
       return { rows, any: isOn(part.feature) && rows.some(Boolean) };
     });
   });
@@ -60,7 +74,7 @@
           {#each features as f, k}
             <label class="set-switch" class:needs={!isOn(f.needs)} hidden={!found[i].rows[k]} data-feature-switch={f.key}>
               <span class="set-switch-words"><b>{tr(f.title)}</b><small>{tr(f.about)}</small>
-                {#if !isOn(f.needs)}<small class="set-needs">{tr("Turn on {0} first.", tr(features.find(x => x.key === f.needs).title))}</small>{/if}
+                {#if !isOn(f.needs)}<small class="set-needs">{tr("Turn on {0} first.", tr(features.find(x => x.key === firstOff(f.key)).title))}</small>{/if}
               </span>
               <input type="checkbox" role="switch" checked={isOn(f.key)} disabled={!isOn(f.needs)}
                      onchange={e => flip(f.key, e.currentTarget.checked)}>

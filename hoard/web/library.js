@@ -468,6 +468,8 @@ function readHash() {
   state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";
+  // (an address for a part turned off in Settings, Features, as Back gives one: Everything instead, issue #422)
+  if ((state.store === "Local" && !featureOn("local")) || (state.store === "Sets" && !featureOn("sets"))) { state.store = ""; state.set = ""; }
   if (p.get("open")) openKey = p.get("open").slice(0, 400);   // a product, from a set's folder in Downloads
 }
 

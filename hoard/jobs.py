@@ -1550,6 +1550,9 @@ class Jobs:
         from .sets import SetStore
         from .wishlists import READERS, pictures_from_pages, read_store_page, store_pages
         stores = [s for s in stores if s in READERS]
+        if not feature_on(self.cfg, "wishlists"):   # (turned off while it waited its turn, or before Hoard started again)
+            self._set(task="wishlists", message="Wishlists are turned off in Settings, Features, so they weren't read.")
+            return
         self._set(task="wishlists", message="Checking your connection")
         online = [s for s in stores if reachable(s)]
         failed = {s: unreachable_message(s, "read") for s in stores if s not in online}
@@ -1597,7 +1600,7 @@ class Jobs:
             raise stopped
         cheaper = done.get("cheaper") or []
         if cheaper:
-            self._news("cheaper", {"count": len(cheaper), "items": (done.get("cheaper_items") or [])[:10]})
+            self._news("cheaper", {"count": len(cheaper), "items": done.get("cheaper_items") or []})   # (the news names 10)
         lines = [f"{STORES[store]['label']}: {why}" for store, why in failed.items()] + \
             [f"Cheaper on {wishlist}: {name}, {was} -> {now}" for wishlist, name, was, now in cheaper[:50]]
         self._set(log=lines[-200:])
@@ -1621,6 +1624,10 @@ class Jobs:
         store = (stores or ["payhip"])[0]
         label = STORES[store]["label"]
         sid, links = str(what.get("set") or ""), [str(x)[:2000] for x in (what.get("links") or [])[:30]]
+        target = next((x for x in SetStore().load()["sets"] if x.get("id") == sid), {})
+        if not feature_on(self.cfg, "wishlists" if target.get("kind") == "wishlist" else "sets"):   # (turned off since: #422)
+            self._set(task="links", message="That's turned off in Settings, Features, so nothing was added.")
+            return
         wait = float(self.cfg.get(store, {}).get("check_wait", 60))
         got, failed = [], []
         self._set(task="links", store=store, message=f"Reading {label}'s pages in Hoard's browser")

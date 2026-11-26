@@ -230,18 +230,20 @@ window, that needs a part that's off says so, and turns it on if you say so.
 
 - **Local:** your own packages, textures and materials ([Your own packages](Your-Own-Packages)): Local's tab, its
   products in Downloads, **Add your own**, and the **Local sync folder** setting. The sync folder is left as it is, and
-  Hoard doesn't look in it until Local is on again.
+  Hoard doesn't look in it until Local is on again; File Explorer's **Add to Hoard** adds nothing meanwhile. A set's
+  placeholders stay: they aren't Local products.
 - **Sets and Wishlists:** [Sets](Sets), with your wishlists: their tab, the **Sets** group in the right-click menu,
-  and a product dragged onto another to make a set. **Wishlists** and **Prices** are part of it, so they're off with
-  it.
+  a product's **Sets** in its details, and a product dragged onto another to make a set. **Wishlists** and **Prices**
+  are part of it, so they're off with it.
 - **Wishlists:** wishlists alone, so your sets stay. Hoard no longer reads wishlists from your stores, and a quick
   refresh reads only your libraries.
 - **Prices:** wishlists' prices, their range and total, what got cheaper, and its notification.
 - **Projects:** [Projects](Projects): its tab, and **Put in a project...** and **New project with these...** in the
   right-click menu.
 - **Notifications:** your system's notifications and the news sent through Apprise, and the **Notifications** card.
-- **Products for adults:** products marked 18+, in the Library, Downloads and sets, and in what you search for;
-  **Mark as 18+** and the blur setting. A link to one asks to turn it back on.
+- **Products for adults:** products marked 18+, in the Library, Downloads and sets, and in what you search for, a set
+  holding one, and one that got cheaper in your notifications; **Mark as 18+** and the blur setting. A link to one
+  asks to turn it back on.
 
 ## Settings only in config.json
 
