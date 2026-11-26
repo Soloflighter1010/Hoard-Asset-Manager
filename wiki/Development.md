@@ -11,7 +11,7 @@ propose a change is in
 |---|---|
 | `hoard/` | The Python app: store adapters (`stores/`), library and downloads, private metadata (`storage.py`: JSON files; SQLite held back behind a switch), background work (`scheduler.py`), HTTP boundary (`server.py`) and routes (`api/`), desktop window (`app.py`), and safety rules (`safety.py`, `egress.py`) |
 | `hoard/web/` | One Library/Downloads shell, shared product components and view modules, served as one inline script; fonts and the compiled Svelte bundle (`ui.generated.js`) |
-| `ui/` | Svelte sources for Look inside and the pop-ups (`Dialog.svelte`); `scripts/build_ui.mjs` compiles the checked-in bundle |
+| `ui/` | Svelte sources for the pages' parts: Look inside, the pop-ups (`Dialog.svelte`), Projects' folder tiles and what's dragged under the pointer. A part of the pages that's redone is redone here, so the pages move over to Svelte a part at a time. `scripts/build_ui.mjs` compiles the checked-in bundle |
 | `Packages/soloflighter.hoard/` | Hoard for Unity. `Editor/Core` is plain C# with no Unity references, so it can be tested without Unity |
 | `tests/` | Every test (see below) |
 | `scripts/` | `build_release.py` (the source zip) and `build_vpm.py` (the Unity package) |

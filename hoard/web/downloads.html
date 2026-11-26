@@ -400,16 +400,12 @@ body.less-motion .slot:hover .art { transform: none; }
 
 /* downloader-only pieces */
 .brand .sub { font: 700 13px var(--body); color: var(--dust); margin-left: 10px; padding: 3px 9px; border-radius: 7px; background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.flag { position: absolute; right: 8px; top: 8px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--warn); color: #2A1400; }
 .ph { justify-items: center; gap: 6px; }
 .ph small { font-size: 12px; font-weight: 700; opacity: .7; }
-.flag.upd { background: var(--gold); color: var(--gold-ink); }
-.slot .flag.upd + .flag { top: 34px; }
 /* copies of one product (bought twice, or on two stores) as one tile, a stack of cards behind it, as in the Library */
 /* min-height: 0, or a square box that lets its picture show past it (for the cards behind) grows to a tall one's height */
 .slot.stacked .art { overflow: visible; min-height: 0; box-shadow: 5px -5px 0 -1px var(--stone), 10px -10px 0 -2px var(--seam); }
 .slot.stacked .art > img, .slot.stacked .art > .ph { border-radius: 12px; overflow: hidden; }
-.flag.count { right: auto; left: 8px; background: var(--bone); color: var(--cave); }
 /* Stack copies (issue #215): a button that stays pressed while it's on */
 .stack-toggle { gap: 6px; height: var(--btn-h-sm); color: var(--dust); cursor: pointer; }
 .stack-toggle svg { width: 16px; height: 16px; flex: none; }
@@ -804,7 +800,8 @@ body.less-motion .xfer-bar.unknown span { width: 100%; opacity: .45; }
 /* badges on a tile: New (issue #18), Gift, Archived */
 .badges { position: absolute; left: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .badges .badge { position: static; }
-.badge.new { background: var(--gold); color: var(--gold-ink); }
+.badge.new, .badge.upd { background: var(--gold); color: var(--gold-ink); }
+.badge.count { background: var(--bone); color: var(--cave); }
 
 /* the sidebar: folds away to a strip, and each of its sections folds on its own */
 .side-fold { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 6px 8px; border: 0; border-radius: 8px;

@@ -515,6 +515,75 @@ class Browse(IsolatedTestCase):
             self.assertEqual(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"), "page")
             browser.close()
 
+    def test_the_bar_marks_one_tab(self):
+        """Issue #420: tabs visited before kept their mark (Sets and Wishlists and Downloads with Projects open). One
+        tab is marked, what's in front: the page, or Projects' or Tasks' window open over it, however it was reached:
+        a click, the keyboard, Back and Forward, or a hoard:// link."""
+        # the tabs that look marked (a box or a ground of their own), by their words
+        marked = ("() => [...document.querySelectorAll('.apptabs a, .apptabs button')].filter(e => {"
+                  " const s = getComputedStyle(e); return s.boxShadow !== 'none' || s.backgroundColor !== 'rgba(0, 0, 0, 0)'; })"
+                  ".map(e => e.firstChild.textContent.trim())")
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1300, "height": 860})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+
+            def only(words, title=None):
+                if title:
+                    page.wait_for_function("t => document.title === t", arg=title)
+                page.mouse.move(650, 700)   # (off the bar: a tab under the pointer has a ground while it's there)
+                page.wait_for_function(f"w => JSON.stringify(({marked})()) === JSON.stringify(w)", arg=[words], timeout=5000)
+                self.assertEqual(page.locator('.apptabs [aria-current="page"]').count(), 1)
+
+            only("Library", "Hoard")
+            page.click('.apptabs a[href="/#store=Sets"]')
+            only("Sets and Wishlists", "Hoard: Sets")
+            page.click('.apptabs a[href="/downloads"]')
+            only("Downloads", "Hoard: Downloads")   # (Sets and Wishlists stayed marked here)
+            page.click('.apptabs a[href="/downloads#store=Local"]')
+            only("Local", "Hoard: Local")
+            page.go_back()
+            only("Downloads", "Hoard: Downloads")
+            page.go_back()
+            only("Sets and Wishlists", "Hoard: Sets")
+            page.go_forward()
+            only("Downloads", "Hoard: Downloads")
+            page.click("#projectsTab")
+            page.locator("#projectsWin:not([hidden])").wait_for()
+            only("Projects")
+            self.assertEqual(page.get_attribute('.apptabs a[href="/downloads"]', "aria-current"), "page", "the page under it")
+            page.click("#tasksTab")   # (one window at a time: Projects closes)
+            page.locator("#tasksWin:not([hidden])").wait_for()
+            only("Tasks")
+            page.click("#projectsTab")
+            page.locator("#projectsWin:not([hidden])").wait_for()
+            only("Projects")
+            page.click("#projectsTab")
+            page.locator("#projectsWin").wait_for(state="hidden")
+            only("Downloads")
+            page.click("#tasksTab")
+            page.locator("#tasksWin:not([hidden])").wait_for()
+            page.keyboard.press("Escape")
+            page.locator("#tasksWin").wait_for(state="hidden")
+            only("Downloads")
+            # from the keyboard: the tab chosen is marked, and one only focused has its ring and no mark
+            page.focus('.apptabs a[href="/"]')
+            page.keyboard.press("Enter")
+            only("Library", "Hoard")
+            page.keyboard.press("Tab")
+            self.assertEqual(page.evaluate("document.activeElement.getAttribute('href')"), "/downloads")
+            self.assertNotEqual(page.evaluate("getComputedStyle(document.activeElement).outlineStyle"), "none")
+            only("Library")
+            # a hoard:// link to a product goes to the library from wherever you are
+            page.click('.apptabs a[href="/#store=Sets"]')
+            only("Sets and Wishlists", "Hoard: Sets")
+            page.evaluate("openLink({do: 'product', key: 'booth:none'})")
+            only("Library", "Hoard")
+            self.assertEqual(errors, [])
+            browser.close()
+
     def test_no_picker_says_so(self):
         c = http.client.HTTPConnection("127.0.0.1", self.srv.server_port, timeout=20)
         c.request("POST", "/api/pick", body=json.dumps({"kind": "folder"}),

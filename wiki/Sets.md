@@ -46,7 +46,8 @@ another, just above its products.
 - **New set**, in the Sets tab, then add products to it.
 - **Drag and drop** (5.2.0 beta 4): drop a product on another to make a set of them, named as it's made (the
   products chosen with it go too), or on **Sets and Wishlists** (the tab above the tiles, or in the bar) to add it
-  to a set you choose. What a drop will do shows on what's under the pointer as you drag; Escape cancels.
+  to a set you choose. What a drop will do shows on what's under the pointer as you drag, and a small copy of the
+  product (with how many more go with it) follows the pointer (5.2.0 beta 13); Escape cancels.
 - Choose products in the **Library** or in **Downloads** (tick their boxes, Ctrl- or Shift-click, or **Select**
   on a touch screen), then **Sets** in the selection bar (or right-click): **New set from these...**, or **Add to**
   a set you have: the five you added to last (or the newest), and **Add to another set...** for the rest (5.2.0):
@@ -301,8 +302,9 @@ of every set.
 Open a set or wishlist and choose **Export JSON** to save a portable file. Hoard writes it in **Exported sets**, in
 the folder for editable copies (beside **Unity packages**), named after the set, and shows it there; a second export
 gets a new name, so nothing is written over (5.2.0 beta 11). Use
-**Import JSON...** in Sets and Wishlists to load one. Import always creates a new
-entry, leaving existing sets and lists unchanged.
+**Import JSON...** in Sets and Wishlists to load one, or drop the file anywhere on Hoard's window (5.2.0 beta 13):
+several at once each come in, and Hoard opens the last. Import always creates a new entry, leaving existing sets and
+lists unchanged.
 
 Files preserve product order, local product entries, notes, photos, photo marks,
 wishlist prices and the chosen cover picture. Short-link credentials are excluded;

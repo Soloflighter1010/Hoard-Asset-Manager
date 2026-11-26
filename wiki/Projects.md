@@ -35,8 +35,8 @@ list and the project's backups keep the old name: add it to the Hub again if you
 
 **List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
 Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, twice
-as wide as it's tall, and (with all projects shown) each folder is one folder tile, with its projects inside: choose it
-to see them.
+as wide as it's tall, and (with all projects shown) each folder is one tile drawn as a folder in Hoard's gold, half a
+project's width, its first projects tucked into it and how many it holds (5.2.0 beta 13): choose it to see them.
 
 A project's details (5.2.0) put it in a folder of your own (**Folder**: one you have, **New folder...**, or **Not in
 a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take one off): words to find it by, such as
@@ -44,7 +44,8 @@ a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take 
 **Not in a folder** for the rest, or **All projects**. Choose a tag in a project's details to see those that have it,
 and choose it again, or its **×** above the list, to see them all. **Find a project** looks at folders and tags too.
 Or drag (5.2.0 beta 4): drop a project on another to make a folder of them, named as it's made (on one that's in a
-folder, it goes in that folder), or on a folder's tile or its button above the list to move it in.
+folder, it goes in that folder), or on a folder's tile or its button above the list to move it in. A small copy of
+the project follows the pointer as you drag (5.2.0 beta 13), and a folder's tile opens a little as it's dragged over.
 
 **Add a project...** lists one you already have: in Hoard's own window it opens your computer's folder picker, in your
 projects folder (in a web browser, you type the folder's full path). **Take off the list** leaves its folder as it is;
