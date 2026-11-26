@@ -316,6 +316,41 @@ class App:
         self.settle()
 
     @staticmethod
+    def describe(proc: subprocess.Popen, home: Path) -> None:
+        """Say what's there when a start never answers: Hoard's programs still running, what's in its data folder,
+        and on a Mac where each of them is waiting (sample) and what the system said about it (a privacy prompt for
+        a folder would hold it up for good)."""
+        def show(title: str, command: list[str], lines: int = 60) -> None:
+            """A command's output, its first lines, under a title (nothing, if it can't run)."""
+            try:
+                said = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=60).stdout
+            except (OSError, subprocess.SubprocessError) as e:
+                said = f"({type(e).__name__})"
+            print(f"--- {title}\n" + "\n".join(said.splitlines()[:lines]), flush=True)
+        print("--- its data folder: " + ", ".join(sorted(p.name for p in home.iterdir())) if home.is_dir() else "", flush=True)
+        if WINDOWS:
+            show("Hoard's programs", ["tasklist", "/V", "/FI", "IMAGENAME eq Hoard.exe"])
+            show("Hoard's server", ["tasklist", "/V", "/FI", "IMAGENAME eq hoard-server.exe"])
+            return
+        listed = subprocess.run(["ps", "-axo", "pid=,ppid=,pgid=,stat=,etime=,command="], capture_output=True,
+                                text=True, errors="replace").stdout.splitlines()
+        def ours(line: str) -> bool:
+            """Is this process the app's (its process group), or a program named as Hoard's are?"""
+            fields = line.split(None, 5)
+            return len(fields) == 6 and (fields[2] == str(proc.pid) or
+                                         Path(fields[5].split()[0]).name.lower() in ("hoard", "hoard-server"))
+        mine = [line for line in listed if ours(line)]
+        print("--- Hoard's programs (pid, parent, group, state, time, command)\n" +
+              "\n".join(line[:300] for line in mine[:40]), flush=True)
+        if MAC:
+            for line in mine:
+                pid = line.split()[0]
+                if line.split()[2:3] == [str(proc.pid)]:
+                    show(f"where {pid} is waiting", ["sample", pid, "2"], 120)
+            show("what the system said about it", ["log", "show", "--last", "5m", "--style", "compact", "--predicate",
+                 'subsystem == "com.apple.TCC" OR process == "Hoard" OR process == "hoard-server"'], 80)
+
+    @staticmethod
     def settle() -> None:
         """On Windows, wait a moment for the window's WebView2 to end after it (it ends on its own, and holds the
         window's own data folder until it does, which the next start opens). Elsewhere, nothing to wait for."""
@@ -396,6 +431,7 @@ class Starts:
             if proc.poll() is not None:
                 fail(f"start {self.n}: it ended (exit code {proc.returncode}) before Hoard's server answered", home)
             time.sleep(0.01)
+        self.app.describe(proc, home)
         self.app.kill(proc)
         fail(f"start {self.n}: Hoard's server didn't answer within {WAIT} seconds", home)
 
