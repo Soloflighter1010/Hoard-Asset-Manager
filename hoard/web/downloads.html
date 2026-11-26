@@ -623,14 +623,16 @@ body.selecting .toast { bottom: 96px; }
 .apptabs a { padding: 7px 12px; border-radius: 9px; font-weight: 700; font-size: 14px; color: var(--dust); text-decoration: none; }
 .apptabs a:hover { color: var(--bone); background: var(--stone); }
 .apptabs a[aria-current="page"] { color: var(--bone); background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }
+.settings h3 { font: 700 13px var(--body); color: var(--dust); margin: 18px 0 6px; }   /* (Add to Local's, and the other panels') */
+.settings h4 { font: 700 14.5px var(--body); color: var(--bone); margin: 0 0 6px; }   /* a setting's name (its card's is an h3) */
+.set-frame { display: contents; }   /* (Settings' frame, ui/Settings.svelte: its list of parts and its cards sit in the window as they were) */
 .setjump { position: sticky; top: -1px; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px; margin: -4px -4px 10px; padding: 6px 4px 8px;
   background: var(--ledge); border-bottom: 1px solid var(--seam); box-shadow: 0 -24px 0 0 var(--ledge); }
 .setjump button { border: 0; border-radius: 999px; padding: 5px 11px; background: var(--stone); color: var(--bone);
   font: 600 12.5px var(--body); cursor: pointer; }
 .setjump button:hover { background: var(--seam); }
 .setjump button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
-.settings h3[id] { scroll-margin-top: 64px; }
+.settings h4[id] { scroll-margin-top: 64px; }
 /* Settings is a page of its own, the whole window below the bar (as Projects is), its parts listed down the side to
    jump to, and what you change in a column wide enough to read */
 #settingsPanel.win { left: 0; right: 0; top: var(--bar-h); bottom: 0; transform: none; width: auto; max-height: none; border-radius: 0;
@@ -643,15 +645,13 @@ body.selecting .toast { bottom: 96px; }
 #settingsPanel.win .setjump button { padding: 7px 12px; border-radius: 9px; background: none; color: var(--dust); text-align: left; font: 700 14px var(--body); }
 #settingsPanel.win .setjump button:hover { color: var(--bone); background: var(--stone); }
 #settingsPanel.win .set-body { flex: 1 1 auto; min-width: 0; max-width: 780px; }
-#settingsPanel.win .set-body > p:first-child { margin-top: 0; }
-#settingsPanel.win h3[id] { scroll-margin-top: 12px; margin-top: 30px; padding-top: 14px; border-top: 1px solid var(--seam);
-  font: 700 16px var(--body); color: var(--bone); }
+#settingsPanel.win h4[id] { scroll-margin-top: 12px; }
 @media (max-width: 860px) {   /* a narrow window: its parts in a row along the top again */
   #settingsPanel.win > .win-body { display: block; padding: 0 16px 40px; }
   #settingsPanel.win .setjump { top: 0; z-index: 2; flex-direction: row; flex-wrap: wrap; width: auto; margin: 0 -16px 10px; padding: 10px 16px;
     background: var(--cave); border-bottom: 1px solid var(--seam); max-height: none; overflow: visible; }
   #settingsPanel.win .setjump button { padding: 5px 11px; border-radius: 999px; background: var(--stone); color: var(--bone); font: 600 12.5px var(--body); }
-  #settingsPanel.win h3[id] { scroll-margin-top: 64px; }
+  #settingsPanel.win :is(h4[id], .set-card) { scroll-margin-top: 64px; }
 }
 /* Hoard's folders: each with what it's for, where it is, and Open */
 .places .librow small + small { margin-top: 1px; }

@@ -549,7 +549,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .pj-pk tr:hover td { background: var(--stone); }
 [data-style="workbench"] .proj { padding: 8px 10px; }
 [data-style="workbench"] .proj table, [data-style="workbench"] .pj-pk { font-size: 12.5px; }
-[data-style="workbench"] .settings h4, [data-style="workbench"] .tasks h3, [data-style="workbench"] .tagpanel h3,
+[data-style="workbench"] .settings h4, [data-style="workbench"] .settings h3:where(:not(.set-card h3)), [data-style="workbench"] .tasks h3, [data-style="workbench"] .tagpanel h3,
 [data-style="workbench"] .projects h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
 [data-style="workbench"] .setjump button { border-radius: 4px; }
 [data-style="workbench"] .setup-card { padding: 22px 26px; }

@@ -84,6 +84,50 @@ class Kept(IsolatedTestCase):
                     self.assertFalse(alerts.send(cfg, event, "anything"), event)
         self.assertEqual(len(sent), 2)
 
+    def test_queued_wishlist_reads_and_links_stop_once_turned_off(self):
+        from hoard import jobs
+        job = jobs.Jobs.__new__(jobs.Jobs)
+        job.cfg = {"ui": {"features": {"wishlists": False}}}
+        with mock.patch.object(jobs.Jobs, "_set") as said, mock.patch.object(sets.SetStore, "put_wishlists") as put:
+            job._wishlists(["booth"])
+        put.assert_not_called()
+        self.assertIn("turned off", said.call_args.kwargs["message"])
+        wish = sets.SetStore().change({"action": "create", "name": "Wants", "kind": "wishlist"})["made"]
+        with mock.patch.object(jobs.Jobs, "_set") as said, mock.patch.object(sets.SetStore, "add_products") as add:
+            job._links(["payhip"], {"set": wish, "links": ["https://payhip.com/b/AbC12"]})
+        add.assert_not_called()
+        self.assertIn("nothing was added", said.call_args.kwargs["message"])
+
+    def test_file_explorer_adds_nothing_with_local_off(self):
+        from hoard import explorer
+        srv = mock.Mock(cfg={"ui": {"features": {"local": False}}, "local_sync": "/somewhere"})
+        with mock.patch.object(explorer, "add") as add:
+            for do in ("add", "sync"):
+                self.assertEqual(explorer.do(srv, {"do": do, "path": "/somewhere/a.png"}), {"said": "local-off"}, do)
+        add.assert_not_called()
+        srv.start_worker.assert_not_called()
+
+    def test_cheaper_news_leaves_out_products_for_adults_with_them_off(self):
+        items = [{"key": "booth:nightdress", "store": "booth", "name": "Night Dress", "url": "https://booth.pm/ja/items/2",
+                  "was": "1,000 JPY", "now": "800 JPY", "adult": True},
+                 {"key": "booth:foxhoodie", "store": "booth", "name": "Fox Hoodie", "url": "https://booth.pm/ja/items/5",
+                  "was": "1,200 JPY", "now": "900 JPY"}]
+        srv = mock.Mock(cfg={"ui": {"features": {"adult": False}}})
+        with mock.patch.object(alerts, "send") as send:
+            server.AppServer._news(srv, "cheaper", {"count": 2, "items": items})
+            text = send.call_args.args[2]
+            self.assertIn("Fox Hoodie", text)
+            self.assertNotIn("Night Dress", text)
+            send.reset_mock()
+            server.AppServer._news(srv, "cheaper", {"count": 1, "items": items[:1]})
+            send.assert_not_called()   # (only one for adults: nothing to say)
+
+    def test_a_set_holding_a_product_for_adults(self):
+        s = {"items": ["booth:a", "booth:b"], "products": {"booth:b": {"adult": True}}}
+        self.assertTrue(sets.holds_adult(s, set(), set()), "its store said so")
+        self.assertFalse(sets.holds_adult(s, set(), {"booth:b"}), "you said it isn't")
+        self.assertTrue(sets.holds_adult({"items": ["booth:a"]}, {"booth:a"}, set()), "one for adults in your library")
+
 
 def _record(root: Path, store: str, creator: str, name: str, key: str) -> None:
     folder = root / store / creator / name
@@ -260,7 +304,17 @@ class Switches(IsolatedTestCase):
         wishes = page.locator('[data-feature-switch="wishlists"]')
         self.assertTrue(wishes.locator("input").is_disabled(), "wishlists are a part of it")
         self.assertIn("Turn on Sets and Wishlists first.", wishes.inner_text())
+        self.assertIn("Turn on Sets and Wishlists first.", page.locator('[data-feature-switch="prices"]').inner_text(),
+                      "the one to turn on, not Wishlists, whose switch is greyed")
         self.close_settings(page)
+        page.locator("#grid .slot", has_text="Rusk").click()
+        page.locator("#detail.open").wait_for()
+        self.assertNotIn("Sets", page.locator("#detail h3").all_inner_texts(), "no Sets in a product's details")
+        page.keyboard.press("Escape")
+        page.goto(self.srv.entry_url().split("/#")[0] + "/#store=Sets")   # (an address for it, as Back gives one)
+        page.locator("#grid .slot", has_text="Rusk").wait_for()   # (Everything, not an empty Sets)
+        self.assertEqual(page.evaluate("""() => featureSets({sets: [{kind: 'set', items: [{local: true, placeholder: true}]}]})"""),
+                         {"sets": []}, "every set left out while Sets is off")
         # a link to a set asks to turn it on, and nothing is opened when you say no
         page.evaluate("() => { openLink({do: 'set', code: 'abc'}); }")   # (not waited for: it waits for the question)
         page.locator("#askDialog").wait_for()
@@ -374,6 +428,29 @@ class Switches(IsolatedTestCase):
         self.assertTrue(page.locator(".set-none").is_visible())
         page.fill("#setFind", "")
         self.assertEqual(page.locator(".set-card:visible").count(), 8, "every card again")
+        page.fill("#setFind", "minimizes hoard")   # (Closing Hoard is only in Hoard's own window: hidden here)
+        self.assertTrue(page.locator(".set-none").is_visible(), "what's hidden isn't found")
+        page.fill("#setFind", "hoard itself")   # (its card, by its title: every row of it, but the one hidden)
+        self.assertTrue(page.locator("#part-updates").is_visible())
+        self.assertEqual(page.locator("#card-hoard .set-row:visible").count(), 3, "no empty row for Closing Hoard")
+        page.fill("#setFind", "apprise")
+        self.close_settings(page)
+        names = [p["name"] for p in page.evaluate("settingsPlaces().map(p => ({name: p.name}))")]
+        self.assertIn("Backup", names, "the bar's settings: search finds each setting by its name, with Find's words left")
+        self.assertIn("Local", names, "and a switch by its own name")
+        self.open_settings(page)
+        self.assertEqual(page.input_value("#setFind"), "", "Find starts empty again")
+        self.assertEqual(page.locator(".set-card:visible").count(), 8)
+        self.assertEqual(self.errors, [])
+
+    def test_a_sets_placeholder_stays_with_local_off(self):
+        page = self.open()
+        self.flip(page, "local", False)
+        got = page.evaluate("""() => featureSets({sets: [{kind: 'set', items: [{local: true, placeholder: true, name: 'Hair'},
+                                                                                 {local: true, name: 'My Textures'}]}]})""")
+        self.assertEqual([i["name"] for i in got["sets"][0]["items"]], ["Hair"], "a placeholder isn't a Local product")
+        page.goto(self.srv.entry_url().split("/#")[0] + "/downloads#store=Local")
+        page.locator("#grid .slot", has_text="Rusk").wait_for()   # (Everything, not an empty Local)
         self.assertEqual(self.errors, [])
 
 

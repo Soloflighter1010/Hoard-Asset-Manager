@@ -214,8 +214,10 @@ def get_api_library(self, path, body, query):
                "hidden": len({i["tag_key"] for i in shown if i["mark"] == "hidden"}) if unlocked else None}
     keys = {i["tag_key"] for i in shown}
     hidden_now = set() if unlocked else set(marks["hidden"])
+    grown = {i["tag_key"] for i in shown if i.get("adult")} | (set(marks["adult"]) - set(marks["not_adult"]))
     mine = [{"id": x["id"], "name": x["name"], "kind": x.get("kind"), "items": [k for k in x["items"] if k not in hidden_now],
-             "owned": len([k for k in x["items"] if k in keys])} for x in app.sets.SetStore().load()["sets"]]
+             "owned": len([k for k in x["items"] if k in keys]),
+             "adult": app.sets.holds_adult(x, grown, marks["not_adult"])} for x in app.sets.SetStore().load()["sets"]]
     from ..stores import health
     return self._json({"items": shown, "tagset": app.tag_overview(tagdata, counted), "stores": stores, "store_health": health.snapshot(),
                        "privacy": privacy, "sets": mine,

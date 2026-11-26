@@ -119,6 +119,8 @@ def post_api_local_sync(self, path, body, query):
     if "folder" in body or "explorer" in body:
         srv.apply_explorer(was)
     shown = {"explorer": {"here": explorer.here(), "on": explorer.on(srv.cfg), **srv.explorer_state}}
+    if body.get("look") is True and not app.feature_on(srv.cfg, "local"):   # (turned off in Settings, Features: #422)
+        return self._json({"error": "Local is turned off in Settings, Features."}, 409)
     if srv.cfg.get("local_sync") and (body.get("look") is True or "folder" in body):
         if localsync.tick(srv) is None:
             return self._json({"ok": True, "busy": True, **localsync.view(srv.cfg), **shown})

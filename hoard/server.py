@@ -814,8 +814,16 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
                     alerts.send(self.cfg, event, text, title=title)
         elif kind == "cheaper":   # (issue #285: a wishlist's products, which are a store's, with their picture and link)
             count, items = (what.get("count", 0), what.get("items") or []) if isinstance(what, dict) else (what, [])
-            hidden = MarkStore().keys("hidden")
-            items = [i for i in items if isinstance(i, dict) and i.get("key") not in hidden]
+            marks = MarkStore().view()
+            items = [i for i in items if isinstance(i, dict) and i.get("key") not in marks["hidden"]]
+            if not feature_on(self.cfg, "adult"):   # (Products for adults turned off, issue #422: none named, nor counted)
+                from . import adult
+                kept = [i for i in items if not adult.why(i.get("key") or "", name=i.get("name") or "",
+                                                          flagged=i.get("adult") is True, marks=marks)]
+                count, items = max(0, count - (len(items) - len(kept))), kept
+                if not count:
+                    return
+            items = items[:10]
             text, link = alerts.cheaper_text(count, items)
             first = next((i for i in items if i.get("thumbnail") and i.get("store") in STORES), None)
             pic_url = sets.product_picture(first["store"], first["thumbnail"]) if first else None

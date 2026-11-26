@@ -1053,6 +1053,8 @@ function readHash() {
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
   if (state.set) state.store = "Sets";   // (a set's folder; and "Show in Downloads" from 4.1)
+  // (an address for a part turned off in Settings, Features, as Back gives one: Everything instead, issue #422)
+  if ((state.store === "Local" && !featureOn("local")) || (state.store === "Sets" && !featureOn("sets"))) { state.store = ""; state.set = ""; }
   state.sort = sortFrom(p.get("sort"), SORTS);
   state.ptype = PRODUCT_TYPES[p.get("type")] ? p.get("type") : "";
   state.view = VIEWS[p.get("view")] ? p.get("view") : "downloads";

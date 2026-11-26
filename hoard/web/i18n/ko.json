@@ -2797,5 +2797,10 @@
  "Turn on {0} first.": "먼저 '{0}' 기능을 켜 주세요.",
  "{0} is turned off, in Settings, Features. Turn it on?": "'{0}' 기능이 설정의 '기능'에서 꺼져 있어요. 켤까요?",
  "Turn it on": "켜기",
- "Wishlists are turned off in Settings, Features.": "위시리스트가 설정의 '기능'에서 꺼져 있어요."
+ "Wishlists are turned off in Settings, Features.": "위시리스트가 설정의 '기능'에서 꺼져 있어요.",
+ "{0} is turned off, so it wasn't imported.": "'{0}' 기능이 꺼져 있어서 가져오지 않았어요.",
+ "Local was turned off, so nothing was added. Choose it in File Explorer again.": "로컬이 꺼져 있어서 아무것도 추가하지 않았어요. 파일 탐색기에서 다시 선택해 주세요.",
+ "Local is turned off in Settings, Features.": "로컬이 설정의 '기능'에서 꺼져 있어요.",
+ "Wishlists are turned off in Settings, Features, so they weren't read.": "위시리스트가 설정의 '기능'에서 꺼져 있어서 읽지 않았어요.",
+ "That's turned off in Settings, Features, so nothing was added.": "설정의 '기능'에서 꺼져 있어서 아무것도 추가하지 않았어요."
 }
