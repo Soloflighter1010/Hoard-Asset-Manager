@@ -207,7 +207,9 @@ Also here:
   [Getting started](Getting-Started#the-tour).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
   close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check
-  carry on. Click it there, or open Hoard again, to bring the window back. Turn it off and the close button quits
+  carry on. Click it there, or open Hoard again, to bring the window back. On a Linux desktop with Wayland, where a
+  program can't bring back a window it minimized, the window is hidden instead: open Hoard again to bring it back
+  (5.2.0 beta 13). Turn it off and the close button quits
   (asking first while something's running). On a Mac, **Command-Q** always quits, as **Quit Hoard** does.
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
   window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).

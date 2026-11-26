@@ -15,6 +15,26 @@ are on the Releases page.) Run from source, Hoard still opens in pywebview's win
 | `installer/` | The Windows installer's sidebar (its first and last pages) and header (the others), made by `../scripts/make_installer_art.py` from the Heap and the website's fonts: run it again after the logo changes |
 | `package.json` | The Tauri CLI, pinned (`package-lock.json` has each file's hash) |
 
+## On Linux
+
+Issue #423: the AppImage opened once, then wouldn't open again. Four things keep that from happening:
+
+- **Background on Wayland:** closing the window while Hoard carries on in the background hides it. Elsewhere the
+  window is minimized, but on Wayland a program can't bring back a window it minimized, so starting Hoard again
+  (which hands over to the copy that's running) showed nothing.
+- **WebKit's renderer:** the AppImage carries its own WebKit, which draws through the graphics card's buffers
+  (DMA-BUF) by default. On some drivers that crashes or stays blank, so the AppImage sets
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` unless it's set already.
+- **A page that stops:** WebKit's page process ending on its own (a crash, or out of memory) loads the page again. If
+  it ends twice more within two minutes, Hoard says so, with where its log is, and quits, so nothing is left running
+  for the next start to hand over to.
+- **Why it couldn't start:** Hoard tells the window where this start's log is, and why it couldn't start (already
+  running and not answering, say), so the window's dialog says that instead of "a log somewhere".
+
+CI's Linux build runs `../scripts/check_appimage.py` on the AppImage it makes, under Xvfb, unpacked (CI has no FUSE).
+It starts the AppImage, checks a second start hands over to it, ends its window, and checks it starts again, also
+after its window is killed outright.
+
 ## Building it
 
 You need Python 3.10 or later with `requirements.txt` and `requirements-nuitka.txt` installed, a C compiler,
