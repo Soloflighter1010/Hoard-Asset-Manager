@@ -82,6 +82,19 @@ currency conversion and the others above) was done in PR #365.
 - [x] [#406](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/406) — Pictures that don't flicker or go blank: kept across redraws, asked for again when one doesn't load.
 - [x] [#407](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/407) — Hoard for Unity's pictures: kept at the size they're drawn, never let go on screen, retried; WebP and AVIF get a PNG copy.
 
+### Beta 12 notes
+
+- [x] [#417](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/417) — A set's or wishlist's JSON file dropped on Hoard's window comes in, in the Library or Downloads (PR #426).
+- [x] [#418](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/418) — A tile's Update mark is clear of its selection box, in Downloads' column of marks (PR #426).
+- [x] [#419](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/419) — What's dragged follows the pointer: a small copy of the product's or project's tile (PR #426, Svelte).
+- [x] [#420](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/420) — One tab marked in the bar (PR #426).
+- [x] [#424](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/424) — A folder of projects looks like a folder, single wide, with its first projects tucked in (PR #426, Svelte).
+- [x] [#425](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/425) — PawPaint projects (`.pawpaint`) are a kind of their own (PR #426).
+- [x] [#423](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/423) — The AppImage opens every time: hidden, not minimized, on Wayland, and WebKit without DMA-BUF (PR #427).
+- [x] [#421](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/421) — A new look for Settings: cards, a row for each setting, and Find a setting (PR #428, Svelte).
+- [x] [#422](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/422) — Turn off the parts of Hoard you don't use, in Settings' Features card (PR #428).
+- [x] [#416](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/416) — Local: a product's page on a store, Edit..., Fill in from its page, tabs by store, and Bring in from BB's Library Manager (PR #429).
+
 ## Later and research
 
 - [ ] [#306](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/306) — New products and sales from followed creators; previously deferred to Hoard V6.
