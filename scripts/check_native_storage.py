@@ -576,7 +576,9 @@ def main(argv: list[str]) -> int:
         parser.error("give the installer, disk image or AppImage (or --source)")
     for root in args.legacy_root:
         assert (root / "hoard" / "__init__.py").is_file(), f"{root} has no hoard/"
-    run = Run(Path(tempfile.mkdtemp(prefix="hoard-native-storage-")))
+    # (its real path: Tauri won't start an app whose own path goes through a symbolic link, as a Mac's /var/folders does
+    # through /var, which is /private/var. It says only "unknown path", and the window couldn't start Hoard's server.)
+    run = Run(Path(tempfile.mkdtemp(prefix="hoard-native-storage-")).resolve())
     try:
         checks(args, run)
         return 0
