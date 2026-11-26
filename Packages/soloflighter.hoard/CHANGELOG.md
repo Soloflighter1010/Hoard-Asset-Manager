@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1
+
+- **A Local product's page in its credits** (Hoard's issue #416). Hoard 5.2 beta 13 lets a Local product have its
+  page on a store (Booth, Gumroad, Jinxxy, Payhip or itch.io), and writes it in `catalog.json` as its `page`. The
+  window reads it, so a project's credits link a Local product's page as they do a store product's. Only a public
+  page on one of those stores is taken (`HoardCatalog.LocalPage`); anything else is left out.
+
 ## 0.12.0
 
 - **A tool the project has already is left out of an import** (Hoard's issue #414). A product's package often
