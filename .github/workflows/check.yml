@@ -190,6 +190,12 @@ jobs:
           path: deb
       - name: The .deb, where the manifest takes it from
         run: mv deb/*.deb shell/flatpak/hoard.deb && rm -r deb
+      # The image's Flatpak installation is in its own layers; updating a runtime renames inside it, which on some
+      # runners' container storage fails across layers ("Invalid cross-device link": on AWS-hosted runners, not on
+      # Azure's), before anything is built. Copied whole into the container's own layer first, its renames stay on one
+      # filesystem.
+      - name: The image's Flatpak installation, in the container's own layer
+        run: cp -a /var/lib/flatpak /var/lib/flatpak.new && rm -rf /var/lib/flatpak && mv /var/lib/flatpak.new /var/lib/flatpak
       - uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
         with:
           manifest-path: shell/flatpak/io.github.soloflighter1010.Hoard.yml
