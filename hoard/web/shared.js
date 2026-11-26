@@ -3379,7 +3379,7 @@ async function konoBringIn(path = "") {
   path = await askFolder("KonoAsset's data folder", "The folder with metadata, data and images in it. KonoAsset's Settings say where it is. Hoard only reads it.", path);
   if (!path) return;
   const r = await apiPost("/api/konoasset/preview", { path });
-  if (!r.ok) { toast(r.data.error || "That folder couldn't be read."); return konoBringIn(path); }
+  if (!r.ok) { toast(tr(r.data.error || "That folder couldn't be read.")); return konoBringIn(path); }
   const s = r.data;
   if (!s.matched && !s.local) {
     await ask(tr("Nothing new to bring in from KonoAsset.") + "\n\n" + konoSummary(s), "OK", false, "");
@@ -3391,6 +3391,37 @@ async function konoBringIn(path = "") {
   toast(go.data.queued ? "Bringing in from KonoAsset once what's running has finished. Follow it in Tasks." : "Bringing in from KonoAsset. Follow it in Tasks.");
 }
 document.addEventListener("click", e => { if (e.target.closest("[data-konoasset]")) konoBringIn(); });
+/* ---------- Bring in a BB's Library Manager library (issue #416), as KonoAsset's is: its root folder, what bringing it
+   in would do, then Bring in or Cancel. Hoard only reads its folder. */
+// What bringing in a BB's Library Manager library would do (/api/bblm/preview), in words.
+function bblmSummary(s) {
+  const lines = [tr("In BB's Library Manager: {0}.", tr(s.total === 1 ? "1 product" : "{0} products", s.total))];
+  if (s.matched) lines.push(tr("Already in your library, by their BOOTH item: {0}. Their tags go on those products.", s.matched));
+  if (s.local) lines.push(tr("New Local products: {0}. Their files stay where they are, in its folder, and each keeps the page it came from.", s.local));
+  if (s.tags) lines.push(tr("Tags: {0}, of which {1} are new to you.", s.tags, s.new_tags));
+  if (s.adult) lines.push(tr("Marked for adults (18+), as it marks them: {0}.", s.adult));
+  if (s.before) lines.push(tr("Brought in before, and left as they are: {0}.", s.before));
+  if (s.left_out) lines.push(tr("Left out, with no files and not in your library: {0} ({1}).", s.left_out, s.left_out_names.join(", ")));
+  return lines.join("\n\n");
+}
+// Settings' Bring in from BB's Library Manager...: choose its root folder, see what it would do, then bring it in.
+async function bblmBringIn(path = "") {
+  path = await askFolder("BB's Library Manager's root folder", "The folder with a folder for each product in it, each with its meta.json. Its Settings say where it is. Hoard only reads it.", path);
+  if (!path) return;
+  const r = await apiPost("/api/bblm/preview", { path });
+  if (!r.ok) { toast(tr(r.data.error || "That folder couldn't be read.")); return bblmBringIn(path); }
+  const s = r.data;
+  if (!s.matched && !s.local) {
+    await ask(tr("Nothing new to bring in from BB's Library Manager.") + "\n\n" + bblmSummary(s), "OK", false, "");
+    return;
+  }
+  if (!await ask(bblmSummary(s) + "\n\n" + tr("Nothing in its folder is changed."), "Bring in")) return;
+  const go = await apiPost("/api/bblm/bring-in", { path, confirm: true });
+  if (!go.ok) { toast(go.data.error || "It didn't start."); return; }
+  toast(go.data.queued ? "Bringing in from BB's Library Manager once what's running has finished. Follow it in Tasks."
+                       : "Bringing in from BB's Library Manager. Follow it in Tasks.");
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-bblm]")) bblmBringIn(); });
 
 /* ---------- Projects (hoard/vpm): your Unity projects, shared with ALCOM and the VRChat Creator Companion (one list in
    all three), with their VPM packages, and your library in them: a new project made from a template with the packages

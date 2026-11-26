@@ -24,7 +24,7 @@ from .paths import data_dir
 VERSION = 2
 FILES = frozenset({
     "config.json", "library.json", "tags.json", "marks.json", "sets.json",
-    "package-needs.json", "konoasset.json", "asset-updates.json", "routine.json",
+    "package-needs.json", "konoasset.json", "bblm.json", "asset-updates.json", "routine.json",
     "sync.json", "tasks.json", "project-tasks.json", "side-tasks.json", "library_folders.json",
     "integrity.json", "picture-looks.json", "update.json", "window-place.json",
     "vpm-projects.json", "vpm-presets.json", "sealed-files.json", "store-health.json", "scheduler.json", "job-queue.json",

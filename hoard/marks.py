@@ -222,6 +222,27 @@ class MarkStore:
                 self._save(data)
             return changed
 
+    def rekey(self, old: str, new: str, keep: bool = False) -> bool:
+        """A product renamed in Hoard (a Local product, issue #416): each choice for it (hidden, archived, for adults...)
+        follows it to its new name. keep: the old name keeps them too (another product has it). Returns whether it had
+        any."""
+        if old == new or not TAG_KEY_RX.match(old) or not TAG_KEY_RX.match(new):
+            return False
+        with self._lock:
+            data = self.load()
+            changed = False
+            for kind in KINDS:
+                if old in data[kind]:
+                    data[kind] = (data[kind] - ({old} if not keep else set())) | {new}
+                    changed = True
+                for i, t in list(data["ids"][kind].items()):
+                    if t == old and not keep:
+                        data["ids"][kind][i] = new
+                        changed = True
+            if changed:
+                self._save(data)
+            return changed
+
     # ---- the PIN
     def set_pin(self, pin: str, current: str | None = None) -> str | None:
         """Set the PIN, or change it (which needs the current one). Setting the first PIN also makes a recovery

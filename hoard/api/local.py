@@ -27,6 +27,25 @@ def _konoasset(self, path: str, body: dict):
     return self._json({"ok": True, "queued": started == "queued"})
 
 
+def _bblm(self, path: str, body: dict):
+    """A BB's Library Manager library (issue #416): what bringing it in would do (changing nothing), then bringing it
+    in, as a task."""
+    from .. import bblm
+    srv = self.server
+    try:
+        folder = bblm.check_folder(str(body.get("path") or "")[:1000])
+        if path == "/api/bblm/preview":
+            return self._json(bblm.summary(bblm.plan(folder, srv.lib.snapshot()[0])))
+    except ValueError as e:
+        return self._json({"error": str(e)}, 400)
+    if path != "/api/bblm/bring-in" or body.get("confirm") is not True:
+        return self._json({"error": "Unknown request."}, 404)
+    started = srv.jobs.start("bblm", [], local={"path": str(folder)})
+    if not started:
+        return self._json({"error": "That's already waiting its turn."}, 409)
+    return self._json({"ok": True, "queued": started == "queued"})
+
+
 def _local(self, path: str, body: dict):
     """Local: add a folder or file of your own (a task, since copying can take a while), rescan one listed where
     it is, or take one out."""
@@ -75,6 +94,44 @@ def _local(self, path: str, body: dict):
             return self._json({"error": f"Couldn't save the picture: {e.strerror or e}."}, 500)
         srv.forget_index()
         return self._json({"ok": True})
+    if path == "/api/local/edit":   # its name, creator, note and store page (issue #416)
+        if any(j.state["running"] and j.state.get("task") in ("add-local", "rescan-local", "remove-local", "move")
+               for j in (srv.jobs, srv.side_jobs)):
+            return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
+        given = {k: str(body[k])[:2000] for k in ("name", "creator", "note", "link") if isinstance(body.get(k), str)}
+        try:
+            rec = local.edit(srv.cfg, app.root_dir(srv.cfg), found[0], **given)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        srv.forget_index()
+        return self._json({"ok": True, "name": rec["name"], "creator": rec["creator"], "note": rec.get("note"),
+                           "link": rec.get("page")})
+    if path == "/api/local/from-page":   # its name, creator, tags, 18+ and picture, from its page on a store (#416)
+        if any(j.state["running"] and j.state.get("task") in ("add-local", "rescan-local", "remove-local", "move")
+               for j in (srv.jobs, srv.side_jobs)):
+            return self._json({"error": "Wait for Hoard to finish with Local, then try again."}, 409)
+        if not found[1].get("page"):
+            return self._json({"error": "Give it its page on a store first, with Edit..."}, 400)
+        try:   # (its public page, as anyone can see it: nothing of yours is sent)
+            got = app.wishlists.from_product_page(found[1]["page"], app.read_store_page)
+        except app.wishlists.LinkError as e:   # (its reason, as a sentence the translations have)
+            return self._json({"error": f"{str(e)[:1].upper()}{str(e)[1:]}."}, 400)
+        if not got:
+            return self._json({"error": "Its page doesn't say what it is."}, 400)
+        picture = None
+        url = app.sets.product_picture(got["store"], got.get("thumbnail"))   # (only from its store's own image host)
+        if url and got["store"] in app.STORES:
+            fetched = app.fetch_picture(url, app.STORES[got["store"]]["referer"], hosts=app.sets.STORE_IMAGE_HOSTS[got["store"]])
+            picture = fetched[0] if fetched and fetched[1] in ("image/png", "image/jpeg") else None
+        try:
+            rec = local.fill_in(srv.cfg, app.root_dir(srv.cfg), found[0], got, picture)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        if got.get("adult") is True:   # (its store says so: as a store's own mark does, issue #311)
+            app.MarkStore().change("adult", {app.tag_key("local", rec["name"], rec.get("key"))}, True)
+        srv.forget_index()
+        return self._json({"ok": True, "name": rec["name"], "creator": rec["creator"],
+                           "tags": len(rec.get("suggested_tags") or []), "picture": bool(picture), "adult": got.get("adult") is True})
     if path == "/api/local/unitypackage":   # a Unity package of it, made without Unity (issue #382)
         return self._json(*_unitypackage(srv, found[1]))
     if path == "/api/local/remove" and body.get("confirm") is not True:
@@ -177,6 +234,11 @@ def post_api_local_add(self, path, body, query):
     return self._local(path, body)
 
 
+def post_api_bblm_preview(self, path, body, query):
+    """POST /api/bblm/preview, /api/bblm/bring-in. a BB's Library Manager library, brought in (issue #416)"""
+    return self._bblm(path, body)
+
+
 def post_api_konoasset_preview(self, path, body, query):
     """POST /api/konoasset/preview, /api/konoasset/bring-in. a KonoAsset library, brought in (issue #305)"""
     srv = self.server
@@ -185,7 +247,7 @@ def post_api_konoasset_preview(self, path, body, query):
 
 
 
-METHODS = {'_konoasset': _konoasset, '_local': _local}
+METHODS = {'_bblm': _bblm, '_konoasset': _konoasset, '_local': _local}
 
 ROUTES = [
     Route('POST', '/api/local/add', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
@@ -194,7 +256,11 @@ ROUTES = [
     Route('POST', '/api/local/preview', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
     Route('POST', '/api/local/sync', post_api_local_sync, changes=True, auth='key', image_key=False, max_body=1048576, request=(('explorer', 'boolean'), ('folder', 'string'), ('look', 'boolean')), response='object'),
     Route('POST', '/api/local/unitypackage', post_api_local_add, changes=False, auth='key', image_key=False, max_body=1048576, request=(('folder', 'string'),), response='object'),
+    Route('POST', '/api/local/edit', post_api_local_add, changes=True, auth='key', image_key=False, max_body=65536, request=(('creator', 'any'), ('folder', 'string'), ('link', 'any'), ('name', 'any'), ('note', 'any')), response='object'),
+    Route('POST', '/api/local/from-page', post_api_local_add, changes=True, auth='key', image_key=False, max_body=65536, request=(('folder', 'string'),), response='object'),
     Route('POST', '/api/local/picture', post_api_local_add, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('copy', 'any'), ('creator', 'any'), ('depth', 'any'), ('folder', 'string'), ('image', 'any'), ('name', 'string'), ('note', 'any'), ('path', 'string')), response='object'),
+    Route('POST', '/api/bblm/preview', post_api_bblm_preview, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),
+    Route('POST', '/api/bblm/bring-in', post_api_bblm_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),
     Route('POST', '/api/konoasset/preview', post_api_konoasset_preview, changes=False, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),
     Route('POST', '/api/konoasset/bring-in', post_api_konoasset_preview, changes=True, auth='key', image_key=False, max_body=1048576, request=(('confirm', 'boolean'), ('path', 'string')), response='object'),
 ]

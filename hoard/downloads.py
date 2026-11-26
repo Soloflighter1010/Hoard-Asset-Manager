@@ -134,6 +134,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
     library folder, the downloads folder (root) first (hoard/libraries.py); an asset in another one is named by its
     number there ("@1/Booth/...") wherever the page names a place, and one in a folder that isn't among them isn't
     shown. progress: called with how many records are read (issue #200)."""
+    from .library import store_for_url   # (here: library reads this module)
     libraries = libraries or [root]
     identities = {}
     from . import storage
@@ -193,6 +194,7 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
                 thumb_v = (own if linked else folder).joinpath(thumb).stat().st_mtime_ns // 1000000
             except OSError:
                 pass
+        source = store_for_url(e.get("page")) if e["store"] == "Local" else None
         assets.append({
             "id": i,
             "store": e["store"],
@@ -200,10 +202,12 @@ def build_index(root: Path, catalog: list[dict], libraries: list[Path] | None = 
             "creator": e["creator"],
             "variants": e.get("variants"),
             "url": store_link(e["store"], e.get("url")),
-            "page": product_link(e["store"].lower(), e.get("page")),   # its public page (catalog.json), for credits
+            # its public page (catalog.json), for credits; a Local product's, the store page you gave it (issue #416)
+            "page": product_link(source or e["store"].lower(), e.get("page")),
             # what Copy store link copies: its public page, never a page of the buyer's own (a Gumroad purchase's link
             # is its download page, which opens its files for whoever has it)
-            "public": public_page(e["store"].lower(), e.get("page"), e.get("url")),
+            "public": public_page(source or e["store"].lower(), e.get("page"), e.get("url")),
+            "source": source,   # (a Local product's page's store: its tab in Local, issue #416)
             "folder": place,
             "catalog_folder": e["folder"],   # as catalog.json (and Hoard for Unity's project reports) name it
             "library": lib,

@@ -158,7 +158,7 @@ function renderProductDetail(a, model, sections, focus = true) {
   const sentence = tr("by {0}", "\u0001").split("\u0001");
   by.append(sentence[0], creator, sentence.slice(1).join("\u0001"), model.extra ? tr(", {0}", model.extra) : "");
   const store = productElement("p", { class: "d-store" }, productElement("span", { class: `dot ${model.store}` }), model.storeName);
-  if (model.storeUrl) store.append(" ", productElement("a", { href: model.storeUrl, target: "_blank", rel: "noopener noreferrer", title: model.storeUrl }, tr("Open on {0}", model.storeName)));
+  if (model.storeUrl) store.append(" ", productElement("a", { href: model.storeUrl, target: "_blank", rel: "noopener noreferrer", title: model.storeUrl }, tr("Open on {0}", model.pageName || model.storeName)));
   // Copy store link: its public page, as Hoard checked it, never the link Open on the store opens (a Gumroad purchase's is
   // its download page, which opens its files for whoever has it); none when there's no public page to copy
   const page = model.copyUrl;

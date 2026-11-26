@@ -40,6 +40,9 @@ the bottom.
 - **Switching from KonoAsset to Hoard?** **Bring in from KonoAsset...**, in Hoard's Settings, brings in its library
   (5.2.0 beta 5): matched to your Hoard library by the BOOTH item, the rest as Local products left where they are,
   with their tags and memos. See [Your Own Packages](Your-Own-Packages#from-konoasset).
+- **Switching from BB's Library Manager?** **Bring in from BB's Library Manager...**, in the same place, does the
+  same with its library (5.2.0 beta 13), with each product's tags, picture and the page it came from. See
+  [Your Own Packages](Your-Own-Packages#from-bbs-library-manager).
 - **Bought from several stores, and want it all in one place, downloaded and kept up to date?** That's Hoard. It
   puts your products into projects, and its Projects shares its list with the Creator Companion and ALCOM.
 

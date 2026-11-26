@@ -216,7 +216,7 @@ TASK_NAMES = {"refresh": "Refresh", "quick-refresh": "Quick refresh", "sync": "S
               "verify": "Check downloads", "add-local": "Add to Local", "move": "Move to another library folder",
               "rescan-local": "Rescan in Local", "remove-local": "Take out of Local",
               "delete-files": "Delete downloaded files", "routine": "Routine check", "project": "Projects",
-              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "links": "Add products by link", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset"}
+              "wishlists": "Read wishlists", "quick-wishlist": "Quick refresh", "links": "Add products by link", "list-files": "See what's in it", "konoasset": "Bring in from KonoAsset", "bblm": "Bring in from BB's Library Manager"}
 MAX_QUEUE = 50       # jobs waiting at once
 MAX_HISTORY = 60     # finished jobs kept in the Tasks tab (tasks.json)
 MAX_TRAIL = 400      # lines kept of each job's progress
@@ -270,7 +270,7 @@ def side_tasks_file():
 # Issue #403: the small tasks that can run beside the main lane's (a download, a store read): reading a product's list
 # of files, Local's tasks, deleting downloaded files and checking downloads. Each goes there only while it doesn't
 # clash with what the main lane is running (claims), and waits in the main lane's queue as before when it does.
-SIDE_TASKS = frozenset({"list-files", "add-local", "konoasset", "rescan-local", "remove-local", "delete-files", "verify"})
+SIDE_TASKS = frozenset({"list-files", "add-local", "konoasset", "bblm", "rescan-local", "remove-local", "delete-files", "verify"})
 EVERY_STORE = "store:*"
 
 
@@ -286,7 +286,7 @@ def claims(spec: dict | None) -> frozenset:
     store = {EVERY_STORE} if not stores or "all" in stores else {f"store:{x}" for x in stores}
     if task == "list-files":
         return frozenset(store)
-    if task in ("add-local", "konoasset", "rescan-local", "remove-local"):
+    if task in ("add-local", "konoasset", "bblm", "rescan-local", "remove-local"):
         return frozenset({"local"})
     if task in ("verify", "delete-files"):
         return frozenset({"downloads", "local"})
@@ -458,7 +458,7 @@ class Jobs:
 
     STORE_PAGES_A_STEP = 8   # products' pages read in each step of the background reader, at each store's own pace
     # tasks that read no store (nor sign in to one): the background reader reads every store's pages beside them
-    NO_STORE_TASKS = frozenset({"install-browser", "verify", "add-local", "konoasset", "move", "project", "rescan-local",
+    NO_STORE_TASKS = frozenset({"install-browser", "verify", "add-local", "konoasset", "bblm", "move", "project", "rescan-local",
                                 "remove-local", "delete-files"})
 
     def read_store_pages_later(self) -> None:
@@ -699,6 +699,8 @@ class Jobs:
             target = lambda s: self._add_local(spec.get("local") or {})  # noqa: E731
         elif task == "konoasset":
             target = lambda s: self._konoasset(spec.get("local") or {})  # noqa: E731
+        elif task == "bblm":
+            target = lambda s: self._bblm(spec.get("local") or {})  # noqa: E731
         elif task == "move":
             target = lambda s: self._move(spec.get("move") or {})  # noqa: E731
         elif task == "project":
@@ -1045,6 +1047,29 @@ class Jobs:
         words = [f"{plural(done['matched'], 'product')} in your library", f"{plural(done['local'], 'Local product')}"]
         message = "Brought in from KonoAsset: " + " and ".join(words) + (
             f", with {plural(done['notes'], 'note')}." if done["notes"] else ".")
+        if done["left_out"]:
+            message += f" Left out, with no files and not in your library: {', '.join(done['left_out'][:10])}" + (
+                f" and {len(done['left_out']) - 10} more." if len(done["left_out"]) > 10 else ".")
+        self._set(message=message)
+
+    def _bblm(self, what: dict) -> None:
+        """Bring in a BB's Library Manager library (issue #416): matched to your library, or as Local products listed
+        where they are, with their tags, pictures, store pages and 18+ marks. Stop stops it between products."""
+        from .config import root_dir
+        from . import bblm
+        self._set(task="bblm", message="Bringing in from BB's Library Manager")
+        try:
+            folder = bblm.check_folder(what.get("path", ""))
+            done = bblm.bring_in(self.cfg, root_dir(self.cfg), folder, self.lib.snapshot()[0], say=self._quietly,
+                                 stop=self.stop)
+        except (ValueError, OSError) as e:
+            self._set(message=str(e), error=str(e))
+            return
+        finally:
+            self.on_download_done()
+        self._counted(matched=done["matched"], local=done["local"], left_out=len(done["left_out"]))
+        message = (f"Brought in from BB's Library Manager: {plural(done['matched'], 'product')} in your library and "
+                   f"{plural(done['local'], 'Local product')}.")
         if done["left_out"]:
             message += f" Left out, with no files and not in your library: {', '.join(done['left_out'][:10])}" + (
                 f" and {len(done['left_out']) - 10} more." if len(done["left_out"]) > 10 else ".")

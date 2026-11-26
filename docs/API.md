@@ -22,6 +22,8 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/backup/make` | key | yes | — | object |
 | POST | `/api/backup/restore` | key | yes | `content: string` | object |
 | POST | `/api/backup/show` | key | yes | — | object |
+| POST | `/api/bblm/bring-in` | key | yes | `confirm: boolean`, `path: string` | object |
+| POST | `/api/bblm/preview` | key | no | `confirm: boolean`, `path: string` | object |
 | POST | `/api/cancel` | key | yes | `lane: any` | object |
 | GET | `/api/changelog` | key | no | — | object |
 | POST | `/api/check-updates` | key | yes | `all: boolean`, `files: object`, `item: object`, `keys: array`, `only: string`, `quick: boolean`, `refresh: boolean`, `stores: array` | object |
@@ -52,6 +54,8 @@ are JSON objects with an `error` string. See the handler for action-specific fie
 | POST | `/api/link` | key | yes | — | object |
 | GET | `/api/loading` | key | no | — | object |
 | POST | `/api/local/add` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
+| POST | `/api/local/edit` | key | yes | `creator: any`, `folder: string`, `link: any`, `name: any`, `note: any` | object |
+| POST | `/api/local/from-page` | key | yes | `folder: string` | object |
 | POST | `/api/local/picture` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/preview` | key | no | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |
 | POST | `/api/local/remove` | key | yes | `confirm: boolean`, `copy: any`, `creator: any`, `depth: any`, `folder: string`, `image: any`, `name: string`, `note: any`, `path: string` | object |

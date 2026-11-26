@@ -358,6 +358,83 @@ def find(manifest: Manifest, key: str) -> dict:
     return rec
 
 
+def edit(cfg: dict, root: Path, key: str, *, name=None, creator=None, note=None, link=None, build: bool = True) -> dict:
+    """Change a Local product (issue #416): its name, who made it, its note, or the link to its page on a store (a
+    product's public page on Booth, Gumroad, Jinxxy, Payhip or itch.io, as Add products by link takes it; "" takes it
+    off). Each left as None stays as it is. Renamed, its tags, its kind and note, your choices for it (hidden, for
+    adults...) and its places in your sets follow it to its new name. Its files and its folder aren't touched. build:
+    catalog.json made again (several changed together make it once, at the end). Returns the record; raises
+    ValueError with a plain explanation."""
+    from . import storage
+    from .marks import MarkStore
+    from .sets import SetStore
+    from .tags import TagStore, legacy_tag_key
+    from .wishlists import LinkError, product_page_link
+    manifest = Manifest(local_dir(root))
+    rec = find(manifest, key)
+    was = rec["name"]
+    if name is not None:
+        name = clean_text(name, 300)
+        if not name:
+            raise ValueError("Give it a name.")
+        if name.casefold() != was.casefold() and any(str(r.get("name") or "").casefold() == name.casefold()
+                                                     for k, r in manifest.assets.items() if k != key):
+            raise ValueError("Another product in Local has that name. Give it another one.")
+        rec["name"] = name
+    if creator is not None:
+        rec["creator"] = clean_text(creator, 200) or "You"
+    if note is not None:
+        rec["note"] = clean_text(note, 300) or None
+    if link is not None:
+        if not str(link).strip():
+            rec.pop("page", None)
+            rec.pop("page_store", None)
+        else:
+            try:
+                rec["page_store"], rec["page"] = product_page_link(str(link))
+            except LinkError:   # (its one reason: not a product's page on those stores)
+                raise ValueError("That isn't a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io.") from None
+    manifest.save()
+    # (with the metadata kept in SQLite, a Local product is known by its folder, which doesn't change: issue #416).
+    # Kept in JSON, it's known by its name, which another of the same name shares: theirs is copied, not taken from it.
+    old, new = legacy_tag_key("local", was), legacy_tag_key("local", rec["name"])
+    if old != new and not storage.enabled():
+        shared = any(legacy_tag_key("local", str(r.get("name") or "")) == old for k, r in manifest.assets.items() if k != key)
+        TagStore().rekey(old, new, keep=shared)
+        MarkStore().rekey(old, new, keep=shared)
+        SetStore().rekey(old, new, keep=shared)
+    if build:
+        build_catalog(cfg, root)
+    log(f"Local: changed {rec['name']}" + (f" (was {was})" if was != rec["name"] else ""))
+    return rec
+
+
+def fill_in(cfg: dict, root: Path, key: str, got: dict, picture: bytes | None = None) -> dict:
+    """Fill in a Local product from its page on a store (issue #416; got: wishlists.from_product_page's shape): its
+    name and creator, the tags its creator gave it there (as suggestions, as a store's are), and its picture (picture:
+    the page's, fetched, when there was one). A picture of the product's own (a _thumbnail file in it) stays the one
+    shown. Whether it's for adults is the caller's to mark. Returns the record; raises ValueError."""
+    import base64
+    from .tags import clean_tag
+    try:   # (a name another product in Local has stays as it was: the rest is still filled in)
+        rec = edit(cfg, root, key, name=got.get("name") or None, creator=got.get("creator") or None, build=False)
+    except ValueError:
+        rec = edit(cfg, root, key, creator=got.get("creator") or None, build=False)
+    tags = [t for t in dict.fromkeys(clean_tag(x) for x in got.get("store_tags") or [] if isinstance(x, str)) if t][:30]
+    if tags:
+        manifest = Manifest(local_dir(root))
+        rec = find(manifest, key)
+        rec["suggested_tags"] = tags
+        manifest.save()
+    build_catalog(cfg, root)   # (once, with its suggested tags in it)
+    if picture:
+        try:
+            choose_picture(cfg, root, key, base64.b64encode(picture).decode("ascii"))
+        except ValueError as e:   # (one of its own, or a kind Hoard for Unity can't show)
+            log(f"Local: kept {rec['name']}'s picture ({e})")
+    return rec
+
+
 def rescan(cfg: dict, root: Path, key: str) -> dict:
     """An item listed where it is: read its folder again, so files you added show and ones you removed go."""
     manifest = Manifest(local_dir(root))

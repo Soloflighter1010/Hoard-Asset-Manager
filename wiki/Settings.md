@@ -199,7 +199,8 @@ Also here:
   and choices as they are.
 - **Bring in from another tool** (5.2): **Bring in from KonoAsset...** brings in KonoAsset's library:
   what you own is matched by its BOOTH item, and the rest come in as Local products, left where they are, with their
-  tags and memos. Nothing in KonoAsset's folder is changed. See [Hoard and other tools](Hoard-and-Other-Tools).
+  tags and memos. Nothing in KonoAsset's folder is changed. **Bring in from BB's Library Manager...** does the same
+  with its library (5.2.0 beta 13). See [Hoard and other tools](Hoard-and-Other-Tools).
 - **Set up Hoard again:** the setup assistant, step by step. See [Getting started](Getting-Started).
 - **Take the tour:** what Hoard can do, shown on your own library (4.1.0). See
   [Getting started](Getting-Started#the-tour).

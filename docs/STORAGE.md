@@ -29,7 +29,7 @@ The version 1 migration imports these logical documents:
 | --- | --- |
 | Settings and library | config, library, library_folders |
 | Organization | tags, marks, sets |
-| Readers and imports | package-needs, konoasset, picture-looks |
+| Readers and imports | package-needs, konoasset, bblm, picture-looks |
 | Work and checks | asset-updates, routine, sync, tasks, project-tasks, integrity, update, scheduler, job-queue, store-health |
 | Desktop and projects | window-place, vpm-projects, vpm-presets |
 | Integrity bookkeeping | sealed-files |
@@ -142,7 +142,8 @@ and database access, avoiding lock inversions during imports. Library refreshes
 restore the live in-memory snapshot if saving fails; a saved-page import commits
 all parsed stores and their confirmed shop settings together. KonoAsset commits
 its remembered ids, tags, notes and types together and restores companion files
-if an import raises or is stopped.
+if an import raises or is stopped; BB's Library Manager's import does the same with
+its remembered ids, tags and 18+ marks.
 
 SQLite guarantees crash atomicity for private metadata. Public files still use
 atomic file replacement, and are regenerated from the current metadata. The

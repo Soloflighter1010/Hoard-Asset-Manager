@@ -572,7 +572,7 @@ it never ends the store browsers or a sign-in window, which are the main lane's.
 or stops, both lanes (`app._lanes`).
 
 Small tasks have a third, `lane=SIDE` (`server.side_jobs`, issue #403): reading a product's list of files, Local's
-tasks, bringing in from KonoAsset, deleting downloaded files and checking downloads (`jobs.SIDE_TASKS`). Each kind of
+tasks, bringing in from KonoAsset or BB's Library Manager, deleting downloaded files and checking downloads (`jobs.SIDE_TASKS`). Each kind of
 task says what it uses (`jobs.claims`: `store:<name>` for each store it reads or signs in to, `downloads`, `local`,
 `library`, `browser`; one not known there uses all of them), and two clash when they share one (`jobs.clash`). The
 main lane's `start` sends a small task to the side lane when it doesn't clash with the main lane's running task, and
