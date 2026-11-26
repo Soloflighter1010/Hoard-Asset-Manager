@@ -19,6 +19,15 @@ def index(cfg: dict, root: Path) -> dict:
     return downloads.build_index(root, downloader.collect_catalog(cfg, root)[0])
 
 
+def fresh_metadata() -> list[Path]:
+    """Tags, marks, sets and what's been brought in from BB's Library Manager start empty in each test (a class's tests
+    share one home); returns the files, to remove again after."""
+    files = [TagStore().path, MarkStore().path, SetStore().path, bblm.remembered_file(), downloader.integrity_file()]
+    for f in files:
+        storage.remove(f, missing_ok=True)
+    return files
+
+
 PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00"
        b"\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfe\xa7V\xbd\xfa\x00\x00\x00\x00IEND\xaeB`\x82")
 
@@ -33,7 +42,8 @@ class Edit(IsolatedTestCase):
         src.mkdir()
         (src / "Kit.unitypackage").write_bytes(b"pkg")
         self.cfg = {**config.load_config(), "root": str(self.root)}
-        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
+        for f in fresh_metadata():   # (one home for the class: each test starts with none)
+            self.addCleanup(storage.remove, f, missing_ok=True)
         self.rec = local.add(self.cfg, self.root, str(src), name="Kit", creator="Me", copy=True)
         self.key = self.rec["key"]
 
@@ -140,7 +150,8 @@ class BringInFromBBLM(IsolatedTestCase):
         self.root = self.base / "Hoard"
         self.root.mkdir()
         self.cfg = {**config.load_config(), "root": str(self.root)}
-        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
+        for f in fresh_metadata():   # (one home for the class: each test starts with none)
+            self.addCleanup(storage.remove, f, missing_ok=True)
         self.lib = self.base / "BBLM"
         owned = self.lib / "8549623"
         _meta(owned, name="Rusk Outfit", originUrl="https://booth.pm/ja/items/8549623", tags=["outfit"], isAdult=True)
@@ -277,7 +288,8 @@ class InThePage(IsolatedTestCase):
         root = self.base / "Hoard"
         root.mkdir()
         cfg = {**config.load_config(), "root": str(root), "setup_done": True, "ui": {"toured": True}}
-        self.addCleanup(storage.remove, downloader.integrity_file(), missing_ok=True)
+        for f in fresh_metadata():   # (one home for the class: each test starts with none)
+            self.addCleanup(storage.remove, f, missing_ok=True)
         for name, link in (("Kit", "https://booth.pm/en/items/77"), ("Hat", None), ("Ears", "https://ash.gumroad.com/l/ears")):
             src = self.base / name
             src.mkdir()
