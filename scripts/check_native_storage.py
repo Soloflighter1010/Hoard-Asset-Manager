@@ -482,6 +482,27 @@ class Starts:
         return state(home)
 
 
+def server_runs(bundle: Path, work: Path) -> None:
+    """The server inside a Mac's Hoard.app runs (its self-test), as the window starts it: from where it is, not as
+    it was built. Else what's wrong with it: its exit and what it said, and the app's and its code signatures."""
+    server = bundle / "Contents" / "Resources" / "server" / "hoard-server"
+    if not server.is_file():
+        there = sorted(p.name for p in (bundle / "Contents" / "Resources").iterdir())
+        raise AssertionError(f"{bundle.name} has no Contents/Resources/server/hoard-server (its Resources: {there})")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("HOARD_")}
+    env["HOARD_DATA_DIR"] = str(work / "self-test")
+    ran = subprocess.run([str(server), "self-test"], cwd=server.parent, env=env, capture_output=True, text=True,
+                         errors="replace", timeout=300)
+    if ran.returncode == 0:
+        print(f"Its server, in {bundle.name}, passed its self-test", flush=True)
+        return
+    signs = [subprocess.run(["codesign", *how, str(path)], capture_output=True, text=True, errors="replace")
+             for how, path in ((["-dvv"], server), (["--verify", "--deep", "--strict", "-vv"], bundle))]
+    raise AssertionError(f"the server in {bundle.name} doesn't run (exit code {ran.returncode}):\n"
+                         f"{(ran.stdout + ran.stderr)[-3000:]}\n--- its signature\n{signs[0].stderr[-1500:]}"
+                         f"\n--- the app's\n{signs[1].stderr[-1500:]}")
+
+
 def install(package: Path, work: Path) -> tuple[App, callable]:
     """Install or unpack the package: the app, and how to take it away again."""
     name = package.name.lower()
@@ -517,6 +538,7 @@ def install(package: Path, work: Path) -> tuple[App, callable]:
         program = work / bundle.name / "Contents" / "MacOS" / "Hoard"
         assert program.is_file(), f"{bundle.name} has no Contents/MacOS/Hoard"
         print(f"Copied {bundle.name} out of the disk image", flush=True)
+        server_runs(work / bundle.name, work)
         return App([str(program)]), lambda: None
     if name.endswith(".appimage"):
         package.chmod(0o755)
