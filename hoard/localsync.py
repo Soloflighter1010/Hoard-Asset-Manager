@@ -159,8 +159,10 @@ def scan(cfg: dict, root: Path) -> dict:
 
 def tick(srv) -> dict | None:
     """The scheduled look (as Hoard starts, then every EVERY seconds): skipped while a job is using Local (in the main
-    lane or the side lane), so the two never write its records at once."""
-    if not str(srv.cfg.get("local_sync") or "").strip():
+    lane or the side lane), so the two never write its records at once. Not while Local is turned off in Settings,
+    Features (issue #422): the folder is left as it is, and looked at again once Local is on."""
+    from .config import feature_on
+    if not str(srv.cfg.get("local_sync") or "").strip() or not feature_on(srv.cfg, "local"):
         return None
     side = getattr(srv, "side_jobs", None)   # (Local's tasks can run in the side lane too: issue #403)
     if not srv.jobs.busy.acquire(blocking=False):

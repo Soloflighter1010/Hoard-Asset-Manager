@@ -198,6 +198,7 @@ function wireApp() {
   wireBackup();
   wireLocal();
   wireInside();
+  wireSettingsFrame();   // (before Settings is a window: its parts and Find a setting are drawn into it)
   for (const id of ["tagPanel", "stores", "settingsPanel"]) makeWindow($("#" + id));
   wireAutosave();
   wireLibs();
@@ -247,6 +248,7 @@ function applyUi(ui) {   // once, when the page first has its data
   const tile = UI[APP.active === "downloads" ? "dl_tile_size" : "tile_size"];   // each page has its own
   if (tile && typeof setZoom === "function") setZoom(tile);
   if (typeof applyStack === "function") applyStack(UI.stack);   // the Library draws itself next
+  applyFeatures();   // (the parts of Hoard turned off in Settings, Features: issue #422)
   state.sort = sortFrom(new URLSearchParams(location.hash.slice(1)).get("sort"), SORTS);   // the sort last chosen
 }
 

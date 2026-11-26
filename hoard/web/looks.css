@@ -549,7 +549,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .pj-pk tr:hover td { background: var(--stone); }
 [data-style="workbench"] .proj { padding: 8px 10px; }
 [data-style="workbench"] .proj table, [data-style="workbench"] .pj-pk { font-size: 12.5px; }
-[data-style="workbench"] .settings h3, [data-style="workbench"] .tasks h3, [data-style="workbench"] .tagpanel h3,
+[data-style="workbench"] .settings h4, [data-style="workbench"] .tasks h3, [data-style="workbench"] .tagpanel h3,
 [data-style="workbench"] .projects h4 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
 [data-style="workbench"] .setjump button { border-radius: 4px; }
 [data-style="workbench"] .setup-card { padding: 22px 26px; }
@@ -692,3 +692,10 @@ html[data-app-view="downloads"] [data-app-view="library"] { display: none !impor
 
 /* Search keeps nonmatching set tiles out of the visual and keyboard layout. */
 .settile[hidden] { display: none !important; }
+
+/* ---- the parts of Hoard turned off in Settings, Features (issue #422): html's data-off names them, and each of their
+   pieces in the pages (the bar's tabs, a view's own tab, a button, a setting) has data-feature */
+:root[data-off~="local"] [data-feature~="local"], :root[data-off~="sets"] [data-feature~="sets"],
+:root[data-off~="wishlists"] [data-feature~="wishlists"], :root[data-off~="prices"] [data-feature~="prices"],
+:root[data-off~="projects"] [data-feature~="projects"], :root[data-off~="notifications"] [data-feature~="notifications"],
+:root[data-off~="adult"] [data-feature~="adult"] { display: none !important; }

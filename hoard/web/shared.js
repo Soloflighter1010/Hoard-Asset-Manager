@@ -1048,6 +1048,7 @@ function dragProducts(slot) {
 function dropTarget(el) {
   if (!el || !el.closest) return null;
   if (DRAG.what === "products") {
+    if (!featureOn("sets")) return null;   // (a drop makes a set, or adds to one)
     const list = DRAG.ids.map(T.byId).filter(Boolean);
     const slot = el.closest("#grid .slot[draggable=true]");
     if (slot && !DRAG.ids.includes(tileId(slot)) && T.byId(tileId(slot)))
@@ -1352,6 +1353,7 @@ const TAG_ACTIONS = { name: "Tags", items: [{ label: "Add a tag...", run: () => 
 // wins over what their store and tags say, as it does in a product's details. Each is offered when it would change
 // one of them: both, when some are for adults and some aren't.
 function ADULT_ACTIONS() {
+  if (!featureOn("adult")) return [];   // (Products for adults turned off: none are shown, and none are marked)
   const chosen = sel.kind === "items" ? chosenItems().filter(a => a.tag_key) : [];
   const some = chosen.some(a => a.adult), every = chosen.length > 0 && chosen.every(a => a.adult);
   return [...(every ? [] : [{ label: "Mark as 18+", run: list => markAdult(list, "adult") }]),
@@ -1516,6 +1518,7 @@ async function searchOffers(tail) {   // [{ text, sub, fill (the box's new text)
   if (tail.kind === "set") return (DATA.sets || []).filter(s => has(s.name)).slice(0, SEARCH_MORE)
     .map(s => ({ text: s.name, raw: true, sub: s.kind === "wishlist" ? tr("Go to this wishlist") : tr("Go to this set"), go: () => showSet(s.id) }));
   if (tail.kind === "project") {
+    if (!featureOn("projects")) return [];   // (turned off in Settings, Features)
     if (!searchProjects) {
       try { const r = await api("/api/vpm", { cache: "no-store" }); searchProjects = r.ok ? ((await r.json()).projects || []) : []; }
       catch (e) { searchProjects = []; }
@@ -3128,6 +3131,77 @@ function wireFileRules() {
     if (b) setRules((SETTINGS.file_rules || []).filter((_, i) => i !== +b.dataset.ruleOut));
   });
 }
+/* ---------- Settings' frame (issues #421 and #422, ui/Settings.svelte): its parts as cards, each setting a row in one,
+   Find a setting, and Features: the parts of Hoard you can turn off, so what you don't use is out of your way. A part
+   turned off leaves the bar, the menus and the pages (html's data-off names it; each of its pieces has data-feature),
+   and the lists leave out what's its own; nothing it keeps is deleted, and turning it on brings it all back. */
+// The parts of Hoard you can turn off ({key, title, about, needs}: ui/settings.js has the list).
+const featureList = () => HoardUI.settings.FEATURES;
+// The part of Hoard a part is in ("" for none), which turned off turns it off too.
+const featureNeeds = key => (featureList().find(f => f.key === key) || {}).needs || "";
+// Whether a part of Hoard is on: it, and the part it's in (a wishlist is one of Sets and Wishlists; a price, a
+// wishlist's).
+const featureOn = key => (UI.features || {})[key] !== false && (!featureNeeds(key) || featureOn(featureNeeds(key)));
+// Whether a product is left out of the pages because a part of Hoard it's in is turned off: Local's own, or one for
+// adults.
+const featureHides = a => (a.store === "Local" && !featureOn("local")) || (!!a.adult && !featureOn("adult"));
+// Whether a set is left out: every set with Sets and Wishlists off, a wishlist with Wishlists off, one for adults.
+const featureHidesSet = s => !featureOn("sets") || (isWish(s) && !featureOn("wishlists")) || (!!s.adult && !featureOn("adult"));
+// The parts of Hoard turned off, in a word (to tell whether what's left out has changed).
+const featuresOff = () => featureList().map(f => f.key).filter(k => !featureOn(k)).join(" ");
+const FEATURE_VIEWS = new WeakMap();   // the app's data for a view -> {off, data}: that data, with what's off left out
+// A view's data (field: its products' list) with what's turned off left out. It's the same object each time for the
+// same data and the same parts off, so what's read for it (its sets) isn't read again as you go between the views; with
+// nothing off, it's the app's own. The app's copy is never changed: turned on again, it's all there.
+function featureData(response, field) {
+  const off = featuresOff();
+  if (!off || !response) return response;
+  const was = FEATURE_VIEWS.get(response);
+  if (was && was.off === off) return was.data;
+  const data = { ...response, [field]: (response[field] || []).filter(a => !featureHides(a)) };
+  if (Array.isArray(response.sets)) data.sets = response.sets.filter(x => !featureHidesSet(x));
+  FEATURE_VIEWS.set(response, { off, data });
+  return data;
+}
+// The sets and wishlists as /api/sets has them, with what's turned off left out: the sets left out of the views, and
+// the products in them that are (for adults, or Local's).
+function featureSets(got) {
+  if (!got || !Array.isArray(got.sets) || !featuresOff()) return got;
+  return { ...got, sets: got.sets.filter(x => !featureHidesSet(x)).map(x => ({ ...x,
+    items: (x.items || []).filter(i => !(i.adult && !featureOn("adult")) && !(i.local && !featureOn("local"))) })) };
+}
+// Draw Settings' frame, once, as the page starts (its switches show the parts turned off once the page has them).
+function wireSettingsFrame() {
+  HoardUI.settings.frame($("#settingsPanel"), { on: UI.features || {}, change: setFeature, tr });
+}
+// Show and hide the parts of Hoard as they're turned on and off.
+function applyFeatures() {
+  const off = featureList().map(f => f.key).filter(k => !featureOn(k));
+  if (off.length) document.documentElement.dataset.off = off.join(" ");
+  else delete document.documentElement.dataset.off;
+  HoardUI.settings.features(UI.features || {});
+  if (!featureOn("projects") && $("#projectsWin") && !$("#projectsWin").hidden) openProjects(false);
+  // (the page it was on has gone: its view's own page, all of it)
+  if ((!featureOn("sets") && inSets()) || (!featureOn("local") && state.store === "Local")) { state.store = ""; state.set = ""; }
+}
+// A part of Hoard turned on or off, in Settings' Features.
+function setFeature(key, on) {
+  uiSave({ features: { [key]: on } });
+  applyFeatures();
+  load(false, true);   // (each view's products again, from what the app has: what's turned off left out)
+}
+// Something asked for a part of Hoard that's turned off (a hoard:// link, a file dropped): it says so, and turns it on
+// if you say so. Resolves whether it's on now.
+async function featureNeeded(key) {
+  if (featureOn(key)) return true;
+  let want = key;   // (the part it's in first, when that's off)
+  while (featureNeeds(want) && !featureOn(featureNeeds(want))) want = featureNeeds(want);
+  const f = featureList().find(x => x.key === want);
+  if (!await ask(tr("{0} is turned off, in Settings, Features. Turn it on?", tr(f.title)), "Turn it on")) return false;
+  setFeature(want, true);
+  return featureNeeded(key);
+}
+
 // Save each setting as it changes.
 function wireAutosave() {
   wireFileRules();
@@ -3430,7 +3504,7 @@ const pjLastMark = p => p === pjLastOpened() ? `<span class="pj-last">${esc(tr("
 // A project's name, by its path (the list's, or the project open).
 const pjNamed = path => ((PJ.data && PJ.data.projects || []).find(x => x.path === path) || PJ.project || {}).name || "";
 function openProjects(open) {   // Projects takes the whole window below the bar, until it's closed
-  const w = $("#projectsWin"), show = open ?? w.hidden;
+  const w = $("#projectsWin"), show = (open ?? w.hidden) && featureOn("projects");   // (turned off in Settings: #422)
   w.hidden = !show;
   $("#projectsTab").setAttribute("aria-expanded", String(show));
   markBar();
@@ -4427,7 +4501,7 @@ const pjAlready = list => { const names = list.map(s => s.package + (s.in_projec
 // ---- products into a project from the selection bar and right-click, on both pages: Put in a project..., and New
 // project with these... What's put in of each is all its packages, unless it has several to choose from (a PC and a
 // Quest one, say), when it asks; what they need (lilToon, Modular Avatar...) comes with a tick to leave it out.
-const PROJECT_ACTIONS = () => ({ name: "Projects", items: [
+const PROJECT_ACTIONS = () => ({ name: "Projects", items: !featureOn("projects") ? [] : [
   { label: "Put in a project...", run: list => putInProject(list) },
   { label: "New project with these...", run: list => newProjectWith(list) }] });
 // {picks, suggested, already (what the project has of what they need), skipped (not downloaded, or no package in it)},
@@ -5318,7 +5392,7 @@ async function addToAnotherSet(list) {
   let sets = SETS && SETS.for === DATA && !SETS.error ? SETS.sets : null;
   if (!sets) {
     const r = await api("/api/sets", { cache: "no-store" }).catch(() => null);
-    sets = r && r.ok ? (await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
+    sets = r && r.ok ? featureSets(await r.json()).sets : (DATA.sets || []).map(s => ({ ...s, items: [] }));
   }
   const value = await askChoice({ title: tr("Add to which set?"), icon: "sets", find: tr("Find a set"),
     detail: tr(items.length === 1 ? "1 product" : "{0} products", items.length),
@@ -5402,7 +5476,7 @@ async function takeOutOfSet(list) {   // from the set that's open
   if (done) toast(tr(list.length === 1 ? "Took it out of {0}." : "Took {1} products out of {0}.", s.name, list.length));
 }
 // the selection bar's and right-click's Sets menu, on both pages
-const SET_ACTIONS = () => ({ name: "Sets", items: [
+const SET_ACTIONS = () => ({ name: "Sets", items: !featureOn("sets") ? [] : [
   ...(inSets() && setById(state.set) ? [{ label: tr("Take out of {0}", setById(state.set).name), raw: true, run: takeOutOfSet }] : []),
   { label: "New set from these...", run: list => addToSet(list, "new") },
   ...setsInMenu().map(s => ({ label: tr("Add to {0}", s.name), raw: true, run: list => addToSet(list, s.id) })),
@@ -5435,7 +5509,7 @@ async function loadSets() {
   } catch (e) { got = { error: true, sets: [] }; }
   got.for = asked;
   if (asked !== DATA) return;   // (the page has read everything again: it asks again)
-  SETS = got;   // (where the page is is known now, a set or a wishlist: #180)
+  SETS = featureSets(got);   // (where the page is is known now, a set or a wishlist: #180)
   if (wishScope() || openWish()) T.render(); else drawSets();   // (a wishlist's tags and creators are in the filters beside it)
 }
 // A set's picture.
@@ -5476,7 +5550,7 @@ document.addEventListener("change", async e => {
   setViewShown = null; drawSets();
 });
 function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
-  if (!i.price) return "";
+  if (!i.price || !featureOn("prices")) return "";
   const amount = convertedPrice(i.price);
   const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>`;
   return estimate + `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
@@ -5485,7 +5559,7 @@ function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue 
 // What a set (or wishlist) has: how many downloaded, owned but not downloaded, and still to buy, in words.
 function setCounts(s) {
   if (isWish(s)) {
-    const yours = s.items.filter(i => i.owned).length, down = s.items.filter(cheaper).length;
+    const yours = s.items.filter(i => i.owned).length, down = featureOn("prices") ? s.items.filter(cheaper).length : 0;
     return { got: 0, owned: s.items.filter(i => i.owned && i.download == null).length, buy: s.items.length - yours,
       text: [tr(s.items.length === 1 ? "1 product" : "{0} products", s.items.length), yours && tr("{0} yours already", yours),
              down && tr(down === 1 ? "1 cheaper than before" : "{0} cheaper than before", down)].filter(Boolean).join(", ") };
@@ -5561,12 +5635,13 @@ function setsRoot() {
   queueMicrotask(filterSetTiles);
   const sort = `<label>${esc(tr("Sort"))} <select id="setSort" aria-label="${esc(tr("Sort sets and wishlists"))}"><option value="saved"${SET_SORT === "saved" ? " selected" : ""}>${esc(tr("Saved order"))}</option><option value="name"${SET_SORT === "name" ? " selected" : ""}>${esc(tr("Name"))}</option></select></label>`;
   // (found as the creators are, and sorted as the shelf sorts: the pages' own field and dropdown)
-  return top + `<div class="setfind">${search}${sort}</div><p id="setSearchResult" class="hint" role="status" hidden></p>` + sets + `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
+  return top + `<div class="setfind">${search}${sort}</div><p id="setSearchResult" class="hint" role="status" hidden></p>` + sets +
+    (!featureOn("wishlists") ? "" : `<h3 class="setmore-h wish-h">${esc(tr("Wishlists"))} <span class="n">${wishes.length.toLocaleString()}</span></h3>` +
     `<div class="row sets-top"><button class="primary sm" data-setx="readwish">${esc(tr("Read my wishlists..."))}</button>` +
     `<button class="ghost sm" data-setx="importwish">${esc(tr("Import saved wishlist pages..."))}</button>` +
     `<button class="ghost sm" data-setx="newwish">${esc(tr("New wishlist"))}</button></div>` +
     (wishes.length ? `<div class="grid setgrid">${wishes.map(setTile).join("")}</div>`
-      : `<p class="none">${esc(tr("Your wishlists from Booth (your loved items), Gumroad, Jinxxy (your wishlist, likes and lists) and Payhip, with what each product costs. Read them from the stores you're signed in to, or import wishlist pages you saved from your own browser. Each time they're read again, a price that changed shows what it was."))}</p>`);
+      : `<p class="none">${esc(tr("Your wishlists from Booth (your loved items), Gumroad, Jinxxy (your wishlist, likes and lists) and Payhip, with what each product costs. Read them from the stores you're signed in to, or import wishlist pages you saved from your own browser. Each time they're read again, a price that changed shows what it was."))}</p>`));
 }
 // Finding more for a wishlist (issue #187): your words searched on Nexyy (a search across the stores) and on the stores'
 // own sites, in your browser; you copy a product's link from there into Add products by link. Hoard doesn't read these
@@ -5608,7 +5683,7 @@ function setHead(s) {
   // the rest of what's done with it, gathered together and quieter than Share (issue #272)
   const quiet = [
     isWish(s) && `<button class="linkish" data-setx="addlinks">${esc(tr("Add products by link..."))}</button>`,   // (a set: from your library, #208)
-    setDownloaded(s).length && `<button class="linkish" data-setx="project">${esc(tr("New project with this set..."))}</button>`,
+    setDownloaded(s).length && featureOn("projects") && `<button class="linkish" data-setx="project">${esc(tr("New project with this set..."))}</button>`,
     c.owned && `<button class="linkish" data-setx="download">${esc(tr(c.owned === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", c.owned))}</button>`,
     `<button class="linkish" data-setx="picture">${esc(tr(s.cover ? "Change its picture..." : "Choose a picture..."))}</button>`,
     s.cover && `<button class="linkish" data-setx="unpicture">${esc(tr("Take the picture off"))}</button>`,
@@ -5868,13 +5943,14 @@ function wishFits(i, words, skip) {
   if (skip !== "creator" && state.creator && i.creator !== state.creator) return false;
   for (const tag of state.tags) if (!(i.words || []).includes(tag) && !wishOwnTags(i).includes(tag)) return false;
   const lo = parseFloat(WISH.min), hi = parseFloat(WISH.max);
-  if (isNaN(lo) && isNaN(hi)) return true;
+  if ((isNaN(lo) && isNaN(hi)) || !featureOn("prices")) return true;   // (Prices turned off: no range either)
   if (!i.price || i.price.currency !== WISH.cur) return false;   // (a range is in one currency: others aren't in it)
   return !(i.price.amount < lo) && !(i.price.amount > hi);
 }
 // A wishlist's price filter: a currency, and the lowest and highest price.
 function wishBar(s) {
   if (WISH.set !== s.id) Object.assign(WISH, { set: s.id, cur: "", min: "", max: "", find: "" });
+  if (!featureOn("prices")) return "";
   const curs = wishCurrencies(s);
   if (!curs.includes(WISH.cur)) WISH.cur = curs[0] || "";
   // A price field.
@@ -5898,6 +5974,7 @@ function money(amount, currency) {
 // Issue #381: what products not yours yet cost in all: per currency (or, with Convert prices to, one estimate in
 // that currency), and how many have no price. shown: whether a filter or search narrows them ("of those shown").
 function priceTotal(list, shown) {
+  if (!featureOn("prices")) return "";
   const priced = list.filter(i => i.price && typeof i.price.amount === "number" && i.price.currency);
   const none = list.length - priced.length;
   if (!priced.length) return "";
@@ -6193,7 +6270,7 @@ const SET_TILE_ACTIONS = () => {
     ...(one ? [{ label: "Open", run: list => showSet(list[0].id) }, { label: "Share...", run: list => shareSet(list[0]) }] : []),
     ...(missing.length ? [{ label: tr(missing.length === 1 ? "Download the 1 not downloaded" : "Download the {0} not downloaded", missing.length),
                             raw: true, run: list => T.download(notDownloaded(list)) }] : []),
-    ...(one && setDownloaded(got[0]).length ? [{ label: "New project with this set...", run: list => newProjectWithSet(list[0]) }] : []),
+    ...(one && featureOn("projects") && setDownloaded(got[0]).length ? [{ label: "New project with this set...", run: list => newProjectWithSet(list[0]) }] : []),
     ...(one ? [{ label: "Choose a picture...", run: list => setPicture(list[0]) }, { label: "Rename", run: list => renameSet(list[0]) }] : []),
     { label: one ? "Delete" : "Delete these sets", danger: true, run: deleteSets }] }] };
 };
@@ -6206,7 +6283,7 @@ const SET_FILE_MOST = 16000000, SET_FILES_LOOKED_IN = 50;
 // Import the sets and wishlists among these files, open the one imported last, and say what came in and what was
 // refused (with also, when there are files that aren't sets); returns the files that aren't sets.
 async function importSetFiles(files, also = "") {
-  const rest = [], refused = [];
+  const rest = [], refused = [], off = new Set();   // (off: a part asked to be turned on, and left off)
   let looked = 0, made = null, n = 0;
   for (const file of files) {
     const json = /\.json$/i.test(file.name);
@@ -6216,6 +6293,8 @@ async function importSetFiles(files, also = "") {
       try { raw = JSON.parse(await file.text()); } catch (e) { raw = null; }   // (not JSON: not a set)
     }
     if (!raw || typeof raw !== "object" || raw.format !== "hoard-set") { rest.push(file); continue; }
+    const needs = raw.set && raw.set.kind === "wishlist" ? "wishlists" : "sets";   // (a set's file: its part, on)
+    if (off.has(needs) || !await featureNeeded(needs)) { off.add(needs); continue; }
     const r = await apiPost("/api/sets", { action: "import-json", file: raw });
     if (!r.ok) { refused.push(`${file.name}: ${tr(r.data.error || "The set couldn't be imported.")}`); continue; }
     made = { id: r.data.made, name: String((raw.set || {}).name || "") };
@@ -6416,7 +6495,7 @@ async function importWishlists() {
       if (pg.error) problems.push(`${pg.filename}: ${tr(pg.error)}`);
       else pg.lists.forEach(x => said.push(tr("{0}: {1} ({2} products)", pg.filename, x.list, x.products)));
     }
-    if (r.data.sets) { SETS = { ...r.data, for: DATA }; drawSets(); }
+    if (r.data.sets) { SETS = featureSets({ ...r.data, for: DATA }); drawSets(); }
   }
   await ask([tr(lists === 1 ? "1 wishlist imported." : "{0} wishlists imported.", lists), said.join("\n"),
              problems.length ? tr("Not imported:") + "\n" + problems.join("\n") : ""].filter(Boolean).join("\n\n"), "OK", false, "Close");
@@ -6537,10 +6616,10 @@ async function openLink(asked) {
   linkOpen = true;
   try {
     if (asked.do === "error") toast(asked.error ? tr(String(asked.error)) : tr("That Hoard link couldn't be opened."));
-    else if (asked.do === "set" && typeof asked.code === "string") await addSharedSet(asked.code);
-    else if (asked.do === "add" && typeof asked.link === "string") await addFromLink(asked.link);
+    else if (asked.do === "set" && typeof asked.code === "string") { if (await featureNeeded("sets")) await addSharedSet(asked.code); }
+    else if (asked.do === "add" && typeof asked.link === "string") { if (await featureNeeded("wishlists")) await addFromLink(asked.link); }
     else if (asked.do === "product" && typeof asked.key === "string") await openFromLink(asked.key);
-    else if (asked.do === "local") await openFromExplorer(asked.said);
+    else if (asked.do === "local") { if (await featureNeeded("local")) await openFromExplorer(asked.said); }
   } finally { linkOpen = false; }
 }
 // hoard://add: a wishlist you choose (or a new one), then Add products by link... with the link in it.
@@ -6565,6 +6644,10 @@ async function addFromLink(link) {
 }
 // hoard://product: its details in the library, or that it isn't there (a hidden one too, while Hidden is locked).
 async function openFromLink(key) {
+  // (one left out because a part of Hoard is turned off, for adults or Local's: it says so, and it's shown if turned on)
+  const off = ((APP.cache && APP.cache.library && APP.cache.library.items) || []).find(a => a.key === key && featureHides(a));
+  if (off && !await featureNeeded(off.adult && !featureOn("adult") ? "adult" : "local")) return;
+  if (off) await load(false, true);
   await navigateApp("/#open=" + encodeURIComponent(key));
   if (hasProduct(key)) return;
   closeDetail();   // (nothing to show: no details stay open, and no open= stays in the address)

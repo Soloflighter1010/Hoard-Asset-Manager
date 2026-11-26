@@ -20,7 +20,7 @@ from .tags import tag_key
 from .setup import browser_problem, install_browser, own_browser_installed, stop_install
 from .common import Cancelled, NotLoggedIn, Progress, capture_log, set_lane, stoppable
 from . import diagnostics
-from .config import payhip_shops
+from .config import feature_on, payhip_shops
 from .library import DOWNLOADABLE, FETCHERS, IMPORTABLE, PAYHIP_NO_SHOPS, PAYHIP_SIGNED_IN_NO_SHOPS, Library, STORES, cache_images, open_sign_in_pages, payhip_unread_note, sign_in_urls, unreachable_message
 from .net import is_network_error, plain_error, reachable
 from .paths import data_dir
@@ -1632,7 +1632,7 @@ class Jobs:
         from .sets import SetStore
         from .wishlists import READERS
         unread = self._refresh(stores, skip_imported=True, quick=True)
-        if self._forced or self.state.get("error"):
+        if self._forced or self.state.get("error") or not feature_on(self.cfg, "wishlists"):   # (Wishlists turned off: #422)
             return
         try:
             kept = {(s.get("source") or {}).get("store") for s in SetStore().load()["sets"] if s.get("kind") == "wishlist"}

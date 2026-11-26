@@ -395,6 +395,8 @@ def post_api_wishlists_read(self, path, body, query):
     """POST /api/wishlists/read. Read wishlists: each chosen store's, in its signed-in window (wishlists.py)"""
     srv = self.server
     u = app.urlparse(self.path)
+    if not app.feature_on(srv.cfg, "wishlists"):   # (turned off in Settings, Features: issue #422)
+        return self._json({"error": "Wishlists are turned off in Settings, Features."}, 409)
     stores = [x for x in body.get("stores") or [] if x in app.wishlists.READERS] if isinstance(body.get("stores"), list) else []
     if not stores:
         return self._json({"error": "Choose the stores to read your wishlists from."}, 400)

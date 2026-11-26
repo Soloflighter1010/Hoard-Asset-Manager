@@ -240,7 +240,8 @@ def run_app(cfg: dict, config_path: Path | None, browser: bool = False, shell: b
         srv.updates.check_in_background()
         from . import notify
         from . import i18n
-        srv.jobs.on_found = lambda counts: srv.cfg.get("notify_found", True) is not False and notify.show(
+        from .config import feature_on
+        srv.jobs.on_found = lambda counts: srv.cfg.get("notify_found", True) is not False and feature_on(srv.cfg, "notifications") and notify.show(
             notify.found_text(counts, i18n.language(srv.cfg, srv.accept_language)))   # in the pages' language
         srv.can_notify = True
         srv.start_schedule()

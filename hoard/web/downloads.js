@@ -31,7 +31,7 @@ const art = a => a.thumb ? `<img src="${fileUrl(a.thumb, a.thumb_v)}" alt="" loa
 
 /* ---------- data */
 async function refreshView(response) {
-  DATA = response;
+  DATA = featureData(response, "assets");   // (what a part of Hoard turned off has is left out: issue #422)
   for (const a of DATA.assets) {
     withStoreTags(a).hay = norm([a.name, a.creator, a.store, storeName(a.store), a.variants, ...a.tags, ...a.suggested, ...a.files.map(f => f.path), a.your_note].join(" "));
   }
@@ -696,7 +696,7 @@ function showDetail(a, focus = true) {
   openId = a.id;
   markCurrent(`.slot[data-id="${a.id}"]`);
   const sections =
-    ((a.used_in || []).length ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
+    ((a.used_in || []).length && featureOn("projects") ? `<p class="also"><span translate="no">${esc(tr("Used in {0}.", listed(a.used_in)))}</span> ` +
       `<button class="linkish" data-act="projects">See Projects</button></p>` : "") +
     otherCopies(a).map(o => `<p class="also"><span translate="no">${esc(tr(o.store === a.store ? (o.creator !== a.creator ? "You also have this again (by {1})." : "You also have this again.")
                                                                          : (o.creator !== a.creator ? "You also have this from {0} (by {1})." : "You also have this from {0}."),

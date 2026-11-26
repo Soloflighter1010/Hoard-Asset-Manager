@@ -27,7 +27,7 @@ from . import __version__, alerts, backup, credits, diagnostics, i18n, itch, lib
 from .changelog import whats_new
 from .asset_updates import AssetUpdates
 from .browser import SigninsUnprotected, browser_name, custom_program, not_chromium, signin_protection, signins_root, use_channel
-from .config import DEFAULT_CONFIG, apply_store_sites, clean_payhip_shop, deep_merge, payhip_shops, root_dir, save_config
+from .config import DEFAULT_CONFIG, FEATURES, apply_store_sites, clean_payhip_shop, deep_merge, feature_on, payhip_shops, root_dir, save_config
 from .downloader import (build_catalog, catalog_seal, collect_catalog, delete_downloaded_files, download_retries, integrity_summary,
                          restore_previous, file_rules, remembered_files, ruled_out, MAX_REMEMBERED, MAX_PROBLEMS, STORE_DIRS,
                          edits_root, last_integrity, make_editable_copy, reseal_catalog, resolve_problem)
@@ -197,6 +197,10 @@ def ui_settings(cfg: dict) -> dict:
         out["recent_sets"] = [s for s in ui["recent_sets"] if isinstance(s, str) and re.fullmatch(r"[0-9A-Za-z]{1,16}", s)][:10]
     if isinstance(ui.get("spots_seen"), list):   # the "new here" notes you've seen (issue #244), by their names
         out["spots_seen"] = [k for k in ui["spots_seen"] if isinstance(k, str) and re.fullmatch(r"[a-z0-9-]{1,40}", k)][:100]
+    if isinstance(ui.get("features"), dict):   # the parts turned off in Settings, Features (issue #422)
+        off = {k: False for k, on in ui["features"].items() if k in FEATURES and on is False}
+        if off:
+            out["features"] = off
     if isinstance(ui.get("unwrapped"), list):   # the gifts you've opened (issue #263): their keys, never their names
         out["unwrapped"] = [k for k in ui["unwrapped"] if isinstance(k, str) and re.fullmatch(r"[a-z]{2,12}:[\w.:-]{1,120}", k)][-MAX_UNWRAPPED:]
     return out
@@ -353,6 +357,12 @@ def apply_settings(cfg: dict, body: dict) -> dict:
     if "ui" in body:   # checked the same way as it's read back (ui_settings), and only what's valid is kept
         change["ui"] = ui_settings({"ui": body["ui"]})
         change["ui"] = {k: v for k, v in change["ui"].items() if v != {}}
+        given = body["ui"].get("features") if isinstance(body["ui"], dict) else None
+        if isinstance(given, dict):   # (a part turned on again, too: it's kept as on, over the off it was)
+            flips = {k: v for k, v in given.items() if k in FEATURES and isinstance(v, bool)}
+            change["ui"].pop("features", None)
+            if flips:
+                change["ui"]["features"] = flips
     if "display" in body:
         given = body["display"] if isinstance(body["display"], dict) else {}
         display = {}
