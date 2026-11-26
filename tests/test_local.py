@@ -466,6 +466,9 @@ class Browse(IsolatedTestCase):
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1300, "height": 860})
             page.goto(self.srv.entry_url())
+            # (the entry address trades its one-time token for the key: leaving before that's kept, the next page has
+            # no key, and asks for nothing it can get, as a slow runner showed)
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.goto(self.srv.url + "downloads")
             page.click("#localAdd")
             page.locator("#localPanel.win:not([hidden])").wait_for()
@@ -505,6 +508,9 @@ class Browse(IsolatedTestCase):
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1300, "height": 860})
             page.goto(self.srv.entry_url())
+            # (the entry address trades its one-time token for the key: leaving before that's kept, the next page has
+            # no key, and asks for nothing it can get, as a slow runner showed)
+            page.wait_for_function("() => localStorage.getItem('hoard-key')")
             page.goto(self.srv.url + "downloads")
             page.click('.apptabs a[href="/downloads#store=Local"]')
             page.wait_for_function("() => document.title === 'Hoard: Local'")
