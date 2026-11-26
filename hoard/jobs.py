@@ -1030,7 +1030,7 @@ class Jobs:
 
     def _konoasset(self, what: dict) -> None:
         """Bring in a KonoAsset library (issue #305): matched to your library, or as Local products listed where they
-        are, with their tags and notes. Stop stops it between products; what's done is kept, and remembered."""
+        are, with their tags and notes. Stop stops it between products, and puts back what it changed."""
         from .config import root_dir
         from . import konoasset
         self._set(task="konoasset", message="Bringing in from KonoAsset")
@@ -1038,6 +1038,9 @@ class Jobs:
             folder = konoasset.check_folder(what.get("path", ""))
             done = konoasset.bring_in(self.cfg, root_dir(self.cfg), folder, self.lib.snapshot()[0], say=self._quietly,
                                       stop=self.stop)
+        except InterruptedError:   # (Stop, between products: the import is put back, so nothing changed)
+            self._set(message="Stopped. Nothing was brought in from KonoAsset.")
+            return
         except (ValueError, OSError) as e:
             self._set(message=str(e), error=str(e))
             return
@@ -1062,6 +1065,9 @@ class Jobs:
             folder = bblm.check_folder(what.get("path", ""))
             done = bblm.bring_in(self.cfg, root_dir(self.cfg), folder, self.lib.snapshot()[0], say=self._quietly,
                                  stop=self.stop)
+        except InterruptedError:   # (Stop, between products: the import is put back, so nothing changed)
+            self._set(message="Stopped. Nothing was brought in from BB's Library Manager.")
+            return
         except (ValueError, OSError) as e:
             self._set(message=str(e), error=str(e))
             return
@@ -1073,7 +1079,10 @@ class Jobs:
         if done["left_out"]:
             message += f" Left out, with no files and not in your library: {', '.join(done['left_out'][:10])}" + (
                 f" and {len(done['left_out']) - 10} more." if len(done["left_out"]) > 10 else ".")
-        self._set(message=message)
+        if done["refused"]:   # (with why each couldn't be: its folder inside Hoard's downloads folder, say)
+            message += f" Couldn't be brought in: {'; '.join(done['refused'][:5])}" + (
+                f" and {len(done['refused']) - 5} more." if len(done["refused"]) > 5 else ".")
+        self._set(message=message, partial=bool(done["refused"]) or None)
 
     def _add_local_folders(self, what: dict) -> None:
         """Issue #109: each folder some levels down in a folder of folders, added to Local as a package of its own."""
@@ -1200,7 +1209,8 @@ class Jobs:
         back what it was changing."""
         if self.lane == PROJECTS:
             return self._stop_project()
-        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move", "routine")
+        if self.state["running"] and (self.state["task"] in ("download", "check-updates", "verify", "move", "routine",
+                                                             "konoasset", "bblm")   # (between products: nothing changed)
                                       or self.state.get("sync") or self.state.get("routine")):
             self._set(message="Stopping")   # before the job can see Stop, so its "Stopped" is never overwritten
             self.stop.set()
@@ -1624,8 +1634,10 @@ class Jobs:
         store = (stores or ["payhip"])[0]
         label = STORES[store]["label"]
         sid, links = str(what.get("set") or ""), [str(x)[:2000] for x in (what.get("links") or [])[:30]]
+        fill = str(what.get("fill") or "")   # (a Local product's folder: Fill in from its page, issue #416)
         target = next((x for x in SetStore().load()["sets"] if x.get("id") == sid), {})
-        if not feature_on(self.cfg, "wishlists" if target.get("kind") == "wishlist" else "sets"):   # (turned off since: #422)
+        part = "local" if fill else "wishlists" if target.get("kind") == "wishlist" else "sets"
+        if not feature_on(self.cfg, part):   # (turned off since: #422)
             self._set(task="links", message="That's turned off in Settings, Features, so nothing was added.")
             return
         wait = float(self.cfg.get(store, {}).get("check_wait", 60))
@@ -1646,6 +1658,9 @@ class Jobs:
                         failed.append(f"{link[:200]}: {e}")
             finally:
                 ctx.close()
+        if got and fill:
+            self._fill_local(fill, got[0], label)
+            return
         if got:
             SetStore().add_products(sid, got)
         self._set(log=failed[-200:])
@@ -1655,6 +1670,25 @@ class Jobs:
         else:
             self._set(message=added + (f"; {len(failed)} couldn't be read (see the log)" if failed else "."),
                       partial=bool(failed) or None)
+
+    def _fill_local(self, folder: str, got: dict, label: str) -> None:
+        """A Local product filled in from its page, read in Hoard's browser for its store (issue #416), as Fill in from
+        its page fills one in (local.fill_from_page)."""
+        from . import local
+        from .config import root_dir
+        root = root_dir(self.cfg)
+        found = local.by_folder(root, folder)
+        if not found:
+            self._set(message="That isn't in Local any more.", error="That isn't in Local any more.")
+            return
+        try:
+            done = local.fill_from_page(self.cfg, root, found[0], got)
+        except ValueError as e:
+            self._set(message=str(e), error=str(e))
+            return
+        finally:
+            self.on_download_done()
+        self._set(message=f"Filled in {done['name']} from its page on {label}.")
 
     def _quick_refresh(self, stores: list[str]) -> None:
         """Issue #300: a quick look at each store for what's new: the start of its library (each listing's first

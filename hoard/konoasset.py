@@ -220,8 +220,10 @@ def _picture(cfg: dict, root: Path, folder: Path, asset: dict, key: str) -> None
 
 
 def bring_in(cfg: dict, root: Path, folder: Path, library_items: list[dict], say=None, stop=None) -> dict:
-    """Commit one import together, restoring metadata and companion files on failure."""
-    with storage.import_transaction():
+    """Commit one import together, restoring metadata and companion files on failure. (Local's records first, then the
+    metadata, as Local's other writers take them: never the other way round, which could wait forever.)"""
+    from . import local
+    with local.WRITING, storage.import_transaction():
         return _bring_in(cfg, root, folder, library_items, say, stop)
 
 

@@ -1273,11 +1273,18 @@ async function localFill(a) {
   toast(tr("Reading its page..."));
   const r = await apiPost("/api/local/from-page", { folder: a.folder });
   if (!r.ok) { toast(tr(r.data.error || "That didn't work.")); return; }
+  if (r.data.browser) {   // (a page its store shows only to a browser, as Payhip's: read in Hoard's, as a task)
+    toast(tr(r.data.queued ? "Its page is read in Hoard's browser once what's running has finished. Follow it in Tasks."
+                           : "Reading its page in Hoard's browser. Follow it in Tasks."));
+    return;
+  }
   await load();
   const again = DATA.assets.find(x => x.folder === a.folder);
   if (again && openId === a.id) showDetail(again, false);
   toast([tr("Filled in {0} from its page.", r.data.name), r.data.tags ? tr(r.data.tags === 1 ? "1 tag suggested." : "{0} tags suggested.", r.data.tags) : "",
-         r.data.adult ? tr("Its store marks it as for adults (18+).") : ""].filter(Boolean).join(" "));
+         r.data.adult ? tr(featureOn("adult") ? "Its store marks it as for adults (18+)."
+                                              : "Its store marks it as for adults (18+), so it's hidden while Products for adults is turned off.") : ""]
+         .filter(Boolean).join(" "));
 }
 // Open Add to Local, or close it (open: which; else the other way).
 function openLocal(open) {

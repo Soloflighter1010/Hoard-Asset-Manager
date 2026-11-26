@@ -90,14 +90,20 @@ Manager...** in Settings, under Bring in from another tool, and choose its root 
 product in it, each with its `meta.json` (its Settings say where it is). It needn't be running, or installed. Before
 anything changes, Hoard says what bringing it in will do; then **Bring in** or **Cancel** (5.2.0 beta 13).
 
-- A product whose BOOTH item is in your Hoard library is matched to that product. The rest become Local products,
-  listed where they are: their files stay in its folder, its `thumbnail.png` is the picture chosen for each, and
-  the page each came from is its page on a store (see [Changing it](#changing-it)).
-- Its tags become your tags, and a product it marks for adults is marked 18+.
-- A product still downloading in it, or one with no files that isn't in your library, is left out, and named.
+- A product whose BOOTH item is in your Hoard library is matched to that product, and one whose folder is in Local
+  already (added with **Add your own**, say) to that one. The rest become Local products, listed where they are:
+  their files stay in its folder, its `thumbnail.png` is the picture chosen for each, and the page each came from is
+  its page on a store (see [Changing it](#changing-it)). BB's Library Manager's own `meta.json` and picture aren't
+  among their files. One named like a product in Local gets "BBLM" and its id after its name.
+- Its tags become your tags, and a product it marks for adults is marked 18+, unless you said it isn't (**It isn't
+  for adults**: your word wins).
+- A product still downloading in it, one with no files that isn't in your library, and one that can't be listed
+  (with why) are left out, and named.
 
 Hoard only reads its folder: nothing in it is written, moved or deleted. It remembers what it brought in
-(`bblm.json` in its app-data folder), so bringing in again later adds only what's new.
+(`bblm.json` in its app-data folder), so bringing in again later adds only what's new; a product taken out of Local,
+or whose folder moved with its root, comes in again. **Stop**, in Tasks, stops it between products, and nothing is
+brought in.
 
 ## Its picture
 

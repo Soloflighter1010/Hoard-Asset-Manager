@@ -2845,5 +2845,14 @@
  "Local was turned off, so nothing was added. Choose it in File Explorer again.": "로컬이 꺼져 있어서 아무것도 추가하지 않았어요. 파일 탐색기에서 다시 선택해 주세요.",
  "Local is turned off in Settings, Features.": "로컬이 설정의 '기능'에서 꺼져 있어요.",
  "Wishlists are turned off in Settings, Features, so they weren't read.": "위시리스트가 설정의 '기능'에서 꺼져 있어서 읽지 않았어요.",
- "That's turned off in Settings, Features, so nothing was added.": "설정의 '기능'에서 꺼져 있어서 아무것도 추가하지 않았어요."
+ "That's turned off in Settings, Features, so nothing was added.": "설정의 '기능'에서 꺼져 있어서 아무것도 추가하지 않았어요.",
+ "Its page is read in Hoard's browser once what's running has finished. Follow it in Tasks.": "실행 중인 것이 끝나면 Hoard의 브라우저에서 페이지를 읽어요. 작업에서 진행 상황을 볼 수 있어요.",
+ "Reading its page in Hoard's browser. Follow it in Tasks.": "Hoard의 브라우저에서 페이지를 읽고 있어요. 작업에서 진행 상황을 볼 수 있어요.",
+ "Its store marks it as for adults (18+), so it's hidden while Products for adults is turned off.": "스토어에서 성인용(18+)으로 표시해서, '성인용 상품'이 꺼져 있는 동안에는 숨겨져요.",
+ "Hoard has too much waiting to read it in its browser now: try again later.": "기다리는 것이 너무 많아서 지금은 Hoard의 브라우저에서 읽을 수 없어요. 나중에 다시 시도해 주세요.",
+ "Already in Local, from its folder: {0}. Their tags go on those products.": "로컬에 이미 있는 것(그 폴더에서): {0}. 태그는 그 상품에 붙어요.",
+ "They're hidden while Products for adults is turned off.": "'성인용 상품'이 꺼져 있는 동안에는 숨겨져요.",
+ "Left out, still downloading in BB's Library Manager: {0} ({1}).": "BB's Library Manager에서 아직 다운로드 중이라 빼는 것: {0}({1}).",
+ "Can't be brought in: {0} ({1}).": "가져올 수 없는 것: {0}({1}).",
+ "Left out, with a meta.json that can't be read: {0}.": "meta.json을 읽을 수 없어서 빼는 것: {0}."
 }

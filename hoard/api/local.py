@@ -35,7 +35,7 @@ def _bblm(self, path: str, body: dict):
     try:
         folder = bblm.check_folder(str(body.get("path") or "")[:1000])
         if path == "/api/bblm/preview":
-            return self._json(bblm.summary(bblm.plan(folder, srv.lib.snapshot()[0])))
+            return self._json(bblm.summary(bblm.plan(folder, srv.lib.snapshot()[0], app.root_dir(srv.cfg))))
     except ValueError as e:
         return self._json({"error": str(e)}, 400)
     if path != "/api/bblm/bring-in" or body.get("confirm") is not True:
@@ -69,6 +69,12 @@ def _edit(srv, path: str, found: tuple, body: dict) -> tuple[dict, int]:
             return {"error": "Give it its page on a store first, with Edit..."}, 400
         try:
             got = app.wishlists.from_product_page(found[1]["page"], app.read_store_page)
+        except app.wishlists.PageRefused:   # (Payhip's, behind Cloudflare: read in Hoard's browser, as a task, #387)
+            job = srv.jobs.start("links", list(app.wishlists.BROWSER_READ[:1]),
+                                 local={"fill": str(body.get("folder") or "")[:1000], "links": [found[1]["page"]]})
+            if not job:
+                return {"error": "Hoard has too much waiting to read it in its browser now: try again later."}, 409
+            return {"ok": True, "browser": True, "queued": job == "queued"}, 200
         except app.wishlists.LinkError as e:   # (its reason, as a sentence the translations have)
             return {"error": f"{str(e)[:1].upper()}{str(e)[1:]}."}, 400
         if not got:

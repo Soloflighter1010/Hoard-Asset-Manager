@@ -249,9 +249,10 @@ class BringInFromBBLM(IsolatedTestCase):
         self.assertIsNone(bblm.booth_item("https://gumroad.com/l/x"))
 
     def test_what_it_would_do_then_bringing_it_in(self):
-        s = bblm.summary(bblm.plan(self.lib, self.library))
-        self.assertEqual((s["total"], s["matched"], s["local"], s["left_out"]), (4, 1, 2, 1), "the pending one isn't counted")
+        s = bblm.summary(bblm.plan(self.lib, self.library, self.root))
+        self.assertEqual((s["total"], s["matched"], s["local"], s["left_out"]), (5, 1, 2, 1))
         self.assertEqual(s["left_out_names"], ["No Files"])
+        self.assertEqual((s["pending"], s["pending_names"]), (1, ["Still Downloading"]), "still downloading: named")
         self.assertEqual(s["adult"], 1)
         before = {p.name: p.read_bytes() for p in self.lib.rglob("*") if p.is_file()}
         done = bblm.bring_in(self.cfg, self.root, self.lib, self.library)
@@ -265,9 +266,57 @@ class BringInFromBBLM(IsolatedTestCase):
         self.assertEqual((mine["Free Shader"]["source"], mine["Hat"]["source"]), ("booth", "gumroad"))
         self.assertTrue(mine["Free Shader"]["linked"], "left where it is")
         self.assertTrue(mine["Free Shader"]["thumb"].endswith("_thumbnail.png"), "BBLM's picture")
+        self.assertEqual([f["path"] for f in mine["Free Shader"]["files"]], ["shader.zip"], "not BBLM's own meta.json and picture")
         self.assertEqual(TagStore().load()["items"].get(legacy_tag_key("local", "Free Shader")), ["free", "shader"])
-        again = bblm.summary(bblm.plan(self.lib, self.library))
+        again = bblm.summary(bblm.plan(self.lib, self.library, self.root))
         self.assertEqual((again["before"], again["matched"], again["local"]), (3, 0, 0), "only what's new, next time")
+        local.remove(self.cfg, self.root, local.by_folder(self.root, mine["Hat"]["folder"])[0])
+        self.assertEqual(bblm.summary(bblm.plan(self.lib, self.library, self.root))["local"], 1, "taken out of Local: new again")
+
+    def test_whats_in_local_already_and_names_of_its_own(self):
+        rec = local.add(self.cfg, self.root, str(self.lib / "ash.hat"), name="My Hat", copy=False)   # (Add your own, before)
+        other = self.base / "Shader"
+        other.mkdir()
+        (other / "x.unitypackage").write_bytes(b"pkg")
+        local.add(self.cfg, self.root, str(other), name="Free Shader", copy=True)
+        (self.lib / "4444").mkdir()
+        _meta(self.lib / "4444" / "junk", name="Only Clutter")   # (a folder of BBLM's, with nothing of the product's)
+        (self.lib / "4444" / "junk" / "desktop.ini").write_bytes(b"x")
+        plan = bblm.plan(self.lib, self.library, self.root)
+        self.assertEqual([a["product"] for a in plan["in_local"]], ["My Hat"], "its folder's in Local: matched to it")
+        self.assertEqual([a["name"] for a in plan["local"]], ["Free Shader - BBLM 1111"], "a name of its own")
+        bblm.bring_in(self.cfg, self.root, self.lib, self.library)
+        self.assertEqual(sorted(a["name"] for a in index(self.cfg, self.root)["assets"] if a["store"] == "Local"),
+                         ["Free Shader", "Free Shader - BBLM 1111", "My Hat"], "nothing twice")
+        self.assertEqual(TagStore().load()["items"].get(legacy_tag_key("local", "Free Shader")), None,
+                         "the other Free Shader's tags aren't BBLM's")
+        self.assertIn(rec["key"], downloader.Manifest(local.local_dir(self.root)).assets, "the one added before, as it was")
+
+    def test_your_word_on_adults_wins(self):
+        owned = tag_key("booth", "Rusk Outfit [v2]", "8549623")
+        MarkStore().change("not_adult", {owned}, True)
+        bblm.bring_in(self.cfg, self.root, self.lib, self.library)
+        self.assertIn(owned, MarkStore().keys("not_adult"))
+        self.assertNotIn(owned, MarkStore().keys("adult"))
+
+    def test_what_cant_be_listed_and_folders_named_unusually(self):
+        _meta(self.lib / "-e3-81-82", name="あ", originUrl="https://example.fanbox.cc/posts/%E3%81%82")
+        (self.lib / "-e3-81-82" / "a.zip").write_bytes(b"zip")
+        self.assertIn("あ", [a["name"] for a in bblm.plan(self.lib, self.library, self.root)["local"]], "an id starting with -")
+        with mock.patch.object(local, "check_source", side_effect=ValueError("That's already inside Hoard's downloads folder.")):
+            plan = bblm.plan(self.lib, self.library, self.root)
+            s = bblm.summary(plan)
+        self.assertEqual(s["local"], 0)
+        self.assertIn("Free Shader (That's already inside Hoard's downloads folder.)", s["refused_names"])
+
+    def test_stop_brings_in_nothing(self):
+        import threading
+        stop = threading.Event()
+        stop.set()
+        with self.assertRaises(InterruptedError):
+            bblm.bring_in(self.cfg, self.root, self.lib, self.library, stop=stop)
+        self.assertEqual([a for a in index(self.cfg, self.root)["assets"] if a["store"] == "Local"], [])
+        self.assertEqual(TagStore().load()["items"], {})
 
     def test_the_server(self):
         import http.client
@@ -310,6 +359,27 @@ class BringInFromBBLM(IsolatedTestCase):
         self.assertIn(tag_key("local", "Felt Hat"), MarkStore().keys("adult"))
         self.assertEqual(rec["key"], local.by_folder(self.root, folder)[0])
 
+    def test_a_page_only_a_browser_is_shown_is_read_in_hoards(self):
+        from hoard import jobs, server, wishlists
+        rec = local.add(self.cfg, self.root, str(self.lib / "ash.hat"), name="Hat", copy=False)
+        local.edit(self.cfg, self.root, rec["key"], link="https://payhip.com/b/AbC12")
+        folder = next(a["folder"] for a in index(self.cfg, self.root)["assets"] if a["store"] == "Local")
+        srv = mock.Mock(cfg=self.cfg, jobs=mock.Mock(state={"running": False}), side_jobs=mock.Mock(state={"running": False}))
+        srv.jobs.start.return_value = "started"
+        refused = wishlists.PageRefused("the store refused Hoard's request for its page")
+        with mock.patch.object(server.wishlists, "from_product_page", side_effect=refused):
+            done, status = __import__("hoard.api.local", fromlist=["_edit"])._edit(
+                srv, "/api/local/from-page", local.by_folder(self.root, folder), {"folder": folder})
+        self.assertEqual((status, done.get("browser")), (200, True))
+        task, stores = srv.jobs.start.call_args.args
+        self.assertEqual((task, stores, srv.jobs.start.call_args.kwargs["local"]["fill"]), ("links", ["payhip"], folder))
+        job = jobs.Jobs.__new__(jobs.Jobs)   # (the task, once its page is read in Hoard's browser)
+        job.cfg, job.on_download_done = self.cfg, lambda: None
+        with mock.patch.object(jobs.Jobs, "_set") as said:
+            job._fill_local(folder, {"store": "payhip", "name": "Ash's Hat", "creator": "ash", "store_tags": ["hat"]}, "Payhip")
+        self.assertIn("Filled in Ash's Hat", said.call_args.kwargs["message"])
+        self.assertEqual(local.by_folder(self.root, folder)[1]["name"], "Ash's Hat")
+
     def test_with_local_turned_off_it_asks_first(self):
         import threading
         import unittest
@@ -332,6 +402,7 @@ class BringInFromBBLM(IsolatedTestCase):
             page.goto(srv.url)
             page.wait_for_function("() => typeof bblmBringIn === 'function' && typeof featureOn === 'function'")
             page.evaluate("p => { window.askFolder = async () => p; bblmBringIn(); }", str(self.lib))
+            page.locator("#askDialog button", has_text="Bring in").click()   # (what it would do, first)
             page.locator("#askDialog", has_text="Local is turned off").wait_for()
             page.locator("#askDialog button", has_text="Cancel").click()
             page.wait_for_timeout(300)
@@ -392,6 +463,12 @@ class InThePage(IsolatedTestCase):
             page.wait_for_timeout(200)
             self.assertEqual(page.locator("#grid .slot .nm").all_inner_texts(), ["Ears"])
             self.assertIn("from=gumroad", page.url, "kept in the address")
+            page.click('#storeSeg [data-store=""]')   # (Everything: Local's tab by store doesn't come with it)
+            page.wait_for_timeout(200)
+            self.assertEqual(sorted(page.locator("#grid .slot .nm").all_inner_texts()), ["Ears", "Hat", "Kit"])
+            self.assertNotIn("from=", page.url)
+            page.click('#storeSeg [data-store="Local"]')
+            page.click('#drives [data-source="gumroad"]')
             page.click('#drives [data-source="gumroad"]')   # (chosen again: every store)
             page.locator("#grid .slot", has_text="Hat").click()
             page.locator('#detail [data-act="local-edit"]').click()

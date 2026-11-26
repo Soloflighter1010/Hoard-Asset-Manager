@@ -205,24 +205,31 @@ def added_sources(root: Path) -> set[str]:
 
 @_writes
 def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", note: str = "", copy: bool = True,
-        progress=None, catalog: bool = True) -> dict:
+        progress=None, catalog: bool = True, manifest: Manifest | None = None, page: tuple[str, str] | None = None,
+        leave_out: frozenset = frozenset()) -> dict:
     """Add a folder or file to Local: copied into Hoard's Local folder, or listed where it is. Returns the record.
-    Raises ValueError with a plain explanation."""
+    Raises ValueError with a plain explanation. manifest: Local's records, open, to add this to and leave for the
+    caller to save (another tool's library brought in saves them once, not once each); page: its page on a store,
+    (store, page), as edit keeps it; leave_out: names of files at the top of the folder that aren't the product's (the
+    other tool's own). """
     say = progress or (lambda line: None)
     source = check_source(root, path, copy)
     single = source.is_file()
-    files = [source.name] if single else walk(source)
+    files = [source.name] if single else [f for f in walk(source) if f.lower() not in leave_out]
     if not files:
         raise ValueError("There are no files in that folder.")
     name = clean_text(name, 300) or clean_text(source.stem if single else source.name, 300) or "Untitled"
     creator = clean_text(creator, 200) or "You"
     sdir = local_dir(root)
     sdir.mkdir(parents=True, exist_ok=True)
-    manifest = Manifest(sdir)
+    keep = manifest is None
+    manifest = manifest if manifest is not None else Manifest(sdir)
     key = "local-" + secrets.token_hex(6)
     rec = manifest.record(key, creator, name)
     rec.update(name=name, creator=creator, note=clean_text(note, 300) or None, url=None,
                source=str(source.resolve()))   # where it came from: adding a folder of folders again skips it (#109)
+    if page:
+        rec["page_store"], rec["page"] = page
     base = source.parent if single else source
     if copy:
         dest = rel_to_path(sdir, rec["folder"])
@@ -251,6 +258,8 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     if not rec["files"]:
         manifest.assets.pop(key, None)
         raise ValueError("None of those files could be read.")
+    if not keep:   # (the caller's to save, with the rest it adds)
+        return rec
     manifest.save()
     if catalog:   # (several added together build it once, at the end)
         build_catalog(cfg, root)
@@ -305,12 +314,13 @@ def _own_thumbnails(dest: Path, rec: dict) -> list[Path]:
 
 
 @_writes
-def choose_picture(cfg: dict, root: Path, key: str, image) -> None:
+def choose_picture(cfg: dict, root: Path, key: str, image, rec: dict | None = None) -> None:
     """Your own picture for an item's tile (safety.chosen_picture's image), or None to go back to one of its own.
     Copied as _thumbnail.<ext> into Hoard's folder for it: an item's copy in Local, or Local/_linked/... for one listed
-    where it is, so nothing of yours is written. Raises ValueError with a plain explanation."""
+    where it is, so nothing of yours is written. rec: its record, when it's in hand (not read again). Raises
+    ValueError with a plain explanation."""
     sdir = local_dir(root)
-    rec = find(Manifest(sdir), key)
+    rec = rec if rec is not None else find(Manifest(sdir), key)
     if not re.fullmatch(r"local-[0-9a-f]{12}", key):
         raise ValueError("That isn't in Local any more.")
     try:
