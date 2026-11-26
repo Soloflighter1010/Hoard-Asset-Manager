@@ -212,8 +212,11 @@ class Protocol(IsolatedTestCase):
                 mock.patch("builtins.print"):
             app.message("Hoard is already running, but isn't answering.")
         self.assertEqual(self.message(), {"do": "say", "text": "Hoard is already running, but isn't answering."})
-        with mock.patch.object(shell, "SHELL", None), mock.patch("builtins.print") as said:
-            app.message("Hoard's local server didn't start.")   # (no shell: the log, as before)
+        # (no shell: the log, as before; never the real platform here, where Windows would open a message box that
+        # waits for a click)
+        with mock.patch.object(shell, "SHELL", None), mock.patch.object(sys, "platform", "linux"), \
+                mock.patch("builtins.print") as said:
+            app.message("Hoard's local server didn't start.")
         said.assert_called_once_with("Hoard: Hoard's local server didn't start.")
 
     def test_the_shell_is_told_where_the_log_is(self):
