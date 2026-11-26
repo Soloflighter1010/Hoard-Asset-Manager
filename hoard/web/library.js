@@ -34,7 +34,7 @@ const thumb = a => a.thumbnail ? `<img src="${keyed("/thumb/" + encodeURICompone
 
 /* ---------- data */
 async function refreshView(response) {
-  DATA = response;
+  DATA = featureData(response, "items");   // (what a part of Hoard turned off has is left out: issue #422)
   for (const a of DATA.items) withStoreTags(a).hay = norm([a.name, a.creator, label(a.store), a.variants, ...a.tags, ...a.suggested, a.your_note].join(" "));
   byKey = new Map(DATA.items.map(a => [a.key, a]));
   if (APP.active !== "library") return;
@@ -133,7 +133,7 @@ function renderStoreSeg() {
     usedStores().filter(s => counts[s] || DATA.stores[s]).map(s =>
       `<button role="radio" class="${s}" data-store="${s}" aria-checked="${state.store === s}">` +
       `<span class="dot ${s}"></span>${label(s)}<span class="n">${(counts[s] || 0).toLocaleString()}</span></button>`).join("") +
-    `<button role="radio" class="sets" data-store="Sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
+    `<button role="radio" class="sets" data-store="Sets" data-feature="sets" aria-checked="${inSets()}"><span class="dot sets" aria-hidden="true"></span>${esc(tr("Sets and Wishlists"))}<span class="n">${(DATA.sets || []).length.toLocaleString()}</span></button>`;
   if (html !== storeSegShown) { $("#storeSeg").innerHTML = html; storeSegShown = html; }   // (not on every keystroke)
 }
 // The Stores panel: each store, whether you're signed in, its count, and its buttons.

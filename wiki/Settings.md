@@ -2,11 +2,13 @@ Everyday choices are in **Settings** (in the **Menu**, top right; or search for 
 
 ## The Settings page
 
-Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is: its parts
-are listed down the side (**Folders**, **Hoard's folders**, **Stores**, **Downloading**, **Notifications**,
-**Look**, **Sign-ins**, **Hoard updates**, **Backup**, **Troubleshooting**, **Support Hoard**, **Acknowledgements**) to
-jump to, or along the top in a narrow window. **×** or Escape closes it. Each change is **saved as you make it**: a
-box or a list straight away, a folder or the Payhip shops when you leave the field. The title bar says **Saved**.
+Settings is a page of its own (from 5.1.3), the whole window below the bar, as [Projects](Projects) is. Its
+settings are in cards (5.2.0 beta 13), each with a line saying what it's for: **Folders**, **Stores**, **How Hoard
+downloads**, **Notifications**, **Look and feel**, **Features**, **Hoard itself** and **Help**. They're listed down the
+side to jump to, or along the top in a narrow window. **Find a setting**, above the list, shows only the settings with
+the words you type: in their names, what they say, or their boxes' names (in any case). **×** or Escape closes it.
+Each change is **saved as you make it**: a box or a list straight away, a folder or the Payhip shops when you leave
+the field. The title bar says **Saved**.
 
 
 - **Downloads folder:** where downloaded files are saved. A `Hoard` folder in your Documents unless you choose
@@ -206,7 +208,9 @@ Also here:
   [Getting started](Getting-Started#the-tour).
 - **Closing the window minimizes Hoard to the taskbar** (in Hoard's own window; on unless you turn it off): the
   close button minimizes the window to the taskbar (the Dock on a Mac), and downloads, syncs and the routine check
-  carry on. Click it there, or open Hoard again, to bring the window back. Turn it off and the close button quits
+  carry on. Click it there, or open Hoard again, to bring the window back. On a Linux desktop with Wayland, where a
+  program can't bring back a window it minimized, the window is hidden instead: open Hoard again to bring it back
+  (5.2.0 beta 13). Turn it off and the close button quits
   (asking first while something's running). On a Mac, **Command-Q** always quits, as **Quit Hoard** does.
 - **Quit Hoard:** stops Hoard. While something is running (or waiting its turn), it asks first, as closing the
   window does: see [Closing Hoard while it's working](Downloads#closing-hoard-while-its-working).
@@ -216,6 +220,28 @@ Also here:
   packages and what builds the apps), with each one's license. Choose one to read its license where Hoard has a
   copy; the others link to theirs. The website's
   [Acknowledgements](https://hoard.furryup.link/acknowledgements.html) page lists the same.
+
+### Features
+
+**Features** (5.2.0 beta 13) turns off the parts of Hoard you don't use, so they're out of your way. A part turned
+off leaves the bar, the views' tabs, the Menu and the right-click menu, and what's its own leaves the lists. Nothing
+it keeps is deleted: turned on again, it's all as you left it. The choice is kept. A link, or a file dropped on the
+window, that needs a part that's off says so, and turns it on if you say so.
+
+- **Local:** your own packages, textures and materials ([Your own packages](Your-Own-Packages)): Local's tab, its
+  products in Downloads, **Add your own**, and the **Local sync folder** setting. The sync folder is left as it is, and
+  Hoard doesn't look in it until Local is on again.
+- **Sets and Wishlists:** [Sets](Sets), with your wishlists: their tab, the **Sets** group in the right-click menu,
+  and a product dragged onto another to make a set. **Wishlists** and **Prices** are part of it, so they're off with
+  it.
+- **Wishlists:** wishlists alone, so your sets stay. Hoard no longer reads wishlists from your stores, and a quick
+  refresh reads only your libraries.
+- **Prices:** wishlists' prices, their range and total, what got cheaper, and its notification.
+- **Projects:** [Projects](Projects): its tab, and **Put in a project...** and **New project with these...** in the
+  right-click menu.
+- **Notifications:** your system's notifications and the news sent through Apprise, and the **Notifications** card.
+- **Products for adults:** products marked 18+, in the Library, Downloads and sets, and in what you search for;
+  **Mark as 18+** and the blur setting. A link to one asks to turn it back on.
 
 ## Settings only in config.json
 

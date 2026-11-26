@@ -134,6 +134,19 @@ def apply_store_sites(cfg: dict) -> None:
     set_extra_sites("payhip", [urlparse(s).hostname for s in payhip_shops(cfg) if urlparse(s).hostname != "payhip.com"])
 
 
+# Parts of Hoard you can turn off in Settings, Features (issue #422), so what you don't use isn't in your way, each with
+# the part it's in ("": none), which turned off turns it off too. The pages' list is ui/settings.js's FEATURES. Nothing
+# a part keeps is deleted with it, and turning it on brings it all back.
+FEATURES = {"local": "", "sets": "", "wishlists": "sets", "projects": "", "prices": "wishlists", "notifications": "", "adult": ""}
+
+
+def feature_on(cfg: dict, key: str) -> bool:
+    """Is this part of Hoard on (ui.features doesn't say it's off), and the part it's in?"""
+    ui = cfg.get("ui") if isinstance(cfg.get("ui"), dict) else {}
+    off = ui.get("features") if isinstance(ui.get("features"), dict) else {}
+    return off.get(key) is not False and (not FEATURES.get(key) or feature_on(cfg, FEATURES[key]))
+
+
 def deep_merge(dst: dict, src: dict) -> dict:
     """Copy src into dst, merging nested dicts instead of replacing them. Returns dst."""
     for k, v in src.items():

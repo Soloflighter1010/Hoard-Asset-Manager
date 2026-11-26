@@ -51,6 +51,8 @@ struct Server {
     updating: AtomicBool,          // one is being downloaded
     install: AtomicBool,           // Hoard is quitting for it: install it once Hoard has stopped, then open again
     links: Mutex<Vec<String>>,     // hoard:// links that came before Hoard's server started (a Mac's, as it opens)
+    log: Mutex<Option<String>>,    // where this start's log is (Hoard says, as it starts): a failure says where
+    said: Mutex<Option<String>>,   // why Hoard ended before its page opened, in its words (it says, issue #423)
 }
 
 /// Is this one of Hoard's links (its scheme in any case, and not too long)?
@@ -214,12 +216,18 @@ fn handle(app: &AppHandle, server: &Arc<Server>, message: Value) {
             }
         }
         Some("show") => {
-            let _ = window.unminimize();
             let _ = window.show();
+            let _ = window.unminimize();
             let _ = window.set_focus();
         }
-        Some("minimize") => {
-            let _ = window.minimize();
+        Some("minimize") => {   // (closed, Hoard carries on in the background)
+            put_away(&window);
+        }
+        Some("log") => {
+            *server.log.lock().unwrap() = message["path"].as_str().map(str::to_string);
+        }
+        Some("say") => {
+            *server.said.lock().unwrap() = message["text"].as_str().map(str::to_string);
         }
         Some("hide") => {
             server.leaving.store(true, Ordering::SeqCst);
@@ -269,6 +277,65 @@ fn handle(app: &AppHandle, server: &Arc<Server>, message: Value) {
             server.install.store(true, Ordering::SeqCst);
         }
         _ => {}
+    }
+}
+
+/// The window, put away while Hoard carries on in the background: minimized, where starting Hoard again brings it
+/// back. Not on Wayland, where a program can't bring back a window it minimized (there's nothing to ask for that), so
+/// starting Hoard again showed nothing, and it never opened again (issue #423): there it's hidden, and shown again.
+fn put_away(window: &tauri::WebviewWindow) {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        let _ = window.hide();
+        return;
+    }
+    let _ = window.minimize();
+}
+
+/// Linux: WebKit's page process ending on its own (a crash, often in the graphics driver, or out of memory) left the
+/// window blank for good, with Hoard running behind it, so starting it again only handed over to that (issue #423).
+/// The page is loaded again; if it ends twice more within two minutes, Hoard says so, with where its log is, and
+/// quits once that's read, so nothing is left running.
+#[cfg(target_os = "linux")]
+fn watch_page(window: &tauri::WebviewWindow, app: AppHandle, server: Arc<Server>) {
+    let _ = window.with_webview(move |webview| {
+        use webkit2gtk::{WebProcessTerminationReason, WebViewExt};
+        let ended = std::rc::Rc::new(std::cell::RefCell::new(Vec::<std::time::Instant>::new()));
+        webview.inner().connect_web_process_terminated(move |view, reason| {
+            if matches!(reason, WebProcessTerminationReason::TerminatedByApi) {
+                return;   // (the shell's own doing)
+            }
+            let now = std::time::Instant::now();
+            let mut times = ended.borrow_mut();
+            times.retain(|t| now.duration_since(*t) < std::time::Duration::from_secs(120));
+            times.push(now);
+            if times.len() < 3 {
+                view.reload();
+                return;
+            }
+            let text = match server.log.lock().unwrap().clone() {
+                Some(log) => format!("Hoard's window stopped working, so Hoard will quit. Its log may say why: {log}"),
+                None => "Hoard's window stopped working, so Hoard will quit. Its log, in Hoard's app-data folder (logs), may say why.".to_string(),
+            };
+            server.leaving.store(true, Ordering::SeqCst);
+            let (app, server) = (app.clone(), server.clone());
+            std::thread::spawn(move || {   // (the dialog waits for you; Hoard quits once it's read)
+                app.dialog().message(text).title("Hoard").kind(MessageDialogKind::Error).blocking_show();
+                *server.stdin.lock().unwrap() = None;   // (Hoard's input ends: it quits, and the window with it)
+            });
+        });
+    });
+}
+
+/// Why Hoard couldn't start, for its dialog: what Hoard said, or that its log says why (and where it is, once Hoard
+/// has said: issue #423).
+fn why_not_started(server: &Server) -> String {
+    if let Some(said) = server.said.lock().unwrap().clone() {
+        return said;
+    }
+    match server.log.lock().unwrap().clone() {
+        Some(log) => format!("Hoard couldn't start. Its log says why: {log}"),
+        None => "Hoard couldn't start. Its log, in Hoard's app-data folder (logs), says why.".to_string(),
     }
 }
 
@@ -336,7 +403,7 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
         let failed = !matches!(&status, Ok(s) if s.success());
         if failed && !server.opened.load(Ordering::SeqCst) {   // (one that ended well never opened: a second start)
             app.dialog()
-                .message("Hoard couldn't start. Its log, in Hoard's app-data folder (logs), says why.")
+                .message(why_not_started(&server))
                 .title("Hoard")
                 .kind(MessageDialogKind::Error)
                 .blocking_show();
@@ -347,6 +414,14 @@ fn start_server(app: &AppHandle, server: &Arc<Server>) -> Result<(), String> {
 }
 
 fn main() {
+    // The AppImage brings its own WebKit, which draws through the graphics card's buffers (DMA-BUF) by default: on
+    // some drivers (NVIDIA's, and some Wayland desktops) the page then crashes or stays blank (issue #423). It draws
+    // without them there, as many apps' AppImages do; set WEBKIT_DISABLE_DMABUF_RENDERER=0 to have them back. (Before
+    // anything else starts: WebKit reads it once.)
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("APPIMAGE").is_some() && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     let server = Arc::new(Server {
         stdin: Mutex::new(None),
         origin: Mutex::new(None),
@@ -356,6 +431,8 @@ fn main() {
         updating: AtomicBool::new(false),
         install: AtomicBool::new(false),
         links: Mutex::new(Vec::new()),
+        log: Mutex::new(None),
+        said: Mutex::new(None),
     });
     let mut builder = tauri::Builder::default();
     if updates_here() {   // (only where this copy can update itself: with the updates' key, and not the Flatpak)
@@ -380,7 +457,8 @@ fn main() {
             }
             let handle = app.handle().clone();
             let (watch, open) = (server.clone(), app.handle().clone());
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+            #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+            let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title("Hoard")
                 .inner_size(1440.0, 920.0)
                 .min_inner_size(900.0, 600.0)
@@ -400,6 +478,8 @@ fn main() {
                 // Windows the page then saw none of them (issue #313).
                 .disable_drag_drop_handler()
                 .build()?;
+            #[cfg(target_os = "linux")]
+            watch_page(&window, app.handle().clone(), server.clone());
             if let Err(why) = start_server(&handle, &server) {
                 handle
                     .dialog()

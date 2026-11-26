@@ -78,21 +78,23 @@ class Tweaks(IsolatedTestCase):
         page = self.downloads()
         menu(page, "#settingsBtn")
         jumps = page.locator(".setjump button")
-        self.assertEqual(jumps.count(), 13)   # with Hoard's folders, the Local sync folder, Notifications, Support Hoard and Acknowledgements
+        # (#421: its cards, fewer than its old list of headings: Folders, Stores, Downloading, Notifications, Look and
+        # feel, Features, Hoard itself and Help)
+        self.assertEqual(jumps.count(), 8)
         page.locator("#setStores input").first.wait_for()   # the stores' boxes are where they were (drawn once Settings loads)
-        page.click("[data-jump='part-help']")
+        page.click("[data-jump='card-hoard']")
         page.wait_for_timeout(800)
-        self.assertTrue(page.locator("#part-help").is_visible())
-        box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
+        self.assertTrue(page.locator("#card-hoard").is_visible())
+        box, bar = page.locator("#card-hoard").bounding_box(), page.locator(".setjump").bounding_box()
         beside = box["x"] >= bar["x"] + bar["width"] - 1   # (a wide window: its parts listed down the side)
         self.assertTrue(beside or box["y"] >= bar["y"] + bar["height"] - 1, "not under the row")
-        page.click("[data-jump='part-thanks']")   # the last part, at the bottom
+        page.click("[data-jump='card-help']")   # the last part, at the bottom
         page.wait_for_timeout(800)
         self.assertTrue(page.locator("#part-thanks").is_visible())
         page.set_viewport_size({"width": 760, "height": 700})   # a narrow window: its parts in a row along the top
-        page.click("[data-jump='part-help']")
+        page.click("[data-jump='card-hoard']")
         page.wait_for_timeout(800)
-        box, bar = page.locator("#part-help").bounding_box(), page.locator(".setjump").bounding_box()
+        box, bar = page.locator("#card-hoard").bounding_box(), page.locator(".setjump").bounding_box()
         self.assertGreaterEqual(box["y"], bar["y"] + bar["height"] - 1, "not under the row")
 
     def test_the_set_picker_looks_like_the_other_dropdowns(self):
