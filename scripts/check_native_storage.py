@@ -59,7 +59,8 @@ def name_of(n: int) -> str:
 # ---- the fixture, written and read by this checkout's source in a process of its own
 
 def worker(phase: str, home: Path, expect: dict) -> None:
-    """seed: a JSON-only home, as beta 12 kept it. verify: read back through SQLite as Hoard reads it."""
+    """seed: a JSON-only home, as beta 12 kept it. verify: read back through SQLite as Hoard reads it. automatic:
+    automatic work turned on (syncs and routine checks every 6 hours), saved through SQLite."""
     os.environ.update(HOARD_DATA_DIR=str(home), HOARD_METADATA="json" if phase == "seed" else "")
     sys.path.insert(0, str(ROOT))
     from hoard import config, library, paths, storage
@@ -84,6 +85,10 @@ def worker(phase: str, home: Path, expect: dict) -> None:
         SetStore()._save({"sets": [{"id": "outfit1", "name": "Outfit", "items": keys[:50]}]})
         return
     assert storage.enabled(), "HOARD_METADATA unset should mean SQLite"
+    if phase == "automatic":   # (turned on, so only a recovery can turn it off: recovered())
+        config.save_config({**config.load_config(), "auto_sync_hours": 6, "routine_hours": 6})
+        storage.close_all()
+        return
     cfg = config.load_config()
     assert cfg["new_days"] == expect["new_days"], cfg["new_days"]
     items = library.Library(paths.LIBRARY_FILE).data["items"]
@@ -164,7 +169,8 @@ def state(home: Path) -> str:
     db = home / "metadata.sqlite3"
     if not db.exists():
         return "no database yet"
-    head = db.read_bytes()[:100]
+    with open(db, "rb") as f:
+        head = f.read(100)
     version = int.from_bytes(head[60:64], "big") if len(head) == 100 else 0
     cut = (home / "metadata.sqlite3-journal").exists()
     return f"database version {version}" + (", a write cut off (its journal left behind)" if cut else "")
@@ -307,6 +313,19 @@ class App:
             time.sleep(0.2)
         assert not self.leftover(proc), "part of Hoard was still running after it was killed"
         self.tidy()
+        self.settle()
+
+    @staticmethod
+    def settle() -> None:
+        """On Windows, wait a moment for the window's WebView2 to end after it (it ends on its own, and holds the
+        window's own data folder until it does, which the next start opens). Elsewhere, nothing to wait for."""
+        deadline = time.monotonic() + 20
+        while WINDOWS and time.monotonic() < deadline:
+            listed = subprocess.run(["tasklist", "/FI", "IMAGENAME eq msedgewebview2.exe", "/NH"],
+                                    capture_output=True, text=True).stdout
+            if "msedgewebview2.exe" not in listed.lower():
+                return
+            time.sleep(0.5)
 
     def tidy(self) -> None:
         """Take away the AppImage's unpacked copy, which a kill leaves behind (a start that ends well takes it away
@@ -388,6 +407,7 @@ class Starts:
         while time.monotonic() < deadline:
             if not alive(server) and running(home) is None and proc.poll() is not None:
                 self.app.tidy()
+                self.app.settle()
                 return
             time.sleep(0.1)
         self.app.kill(proc)
@@ -468,6 +488,17 @@ def install(package: Path, work: Path) -> tuple[App, callable]:
     raise SystemExit(f"not an installer, a disk image or an AppImage: {package.name}")
 
 
+class Run:
+    """One run of the checks: its folder, the app (once it's installed), and how to take it away again."""
+
+    def __init__(self, work: Path):
+        self.work, self.app, self.remove = work, None, lambda: None
+
+    def last_home(self) -> Path:
+        """The data folder of the app's last start (where a failed check's logs are), else the run's folder."""
+        return self.app.log.parent / "data" if self.app and self.app.log else self.work
+
+
 def main(argv: list[str]) -> int:
     """Seed, move, kill, roll back and come back, as the module says."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -475,7 +506,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--legacy-root", type=Path, action="append", default=[],
                         help="a Hoard's source (a folder with hoard/ in it), run kept in JSON after the app")
     parser.add_argument("--source", action="store_true", help="run this checkout's source in place of an app")
-    parser.add_argument("--worker", choices=("seed", "verify"), help=argparse.SUPPRESS)
+    parser.add_argument("--worker", choices=("seed", "verify", "automatic"), help=argparse.SUPPRESS)
     parser.add_argument("--home", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--expect", default="{}", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -487,92 +518,98 @@ def main(argv: list[str]) -> int:
         parser.error("give the installer, disk image or AppImage (or --source)")
     for root in args.legacy_root:
         assert (root / "hoard" / "__init__.py").is_file(), f"{root} has no hoard/"
-    work = Path(tempfile.mkdtemp(prefix="hoard-native-storage-"))
-    remove = lambda: None   # noqa: E731
+    run = Run(Path(tempfile.mkdtemp(prefix="hoard-native-storage-")))
     try:
-        if args.source:
-            app = App([sys.executable, "-m", "hoard", "--shell"], source=True)
-        else:
-            app, remove = install(args.package.resolve(), work)
-        starts = Starts(app)
-        pristine = work / "seed" / "data"
-        pristine.mkdir(parents=True)
-        run_worker("seed", pristine)
-        before = digests(pristine)
-        expect = {"new_days": 7, "names": {"0": name_of(0), str(PRODUCTS - 1): name_of(PRODUCTS - 1)},
-                  "notes": {"0": "first", "1": "second"}, "count": PRODUCTS}
+        checks(args, run)
+        return 0
+    except AssertionError as e:   # (a check that failed: said with what Hoard said, as fail() says it)
+        fail(str(e) or "a check failed", run.last_home())
+    finally:
+        try:
+            run.remove()
+        finally:
+            shutil.rmtree(run.work, ignore_errors=True)
 
-        def fresh(label: str, source: Path) -> Path:
-            """A copy of a home, in a folder of its own."""
-            home = work / label / "data"
-            shutil.copytree(source, home)
-            return home
 
-        # 1. The move, as the app starts.
-        home = fresh("moved", pristine)
-        times = starts.once(home)
-        moved(home, before, expect)
-        run_worker("verify", home, expect)
-        took = max(times["ready"] - times["db"], 0.05)
-        print(f"1. It moved {PRODUCTS} products' metadata into SQLite as it started (its database {times['db']:.1f} s "
-              f"in, ready {times['ready']:.1f} s in), keeping the originals and JSON copies", flush=True)
+def checks(args, run: Run) -> None:
+    """Install the app, then seed, move, kill, roll back and come back, as the module says."""
+    work = run.work
+    if args.source:
+        run.app = App([sys.executable, "-m", "hoard", "--shell"], source=True)
+    else:
+        run.app, run.remove = install(args.package.resolve(), work)
+    starts = Starts(run.app)
+    pristine = work / "seed" / "data"
+    pristine.mkdir(parents=True)
+    run_worker("seed", pristine)
+    before = digests(pristine)
+    expect = {"new_days": 7, "names": {"0": name_of(0), str(PRODUCTS - 1): name_of(PRODUCTS - 1)},
+              "notes": {"0": "first", "1": "second"}, "count": PRODUCTS}
 
-        # 2. Killed part way through the move.
-        for n, (when, after) in enumerate((("journal", 0), ("after", 0.1 * took), ("after", 0.35 * took),
-                                           ("after", 0.7 * took), ("ready", 0))):
-            trial = fresh(f"killed{n}", pristine)
-            left = starts.killed(trial, when, after)
-            originals_kept(trial, before)
+    def fresh(label: str, source: Path) -> Path:
+        """A copy of a home, in a folder of its own."""
+        home = work / label / "data"
+        shutil.copytree(source, home)
+        return home
+
+    # 1. The move, as the app starts.
+    home = fresh("moved", pristine)
+    times = starts.once(home)
+    moved(home, before, expect)
+    run_worker("verify", home, expect)
+    took = max(times["ready"] - times["db"], 0.05)
+    print(f"1. It moved {PRODUCTS} products' metadata into SQLite as it started (its database {times['db']:.1f} s "
+          f"in, ready {times['ready']:.1f} s in), keeping the originals and JSON copies", flush=True)
+
+    # 2. Killed part way through the move.
+    for n, (when, after) in enumerate((("journal", 0), ("after", 0.1 * took), ("after", 0.35 * took),
+                                       ("after", 0.7 * took), ("ready", 0))):
+        trial = fresh(f"killed{n}", pristine)
+        left = starts.killed(trial, when, after)
+        originals_kept(trial, before)
+        starts.once(trial)
+        moved(trial, before, expect)
+        run_worker("verify", trial, expect)
+        moment = {"journal": "as it first wrote to its database", "ready": "just as it was ready"}.get(
+            when.split(" ")[0], f"{after:.2f} s after its database was made")
+        print(f"2. Killed {moment}{when[len(when.split(' ')[0]):]} ({left}): every original kept, and the next "
+              "start finished the move", flush=True)
+
+    # 3. A JSON-only Hoard after it, then the app again.
+    for n, root in enumerate(args.legacy_root, 1):
+        edit = {"new_days": expect["new_days"] + 1, "rename": PRODUCTS - 1, "name": f"Hair Pack Renamed {n}",
+                "note_on": 2 + n, "note": f"edited by a JSON-only Hoard ({n})"}
+        said = legacy(root.resolve(), home, expect, edit)
+        expect = {**expect, "new_days": edit["new_days"],
+                  "names": {**expect["names"], str(edit["rename"]): edit["name"]},
+                  "notes": {**expect["notes"], str(edit["note_on"]): edit["note"]}}
+        for when in ("journal", "ready"):
+            trial = fresh(f"legacy{n}-{when}", home)
+            left = starts.killed(trial, when)
             starts.once(trial)
             moved(trial, before, expect)
             run_worker("verify", trial, expect)
-            moment = {"journal": "as it first wrote to its database", "ready": "just as it was ready"}.get(
-                when.split(" ")[0], f"{after:.2f} s after its database was made")
-            print(f"2. Killed {moment}{when[len(when.split(' ')[0]):]} ({left}): every original kept, and the next "
-                  "start finished the move", flush=True)
+            print(f"3. Killed {'as it brought them in' if when == 'journal' else 'just as it was ready'} "
+                  f"({left}): the edits were brought in at the next start", flush=True)
+        starts.once(home)
+        moved(home, before, expect)
+        run_worker("verify", home, expect)
+        print(f"3. {said}: the app brought its edits in", flush=True)
 
-        # 3. A JSON-only Hoard after it, then the app again.
-        for n, root in enumerate(args.legacy_root, 1):
-            edit = {"new_days": expect["new_days"] + 1, "rename": PRODUCTS - 1, "name": f"Hair Pack Renamed {n}",
-                    "note_on": 2 + n, "note": f"edited by a JSON-only Hoard ({n})"}
-            said = legacy(root.resolve(), home, expect, edit)
-            expect = {**expect, "new_days": edit["new_days"],
-                      "names": {**expect["names"], str(edit["rename"]): edit["name"]},
-                      "notes": {**expect["notes"], str(edit["note_on"]): edit["note"]}}
-            for when in ("journal", "ready"):
-                trial = fresh(f"legacy{n}-{when}", home)
-                left = starts.killed(trial, when)
-                starts.once(trial)
-                moved(trial, before, expect)
-                run_worker("verify", trial, expect)
-                print(f"3. Killed {'as it brought them in' if when == 'journal' else 'just as it was ready'} "
-                      f"({left}): the edits were brought in at the next start", flush=True)
-            starts.once(home)
-            moved(home, before, expect)
-            run_worker("verify", home, expect)
-            print(f"3. {said}: the app brought its edits in", flush=True)
-
-        # 4. Its sealing key lost, or another's in its place.
-        for how in ("lost", "replaced"):
-            trial = fresh(f"key-{how}", home)
-            key = trial / "integrity.key"
-            if how == "lost":
-                key.unlink()
-            else:
-                key.write_text("ab" * 32, encoding="ascii")
-            starts.once(trial)
-            recovered(trial, before, expect)
-            run_worker("verify", trial, expect)
-            print(f"4. Its sealing key {how}: it started, with its database kept aside as it was, and what was in it "
-                  "kept, untrusted until a refresh", flush=True)
-        remove()
-        remove = lambda: None   # noqa: E731
-        return 0
-    finally:
-        try:
-            remove()
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
+    # 4. Its sealing key lost, or another's in its place.
+    for how in ("lost", "replaced"):
+        trial = fresh(f"key-{how}", home)
+        run_worker("automatic", trial)
+        key = trial / "integrity.key"
+        if how == "lost":
+            key.unlink()
+        else:
+            key.write_text("ab" * 32, encoding="ascii")
+        starts.once(trial)
+        recovered(trial, before, expect)
+        run_worker("verify", trial, expect)
+        print(f"4. Its sealing key {how}: it started, with its database kept aside as it was, and what was in it "
+              "kept, untrusted until a refresh", flush=True)
 
 
 if __name__ == "__main__":

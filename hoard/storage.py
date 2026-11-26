@@ -737,7 +737,7 @@ def report_state() -> dict:
     """How private metadata is kept, for a support report (#320, #348): JSON or SQLite, the database's version and size,
     and how many of the files migration and recovery leave in the app-data folder there are. Counts only, never a
     name or anything in them. Never raises: a report says what it can."""
-    home = data_dir()
+    home = data_dir().absolute()
     state = {"kept_in": "sqlite" if enabled() else "json"}
     try:
         db = home / "metadata.sqlite3"
@@ -746,13 +746,14 @@ def report_state() -> dict:
                 head = f.read(100)
             state["database_version"] = int.from_bytes(head[60:64], "big") if len(head) == 100 else None
             state["database_mb"] = round(db.stat().st_size / 1e6, 1)
-            state["write_cut_off"] = (home / "metadata.sqlite3-journal").exists()   # (until Hoard next opens it)
         state["originals_kept"] = sum(1 for _ in home.glob("*.json.pre-sqlite-v1"))
         state["conflict_copies"] = sum(1 for _ in home.glob("*.json.legacy-conflict-*"))
         state["recovery_copies"] = sum(1 for _ in home.glob("metadata.before-recovery-*.sqlite3"))
-        if enabled() and db.is_file():
-            state["library_trust"] = database().trust("library.json")
-    except Exception as e:   # (a database that can't be opened says so, and the rest of the report is made)
+        with _instances_lock:   # (only one Hoard has open: a report never opens it, which could move or recover it)
+            open_db = _instances.get(home) if enabled() else None
+        if open_db is not None:
+            state["library_trust"] = open_db.trust("library.json")
+    except Exception as e:   # (a database that can't be read says so, and the rest of the report is made)
         state["problem"] = type(e).__name__
     return state
 

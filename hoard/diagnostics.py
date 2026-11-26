@@ -947,18 +947,18 @@ def _metadata_text(state: dict) -> str:
     """How Hoard keeps its metadata, in a line: "SQLite (version 2, 12.3 MB); 25 originals kept from the move"."""
     if state.get("kept_in") != "sqlite":
         return "JSON files"
-    said = [f"version {state['database_version']}" if state.get("database_version") else "no database yet"]
+    version = state.get("database_version")
+    said = [f"version {version}" if version is not None else "no database yet"]   # (0: a move that never finished)
     if state.get("database_mb") is not None:
         said.append(f"{state['database_mb']} MB")
     text = f"SQLite ({', '.join(said)})"
-    for key, what in (("originals_kept", "originals kept from the move"), ("conflict_copies", "conflict copies"),
-                      ("recovery_copies", "databases kept aside by a recovery")):
+    for key, one, many in (("originals_kept", "original kept from the move", "originals kept from the move"),
+                           ("conflict_copies", "conflict copy", "conflict copies"),
+                           ("recovery_copies", "database kept aside by a recovery", "databases kept aside by a recovery")):
         if state.get(key):
-            text += f"; {state[key]} {what}"
+            text += f"; {state[key]} {one if state[key] == 1 else many}"
     if state.get("library_trust") in ("changed", "foreign"):
         text += "; its library untrusted until a refresh"
-    if state.get("write_cut_off"):
-        text += "; a write was cut off"
     if state.get("problem"):
         text += f"; couldn't be read ({state['problem']})"
     return text

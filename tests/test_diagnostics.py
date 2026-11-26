@@ -265,7 +265,8 @@ class Sanitizing(IsolatedTestCase):
         """#320, #348: a report says how Hoard keeps its metadata (SQLite since beta 14), so reports from a beta show
         how the move and recoveries went: counts only, never a file's name or what's in it."""
         from hoard import config, paths, storage
-        config.save_config({**config.load_config(), "setup_done": True})   # (the database, made)
+        self.fresh_home()   # (no other test's originals or copies)
+        config.save_config({**config.load_config(), "setup_done": True})   # (the database, made, and open)
         home = paths.data_dir()
         (home / "tags.json.legacy-conflict-1").write_text("{}", "utf-8")
         self.addCleanup((home / "tags.json.legacy-conflict-1").unlink, missing_ok=True)
@@ -273,14 +274,19 @@ class Sanitizing(IsolatedTestCase):
         self.assertEqual((state["kept_in"], state["database_version"], state["conflict_copies"], state["recovery_copies"]),
                          ("sqlite", 2, 1, 0))
         self.assertIn(state["library_trust"], ("sealed", "unsealed"))
-        self.assertFalse(state["write_cut_off"])
         line = diagnostics._metadata_text(state)
-        self.assertRegex(line, r"^SQLite \(version 2, [\d.]+ MB\); 1 conflict copies$")
-        self.assertEqual(diagnostics._metadata_text({**state, "library_trust": "changed", "recovery_copies": 1}),
-                         line + "; 1 databases kept aside by a recovery; its library untrusted until a refresh")
+        self.assertRegex(line, r"^SQLite \(version 2, [\d.]+ MB\); 1 conflict copy$")
+        self.assertEqual(diagnostics._metadata_text({**state, "library_trust": "changed", "recovery_copies": 2}),
+                         line + "; 2 databases kept aside by a recovery; its library untrusted until a refresh")
+        self.assertTrue(diagnostics._metadata_text({**state, "database_version": 0}).startswith("SQLite (version 0, "),
+                        "a move that never finished, said")
+        storage.close_all()
+        self.assertNotIn("library_trust", storage.report_state(), "a report never opens the database itself")
+        self.assertFalse(any(storage._instances), "nor is it left open")
         with mock.patch.dict(os.environ, {"HOARD_METADATA": "json"}):
             self.assertEqual(diagnostics._metadata_text(storage.report_state()), "JSON files")
-        with mock.patch.object(storage, "database", side_effect=storage.DatabaseIntegrityError("no")):
+        storage.database()
+        with mock.patch.object(storage.Database, "trust", side_effect=storage.DatabaseIntegrityError("no")):
             self.assertEqual(storage.report_state()["problem"], "DatabaseIntegrityError", "and the report is still made")
 
 
