@@ -35,8 +35,8 @@ list and the project's backups keep the old name: add it to the Hub again if you
 
 **List** and **Tiles** (beside **Add a project...**, 5.2.0 beta 2) choose how the list shows, as ALCOM's and the
 Creator Companion's grid view do, and Hoard remembers it. As tiles, each project is a tile in its kind's colour, twice
-as wide as it's tall, and (with all projects shown) each folder is one tile drawn as a folder in Hoard's gold, its
-first projects tucked into it and how many it holds (5.2.0 beta 13): choose it to see them.
+as wide as it's tall, and (with all projects shown) each folder is one tile drawn as a folder in Hoard's gold, half a
+project's width, its first projects tucked into it and how many it holds (5.2.0 beta 13): choose it to see them.
 
 A project's details (5.2.0) put it in a folder of your own (**Folder**: one you have, **New folder...**, or **Not in
 a folder**) and give it tags (**Tags**: type one and **Add**, or **×** to take one off): words to find it by, such as

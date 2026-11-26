@@ -102,9 +102,10 @@ dl.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110p
 .pj-row.last { background-color: color-mix(in srgb, var(--gold) 9%, var(--ledge)); }
 .pj-tile.last .pj-tile-art { box-shadow: inset 0 -5px 0 var(--c, var(--seam)), 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent); }
 .pj-detail .pj-last { margin: 0 0 6px; }
-/* issue #250's tiles, twice as wide as they're tall: a project's tile, and a folder's */
-.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
-.pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
+/* issue #250's tiles: a project's twice as wide as it's tall, over two of the grid's columns; a folder's (issue #424)
+   single wide, in one, as wide as it's tall */
+.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 18px 16px; }
+.pj-tile { grid-column: span 2; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
   text-align: left; font: inherit; cursor: pointer; }
 .pj-tile.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds { --c: var(--pj-worlds); } .pj-tile.k-other { --c: var(--pj-other); }
 .pj-tile-art { position: relative; aspect-ratio: 2 / 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;

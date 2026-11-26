@@ -64,7 +64,7 @@ a view's script stays there. The parts so far:
   (`web/looks.css`). The pages' own dialogs in their HTML (the support report, PIN, the itch.io key, closing Hoard,
   a download's files, the check's results) take the same ground, outline, corners and backdrop from the pages' CSS.
   The style guide draws the component itself, in place (`dialogs.example`).
-- **A folder's tile in Projects** (`ui/FolderTile.svelte`, `HoardUI.projects`, issue #424): a folder in Hoard's gold
+- **A folder's tile in Projects** (`ui/FolderTile.svelte`, `HoardUI.projects`, issue #424): single wide, a folder in Hoard's gold
   with its first projects' tiles tucked into it, its name and how many it holds. `shared.js` draws Projects' list as
   markup with a placeholder for each folder's tile, and `projects.folders(box, tiles, tr)` puts the tiles in their
   places (letting go of the ones drawn before). The tile keeps the data Projects' clicks, Find and drops read from it.

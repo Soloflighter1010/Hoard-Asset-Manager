@@ -308,9 +308,11 @@ class ProjectsPanel(IsolatedTestCase):
         self.assertEqual(folder.locator(".nm-t").inner_text(), "Avatars WIP")
         self.assertIn("1 project", folder.inner_text())
         self.assertEqual(page.locator(".pj-tile:not(.pj-folder-tile) .nm-t").all_inner_texts(), ["Old World"], "its project inside it")
-        for art in (".pj-folder-tile .pj-tile-art", ".pj-tile:not(.pj-folder-tile) .pj-tile-art"):   # twice as wide as tall
-            box = page.locator(art).first.bounding_box()
-            self.assertAlmostEqual(box["width"] / box["height"], 2, delta=0.05)
+        for art, ratio in ((".pj-tile:not(.pj-folder-tile) .pj-tile-art", 2), (".pj-folder-tile .pj-tile-art", 1)):
+            box = page.locator(art).first.bounding_box()   # a project's twice as wide as tall; a folder's single wide
+            self.assertAlmostEqual(box["width"] / box["height"], ratio, delta=0.05, msg=art)
+        one, two = folder.bounding_box()["width"], page.locator(".pj-tile:not(.pj-folder-tile)").first.bounding_box()["width"]
+        self.assertAlmostEqual(two, 2 * one + 16, delta=2, msg="a folder takes one of the grid's columns, a project two")
         page.click("[data-pj=undetail]")   # (its details were open from before: choosing it again would put them away)
         folder.click()
         page.wait_for_function("() => [...document.querySelectorAll('.pj-tile .nm-t')].map(e => e.textContent).join() === 'Rusk Avatar'")

@@ -23,14 +23,16 @@
 </button>
 
 <style>
-  .folder { background: none; box-shadow: none; overflow: visible; }
+  /* single wide: one of the grid's columns (a project's tile takes two), as wide as it's tall */
+  button { grid-column: span 1; }
+  .folder { aspect-ratio: 1 / 1; background: none; box-shadow: none; overflow: visible; }
   /* the folder's back, with its tab, and its front, in Hoard's gold; the projects' tiles between them */
   .back { position: absolute; inset: 14% 5% 4%; border-radius: 10px; background: color-mix(in srgb, var(--gold) 62%, var(--cave)); }
   .back::before { content: ""; position: absolute; left: 0; top: -12%; width: 36%; height: 20%; border-radius: 8px 8px 0 0;
     background: inherit; }
-  .papers { position: absolute; inset: 6% 18% 34%; display: flex; justify-content: center; align-items: flex-start; }
-  .papers i { display: grid; place-items: center; width: 34%; aspect-ratio: 2 / 1; margin: 0 -2%; border-radius: 6px;
-    font: 400 clamp(11px, 1.6vw, 17px) var(--display); font-style: normal; color: var(--bone);
+  .papers { position: absolute; inset: 4% 8% 40%; display: flex; justify-content: center; align-items: flex-start; }
+  .papers i { display: grid; place-items: center; width: 38%; aspect-ratio: 2 / 1; margin: 0 -2%; border-radius: 5px;
+    font: 400 clamp(9px, 1vw, 13px) var(--display); font-style: normal; color: var(--bone);
     background: color-mix(in srgb, var(--c) 40%, var(--stone)); box-shadow: inset 0 -3px 0 var(--c), 0 2px 6px rgb(0 0 0 / .25);
     transform: translateY(calc(var(--at) * var(--at) * 9%)) rotate(calc(var(--at) * 7deg));
     transition: transform .15s ease-out, translate .15s ease-out; }
