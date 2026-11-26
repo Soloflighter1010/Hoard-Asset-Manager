@@ -19,6 +19,7 @@ library with Hoard run from source, and Hoard for Unity finds it. Only its copy 
 | `keys/` | On Windows: your itch.io API key, encrypted by your Windows account. (On a Mac it's in your Keychain, on Linux in your keyring.) See [Stores](Stores#itchio) |
 | `tags.json` | Your tags, and what you set in a product's details: its type, and your note on it (5.2.0) |
 | `konoasset.json` | Which of KonoAsset's assets you've brought in, and the products they became, so bringing in again adds only what's new (5.2.0). See [Your Own Packages](Your-Own-Packages#from-konoasset) |
+| `bblm.json` | Which of BB's Library Manager's products you've brought in, and the products they became, so bringing in again adds only what's new (5.2.0 beta 13). See [Your Own Packages](Your-Own-Packages#from-bbs-library-manager) |
 | `picture-looks.json` | How product pictures look (a 64-bit hash of each, by the picture's SHA-256), so copies of one product saved differently by two stores stack. See [Library](Library#finding-things) |
 | `asset-updates.json` | What the last **Check for updates** found: for each thing you've downloaded, the files its store has that you don't yet. See [Downloads](Downloads#checking-for-updates-without-downloading). From 5.2, also the products a download of which didn't finish, with why, until one goes through: see [Library](Library#something-wrong-with-a-product) |
 | `marks.json` | What you've archived, hidden or removed, and your hidden library's PIN and recovery words, each only as a salted, slow hash |

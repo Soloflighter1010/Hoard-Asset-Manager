@@ -26,7 +26,7 @@ from .config import root_dir
 from .net import NETWORK_ERRORS, STORE_HOSTS, reachable
 from .paths import PROBE_DIR, STORE_PYTHON_NOTE, store_python
 from . import egress, itch, pace, vault
-from .safety import DataFileError, UnsafePath, clean_text, fetch_public, open_under, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, store_link, valid_rel
+from .safety import STORE_LINK_SITES, DataFileError, UnsafePath, clean_text, fetch_public, open_under, rel_to_path, remember_sealed, safe_name, save_browser_download, scrub, seal, store_link, valid_rel
 from .storage import seal_status as check_seal, read_document as read_json_file, archive_document as set_aside, write_document as write_file_safely
 from .tags import TagMatcher, TagStore, clean_note, clean_tag, tag_key
 
@@ -82,6 +82,20 @@ def clean_manifest(data, store_dir: Path, trust_links: bool = True) -> tuple[dic
                 rec.pop("location")
         if rec.get("note") is not None:
             rec["note"] = clean_text(rec["note"], 300) or None
+        if "suggested_tags" in rec:   # the tags its page gave it (issue #416): a list of clean tags, or none
+            given = rec["suggested_tags"] if store == "local" and isinstance(rec["suggested_tags"], list) else []
+            tidy = [t for t in dict.fromkeys(clean_tag(t) for t in given[:30] if isinstance(t, str)) if t]
+            if tidy:
+                rec["suggested_tags"] = tidy
+            else:
+                rec.pop("suggested_tags")
+        if "page" in rec or "page_store" in rec:   # a Local product's page on a store (issue #416): a public one only
+            from .sets import product_link
+            ps = rec.get("page_store")
+            if not (store == "local" and trust_links and isinstance(ps, str) and ps in STORE_LINK_SITES
+                    and product_link(ps, rec.get("page")) == rec.get("page")):
+                rec.pop("page", None)
+                rec.pop("page_store", None)
         if rec.get("variants") is not None:
             rec["variants"] = clean_text(rec["variants"], 300) or None
         kept[key] = rec
@@ -1128,6 +1142,7 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
     stop = STOPWORDS | {w.lower() for w in tcfg.get("extra_stopwords", [])}
     tagdata = TagStore().load()
     block = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"]) | set(tagdata["tags"])
+    refused = {w.lower() for w in tcfg.get("blocklist", [])} | set(tagdata["hidden"])   # (a page's tags: never these)
     assets = read_library(cfg, root)
     if not assets:
         return [], {}
@@ -1153,13 +1168,17 @@ def collect_catalog(cfg: dict, root: Path) -> tuple[list, dict]:
         folder = f"{a['store']}/{a['folder']}"
         key = tag_key(a["store"], a["name"], a.get("library_id") or a.get("key"))
         mine = TagStore.tags_for(tagdata, key, a["name"], matcher)
-        a_tags = sorted((ts & tags) - set(mine))
+        a_tags = (ts & tags) | ({t for t in a.get("suggested_tags") or [] if isinstance(t, str) and clean_tag(t) == t} - refused
+                               if a["store"] == "Local" else set())   # (a Local product's from its page: issue #416)
+        a_tags = sorted(a_tags - set(mine))
         added = a.get("first_seen") if isinstance(a.get("first_seen"), str) and len(a["first_seen"]) <= 40 else None
         url = store_link(a["store"], a.get("url"))
         # its public page, for a credits list: the download's own link is often the buyer's (Jinxxy's inventory, a
         # Gumroad download page), so the library's page for it, else that link when it's public
-        page = None if a["store"] == "Local" else (pages.get(url or "") or pages.get(tag_key(a["store"], a["name"], a.get("library_id") or a.get("key")))
-                                                   or product_link(a["store"].lower(), url))
+        # (a Local product's: the store page you gave it, issue #416)
+        page = (product_link(a.get("page_store"), a.get("page")) if a.get("page_store") else None) if a["store"] == "Local" \
+            else (pages.get(url or "") or pages.get(tag_key(a["store"], a["name"], a.get("library_id") or a.get("key")))
+                  or product_link(a["store"].lower(), url))
         catalog.append({"store": a["store"], "name": a["name"], "creator": a["creator"], "folder": folder,
                         "url": url, **({"page": page} if page else {}), "variants": a.get("variants"), "added": added,
                         "files": sorted(f["path"] for f in a["files"].values()),
@@ -1774,7 +1793,8 @@ def validate_catalog_entry(entry: dict) -> list[str]:
         problems.append(f"{label}: url isn't an https address on the store's own website")
     if "page" in entry:
         from .sets import product_link
-        if product_link(str(entry.get("store")).lower(), entry["page"]) != entry["page"]:
+        stores = STORE_LINK_SITES if entry.get("store") == "Local" else (str(entry.get("store")).lower(),)   # (#416)
+        if all(product_link(s, entry["page"]) != entry["page"] for s in stores):
             problems.append(f"{label}: page isn't a public page on the store's own website")
     if "needs" in entry:
         from .needs import valid_needs

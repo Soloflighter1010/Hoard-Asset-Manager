@@ -332,6 +332,36 @@ class TagStore:
             self._apply(data, action, body)
             self._save(data)
 
+    def rekey(self, old: str, new: str, keep: bool = False) -> bool:
+        """A product renamed in Hoard (a Local product, issue #416): its tags, the ones taken off it, its kind and its
+        note follow it to its new name. What the new name has already stays, and is added to. keep: the old name keeps
+        them too (another product has it). Returns whether it had any."""
+        if old == new or not TAG_KEY_RX.match(old) or not TAG_KEY_RX.match(new):
+            return False
+        with _tag_lock, _file_lock(self.path.with_suffix(".lock")):
+            if not storage.exists(self.path):
+                return False
+            try:
+                data = self.sanitize(read_json_file(self.path, 16 * 1024 * 1024))
+            except DataFileError:
+                return False   # (a damaged file is left for change to set aside)
+            changed = False
+            for field in ("items", "excluded"):
+                if old in data[field]:
+                    data[field][new] = sorted(set(data[field].get(new, [])) | set(data[field][old]))
+                    if not keep:
+                        del data[field][old]
+                    changed = True
+            for field in ("types", "notes"):
+                if old in data[field]:
+                    data[field].setdefault(new, data[field][old])
+                    if not keep:
+                        del data[field][old]
+                    changed = True
+            if changed:
+                self._save(data)
+            return changed
+
     def change_all(self, bodies: list[dict]) -> list[str]:
         """Several changes, read and saved once (bringing in another tool's library: hoard/konoasset.py). One that
         doesn't make sense is left out, not the rest: returns why each left out wasn't made."""

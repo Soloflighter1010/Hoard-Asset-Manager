@@ -1178,6 +1178,7 @@ const SETUP_WIRES = {
     viewListen("library", $("#setupKonoCheck"), "click", async () => {
       const path = $("#setupKono").value.trim(), r = await apiPost("/api/konoasset/preview", { path });
       SETUP.kono = r.ok ? path : "";
+      SETUP.konoLocal = r.ok && r.data.local > 0;   // (it makes Local products: Local needs to be on, issue #422)
       $("#setupKonoResult").textContent = r.ok
         ? tr("{0} in KonoAsset. They're brought in after Hoard reads your stores.", tr(r.data.total === 1 ? "1 product" : "{0} products", r.data.total))
         : (r.data.error || tr("That folder couldn't be read."));
@@ -1264,6 +1265,7 @@ function wireSetup() {
         await load();
         const on = STORE_ORDER.filter(s => SETUP.st.stores[s].enabled);
         if (on.length) await runJob("/api/refresh", on, true);
+        if (SETUP.kono && SETUP.konoLocal && !await featureNeeded("local")) SETUP.kono = "";   // (Local off: not brought in)
         if (SETUP.kono) {   // (queued after reading the stores, so what's in your library is matched)
           const r = await apiPost("/api/konoasset/bring-in", { path: SETUP.kono, confirm: true });
           if (!r.ok) toast(r.data.error || "Bringing in from KonoAsset didn't start.");

@@ -711,6 +711,8 @@ public static class CoreTests
         Check("the catalog's public page read", good != null && good.Page == "https://booth.pm/ja/items/1", good == null ? "missing" : good.Page ?? "null");
         Check("a page of the buyer's own isn't one", itch != null && itch.Page == null, itch == null ? "missing" : itch.Page ?? "null");
         Check("edited catalog: no public pages trusted", edited.Assets.TrueForAll(a => a.Page == null));
+        Check("a Local product's page, on whichever store it's on", HoardCatalog.LocalPage("https://kitsu.booth.pm/items/88") == "https://kitsu.booth.pm/items/88"
+              && HoardCatalog.LocalPage("https://ash.gumroad.com/l/hat") != null && HoardCatalog.LocalPage("https://example.com/items/1") == null);
 
         // U11: a \\u escape is exactly four hex digits
         try { Json.Parse("\"\\u 41 \""); Check("a \\u escape with spaces refused", false, "read"); }

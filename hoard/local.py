@@ -17,11 +17,13 @@ Unity can import it. Records are kept in Local/_manifest.json, as each store's a
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import re
 import secrets
 import stat
+import threading
 from pathlib import Path
 
 from . import reach
@@ -36,6 +38,21 @@ LOCAL = STORE_DIRS["local"]
 MAX_FILES = 20000
 MAX_PICTURE = 20 * 1024 * 1024   # bytes: a bigger image isn't copied for the picture
 SKIP = {".ds_store", "thumbs.db", "desktop.ini", "_manifest.json", "asset.json"}   # system clutter, and Hoard's own
+
+
+# Local's records are read, changed and saved whole (_manifest.json): one change at a time, so none is saved over
+# another's (Edit... beside a sync folder's look, an import, a rescan; issue #416). Held while a change is made.
+WRITING = threading.RLock()
+
+
+def _writes(change):
+    """A change to Local's records, made holding WRITING."""
+    @functools.wraps(change)
+    def held(*args, **kwargs):
+        """The change, made holding WRITING."""
+        with WRITING:
+            return change(*args, **kwargs)
+    return held
 
 
 def local_dir(root: Path) -> Path:
@@ -186,25 +203,33 @@ def added_sources(root: Path) -> set[str]:
     return out
 
 
+@_writes
 def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", note: str = "", copy: bool = True,
-        progress=None, catalog: bool = True) -> dict:
+        progress=None, catalog: bool = True, manifest: Manifest | None = None, page: tuple[str, str] | None = None,
+        leave_out: frozenset = frozenset()) -> dict:
     """Add a folder or file to Local: copied into Hoard's Local folder, or listed where it is. Returns the record.
-    Raises ValueError with a plain explanation."""
+    Raises ValueError with a plain explanation. manifest: Local's records, open, to add this to and leave for the
+    caller to save (another tool's library brought in saves them once, not once each); page: its page on a store,
+    (store, page), as edit keeps it; leave_out: names of files at the top of the folder that aren't the product's (the
+    other tool's own). """
     say = progress or (lambda line: None)
     source = check_source(root, path, copy)
     single = source.is_file()
-    files = [source.name] if single else walk(source)
+    files = [source.name] if single else [f for f in walk(source) if f.lower() not in leave_out]
     if not files:
         raise ValueError("There are no files in that folder.")
     name = clean_text(name, 300) or clean_text(source.stem if single else source.name, 300) or "Untitled"
     creator = clean_text(creator, 200) or "You"
     sdir = local_dir(root)
     sdir.mkdir(parents=True, exist_ok=True)
-    manifest = Manifest(sdir)
+    keep = manifest is None
+    manifest = manifest if manifest is not None else Manifest(sdir)
     key = "local-" + secrets.token_hex(6)
     rec = manifest.record(key, creator, name)
     rec.update(name=name, creator=creator, note=clean_text(note, 300) or None, url=None,
                source=str(source.resolve()))   # where it came from: adding a folder of folders again skips it (#109)
+    if page:
+        rec["page_store"], rec["page"] = page
     base = source.parent if single else source
     if copy:
         dest = rel_to_path(sdir, rec["folder"])
@@ -233,6 +258,8 @@ def add(cfg: dict, root: Path, path: str, name: str = "", creator: str = "", not
     if not rec["files"]:
         manifest.assets.pop(key, None)
         raise ValueError("None of those files could be read.")
+    if not keep:   # (the caller's to save, with the rest it adds)
+        return rec
     manifest.save()
     if catalog:   # (several added together build it once, at the end)
         build_catalog(cfg, root)
@@ -286,12 +313,14 @@ def _own_thumbnails(dest: Path, rec: dict) -> list[Path]:
     return [f for f in found if f.name.lower() not in mine and f.is_file() and not f.is_symlink()]
 
 
-def choose_picture(cfg: dict, root: Path, key: str, image) -> None:
+@_writes
+def choose_picture(cfg: dict, root: Path, key: str, image, rec: dict | None = None) -> None:
     """Your own picture for an item's tile (safety.chosen_picture's image), or None to go back to one of its own.
     Copied as _thumbnail.<ext> into Hoard's folder for it: an item's copy in Local, or Local/_linked/... for one listed
-    where it is, so nothing of yours is written. Raises ValueError with a plain explanation."""
+    where it is, so nothing of yours is written. rec: its record, when it's in hand (not read again). Raises
+    ValueError with a plain explanation."""
     sdir = local_dir(root)
-    rec = find(Manifest(sdir), key)
+    rec = rec if rec is not None else find(Manifest(sdir), key)
     if not re.fullmatch(r"local-[0-9a-f]{12}", key):
         raise ValueError("That isn't in Local any more.")
     try:
@@ -358,6 +387,132 @@ def find(manifest: Manifest, key: str) -> dict:
     return rec
 
 
+@_writes
+def edit(cfg: dict, root: Path, key: str, *, name=None, creator=None, note=None, link=None, build: bool = True) -> dict:
+    """Change a Local product (issue #416): its name, who made it, its note, or the link to its page on a store (a
+    product's public page on Booth, Gumroad, Jinxxy, Payhip or itch.io, as Add products by link takes it; "" takes it
+    off). Each left as None stays as it is. Renamed, its tags, its kind and note, your choices for it (hidden, for
+    adults...) and its places in your sets follow it to its new name. Its files and its folder aren't touched. build:
+    catalog.json made again (several changed together make it once, at the end). Returns the record; raises
+    ValueError with a plain explanation."""
+    from . import storage
+    from .marks import MarkStore
+    from .safety import DataFileError
+    from .sets import SetStore
+    from .tags import TagStore, legacy_tag_key
+    from .wishlists import LinkError, product_page_link
+    manifest = Manifest(local_dir(root))
+    rec = find(manifest, key)
+    was = rec["name"]
+    if name is not None:
+        name = clean_text(name, 300)
+        if not name:
+            raise ValueError("Give it a name.")
+        others = [str(r.get("name") or "") for k, r in manifest.assets.items() if k != key]
+        new_key = legacy_tag_key("local", name)
+        if (name.casefold() != was.casefold() and any(n.casefold() == name.casefold() for n in others)) or \
+                (new_key != legacy_tag_key("local", was) and any(legacy_tag_key("local", n) == new_key for n in others)):
+            # (kept in JSON, a product is known by its name with its version and punctuation left out: "Fox Kit v2" is
+            # "Fox Kit", whose tags and marks it would take on)
+            raise ValueError("Another product in Local has that name. Give it another one.")
+        rec["name"] = name
+    if creator is not None:
+        rec["creator"] = clean_text(creator, 200) or "You"
+    if note is not None:
+        rec["note"] = clean_text(note, 300) or None
+    if link is not None:
+        page = rec.get("page")
+        if not str(link).strip():
+            rec.pop("page", None)
+            rec.pop("page_store", None)
+        else:
+            try:
+                rec["page_store"], rec["page"] = product_page_link(str(link))
+            except LinkError:   # (its one reason: not a product's page on those stores)
+                raise ValueError("That isn't a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io.") from None
+        if rec.get("page") != page:
+            rec.pop("suggested_tags", None)   # (the tags its old page gave it go with it)
+    # (with the metadata kept in SQLite, a Local product is known by its folder, which doesn't change: issue #416).
+    # Kept in JSON, it's known by its name, which another of the same name shares: theirs is copied, not taken from it.
+    # Moved first, and put back if one can't be (its tags kept busy by Hoard for Unity, say), so a rename is all or none.
+    old, new = legacy_tag_key("local", was), legacy_tag_key("local", rec["name"])
+    moved = []
+    shared = any(legacy_tag_key("local", str(r.get("name") or "")) == old for k, r in manifest.assets.items() if k != key)
+    try:
+        if old != new and not storage.enabled():
+            for kept in (TagStore(), MarkStore(), SetStore()):
+                kept.rekey(old, new, keep=shared)
+                moved.append(kept)
+        manifest.save()
+    except (OSError, DataFileError) as e:
+        for kept in reversed(moved):
+            kept.rekey(new, old)
+        raise ValueError(f"It couldn't be changed: {getattr(e, 'strerror', None) or e}. Try again in a moment.") from None
+    if build:
+        build_catalog(cfg, root)
+    log(f"Local: changed {rec['name']}" + (f" (was {was})" if was != rec["name"] else ""))
+    return rec
+
+
+@_writes
+def fill_in(cfg: dict, root: Path, key: str, got: dict, picture: bytes | None = None) -> tuple[dict, bool]:
+    """Fill in a Local product from its page on a store (issue #416; got: wishlists.from_product_page's shape): its
+    name and creator, the tags its creator gave it there (as suggestions, as a store's are, in place of any an earlier
+    page gave), and its picture (picture: the page's, fetched, when there was one). A picture you chose for it, or one
+    of its own (a _thumbnail file in it), stays the one shown. Whether it's for adults is the caller's to mark. Returns
+    the record, and whether the page's picture is the one shown now; raises ValueError."""
+    import base64
+    from .tags import clean_tag
+    try:   # (a name another product in Local has stays as it was: the rest is still filled in)
+        rec = edit(cfg, root, key, name=got.get("name") or None, creator=got.get("creator") or None, build=False)
+    except ValueError:
+        rec = edit(cfg, root, key, creator=got.get("creator") or None, build=False)
+    tags = [t for t in dict.fromkeys(clean_tag(x) for x in got.get("store_tags") or [] if isinstance(x, str)) if t][:30]
+    manifest = Manifest(local_dir(root))
+    rec = find(manifest, key)
+    if tags:
+        rec["suggested_tags"] = tags
+    else:
+        rec.pop("suggested_tags", None)
+    manifest.save()
+    build_catalog(cfg, root)   # (once, with its suggested tags in it)
+    used = False
+    if picture and _chosen(key) is None:   # (one you chose is never replaced: it's yours)
+        try:
+            choose_picture(cfg, root, key, base64.b64encode(picture).decode("ascii"))
+            used = True
+        except ValueError as e:   # (one of its own, or a kind Hoard for Unity can't show)
+            log(f"Local: kept {rec['name']}'s picture ({e})")
+    return rec, used
+
+
+def fill_from_page(cfg: dict, root: Path, key: str, got: dict) -> dict:
+    """Fill in a Local product from its page, as read (got: wishlists.from_product_page's shape): its picture fetched
+    from its store's own image host (only from there, redirects too), then fill_in, then 18+ when its store says so
+    (as a store's own mark does, issue #311), unless you said it isn't, which wins. Returns what was done, for the
+    page: {name, creator, tags, picture, adult}. Raises ValueError."""
+    from .library import STORES, fetch_picture
+    from .marks import MarkStore
+    from .sets import STORE_IMAGE_HOSTS, product_picture
+    from .tags import tag_key
+    picture, store = None, got.get("store")
+    url = product_picture(store, got.get("thumbnail"))
+    if url and store in STORES and store in STORE_IMAGE_HOSTS:
+        fetched = fetch_picture(url, STORES[store]["referer"], hosts=STORE_IMAGE_HOSTS[store])
+        picture = fetched[0] if fetched and fetched[1] in ("image/png", "image/jpeg") else None
+    rec, used = fill_in(cfg, root, key, got, picture)
+    adult = got.get("adult") is True
+    if adult:
+        marks, mark = MarkStore(), tag_key("local", rec["name"], rec.get("key"))
+        if mark in marks.keys("not_adult"):
+            adult = False   # (you said it isn't for adults: your word wins over its store's)
+        else:
+            marks.change("adult", {mark}, True)
+    return {"name": rec["name"], "creator": rec["creator"], "tags": len(rec.get("suggested_tags") or []),
+            "picture": used, "adult": adult}
+
+
+@_writes
 def rescan(cfg: dict, root: Path, key: str) -> dict:
     """An item listed where it is: read its folder again, so files you added show and ones you removed go."""
     manifest = Manifest(local_dir(root))
@@ -379,6 +534,7 @@ def rescan(cfg: dict, root: Path, key: str) -> dict:
     return rec
 
 
+@_writes
 def remove(cfg: dict, root: Path, key: str) -> dict:
     """Take an item out of Local. A copy's files (only the ones Hoard copied) are deleted with it, and its folder when
     that leaves it empty; an item listed where it is is only forgotten: nothing in your folder is touched."""

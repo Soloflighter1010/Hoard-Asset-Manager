@@ -83,6 +83,28 @@ Hoard only reads KonoAsset's folder: nothing in it is written, moved or deleted.
 (`konoasset.json` in its app-data folder), so bringing in again later adds only what's new. It reads KonoAsset's
 lists as KonoAsset 1.0 and later write them.
 
+### From BB's Library Manager
+
+Switching from [BB's Library Manager](https://github.com/BunBnnuy/BBLM)? Choose **Bring in from BB's Library
+Manager...** in Settings, under Bring in from another tool, and choose its root folder: the one with a folder for each
+product in it, each with its `meta.json` (its Settings say where it is). It needn't be running, or installed. Before
+anything changes, Hoard says what bringing it in will do; then **Bring in** or **Cancel** (5.2.0 beta 13).
+
+- A product whose BOOTH item is in your Hoard library is matched to that product, and one whose folder is in Local
+  already (added with **Add your own**, say) to that one. The rest become Local products, listed where they are:
+  their files stay in its folder, its `thumbnail.png` is the picture chosen for each, and the page each came from is
+  its page on a store (see [Changing it](#changing-it)). BB's Library Manager's own `meta.json` and picture aren't
+  among their files. One named like a product in Local gets "BBLM" and its id after its name.
+- Its tags become your tags, and a product it marks for adults is marked 18+, unless you said it isn't (**It isn't
+  for adults**: your word wins).
+- A product still downloading in it, one with no files that isn't in your library, and one that can't be listed
+  (with why) are left out, and named.
+
+Hoard only reads its folder: nothing in it is written, moved or deleted. It remembers what it brought in
+(`bblm.json` in its app-data folder), so bringing in again later adds only what's new; a product taken out of Local,
+or whose folder moved with its root, comes in again. **Stop**, in Tasks, stops it between products, and nothing is
+brought in.
+
 ## Its picture
 
 An item's tile shows one of its own images to begin with. To show another, open it and choose **Choose a
@@ -93,9 +115,22 @@ nothing in your folder is written. Hoard for Unity shows it too. **Rescan** keep
 for an item listed where it is, **Use one of its own pictures**) goes back to one of its own. An item with a
 `_thumbnail` image of its own shows that one: change that file instead.
 
+## Changing it
+
+**Edit...**, in an item's details, changes its name, who made it, its note, and its page on a store (5.2.0 beta 13):
+a product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io, such as a free BOOTH item you downloaded yourself.
+Renamed, its tags, its note, your choices for it (hidden, 18+) and its places in your sets go with it. Its files and
+its folder aren't touched. Its details then open that page (**Open on Booth**, or its store's). Each item in Local
+has a name of its own: one another item has is refused.
+
+With a page, **Fill in from its page** reads it, as anyone can see it, and fills in its name, who made it, the tags its
+creator gave it (as suggestions), and its picture. A product its store marks for adults is marked 18+. Hoard asks
+whether to, as soon as you give an item a page.
+
 ## Using it
 
-- Local items are in Downloads under **Local**, with your tags, search and **Make an editable copy**.
+- Local items are in Downloads under **Local**, with your tags, search and **Make an editable copy**. Once one has a
+  page on a store, Local has a tab for each store, and one for those with no page (5.2.0 beta 13).
 - **Hoard for Unity** lists them under **Local** (0.4.0 and newer), and imports their `.unitypackage` files like
   any download. Its credits list includes them when they're in the project.
 - An item listed where it is is only trusted from Hoard's own sealed records on this computer: if

@@ -625,6 +625,37 @@ class SetStore:
                 _tidy_pictures(data["sets"])
         return {**data, **({"made": made} if made else {})}
 
+    def rekey(self, old: str, new: str, keep: bool = False) -> bool:
+        """A product renamed in Hoard (a Local product, issue #416): each set that has it keeps it under its new name,
+        with what's known of it and its marks on the set's photos. keep: the old name stays in them too (another
+        product has it; the marks stay on it). Returns whether any set had it."""
+        if old == new or not TAG_KEY_RX.match(old) or not TAG_KEY_RX.match(new):
+            return False
+        with _lock:
+            data = self.load()
+            changed = False
+            for s in data["sets"]:
+                if old not in s.get("items", []):
+                    continue
+                changed = True
+                if keep:   # (a set already holding all it can is left as it is)
+                    if len(s["items"]) < (MAX_WISH_ITEMS if s.get("kind") == "wishlist" else MAX_ITEMS):
+                        s["items"] = list(dict.fromkeys([*s["items"], new]))
+                    if old in (s.get("products") or {}):
+                        s["products"].setdefault(new, dict(s["products"][old]))
+                    continue
+                s["items"] = list(dict.fromkeys(new if k == old else k for k in s["items"]))
+                known = s.get("products") or {}
+                if old in known:
+                    known.setdefault(new, known.pop(old))
+                for url, marks in (s.get("marks") or {}).items():
+                    taken = {m[0] for m in marks}
+                    s["marks"][url] = [[new, m[1], m[2]] if m[0] == old and new not in taken else m
+                                       for m in marks if not (m[0] == old and new in taken)]
+            if changed:
+                self._save(data)
+            return changed
+
     def add_products(self, sid: str, products: list[dict]) -> dict:
         """Products added to a set or wishlist by their links (wishlists.from_product_page's shape), each with what's
         known of it, as a wishlist read from a store holds them. Returns the sets after it."""

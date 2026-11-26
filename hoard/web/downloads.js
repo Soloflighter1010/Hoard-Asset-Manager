@@ -3,7 +3,7 @@
 function createDownloadsView() {
 // first, or it applies to nothing
 const grid = $("#grid"), detail = $("#detail");
-const state = { view: "downloads", space: "", q: "", store: "", lib: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "", ptype: "" };
+const state = { view: "downloads", space: "", q: "", store: "", lib: "", source: "", tags: new Set(), types: new Set(), creator: "", sort: "name", allTags: false, creatorFind: "", set: "", ptype: "" };
 let DATA = { assets: [] }, byId = new Map(), openId = null, lastFocus = null;
 
 // A store's name, from its folder's.
@@ -98,6 +98,7 @@ function matches(a, skip) {
   if (!(inSets() ? setHas(a) : inView(a))) return false;
   if (state.store && !inSets() && a.store !== state.store) return false;   // (Sets: every set's tile, or the one open)
   if (state.lib !== "" && String(a.library || 0) !== state.lib) return false;   // a library folder's tab
+  if (state.source && (a.store !== "Local" || (a.source || "none") !== state.source)) return false;   // Local's (#416)
   if (skip !== "creator" && state.creator && a.creator !== state.creator) return false;
   if (skip !== "ptype" && state.ptype && a.type !== state.ptype) return false;   // what it is (issue #223)
   for (const t of state.tags) if (!a.tags.includes(t) && !a.suggested.includes(t)) return false;
@@ -121,7 +122,7 @@ const countBy = (list, key) => {
   return m;
 };
 // Whether any search or filter is narrowing the downloads down.
-const filtersActive = () => state.ptype || state.q || state.store || state.lib !== "" || state.creator || state.tags.size || state.types.size || state.set;
+const filtersActive = () => state.ptype || state.q || state.store || state.lib !== "" || state.source || state.creator || state.tags.size || state.types.size || state.set;
 
 /* ---------- rendering */
 function render() {
@@ -129,6 +130,9 @@ function render() {
   if (!VIEWS[state.view] || (state.view === "hidden" && !(DATA.privacy || {}).unlocked)) state.view = "downloads";
   if (!inSets()) state.set = "";
   wishScope();
+  // (Local's tab by store, issue #416: only in Local, and only while one of its products is from that store)
+  if (state.source && (state.store !== "Local" ||
+      !DATA.assets.some(a => a.store === "Local" && inView(a) && (a.source || "none") === state.source))) state.source = "";
   const list = DATA.assets.filter(a => matches(a)).sort(SORTS[state.sort]);
   renderViews(); renderGrid(stacked(list)); markSelected(); renderFacets(list); renderStatus(list); syncControls(); saveHash(); renderTagPanel();
   drawSets();
@@ -647,6 +651,7 @@ function renderStatus(list) {
   if (state.q) pills.push(["q", "", `Search`, state.q]);
   if (state.store && !inSets()) pills.push(["store", "", "Store", storeName(state.store)]);   // (Sets says where you are)
   if (state.lib !== "") pills.push(["lib", "", "Folder", libName(state.lib)]);
+  if (state.source) pills.push(["source", "", "Where it's from", tr(LOCAL_SOURCES[state.source] || "")]);
   if (state.creator) pills.push(["creator", "", "Creator", state.creator]);
   for (const t of state.tags) pills.push(["tag", t, "Tag", t]);
   for (const t of state.types) pills.push(["type", t, "Type", "." + t]);
@@ -686,6 +691,7 @@ function syncControls() {
     b.setAttribute("aria-checked", String(b.dataset.store === state.store && (b.dataset.store !== "" || state.lib === "")));
   }
   for (const b of $("#drives").querySelectorAll("[data-lib]")) b.setAttribute("aria-checked", String(b.dataset.lib === state.lib));
+  for (const b of $("#drives").querySelectorAll("[data-source]")) b.setAttribute("aria-checked", String(b.dataset.source === state.source));
   // the stores you have downloads from, for Everything's glow
   setGlow(inSets() ? "" : state.store.toLowerCase(), GLOW_COLORS.filter(s => DATA.assets.some(a => a.store.toLowerCase() === s)));
   $("#sort").value = state.sort;
@@ -727,7 +733,9 @@ function showDetail(a, focus = true) {
     previousSection(a) +
     `<p class="path" id="absPath">${esc(a.abs_folder)}</p>`;
   saveHash();   // (first: the step left behind keeps the page's place as it was, for Back to return to, issue #329)
-  renderProductDetail(a, { store: a.store.toLowerCase(), storeName: storeName(a.store), storeUrl: storeUrl(a.store, a.url),
+  renderProductDetail(a, { store: a.store.toLowerCase(), storeName: storeName(a.store),
+    storeUrl: a.source ? storeUrl(a.source, a.page) : storeUrl(a.store, a.url),   // (a Local product's own page, #416)
+    pageName: a.source ? LOCAL_SOURCES[a.source] : "",
     copyUrl: a.public,   // (its public page: never the purchase's own link Open on the store opens)
     extra: a.variants, src: a.thumb ? fileUrl(a.thumb, a.thumb_v) : "", type: a.types[0],
     facts: [["Files", a.files.length], ["Size", fmtSize(a.size)], ["Added", shortDay(a.added) || "—"], ["Projects", (a.used_in || []).length]],
@@ -1033,6 +1041,7 @@ function saveHash() {
   if (state.q) p.set("q", state.q);
   if (state.store) p.set("store", state.store);
   if (state.lib !== "") p.set("lib", state.lib);
+  if (state.source) p.set("from", state.source);
   if (state.creator) p.set("creator", state.creator);
   if (state.tags.size) p.set("tags", [...state.tags].join(","));
   if (state.types.size) p.set("types", [...state.types].join(","));
@@ -1049,6 +1058,8 @@ function readHash() {
   const p = new URLSearchParams(location.hash.slice(1));
   state.q = p.get("q") || ""; state.store = p.get("store") || ""; state.creator = p.get("creator") || "";
   state.lib = /^\d+$/.test(p.get("lib") || "") ? p.get("lib") : "";
+  state.source = state.store === "Local" && Object.prototype.hasOwnProperty.call(LOCAL_SOURCES, p.get("from") || "") ? p.get("from") : "";
+  if (state.store === "Local") state.lib = "";   // (Local's tabs are by store, not by library folder)
   state.tags = new Set((p.get("tags") || "").split(",").filter(Boolean));
   state.types = new Set((p.get("types") || "").split(",").filter(Boolean));
   state.set = /^[0-9A-Za-z]{1,16}$/.test(p.get("set") || "") ? p.get("set") : "";
@@ -1125,6 +1136,9 @@ const libName = n => { const l = (DATA.libraries || []).find(l => String(l.n) ==
 let drivesShown = "";
 // The library folders, each with how many downloads it has, to show only one.
 function renderDrives() {
+  if (state.store === "Local") return renderSources();   // (Local's are in the downloads folder: its own tabs, #416)
+  state.source = "";
+  $("#drives").setAttribute("aria-label", tr("Library folder"));
   const libs = DATA.libraries || [];
   if (state.lib !== "" && !libs.some(l => String(l.n) === state.lib)) state.lib = "";   // a folder taken out
   const counts = {};
@@ -1138,7 +1152,21 @@ function renderDrives() {
 }
 
 
-
+// Local's tabs (issue #416): by the store each product's page is on (Edit..., or brought in from another tool), and one
+// for those with none. Shown once one has a page.
+const LOCAL_SOURCES = { booth: "Booth", gumroad: "Gumroad", jinxxy: "Jinxxy", payhip: "Payhip", itch: "itch.io", none: "No store page" };
+// The tabs above Local's list, one for each store its products' pages are on, with how many.
+function renderSources() {
+  const counts = {};
+  for (const a of DATA.assets) if (a.store === "Local" && inView(a)) counts[a.source || "none"] = (counts[a.source || "none"] || 0) + 1;
+  if (state.source && !counts[state.source]) state.source = "";
+  const here = Object.keys(LOCAL_SOURCES).filter(k => counts[k]);
+  const html = !here.some(k => k !== "none") ? "" : '<span class="tabsep" aria-hidden="true"></span>' + here.map(k =>
+    `<button role="radio" data-source="${k}" aria-checked="false">${esc(tr(LOCAL_SOURCES[k]))}<span class="n">${counts[k].toLocaleString()}</span></button>`).join("");
+  $("#drives").setAttribute("aria-label", tr("Where it's from"));
+  if (html !== drivesShown) { $("#drives").innerHTML = html; drivesShown = html; }
+  $("#drives").hidden = !html;
+}
 // Download what's new from some stores (choosing what, in the downloads dialog).
 const downloadNew = stores => pickNew(stores, keys => keys ? startDownload(storesOf(keys), null, null, keys) : startDownload(stores));
 
@@ -1163,7 +1191,9 @@ function localSection(a) {
     `<p class="sub">${a.note ? `${esc(tr("For {0}.", a.note))} ` : ""}${a.linked
       ? "Listed where it is: Hoard never changes anything in this folder."
       : "A copy in Hoard, checked like your downloads."}</p>` +
-    `<div class="actions">${a.linked ? `<button class="ghost" data-act="local-rescan">Rescan</button>` : ""}` +
+    `<div class="actions"><button class="ghost" data-act="local-edit">${esc(tr("Edit..."))}</button>` +   // (issue #416)
+    (a.page ? `<button class="ghost" data-act="local-fill">${esc(tr("Fill in from its page"))}</button>` : "") +
+    `${a.linked ? `<button class="ghost" data-act="local-rescan">Rescan</button>` : ""}` +
     `<button class="ghost" data-act="local-picture">${esc(tr(a.own_picture ? "Change its picture..." : "Choose a picture..."))}</button>` +
     (a.own_picture ? `<button class="ghost" data-act="local-unpicture">${esc(tr(a.linked ? "Use one of its own pictures" : "Take the picture off"))}</button>` : "") +
     `<button class="ghost" data-act="local-package">${esc(tr("Make a Unity package"))}</button>` +   // (issue #382)
@@ -1189,6 +1219,8 @@ async function localPackage(a) {
 async function localAction(act, a) {
   if (!a) return;
   if (act === "local-package") return localPackage(a);
+  if (act === "local-edit") return localEdit(a);
+  if (act === "local-fill") return localFill(a);
   if (act === "local-picture" || act === "local-unpicture") {   // (kept in Hoard's own folder for it: see local.py)
     const image = act === "local-picture" ? await choosePicture() : null;
     if (act === "local-picture" && !image) return;
@@ -1212,6 +1244,47 @@ async function localAction(act, a) {
   if (act === "local-rescan") { const again = DATA.assets.find(x => x.folder === a.folder); if (again) showDetail(again, false); }
   toast(act === "local-rescan" ? tr(r.data.files === 1 ? "Rescanned: 1 file." : "Rescanned: {0} files.", r.data.files)
         : tr("Took {0} out of Local.", a.name));
+}
+// Change a Local product (issue #416): its name, who made it, its note, and its page on a store. Renamed, its tags,
+// note and places in your sets go with it (hoard/local.py's edit).
+async function localEdit(a) {
+  const res = await askForm({ icon: "pencil", title: tr("Edit {0}", a.name), ok: tr("Save"),
+    blocks: [{ type: "field", id: "editName", label: tr("Name"), value: a.name, max: 300 },
+             { type: "field", id: "editCreator", label: tr("Creator"), value: a.creator, max: 200 },
+             { type: "field", id: "editNote", label: tr("Note"), value: a.note || "", rows: 3 },
+             { type: "field", id: "editLink", label: tr("Its page on a store"), value: a.page || "", max: 2000,
+               placeholder: "https://booth.pm/en/items/..." },
+             { type: "text", tone: "hint", text: tr("A product's page on Booth, Gumroad, Jinxxy, Payhip or itch.io: Local's tabs go by its store, and its details open it.") }] });
+  if (!res.ok) return;
+  const f = res.fields;
+  const r = await apiPost("/api/local/edit", { folder: a.folder, name: f.editName, creator: f.editCreator,
+                                               note: f.editNote, link: f.editLink });
+  if (!r.ok) { toast(tr(r.data.error || "That didn't work.")); return; }
+  await load();
+  const again = DATA.assets.find(x => x.folder === a.folder);
+  if (again && openId === a.id) showDetail(again, false);
+  toast(tr("Changed {0}.", r.data.name));
+  if (r.data.link && r.data.link !== a.page && again
+      && await ask(tr("Fill in its name, creator, tags and picture from its page?"), "Fill it in", false, "Not now")) localFill(again);
+}
+// Fill in a Local product from its page on a store (issue #416): its name, creator, its store's tags (as suggestions),
+// whether it's for adults, and its picture. Hoard reads the page as anyone can see it.
+async function localFill(a) {
+  toast(tr("Reading its page..."));
+  const r = await apiPost("/api/local/from-page", { folder: a.folder });
+  if (!r.ok) { toast(tr(r.data.error || "That didn't work.")); return; }
+  if (r.data.browser) {   // (a page its store shows only to a browser, as Payhip's: read in Hoard's, as a task)
+    toast(tr(r.data.queued ? "Its page is read in Hoard's browser once what's running has finished. Follow it in Tasks."
+                           : "Reading its page in Hoard's browser. Follow it in Tasks."));
+    return;
+  }
+  await load();
+  const again = DATA.assets.find(x => x.folder === a.folder);
+  if (again && openId === a.id) showDetail(again, false);
+  toast([tr("Filled in {0} from its page.", r.data.name), r.data.tags ? tr(r.data.tags === 1 ? "1 tag suggested." : "{0} tags suggested.", r.data.tags) : "",
+         r.data.adult ? tr(featureOn("adult") ? "Its store marks it as for adults (18+)."
+                                              : "Its store marks it as for adults (18+), so it's hidden while Products for adults is turned off.") : ""]
+         .filter(Boolean).join(" "));
 }
 // Open Add to Local, or close it (open: which; else the other way).
 function openLocal(open) {
@@ -1660,8 +1733,11 @@ viewListen("downloads", $("#q"), "input", e => { clearTimeout(qTimer); qTimer = 
 viewListen("downloads", $("#storeSeg"), "click", e => {
   const d = e.target.closest("[data-lib]");   // a library folder's tab: chosen again, it goes back to every folder
   if (d) { state.lib = state.lib === d.dataset.lib ? "" : d.dataset.lib; render(); return; }
+  const from = e.target.closest("[data-source]");   // one of Local's tabs (issue #416): the same, for every store
+  if (from) { state.source = state.source === from.dataset.source ? "" : from.dataset.source; render(); return; }
   const b = e.target.closest("[data-store]");
-  if (b) { state.store = b.dataset.store; state.set = ""; if (!b.dataset.store) state.lib = ""; render(); }   // (Sets: every set)
+  // (Sets: every set. Local has its own tabs, by store, in place of the library folders': neither carries over, #416)
+  if (b) { state.store = b.dataset.store; state.set = ""; state.source = ""; if (!b.dataset.store || b.dataset.store === "Local") state.lib = ""; render(); }
 });
 viewListen("downloads", $("#sort"), "change", e => { state.sort = e.target.value; if (state.view !== "space") uiSave({ sort: state.sort }); render(); });
 viewListen("downloads", $("#creatorFind"), "input", e => { state.creatorFind = e.target.value; render(); });
@@ -1688,8 +1764,8 @@ viewListen("downloads", $("#filters"), "click", e => {
 viewListen("downloads", document, "click", e => {
   const b = e.target.closest("[data-clear]"); if (!b) return;
   const k = b.dataset.clear, v = b.dataset.v;
-  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; state.ptype = ""; }
-  else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
+  if (k === "all") { state.q = ""; state.store = ""; state.lib = ""; state.source = ""; state.creator = ""; state.tags.clear(); state.types.clear(); state.set = ""; state.ptype = ""; }
+  else if (k === "q") state.q = ""; else if (k === "lib") state.lib = ""; else if (k === "source") state.source = ""; else if (k === "store") state.store = ""; else if (k === "creator") state.creator = "";
   else if (k === "tag") state.tags.delete(v); else if (k === "type") state.types.delete(v);
   else if (k === "ptype") state.ptype = "";
   render();
