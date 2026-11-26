@@ -158,3 +158,11 @@ class IsolatedTestCase(unittest.TestCase):
             original(current)
         isolated_setup.__func__._hoard_original = original
         cls.setUpClass = isolated_setup
+
+    def fresh_home(self) -> Path:
+        """A home of this test's own, inside its class's: for a test whose metadata must start from nothing. (In SQLite
+        a product's identity outlives what's kept about it, so in a class's one home its tests would meet each other's
+        products: a Local "Kit" added by each is a new product, with a key of its own.) Returns its folder."""
+        home = TestHome().__enter__()
+        self.addCleanup(home.close)
+        return home.root

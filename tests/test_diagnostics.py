@@ -261,6 +261,28 @@ class Sanitizing(IsolatedTestCase):
             env = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))
         self.assertIsNone(env["webview"])
 
+    def test_how_metadata_is_kept(self):
+        """#320, #348: a report says how Hoard keeps its metadata (SQLite since beta 14), so reports from a beta show
+        how the move and recoveries went: counts only, never a file's name or what's in it."""
+        from hoard import config, paths, storage
+        config.save_config({**config.load_config(), "setup_done": True})   # (the database, made)
+        home = paths.data_dir()
+        (home / "tags.json.legacy-conflict-1").write_text("{}", "utf-8")
+        self.addCleanup((home / "tags.json.legacy-conflict-1").unlink, missing_ok=True)
+        state = diagnostics._environment(self.cfg, diagnostics._ReportSanitizer(self.cfg))["metadata"]
+        self.assertEqual((state["kept_in"], state["database_version"], state["conflict_copies"], state["recovery_copies"]),
+                         ("sqlite", 2, 1, 0))
+        self.assertIn(state["library_trust"], ("sealed", "unsealed"))
+        self.assertFalse(state["write_cut_off"])
+        line = diagnostics._metadata_text(state)
+        self.assertRegex(line, r"^SQLite \(version 2, [\d.]+ MB\); 1 conflict copies$")
+        self.assertEqual(diagnostics._metadata_text({**state, "library_trust": "changed", "recovery_copies": 1}),
+                         line + "; 1 databases kept aside by a recovery; its library untrusted until a refresh")
+        with mock.patch.dict(os.environ, {"HOARD_METADATA": "json"}):
+            self.assertEqual(diagnostics._metadata_text(storage.report_state()), "JSON files")
+        with mock.patch.object(storage, "database", side_effect=storage.DatabaseIntegrityError("no")):
+            self.assertEqual(storage.report_state()["problem"], "DatabaseIntegrityError", "and the report is still made")
+
 
     def test_windows_security_features(self):
         """Issue #229: on Windows, a report says whether Smart App Control and Memory integrity are on, as the

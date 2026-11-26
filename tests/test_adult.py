@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 from tests.isolation import IsolatedTestCase
-from hoard import adult, config, library, server, sets, wishlists
+from hoard import adult, config, library, server, sets, storage, wishlists
 from hoard.marks import MarkStore
 from hoard.tags import TagStore, tag_key
 
@@ -210,7 +210,7 @@ class ReadFromTheStores(IsolatedTestCase):
         lib.replace_store("booth", [library.item("booth", str(n), name=names[n], url=f"https://booth.pm/ja/items/{n}")
                                     for n in names])
         store = sets.SetStore()
-        self.addCleanup(store.path.unlink, missing_ok=True)
+        self.addCleanup(storage.remove, store.path, missing_ok=True)
         mine = store.change({"action": "create", "name": "Mine", "items": [tag_key("booth", "Dune Scarf")]})["sets"][-1]["id"]
         shared = store.change({"action": "create", "name": "Shared", "items": [tag_key("booth", "Fern Dress")]})["sets"][-1]["id"]
         store.set_short(shared, {"id": "abcDEF0123", "key": "k" * 22, "token": "t" * 43, "made": "0123456789abcdef",
@@ -307,7 +307,7 @@ class InHoard(IsolatedTestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(__import__("shutil").rmtree, self.tmp, True)
         for kept in (MarkStore().path, TagStore().path, sets.SetStore().path):   # (each test from nothing chosen)
-            kept.unlink(missing_ok=True)
+            storage.remove(kept, missing_ok=True)
         self.srv = server.AppServer(("127.0.0.1", 0), {**config.load_config(), "root": str(self.tmp / "dl"), "setup_done": True,
                                                       "ui": {"toured": True}}, lan=False)
         with self.srv.lib.lock:   # (in memory only)
@@ -380,9 +380,9 @@ class InHoard(IsolatedTestCase):
                                    for n in ("Long", "Soon", "Over", "None"))
         store.set_short(long_, rec(11.5))
         store.set_short(soon, rec(0.5))
-        data = json.loads(store.path.read_text("utf-8"))
+        data = storage.read_document(store.path)
         next(s for s in data["sets"] if s["id"] == over)["short_ended"] = int(time.time()) - 86400
-        store.path.write_text(json.dumps(data), "utf-8")
+        storage.write_document(store.path, json.dumps(data))
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1400, "height": 900})

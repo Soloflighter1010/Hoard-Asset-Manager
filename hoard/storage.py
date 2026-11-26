@@ -724,13 +724,37 @@ class Database:
 
 
 def enabled() -> bool:
-    """Whether private metadata is kept in SQLite. Off unless HOARD_METADATA=sqlite.
+    """Whether private metadata is kept in SQLite: yes, unless HOARD_METADATA=json (#320, #348).
 
-    Recovery, distinct identity projection and current JSON mirrors are in place.
-    Default activation waits for native packaged cross-platform validation and
-    the desktop transition to settle. Without the opt-in, metadata stays JSON.
+    HOARD_METADATA=json keeps it in the JSON files Hoard used before (for development, or to try something with a
+    JSON-only Hoard's behaviour): a home SQLite keeps is then read from its JSON copies, and SQLite brings what was
+    changed in them back in at its next start, as it does a JSON-only release's edits.
     """
-    return os.environ.get("HOARD_METADATA", "").strip().lower() == "sqlite"
+    return os.environ.get("HOARD_METADATA", "").strip().lower() != "json"
+
+
+def report_state() -> dict:
+    """How private metadata is kept, for a support report (#320, #348): JSON or SQLite, the database's version and size,
+    and how many of the files migration and recovery leave in the app-data folder there are. Counts only, never a
+    name or anything in them. Never raises: a report says what it can."""
+    home = data_dir()
+    state = {"kept_in": "sqlite" if enabled() else "json"}
+    try:
+        db = home / "metadata.sqlite3"
+        if db.is_file():
+            with open(db, "rb") as f:
+                head = f.read(100)
+            state["database_version"] = int.from_bytes(head[60:64], "big") if len(head) == 100 else None
+            state["database_mb"] = round(db.stat().st_size / 1e6, 1)
+            state["write_cut_off"] = (home / "metadata.sqlite3-journal").exists()   # (until Hoard next opens it)
+        state["originals_kept"] = sum(1 for _ in home.glob("*.json.pre-sqlite-v1"))
+        state["conflict_copies"] = sum(1 for _ in home.glob("*.json.legacy-conflict-*"))
+        state["recovery_copies"] = sum(1 for _ in home.glob("metadata.before-recovery-*.sqlite3"))
+        if enabled() and db.is_file():
+            state["library_trust"] = database().trust("library.json")
+    except Exception as e:   # (a database that can't be opened says so, and the rest of the report is made)
+        state["problem"] = type(e).__name__
+    return state
 
 
 def managed(path: Path) -> bool:

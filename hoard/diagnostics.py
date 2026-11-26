@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Iterable
 
 from . import __version__
-from . import i18n, paths, themes
+from . import i18n, paths, storage, themes
 from .paths import data_dir, documents_dir, log_files
 from .safety import scrub, write_file_safely
 
@@ -634,6 +634,7 @@ def _environment(cfg: dict, sanitizer: _ReportSanitizer) -> dict:
         "desktop_app": frozen,
         "store_signin_protection": sanitizer.text(signins_note or "unknown"),
         "downloads_folder_exists": _downloads_exists(cfg),
+        "metadata": storage.report_state(),
         **({"windows_security": windows_security()} if platform.system() == "Windows" else {}),
     }
 
@@ -910,6 +911,7 @@ def _human_report(report: dict) -> str:
         f"Playwright: {env.get('playwright') or 'unknown'}",
         f"WebView: {env.get('webview') or 'not installed/available'}",
         f"Desktop app: {'yes' if env.get('desktop_app') else 'no'}",
+        f"Metadata: {_metadata_text(env.get('metadata') or {})}",
         "",
         "Problem",
         "-------",
@@ -939,6 +941,27 @@ def _human_report(report: dict) -> str:
         lines += ["", "User notes", "----------", report["notes"]]
     lines += ["", "Privacy", "-------", "This report was sanitized locally. No report data was uploaded by Hoard."]
     return "\n".join(lines) + "\n"
+
+
+def _metadata_text(state: dict) -> str:
+    """How Hoard keeps its metadata, in a line: "SQLite (version 2, 12.3 MB); 25 originals kept from the move"."""
+    if state.get("kept_in") != "sqlite":
+        return "JSON files"
+    said = [f"version {state['database_version']}" if state.get("database_version") else "no database yet"]
+    if state.get("database_mb") is not None:
+        said.append(f"{state['database_mb']} MB")
+    text = f"SQLite ({', '.join(said)})"
+    for key, what in (("originals_kept", "originals kept from the move"), ("conflict_copies", "conflict copies"),
+                      ("recovery_copies", "databases kept aside by a recovery")):
+        if state.get(key):
+            text += f"; {state[key]} {what}"
+    if state.get("library_trust") in ("changed", "foreign"):
+        text += "; its library untrusted until a refresh"
+    if state.get("write_cut_off"):
+        text += "; a write was cut off"
+    if state.get("problem"):
+        text += f"; couldn't be read ({state['problem']})"
+    return text
 
 
 def _human_job(job: dict) -> str:

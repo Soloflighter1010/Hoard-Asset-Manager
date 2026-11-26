@@ -1,22 +1,21 @@
 # Private metadata
 
-> **Held back.** Hoard keeps its private metadata in the JSON files it always has. The database described here is
-> used only when Hoard is started with `HOARD_METADATA=sqlite` (`storage.enabled()`), for development and testing.
-> Implementation now covers:
+> **On by default since 5.2.0 beta 14** (#320, #348). Hoard keeps its private metadata in `metadata.sqlite3`; a
+> home a JSON-only release kept moves into it as Hoard first reads it. `HOARD_METADATA=json` keeps the JSON files it
+> used before (for development, or to try something with a JSON-only release's behaviour), and with it `managed()` is
+> false for every path, so `read_document`, `write_document`, `exists`, `stat` and `remove` are the file calls they
+> replaced; `transaction()` only takes the shared lock.
 >
-> - **Older-release compatibility.** Committed documents have current JSON mirrors; older JSON edits are imported
->   on reopening. Run releases separately, with the SQLite flag off in older experimental builds.
+> - **Older-release compatibility.** Committed documents have current JSON mirrors; a JSON-only release's edits are
+>   imported on reopening. Run one release at a time (recent releases share an instance lock in the app-data
+>   folder, so a second start hands over to the one running).
 > - **Recovery.** Recognized databases with missing/foreign seals are preserved, then opened with untrusted
 >   library links hidden and automatic work disabled. The library shows a refresh notice.
 > - **Write cost.** Per-document seals keep small writes independent of library size.
 > - **Distinct identities.** Products sharing a normalized name receive separate, permanent API keys tied to
 >   their store identities. Ambiguous legacy annotations remain preserved without guessing an owner.
->
-> Default activation still waits for native packaged Windows/macOS/Linux validation and the desktop transition
-> to settle (#324). Source-package and sidecar checks below do not certify native installers or windows.
->
-> With the switch off, `managed()` is false for every path, so `read_document`, `write_document`, `exists`,
-> `stat` and `remove` are the file calls they replaced; `transaction()` only takes the shared lock.
+> - **Checked as installed.** `scripts/check_native_storage.py` runs the packaged app on every system Check builds
+>   (below).
 
 `hoard/storage.py` owns `metadata.sqlite3` in Hoard's app-data folder. Python's
 standard SQLite module is the only database dependency. Domain modules retain
@@ -185,7 +184,7 @@ normalizer, so this also stresses the additional title/public-key aliases and th
 Reproduce with `python scripts/benchmark_storage.py --products 50000 --repeats 5`.
 Storage tests additionally assert that a small write hashes only its changed
 document, while externally changed document bodies, missing seals, product rows
-and aliases still fail verification. SQLite remains opt-in.
+and aliases still fail verification.
 
 Compatibility tests exercise settings/library round trips through JSON mode, old-release edits and new documents,
 rollback isolation, failed and partially completed mirror batches, missing files, malformed conflicts and
@@ -216,12 +215,39 @@ Archive identities and explicit test limits are recorded in
 This tests released source packages and source/compiled sidecars, not the native Tauri window or
 installer execution. No installer was run and no installed app or real user data was changed.
 
-Before activating SQLite by default in a beta:
+## The installed app
+
+`scripts/check_native_storage.py` checks the app as a release hands it out, on each system Check builds: Windows'
+installer run silently into a folder of its own (and uninstalled after), a Mac's `Hoard.app` copied out of its disk
+image, and Linux's AppImage unpacked (under `xvfb-run`). Each start has a data folder of its own (`HOARD_DATA_DIR`)
+and nothing saying where to keep metadata, as for anyone. On a home seeded as a JSON-only release keeps it (4,000
+products, so the move takes long enough to interrupt):
+
+1. the first start moves it into `metadata.sqlite3`: every document, the originals kept as `.pre-sqlite-v1`, and
+   JSON copies beside them. The database is read as it is (not through Hoard, which would bring in edits itself),
+   then through this checkout's source;
+2. the whole app (its window and server) is killed outright as it first writes to its database, at three moments
+   during the move, and just as it's ready. Each time every original is still there, byte for byte, and the next
+   start finishes the move;
+3. beta 12's source and this source kept in JSON (`HOARD_METADATA=json`), run after it, read that home and save a
+   setting, a product's name and a note; the app brings the edits in at its next start, also when killed in the
+   middle of bringing them in;
+4. with `integrity.key` lost, and with another's in its place, it starts: the database is kept aside as it was, what
+   was in it is kept but untrusted, and automatic work is off.
+
+`--source` runs this checkout's server in place of an installed app, to try it without building one:
+
+```sh
+python scripts/check_native_storage.py --source --legacy-root path/to/beta-12-source --legacy-root .
+```
+
+The rollout:
 
 - [x] Per-document sealing, current JSON mirrors, quarantine recovery and distinct identity projection.
 - [x] Published older source-package round trips, source/compiled Windows sidecar protocols and lost-key startup checks.
-- [ ] Native packaged Windows/macOS/Linux app checks on disposable migrated homes, including lost/foreign keys,
-  interruption/restart, returning to an older JSON release, and returning to SQLite.
-- [ ] Confirm the desktop transition is settled (#324), then activate SQLite in a beta while retaining
-  current JSON mirrors and `.pre-sqlite-v1` recovery files.
-- [ ] Review beta migration/recovery reports before removing the opt-in gate or compatibility window.
+- [x] Native packaged Windows/macOS/Linux app checks on disposable migrated homes, including lost/foreign keys,
+  interruption/restart, returning to an older JSON release, and returning to SQLite (`check_native_storage.py`).
+- [x] The desktop transition: releases are the Tauri window with the Nuitka server only, since beta 6 (#324's Mac
+  signing doesn't change where metadata is kept).
+- [x] SQLite on by default in beta 14, keeping current JSON mirrors and `.pre-sqlite-v1` recovery files.
+- [ ] Review beta migration/recovery reports before removing JSON mode or the compatibility window.

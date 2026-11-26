@@ -1,4 +1,4 @@
-<!-- Translated from Where-Hoard-Keeps-Things (English 11a0728378f1). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Where-Hoard-Keeps-Things (English 3da0110e529c). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Where-Hoard-Keeps-Things">English</a> · <a href="Hoardの保存場所">日本語</a> · <b>한국어</b> · AI의 도움을 받아 영어판에서 번역한 페이지예요. 영어판과 내용이 다르면 영어판이 맞는 정보예요. 이상한 번역을 찾으면 <a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">번역 수정</a>으로 알려 주세요.</sub></p>
 
 Hoard가 보관하는 것은 두 가지로 나뉘어요. 내가 고른 폴더에 있는 다운로드와, 그 밖의 모든 것을 담은 내 사용자 계정 전용의 비공개 앱 데이터 폴더예요.
@@ -13,6 +13,10 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 
 | 무엇 | 무엇을 위한 것인지 |
 |---|---|
+| `metadata.sqlite3` | 설정, 라이브러리 목록, 태그, 표시, 세트, 그리고 아래 `.json` 파일 대부분을 데이터베이스 하나에 모아 저장한 것(5.2.0 베타 14부터). 변경은 전부 저장되거나 전혀 저장되지 않아서, 도중에 Hoard가 멈춰도 반만 저장되는 일은 없어요. `.json` 파일도 그 옆에서 최신으로 유지돼서, 이전 Hoard가 읽을 수 있는 사본이 돼요. 이전 Hoard로 돌아가도 라이브러리는 그대로이고, 이전 Hoard가 거기서 바꾼 것은 이 Hoard를 다음에 실행할 때 들어와요. 하나를 닫고 나서 다른 하나를 실행하세요 |
+| `<name>.json.pre-sqlite-v1` | 각 파일을, Hoard가 처음 `metadata.sqlite3`에 넣었을 때 그대로 둔 것. Hoard가 지우는 일은 없어요 |
+| `metadata.before-recovery-<id>.sqlite3` | Hoard가 데이터베이스를 확인하지 못했을 때(`integrity.key`가 없어지거나 다른 것으로 바뀌었을 때), 그 안의 내용으로 계속하기 전에 남겨 둔 그대로의 데이터베이스. 링크와 이미지는 스토어를 새로 고칠 때까지 숨겨지고, 자동 작업은 직접 켤 때까지 꺼져 있어요 |
+| `<name>.json.legacy-conflict-<time>` | Hoard가 아닌 다른 것이 Hoard가 들여올 수 없게 바꾼 `.json` 사본(올바른 JSON이 아니라든가). 그대로 남겨요 |
 | `sign-ins/` | 스토어 로그인. 스토어마다 폴더 하나이고, 운영체제가 암호화해요. 이 폴더는 절대 공유하지 마세요 |
 | `config.json` | 설정. [설정](설정)을 보세요 |
 | `library.json` | 라이브러리 목록. 가진 것의 이름, 제작자, 링크, 이미지 주소 |
@@ -86,7 +90,7 @@ Linux Flatpak도 `~/.local/share/Hoard`를 써요(`~/.var/app` 아래의 자기 
 
 ## 봉인
 
-Hoard가 쓰는 모든 기록(라이브러리 목록과 표시, 다운로드 폴더의 스토어마다 있는 `_manifest.json`, `catalog.json`, `tags.json`, 모든 `asset.json`)에는 `integrity.key`로 만든 봉인이 붙어 있어요. 기록이 Hoard가 아닌 다른 것에 의해 바뀌면 봉인으로 알 수 있고, Hoard는 이렇게 해요.
+Hoard가 쓰는 모든 기록(`metadata.sqlite3` 안의 하나하나, 라이브러리 목록과 표시, 다운로드 폴더의 스토어마다 있는 `_manifest.json`, `catalog.json`, `tags.json`, 모든 `asset.json`)에는 `integrity.key`로 만든 봉인이 붙어 있어요. 기록이 Hoard가 아닌 다른 것에 의해 바뀌면 봉인으로 알 수 있고, Hoard는 이렇게 해요.
 
 - 알려 주고, 바뀐 파일의 사본을 볼 수 있게 남겨 둬요(`_manifest.changed-<date>.json` 같은 것).
 - 기록은 남기지만 링크는 남기지 않고, 다음 새로고침이나 동기화 때 스토어에서 링크를 다시 가져와요(편집된 `marks.json`은 선택은 남기지만 숨긴 라이브러리의 PIN은 지워요).
@@ -100,7 +104,7 @@ Hoard가 쓰는 모든 기록(라이브러리 목록과 표시, 다운로드 폴
 ## 백업, 그리고 새 컴퓨터로 옮기기
 
 - **다운로드 폴더**는 Hoard의 기록이 옆에 있는 평범한 파일이에요. 통째로 백업하거나 옮기세요.
-- **Hoard의 앱 데이터 폴더**에는 설정, 라이브러리 목록, 태그, 표시, `integrity.key`가 있어요. 새 컴퓨터의 같은 곳에 복사하면 봉인이 유효한 채로 그대로 써요.
+- **Hoard의 앱 데이터 폴더**에는 설정, 라이브러리 목록, 태그, 표시(모두 `metadata.sqlite3` 안)와 `integrity.key`가 있어요. Hoard를 닫고 새 컴퓨터의 같은 곳에 복사하면 봉인이 유효한 채로 그대로 써요.
 - **로그인은 옮길 수 없어요.** 만든 컴퓨터의 내 계정용으로 암호화되어 있어서, 새 컴퓨터에서는 스토어에 다시 로그인하세요.
 
 새 컴퓨터에서 다운로드 폴더가 다른 곳에 있다면 [설정](설정)에서 고르세요.

@@ -151,6 +151,29 @@ jobs:
         if: matrix.name == 'linux-x86_64'
         working-directory: shell
         run: xvfb-run -a -s "-screen 0 1440x920x24" python ../scripts/check_appimage.py target/release/bundle/appimage/*.AppImage
+      # #320, #348: the app keeps its metadata in SQLite, checked as it's installed: Windows' installer run silently, a
+      # Mac's app copied out of its disk image, the AppImage unpacked. Started on a home a JSON-only Hoard kept, it moves
+      # it, is killed part way through and starts again; beta 12 and this source kept in JSON read it after, and save
+      # edits that it brings back in; and it starts with its sealing key lost, or another's.
+      - name: Beta 12's source, a Hoard that keeps everything in JSON
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v5.2.0-beta.12
+          path: legacy-beta-12
+          persist-credentials: false
+      - name: The installed app keeps its metadata in SQLite
+        run: |
+          case "${{ matrix.name }}" in
+            windows-*) package=$(ls shell/target/release/bundle/nsis/*-setup.exe) ;;
+            macos-*)   package=$(ls shell/target/release/bundle/dmg/*.dmg) ;;
+            *)         package=$(ls shell/target/release/bundle/appimage/*.AppImage) ;;
+          esac
+          check=(python scripts/check_native_storage.py "$package" --legacy-root legacy-beta-12 --legacy-root .)
+          if [ "${{ runner.os }}" = Linux ]; then
+            xvfb-run -a -s "-screen 0 1440x920x24" "${check[@]}"
+          else
+            "${check[@]}"
+          fi
       - name: Keep the .deb, for the Flatpak
         if: matrix.name == 'linux-x86_64'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

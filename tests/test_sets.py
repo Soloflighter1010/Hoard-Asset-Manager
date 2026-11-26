@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 
-from hoard import downloader, sets
+from hoard import downloader, sets, storage
 from hoard.tags import tag_key
 
 RUSK, HOODIE = tag_key("Booth", "Rusk"), tag_key("Booth", "Hoodie for Rusk")
@@ -1231,7 +1231,7 @@ class PricesOfASet(IsolatedTestCase):
     def test_read_once_a_day_and_shown(self):
         store = sets.SetStore()
         store.path.parent.mkdir(parents=True, exist_ok=True)
-        store.path.write_text(json.dumps({"sets": [
+        storage.write_document(store.path, json.dumps({"sets": [
             {"id": "a1", "name": "Rusk", "items": [RUSK, HOODIE], "from_link": True,
              "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"},
                           HOODIE: {"store": "booth", "name": "Hoodie for Rusk", "url": "https://booth.pm/ja/items/222"}}},
@@ -1267,7 +1267,7 @@ class PricesOfASet(IsolatedTestCase):
         picture and creator from its page too, where it has none; what it has (typed by its maker) is kept."""
         store = sets.SetStore()
         store.path.parent.mkdir(parents=True, exist_ok=True)
-        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Made on the website", "items": [RUSK, HOODIE],
+        storage.write_document(store.path, json.dumps({"sets": [{"id": "a1", "name": "Made on the website", "items": [RUSK, HOODIE],
             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"},
                          HOODIE: {"store": "booth", "name": "Hoodie for Rusk", "creator": "Typed by its maker",
                                   "url": "https://booth.pm/ja/items/222"}}}]}))
@@ -1283,7 +1283,7 @@ class PricesOfASet(IsolatedTestCase):
         """Issue #403: a set's prices are read from their public pages beside a download, not after it."""
         store = sets.SetStore()
         store.path.parent.mkdir(parents=True, exist_ok=True)
-        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK],
+        storage.write_document(store.path, json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK],
             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
         gate, read = threading.Event(), threading.Event()
         self.addCleanup(gate.set)
@@ -1298,7 +1298,7 @@ class PricesOfASet(IsolatedTestCase):
     def test_a_date_that_isnt_one(self):
         store = sets.SetStore()
         store.path.parent.mkdir(parents=True, exist_ok=True)
-        store.path.write_text(json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK], "priced": "2026-99-99T99:99:99Z",
+        storage.write_document(store.path, json.dumps({"sets": [{"id": "a1", "name": "Rusk", "items": [RUSK], "priced": "2026-99-99T99:99:99Z",
             "products": {RUSK: {"store": "booth", "name": "Rusk", "url": "https://booth.pm/ja/items/111"}}}]}))
         with mock.patch("hoard.wishlists.from_product_page", lambda link, fetch: {}), \
                 mock.patch.object(self.srv, "start_beside", lambda name, target, *a: target(*a)):

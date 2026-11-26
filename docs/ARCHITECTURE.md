@@ -43,7 +43,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   api/                 registered endpoints, grouped by domain; routing.py enforces their access policy
   schema.py            structural validation of public exports, alongside semantic safety checks
   schema_data.py       generated runtime copy of docs/schemas (no runtime schema dependency)
-  storage.py           private metadata: JSON files, or (held back, HOARD_METADATA=sqlite) SQLite with stable identities (STORAGE.md)
+  storage.py           private metadata: SQLite with stable identities, or JSON files with HOARD_METADATA=json (STORAGE.md)
   cli.py               the command line (docs/COMMAND-LINE.md)
   app.py               the desktop app: its window (pywebview), one copy at a time, log file, clean quit
   notify.py            a notification from the system when the routine check finds something to download

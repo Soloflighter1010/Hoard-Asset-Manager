@@ -18,8 +18,8 @@ work; they do not promise release dates or rank the new requests.
 - [x] [#316](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/316) — Test isolation and parallel CI: each test its own folders, shuffled and run twice in six shards per system; one run of the suite takes about a third of the 16 to 19 minutes it did.
 - [x] [#322](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/322) — Store adapters and health checks: the store-specific branches moved behind each store's adapter (PR #365).
 - [ ] [#324](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/324) — Choose one desktop shell using cross-platform measurements and tester results; Mac signing remains outstanding.
-- [ ] [#320](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/320) — SQLite metadata and stable product IDs: implemented behind an opt-in flag, not enabled by default.
-- [ ] [#348](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/348) — JSON compatibility, recovery, sealing cost and identity collisions are addressed in PR #365. Native packaged validation and beta activation remain, after the desktop transition settles.
+- [x] [#320](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/320) — SQLite metadata and stable product IDs: on by default in beta 14 (PR #431), with `HOARD_METADATA=json` to keep the JSON files.
+- [x] [#348](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/348) — JSON compatibility, recovery, sealing cost and identity collisions are addressed in PR #365; the installed app is checked on Windows, macOS and Linux, and SQLite is on from beta 14 (PR #431).
 
 Implementation evidence and reproduction commands live in [the architecture implementation notes](docs/ROADMAP-315.md).
 
