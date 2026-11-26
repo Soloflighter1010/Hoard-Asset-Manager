@@ -208,6 +208,7 @@ FILE_KINDS = {
     "picture": ("Pictures and textures", (".png", ".jpg", ".jpeg", ".tga", ".tif", ".tiff", ".exr", ".webp", ".dds", ".bmp")),
     "blender": ("Blender files", (".blend", ".blend1")),
     "substance": ("Substance Painter projects", (".spp", ".sbsar", ".sbs")),
+    "pawpaint": ("PawPaint projects", (".pawpaint",)),
     "model": ("3D models", (".fbx", ".obj", ".vrm", ".glb", ".gltf", ".dae", ".3ds", ".max", ".ma", ".mb")),
     "audio": ("Sound", (".wav", ".mp3", ".ogg", ".flac", ".m4a")),
     "video": ("Video", (".mp4", ".mov", ".webm", ".mkv", ".avi")),

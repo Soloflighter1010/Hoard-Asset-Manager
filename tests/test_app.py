@@ -4165,6 +4165,23 @@ class ChosenFiles(IsolatedTestCase):
         self.assertFalse(downloader.left_out(check, report, "booth", "Rusk", "Rusk (Quest).zip"), "a check sees every file")
         self.assertFalse(downloader.left_out(SimpleNamespace(dry_run=False), report, "booth", "Rusk", "x"), "the command line")
 
+    def test_the_pages_know_the_kinds_of_file_hoard_does(self):
+        """Issue #425: each kind of file Hoard leaves out by a rule is a kind the pages name (what a product contains,
+        and Settings' rules), with the same ends to its files' names; PawPaint's projects are one of them."""
+        js = (REPO / "hoard" / "web" / "shared.js").read_text(encoding="utf-8")
+        table = js[js.index("const CONTENT_KINDS = ["):js.index("// A file's kind")]
+        contents = {k: tuple(json.loads("[" + ends + "]")) for k, ends in re.findall(r'\["(\w+)", \[([^\]]*)\]', table)}
+        rules = js[js.index("const FILE_KINDS = {"):js.index("const RULE_STORES")]
+        for kind, (label, ends) in downloader.FILE_KINDS.items():
+            self.assertIn(kind, contents, kind)
+            self.assertTrue(set(contents[kind]) <= set(ends), kind)
+            self.assertRegex(rules, r"\b%s: \"" % kind, kind)
+        self.assertEqual(contents["pawpaint"], (".pawpaint",))
+        self.assertEqual(downloader.FILE_KINDS["pawpaint"], ("PawPaint projects", (".pawpaint",)))
+        rule = downloader.file_rules({"file_rules": [{"store": "all", "kind": "pawpaint"}]})
+        self.assertEqual(downloader.ruled_out(rule, "booth", "Rusk.PawPaint"), "PawPaint projects")
+        self.assertIsNone(downloader.ruled_out(rule, "booth", "Rusk.spp"))
+
     def test_a_rule_leaves_psds_out_of_every_download(self):
         """Issue #225: a rule to leave out layered images (PSDs) keeps them out of every store's downloads; a file you
         ticked for this download wins; a file you left out of a product before stays out; a check sees them all."""

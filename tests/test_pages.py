@@ -357,7 +357,7 @@ class AccessKey(IsolatedTestCase):
             page.click("#views [data-view='updates']")
             self.assertIn("1 download has newer files", page.locator("#viewBar").inner_text())
             self.assertIn("Last checked", page.locator("#viewBar").inner_text())
-            page.locator("#grid .slot .flag.upd").wait_for()
+            page.locator("#grid .slot .badge.upd").wait_for()
             page.click("#grid .slot")
             self.assertIn("Rusk_v2.zip", page.locator("#detail .update").inner_text())
             page.click("#detail [data-act='update-one']")
@@ -379,6 +379,54 @@ class AccessKey(IsolatedTestCase):
                                    ("check-updates", list(server.STORES), None)])
         self.assertEqual(refused, [])
         page.close()   # (left open, it carried on beside the tests after it)
+
+    def test_the_update_mark_leaves_the_selection_box_clear(self):
+        """Issue #418: Downloads' Update mark sat in a tile's top-right corner, where its selection box shows, so the
+        box couldn't be seen or clicked. It's in the tile's column of marks, as the Library's are: in every style and
+        tile size, the mark and the box don't overlap, and a click on the box reaches it."""
+        from hoard import tags
+        from hoard.asset_updates import AssetUpdates
+        store = AssetUpdates()
+        store.record_check(["booth"], None, [{"store": "booth", "key": tags.tag_key("booth", "Rusk"), "name": "Rusk",
+                                              "creator": "Kitsu Studio", "file": "Rusk_v2.zip", "kind": "new"}])
+        self.addCleanup(storage.remove, store.path, missing_ok=True)
+        page, refused = self.open(self.srv.entry_url())
+        goto(page, f"{self.srv.url}downloads")
+        tile = page.locator("#grid .slot", has=page.locator(".badge.upd"))
+        tile.wait_for()
+        rects = """s => { const r = e => e && e.getBoundingClientRect(), b = r(s.querySelector('.badge.upd')), t = r(s.querySelector('.tick'));
+                         const x = t.left + t.width / 2, y = t.top + t.height / 2;
+                         return {badge: b && b.width ? [b.left, b.top, b.right, b.bottom] : null, tick: [t.left, t.top, t.right, t.bottom],
+                                 hit: document.elementFromPoint(x, y) === s.querySelector('.tick')}; }"""
+        for style in ("", "treasure", "workbench"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            for size in (120, 300):
+                page.evaluate("v => setZoom(v)", size)
+                tile.hover()
+                got = tile.evaluate(rects)
+                self.assertGreater(got["tick"][2] - got["tick"][0], 0, (style, size, "the box shows"))
+                self.assertTrue(got["hit"], (style, size, "a click on the box reaches it"))
+                if style == "workbench":
+                    self.assertIsNone(got["badge"], "Workbench says it in the tile's row")
+                    continue
+                b, t = got["badge"], got["tick"]
+                self.assertIsNotNone(b, (style, size))
+                self.assertTrue(b[2] <= t[0] or t[2] <= b[0] or b[3] <= t[1] or t[3] <= b[1], (style, size, b, t))
+        # a product for adults: its 18+ mark has the bottom-left corner, where Treasure puts the column
+        page.evaluate("() => { DATA.assets.find(a => a.name === 'Rusk').adult = true; T.render(); }")
+        tile.locator(".adult-mark").wait_for()
+        for style in ("", "treasure"):
+            page.evaluate("s => s ? document.documentElement.dataset.style = s : delete document.documentElement.dataset.style", style)
+            b, m = [tile.locator(c).bounding_box() for c in (".badge.upd", ".adult-mark")]
+            self.assertTrue(b["x"] + b["width"] <= m["x"] or m["x"] + m["width"] <= b["x"] or b["y"] + b["height"] <= m["y"]
+                            or m["y"] + m["height"] <= b["y"], (style or "standard", "Update and 18+ apart", b, m))
+        page.evaluate("delete document.documentElement.dataset.style")
+        tile.hover()   # (the box shows as the tile is pointed at)
+        tile.locator(".tick").click()
+        page.wait_for_function("() => document.body.classList.contains('selecting')")
+        self.assertEqual(tile.get_attribute("aria-pressed"), "true", "the box chose its tile")
+        self.assertEqual(refused, [])
+        page.close()
 
     def test_download_more_of_it(self):
         """Issue #225: a product downloaded with some of its files left out: Download more of it asks again, with
@@ -2748,6 +2796,56 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         for i in made:   # (the next test starts with no sets)
             page.evaluate(post, ["/api/sets", {"action": "delete", "id": i}])
         made.clear()
+        self.assertEqual(self.errors, [])
+        page.close()
+
+    def test_what_is_dragged_follows_the_pointer(self):
+        """Issue #419: only an outline on what's under the pointer showed a drag. A small copy of what's dragged
+        (its picture and name, and how many more go with it) follows the pointer, without hiding what a drop will
+        do; Escape or letting go ends it."""
+        page = self.open()
+        tile = lambda name: page.locator("#grid .slot", has_text=name)  # noqa: E731
+        ghost = page.locator("[data-drag-ghost]")
+
+        def drag(name, to, steps=8):
+            tile(name).hover(position={"x": 30, "y": 30})   # (once it's what's under the pointer: the splash has gone)
+            b = tile(to).bounding_box()
+            page.mouse.down()
+            x, y = b["x"] + b["width"] / 2, b["y"] + b["height"] / 3
+            page.mouse.move(x, y, steps=steps)
+            return x, y
+        x, y = drag("Rusk", "Anko")
+        ghost.wait_for()
+        self.assertIn("Rusk", ghost.inner_text())
+        box = ghost.bounding_box()
+        self.assertTrue(x < box["x"] < x + 40 and y < box["y"] < y + 40, ("beside the pointer", x, y, box))
+        self.assertIn("drop-on", tile("Anko").get_attribute("class"), "what a drop will do still shows under it")
+        self.assertEqual(page.evaluate("getComputedStyle(document.querySelector('[data-drag-ghost]')).pointerEvents"), "none")
+        page.mouse.move(x + 30, y + 20)
+        self.assertAlmostEqual(ghost.bounding_box()["x"], box["x"] + 30, delta=2, msg="it follows the pointer")
+        page.keyboard.press("Escape")
+        ghost.wait_for(state="detached")
+        page.mouse.up()
+        self.assertEqual(page.locator("dialog[open]").count(), 0, "Escape: nothing done")
+        # several chosen: the one taken, and how many more
+        tile("Rusk").click(modifiers=["Control"])
+        tile("Mochi").click(modifiers=["Control"])
+        drag("Rusk", "Anko")
+        ghost.wait_for()
+        self.assertIn("+1", ghost.inner_text())
+        page.mouse.move(5, 5, steps=3)   # let go where nothing takes it
+        page.mouse.up()
+        ghost.wait_for(state="detached")
+        self.assertEqual(page.locator("dialog[open]").count(), 0)
+        # the window let go of mid-drag (another program taken up): it ends, and nothing stays on the page
+        drag("Rusk", "Anko")
+        ghost.wait_for()
+        page.evaluate("dispatchEvent(new Event('blur'))")
+        ghost.wait_for(state="detached")
+        self.assertNotIn("drop-on", tile("Anko").get_attribute("class") or "")
+        page.mouse.up()
+        self.assertEqual(page.locator("dialog[open]").count(), 0)
+        page.keyboard.press("Escape")
         self.assertEqual(self.errors, [])
         page.close()
 

@@ -642,5 +642,5 @@ when it sees `/RELAUNCH=1`. The next start deletes installers for its own versio
 ## One application shell
 
 Library and Downloads now share the document, windows, product components and data owner.
-[APP-SHELL.md](APP-SHELL.md) documents navigation, the compatibility boundary, the Svelte parts (Look inside and the pop-ups),
-its measured build/bundle costs, and the decision to keep that trial bounded.
+[APP-SHELL.md](APP-SHELL.md) documents navigation, the compatibility boundary, the Svelte parts (Look inside, the pop-ups, Projects' folder tiles, what's dragged; a part redone is redone in Svelte),
+its measured build/bundle costs, and how the pages move over to it a part at a time.

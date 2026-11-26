@@ -9,6 +9,9 @@
 .background-task { background: transparent; }
 .background-task progress { width: min(260px, 70%); margin-right: 12px; accent-color: var(--gold); }
 html.hoard-dragging, html.hoard-dragging * { cursor: grabbing !important; user-select: none !important; }
+/* Issue #420: one tab marked in the bar, what's in front: Projects' or Tasks' window open over the page (markBar)
+   takes the page's mark. Here, as it's for both views and every style. */
+.bar[data-front] .apptabs a[aria-current="page"]:not(:hover) { color: var(--dust); background: none; box-shadow: none; }
 /* a window's scroll stays in it (issue #264): scrolled to its end, Settings carried on scrolling the page behind it;
    and while Settings or Projects fills the window, the page behind doesn't scroll at all */
 .win-body, .setjump { overscroll-behavior: contain; }
@@ -99,12 +102,12 @@ dl.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110p
 .pj-row.last { background-color: color-mix(in srgb, var(--gold) 9%, var(--ledge)); }
 .pj-tile.last .pj-tile-art { box-shadow: inset 0 -5px 0 var(--c, var(--seam)), 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent); }
 .pj-detail .pj-last { margin: 0 0 6px; }
-/* issue #250's tiles, twice as wide as they're tall: a project's tile, and a folder's */
-.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px 16px; }
-.pj-tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
+/* issue #250's tiles: a project's twice as wide as it's tall, over two of the grid's columns; a folder's (issue #424)
+   single wide, in one, as wide as it's tall */
+.pj-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 18px 16px; }
+.pj-tile { grid-column: span 2; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: inherit;
   text-align: left; font: inherit; cursor: pointer; }
-.pj-tile.k-avatars, .pj-mini i.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds, .pj-mini i.k-worlds { --c: var(--pj-worlds); }
-.pj-tile.k-other, .pj-mini i.k-other { --c: var(--pj-other); }
+.pj-tile.k-avatars { --c: var(--pj-avatars); } .pj-tile.k-worlds { --c: var(--pj-worlds); } .pj-tile.k-other { --c: var(--pj-other); }
 .pj-tile-art { position: relative; aspect-ratio: 2 / 1; display: grid; place-items: center; border-radius: 12px; transition: transform .12s ease-out;
   background: color-mix(in srgb, var(--c, var(--seam)) 22%, var(--ledge)); box-shadow: inset 0 -5px 0 var(--c, var(--seam)); }
 .pj-tile-art b { font: 400 34px var(--display); color: var(--bone); }
@@ -116,11 +119,7 @@ dl.pj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110p
 .pj-tile .cr { font-size: 12px; color: var(--dust); }
 .pj-tile .pj-ups { justify-content: flex-start; }
 .pj-fav { position: absolute; top: 8px; left: 10px; font-style: normal; color: var(--gold-text); }
-.pj-folder-tile .pj-tile-art { background: var(--ledge); box-shadow: inset 0 0 0 1px var(--seam); }
-.pj-folder-tile .pj-tile-art > svg { position: absolute; inset: 12% 0; margin: auto; width: auto; height: 76%; color: var(--dust); }
-.pj-mini { position: absolute; inset: 42% 39% 22%; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-.pj-mini i { display: grid; place-items: center; border-radius: 4px; font: 700 10px var(--body); font-style: normal;
-  background: color-mix(in srgb, var(--c) 45%, var(--stone)); color: var(--bone); }
+/* (a folder's tile, issue #424, is drawn in ui/FolderTile.svelte) */
 body.less-motion .pj-tile-art { transition: none; }
 /* building an Apprise address (issue #239): a service, and its fields one under another */
 .apprise-build { margin: 8px 0; }
@@ -362,8 +361,9 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
   padding: 2px 9px; border-radius: 999px; background: var(--c); color: var(--cave); font: 700 10.5px/1.5 var(--body); letter-spacing: .06em;
   text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-style="treasure"] .badges { top: auto; bottom: 10px; left: 10px; flex-direction: row; flex-wrap: wrap; }
-[data-style="treasure"] .badge, [data-style="treasure"] .flag { border-radius: 999px; padding: 2px 9px; }
-[data-style="treasure"] .flag.count { top: auto; bottom: 10px; left: 10px; }
+/* ...above a product for adults' 18+ mark, which has that corner (issue #418: Downloads' Update mark was under it) */
+[data-style="treasure"] .slot.adult .badges { bottom: 37px; }
+[data-style="treasure"] .badge { border-radius: 999px; padding: 2px 9px; }
 [data-style="treasure"] .ondisk-mark { border-radius: 999px; }
 [data-style="treasure"] .slot:not(.stacked):is(:hover, [aria-current="true"]) .art { box-shadow: 0 6px 24px -6px var(--c, var(--gold)); }
 [data-style="treasure"] .slot[aria-current="true"] .art { outline-offset: 4px; }
@@ -464,7 +464,7 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .grid .slot.stacked .art > img, [data-style="workbench"] .grid .slot.stacked .art > .ph { border-radius: 6px; }
 [data-style="workbench"] .grid .ph b { font-size: 14px; }
 [data-style="workbench"] .grid .ph small { display: none; }
-[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .note-mark, .flag) { display: none; }
+[data-style="workbench"] .grid :is(.notch, .badges, .ondisk-mark, .note-mark) { display: none; }
 [data-style="workbench"] .grid :is(.nm-t, .slot .nm) { grid-area: nm; align-self: end; font-size: 14px; -webkit-line-clamp: 1; }
 [data-style="workbench"] .grid .cr { grid-area: cr; align-self: start; margin-top: 0; font-size: 12.5px; }
 /* the columns fit their longest words: "Not downloaded yet", and a date in Korean ("2026년 9월 28일"), whole; wider
