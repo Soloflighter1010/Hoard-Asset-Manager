@@ -1,4 +1,4 @@
-<!-- Translated from Hoard-for-Unity (English 7d5153366c89). When the English page changes: python3 scripts/wiki_translations.py --diff -->
+<!-- Translated from Hoard-for-Unity (English e3984396ba97). When the English page changes: python3 scripts/wiki_translations.py --diff -->
 <p><sub><a href="Hoard-for-Unity">English</a> · <b>日本語</b> · <a href="Hoard-for-Unity-사용법">한국어</a> · AIの助けを借りて英語版から翻訳したページです。英語版と内容が違うときは、英語版が正しい情報です。おかしな訳を見つけたら<a href="https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/new?template=translation.yml">翻訳の修正</a>で教えてください。</sub></p>
 
 **Hoard for Unity** は、HoardがダウンロードしたものをUnityエディターに持ち込みます。アセットを探し回ったり、もう一度ダウンロードしたりせずにインポートできます。(Hoard for Unityの画面は英語です。このページでは、ボタンなどの名前を英語のまま書いています。)
@@ -56,6 +56,7 @@ Hoardのアプリがプロジェクトに入れた商品([プロジェクト](�
 - アニメーションする画像とクレジットの一覧には、0.3.0以降が必要です。HoardがWebPやAVIFで保存した画像はUnityでは表示できないため、Hoard 5.2.0ベータ11からは、ダウンロードで初めて表示したときにPNGかJPEGのコピーをその横に保存し、ウィンドウはHoardのライブラリを次に読み込んだとき(開いたとき、または **Reload**)にそれを表示します。それまでは、商品の中に画像があればそれを代わりに使います。
 - 長い一覧で画像がちらついたり空白になったりしないようにするには、0.11.1以降が必要です。画像は表示する大きさで保持され、画面に出ている画像は手放されず、読み込めなかった画像は少したってからもう一度読み込まれます。
 - インポートするとき、プロジェクトにもうあるツール(lilToon、Poiyomi)を外すには、0.12.0以降が必要です。
+- プロジェクトのクレジットにLocalの商品のストアのページを載せるには(Hoard 5.2ベータ13以降)、0.12.1以降が必要です。
 
 ## インストール
 

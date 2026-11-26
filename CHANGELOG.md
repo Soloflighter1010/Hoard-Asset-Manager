@@ -1,5 +1,59 @@
 # Changelog
 
+## 5.2.0-beta.13
+
+### Settings
+
+- **A new look for Settings** (#421). Settings is in cards: **Folders**, **Stores**, **How Hoard downloads**,
+  **Notifications**, **Look and feel**, **Features**, **Hoard itself** and **Help**, each with a line saying what
+  it's for, listed down the side to jump to. Each setting is a row with its name, what it does, and its control.
+  **Find a setting**, above the list, shows only the settings with the words you type.
+- **Turn off the parts of Hoard you don't use** (#422). The **Features** card has a switch for **Local**, **Sets and
+  Wishlists**, **Wishlists** alone, **Prices**, **Projects**, **Notifications** and **Products for adults**. A part turned off goes from the
+  bar, the tabs, the right-click menu, search and Settings, and the server stops what it would send or read for it
+  (no notifications, no wishlists read). Nothing is deleted: turned on again, it's all back. Something that needs a
+  part that's off (a `hoard://` link, a set's file dropped on the window) says so, with **Turn it on**.
+
+### Local
+
+- **A Local product's page on a store, and Edit...** (#416). **Edit...** in a Local product's details changes its
+  name, who made it, its note, and its page on a store: a product's public page on Booth, Gumroad, Jinxxy, Payhip
+  or itch.io, such as a free BOOTH item you downloaded yourself. Renamed, its tags, note, 18+ mark and places in
+  your sets go with it. Its details then open its page.
+- **Fill in from its page** reads that page as anyone can see it, and fills in the product's name, creator, its
+  creator's tags (as suggestions), its picture and its 18+ mark.
+- **Local's tabs by store**: once a Local product has a page, Local has a tab for each store, and one for those with
+  no page.
+- **Bring in from BB's Library Manager...** in Settings brings its library in: products whose BOOTH item is in your
+  library get its tags, and the rest become Local products listed where they are, with their pictures, pages, tags
+  and 18+ marks. Hoard only reads its folder.
+
+### Library, sets and Projects
+
+- **One tab marked in the bar** (#420). Going to Downloads left Sets and Wishlists marked, and Projects marked on top.
+- **The Update mark is clear of a tile's selection box** (#418), in Downloads' column of marks, as the Library's are.
+- **A set's file dropped on Hoard's window comes in** (#417), as **Import JSON...** brings it, in the Library or
+  Downloads; several at once each come in.
+- **What's dragged follows the pointer** (#419): a small copy of the product's tile (its picture and name, and how
+  many more go with it) or the project's.
+- **A folder of projects looks like a folder** (#424): in Hoard's gold, single wide, with its first projects tucked
+  into it and how many it holds. It opens a little as a project is dragged over it.
+- **PawPaint projects** (#425): `.pawpaint` files are a kind of their own, in what a product contains, in the files
+  to choose before downloading, and in **Files to leave out**.
+
+### Hoard for Unity
+
+- **A Local product's page in its credits** (#416, Hoard for Unity 0.12.1). Hoard for Unity reads a Local
+  product's page on a store from catalog.json, so a project's credits link it, as they do a store product's.
+
+### Linux
+
+- **The AppImage opens every time** (#423). On Wayland, closing the window (Hoard carries on) minimized it where
+  it couldn't be brought back, so every later start handed over to a Hoard you couldn't see. It's hidden now, and
+  starting Hoard again brings it back. The AppImage's WebKit no longer draws through the graphics card's buffers,
+  which crashed the page or left it blank on some drivers, and a page that stops loads again; if it keeps stopping,
+  Hoard says so, with where its log is, and quits.
+
 ## 5.2.0-beta.12
 
 ### Local and File Explorer

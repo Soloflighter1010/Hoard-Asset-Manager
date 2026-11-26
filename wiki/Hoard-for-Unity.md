@@ -147,6 +147,7 @@ them or partly (not ones imported once and gone since), named for the project: t
 - For pictures that don't flicker or go blank in a long list: 0.11.1 or newer. A picture is kept at the size it's
   drawn, one on screen is never let go, and one that couldn't be read is tried again a little later.
 - For leaving out a tool the project has already (lilToon, Poiyomi) when importing: 0.12.0 or newer.
+- For a Local product's page on a store in a project's credits (Hoard 5.2 beta 13 or newer): 0.12.1 or newer.
 
 ## Installing
 
