@@ -82,6 +82,7 @@ class FakeSystem(filemanagers.System):
         return hashlib.sha256(icon.read_bytes()).hexdigest() if icon.is_file() else None
 
 
+@unittest.skipIf(os.name == "nt", "Finder's and Linux's file managers (Windows' File Explorer is test_explorer's)")
 class Case(IsolatedTestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
