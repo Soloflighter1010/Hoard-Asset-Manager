@@ -218,14 +218,15 @@
       let got;
       try { got = body.action === "import" ? await fromCode(body.code) : fromFile(body.file); }
       catch (e) { return json({ error: e.message || "That isn't a set Hoard can add." }, 400); }
-      return json({ ok: true, made: addSet(got, true) });
+      return json({ ok: true, made: addSet(got, true, body.action === "import") });
     }
     return setsChangeOwn(body);
   }
 
   // A set (or wishlist) added to the Sets tab, its products shown as owned when they're in the library; brought in
-  // (a shared one), its name made its own when it's taken. Returns its id.
-  function addSet(got, broughtIn) {
+  // (a shared one), its name made its own when it's taken. One from someone's link (a code or a short link) is kept
+  // apart from your own, its photos shown when you ask, as Hoard does (hoard/sets.py's from_link). Returns its id.
+  function addSet(got, broughtIn, fromLink = false) {
     const view = at("/api/sets") || { sets: [] }, lib = at("/api/library") || {};
     const summary = lib.sets || (lib.sets = []), library = (lib.items || []);
     let name = got.name;
@@ -243,7 +244,8 @@
                placeholder: false, mark: null, adult: !!(p.adult || (mine && mine.adult)) };
     }).filter(i => !seen.has(i.key) && seen.add(i.key));   // (each product once, as Hoard keeps a set)
     view.sets.push({ id, name, note: got.note || "", dependencies: [], photos: got.photos || [], marks: {}, photo_p: [],
-                     cover: null, short: null, short_ended: null, items, ...(got.kind === "wishlist" ? { kind: "wishlist" } : {}) });
+                     cover: null, short: null, short_ended: null, items, ...(got.kind === "wishlist" ? { kind: "wishlist" } : {}),
+                     ...(fromLink ? { from_link: true } : {}) });
     summary.push({ id, name, kind: got.kind === "wishlist" ? "wishlist" : null, items: items.map(i => i.key),
                    owned: items.filter(i => i.owned).length, adult: items.some(i => i.adult) });
     downloadsSets();

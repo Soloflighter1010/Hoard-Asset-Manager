@@ -167,6 +167,7 @@ class TryHoard(IsolatedTestCase):
         self.page.get_by_text("Added the shared set.").wait_for(timeout=10000)
         party = self.evaluate("fetch('/api/sets').then(r => r.json()).then(d => d.sets.find(s => s.name === 'Party night'))")
         self.assertEqual([i["owned"] for i in party["items"]], [True, False], "what's in the library is yours")
+        self.assertTrue(party["from_link"], "kept apart from your own, its photos shown when you ask, as in Hoard")
         self.assertEqual(self.elsewhere(), [])
 
     def test_a_short_link_and_a_file(self):
