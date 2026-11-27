@@ -78,6 +78,9 @@ Packages/, ProjectSettings/, Assets/, source.json, Website/   VRChat's template-
                        is also a Unity 2022.3 project. unity-release.yml ("Build Release") publishes the
                        package; build-listing.yml builds the VCC listing and its page (Website/) with VRChat's
                        package-list-action, pinned, from every release
+site/demo/             Try Hoard (issue #394): demo.js stands in for Hoard's server in the visitor's browser,
+                       answering the app's own pages (built at demo/ on deploy by scripts/build_site_demo.py,
+                       with what a real Hoard's server answered them, and products.json's products)
 share/                 Hoard's share server, for short links: a Cloudflare Worker (worker.mjs) with Workers KV,
                        its wrangler.toml, and a stand-in KV and server for the tests; deployed by hand
                        (share/README.md), not by a workflow
@@ -342,7 +345,8 @@ and **Add a shared set** still read one. A short link (`set.html#S1.<id>.<key>`)
   sees a key, logs nothing, caps a set at 48 KB and limits writes per address.
 - **Opening one:** the set viewer (`site/set.js`) fetches the locked set by its id (its Content-Security-Policy
   allows only that `connect-src`) and unlocks it in the page; **Add a shared set** asks Hoard's server to fetch it
-  (`open-short`), unlocks it in the page, and adds the code as any other.
+  (`open-short`), unlocks it in the page, and adds the code as any other. In Try Hoard (`site/demo/demo.js`), the
+  page fetches it itself, the only `connect-src` its policy allows; the key never leaves the page there either.
 - **Deleting one:** **Delete the short link** (`unshort`), and deleting the set, delete it from the server with
   the token. Backups leave short links out; a restore keeps this computer's.
 - **Too big for one:** the share server takes a locked set of up to 48 KiB, measured once it's decoded from

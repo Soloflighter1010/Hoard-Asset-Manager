@@ -253,6 +253,7 @@
               : el("span", { class: "sv-none" }, "No store link")));
     }
     $("#setCode").value = location.href;
+    $("#setDemo").href = "demo/#import=" + encodeURIComponent(given);   // (Try Hoard, issue #394: added there, as in Hoard)
     const fits = openInHoard($("#setHoard"), $("#setHoardLong"), given);
     $("#setHoardNote").hidden = !fits;
     if (!fits) $("#setCopy").classList.replace("ghost", "primary");   // (too long a link: copying it is the way)
@@ -381,6 +382,7 @@
     $("#makeLink").value = link;
     $("#makeOpen").href = "#" + code;
     openInHoard($("#makeHoard"), $("#makeHoardNote"), code);
+    $("#makeDemo").href = "demo/#import=" + encodeURIComponent(code);
     $("#makeShared").hidden = false;
     $("#makeLink").focus();
     $("#makeLink").select();

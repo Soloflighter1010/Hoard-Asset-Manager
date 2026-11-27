@@ -31,6 +31,7 @@ on:
             "wiki/**", "scripts/build_site_docs.py", "scripts/site_chrome.py",   # (the docs, and every page's bar)
             "scripts/build_press_kit.py",   # (the press kit's download)
             "scripts/version_assets.py",    # (each page's links to the stylesheets and scripts, with their version)
+            "hoard/**", "scripts/build_site_demo.py", "requirements.txt",   # (Try Hoard: the app's pages, issue #394)
             ".github/workflows/build-listing.yml"]
   workflow_run:
     workflows: [Build Release]
@@ -170,6 +171,21 @@ jobs:
         run: |
           python3 scripts/build_site_docs.py "${{ env.listPublishDirectory }}/docs"
           test -s "${{ env.listPublishDirectory }}/docs/index.html" && test -s "${{ env.listPublishDirectory }}/docs/search.json"
+
+      # Try Hoard (issue #394): the app's own pages at demo/, running in the visitor's browser with a stand-in for
+      # Hoard's server, built from this commit's pages and what a real Hoard answers them (its server, with the demo's
+      # products, walked through in a browser): Hoard's locked requirements, every file hash-checked, and Chromium.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Hoard's requirements and Chromium, for Try Hoard
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Build Try Hoard
+        run: |
+          python scripts/build_site_demo.py "${{ env.listPublishDirectory }}/demo"
+          test -s "${{ env.listPublishDirectory }}/demo/index.html" && test -s "${{ env.listPublishDirectory }}/demo/downloads.html"
 
       # The press kit's download (press.html): the logos, the screenshots and the page's words, zipped.
       - name: Build the press kit

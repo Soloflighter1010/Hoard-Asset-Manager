@@ -114,6 +114,8 @@ solução de problemas. Ela também está disponível em
 
 ---
 
+**Experimente primeiro, no navegador:** o [Try Hoard](https://hoard.furryup.link/demo/) mostra as telas do próprio Hoard com uma biblioteca de produtos reais e um login de mentira (em inglês). Nada do que você faz lá sai do seu navegador.
+
 ## Instalação (Windows)
 
 A partir da versão 5.2.0 beta 6, o Hoard usa o Tauri para a janela do aplicativo e o Nuitka para compilar o

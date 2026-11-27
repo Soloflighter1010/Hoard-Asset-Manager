@@ -122,6 +122,8 @@ class TheSite(IsolatedTestCase):
                 target = posixpath.normpath(posixpath.join(posixpath.dirname(name), path)) if path else name
                 if target == "vcc":
                     continue   # the listing's page, put at vcc/ on deploy
+                if target == "demo":
+                    continue   # Try Hoard (issue #394), built at demo/ on deploy: test_site_demo builds and checks it
                 if target in (".", "docs") or path.endswith("/"):
                     target = posixpath.join("" if target == "." else target, "index.html")
                 self.assertTrue((site / target).is_file(), f"{name}: {value}")

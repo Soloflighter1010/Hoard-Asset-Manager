@@ -107,6 +107,9 @@ Guides for everything, from installing to fixing a problem, are in the
 </a>
 ---
 
+**Try it first, in your browser:** [Try Hoard](https://hoard.furryup.link/demo/) runs Hoard's own pages with a
+library of real products and a pretend sign-in. Nothing you do there leaves your browser.
+
 ## Install (Windows)
 
 From 5.2.0 beta 6, Hoard is built a new way (its window with Tauri, its server compiled by Nuitka) and installs as a

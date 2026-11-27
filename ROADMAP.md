@@ -63,7 +63,7 @@ currency conversion and the others above) was done in PR #365.
 ## Requested after beta 10
 
 - [x] [#396](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/396) — `hoard://` links: open a shared set, a product to add to a wishlist, or a product in your library, with **Open in Hoard** on the website's set viewer and set maker.
-- [ ] [#394](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/394) — Try Hoard on the website: a demo in the browser with a pretend sign-in and real products (waiting on the list of products to show).
+- [x] [#394](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/394) — Try Hoard on the website: Hoard's own pages in the browser at demo/, with a pretend sign-in, the maintainer's products, and sets brought in by code, short link or file, or from the set viewer.
 - [x] [#410](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/410) — The Local sync folder in Windows' File Explorer: Hoard's icon on it, and Add to Hoard, Sync with Hoard now and Open in Hoard in the right-click menu.
 - [x] [#411](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/411) — The same in macOS's Finder and on Linux: Quick Actions in Finder; GNOME Files' Scripts, Dolphin's service menus and Nemo's actions; the icon in each (only Dolphin's in the Flatpak).
 - [x] [#413](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/413) — Send to Hoard: a bookmark that sends a store's product page, or a set shared from the website, to Hoard as a `hoard://` link.
@@ -94,6 +94,31 @@ currency conversion and the others above) was done in PR #365.
 - [x] [#421](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/421) — A new look for Settings: cards, a row for each setting, and Find a setting (PR #428, Svelte).
 - [x] [#422](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/422) — Turn off the parts of Hoard you don't use, in Settings' Features card (PR #428).
 - [x] [#416](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/416) — Local: a product's page on a store, Edit..., Fill in from its page, tabs by store, and Bring in from BB's Library Manager (PR #429).
+
+## Requested after beta 13
+
+- [ ] [#433](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/433) — Settings uses a wide window: two columns, or centred.
+- [ ] [#434](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/434) — Workbench style: bigger pictures in the list.
+- [ ] [#435](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/435) — Switching tabs quickly ends on the last one clicked.
+- [ ] [#436](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/436) — A dragged product's or project's ghost stays by the pointer at any scaling.
+- [ ] [#437](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/437) — Projects: folders in a sidebar.
+- [ ] [#438](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/438) — Acknowledgements: up to date, with BB's Library Manager and KonoAsset.
+- [ ] [#439](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/439) — Setup assistant: features on or off, and presets.
+- [ ] [#440](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/440) — Mix and match by product type; tags without their own kinds.
+- [ ] [#441](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/441) — Spring and Summer themes and seasonal sorts; Spooky becomes Fall until October.
+- [ ] [#443](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/443) — Marking as 18+ shows at once.
+- [ ] [#445](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/445) — Delete one downloaded file, not all of a product's.
+- [ ] [#446](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/446) — Files you chose not to download aren't updates.
+- [ ] [#447](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/447) — Disk space, reworked: charts by file type, drive and more.
+- [ ] [#448](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/448) — An icon beside each of the views in the filters.
+- [ ] [#449](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/449) — 18+: common words in English, Japanese and Korean, so Hoard marks products ahead of time.
+- [ ] [#450](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/450) — Hidden: Bring in all 18+ products.
+- [ ] [#451](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/451) — A converted price is easy to see.
+
+## Hoard 6
+
+- [ ] [#442](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/442) — Hoard 6.0 comes out with VRChat's move to Unity 6.
+- [ ] [#444](https://github.com/Soloflighter1010/Hoard-Asset-Manager/issues/444) — Hoard 6's pages in Svelte wherever they can be.
 
 ## Later and research
 
