@@ -2773,6 +2773,7 @@
  "Hoard couldn't put its icon on this folder (it has a custom icon of its own, or the folder can't be changed).": "このフォルダーにHoardのアイコンを付けられませんでした(フォルダーに独自のアイコンがあるか、フォルダーを変更できません)。",
  "In the Flatpak, GNOME Files and Nemo can't show Hoard's icon on the folder; Dolphin can.": "Flatpak版では、GNOME ファイルとNemoはフォルダーにHoardのアイコンを表示できません。Dolphinでは表示されます。",
  "Local was turned off, so nothing was added. Turn it on in Settings, Features, and choose Add to Hoard again.": "ローカルがオフになっていたため、何も追加しませんでした。設定の「機能」でオンにしてから、もう一度「Hoardに追加」を選んでください。",
+ "{0} more weren't added: Hoard takes {1} at a time. Choose them again.": "ほかに{0}件は追加しませんでした。Hoardが一度に受け取れるのは{1}件までです。もう一度選んでください。",
  "Add to Hoard": "Hoardに追加",
  "Sync with Hoard now": "今すぐHoardと同期",
  "Open in Hoard": "Hoardで開く",

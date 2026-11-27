@@ -482,7 +482,7 @@ ROUTES = [
     Route('POST', '/api/pick', post_api_pick, changes=True, auth='key', image_key=False, max_body=1048576, request=(('kind', 'any'), ('start', 'any')), response='object'),
     Route('POST', '/api/apprise', post_api_apprise, changes=True, auth='key', image_key=False, max_body=1048576, request=(('action', 'string'), ('forget', 'boolean'), ('id', 'string'), ('urls', 'any')), response='object'),
     Route('POST', '/api/apprise/test', post_api_apprise_test, changes=True, auth='key', image_key=False, max_body=1048576, request=(('id', 'string'),), response='object'),
-    Route('POST', '/api/show', post_api_show, changes=False, auth='instance', image_key=False, max_body=1048576, request=(('actions', 'array'), ('open', 'string'), ('token', 'string')), response='object'),
+    Route('POST', '/api/show', post_api_show, changes=False, auth='instance', image_key=False, max_body=4194304, request=(('actions', 'array'), ('open', 'string'), ('token', 'string')), response='object'),
     Route('POST', '/api/quit', post_api_quit, changes=True, auth='key', image_key=False, max_body=1048576, request=(('anyway', 'boolean'),), response='object'),
     Route('POST', '/api/app/close', post_api_app_close, changes=True, auth='key', image_key=False, max_body=1048576, request=(('how', 'string'),), response='object'),
     Route('POST', '/api/setup/done', post_api_setup_done, changes=True, auth='key', image_key=False, max_body=1048576, request=(('done', 'boolean'),), response='object'),

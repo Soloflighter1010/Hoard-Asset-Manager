@@ -2773,6 +2773,7 @@
  "Hoard couldn't put its icon on this folder (it has a custom icon of its own, or the folder can't be changed).": "이 폴더에 Hoard 아이콘을 붙이지 못했어요(폴더에 자체 아이콘이 있거나, 폴더를 바꿀 수 없어요).",
  "In the Flatpak, GNOME Files and Nemo can't show Hoard's icon on the folder; Dolphin can.": "Flatpak 버전에서는 GNOME 파일과 Nemo가 폴더에 Hoard 아이콘을 보여 줄 수 없어요. Dolphin에서는 보여요.",
  "Local was turned off, so nothing was added. Turn it on in Settings, Features, and choose Add to Hoard again.": "로컬이 꺼져 있어서 아무것도 추가하지 않았어요. 설정의 '기능'에서 켠 다음 'Hoard에 추가'를 다시 선택해 주세요.",
+ "{0} more weren't added: Hoard takes {1} at a time. Choose them again.": "{0}개는 더 추가하지 않았어요. Hoard는 한 번에 {1}개까지 받아요. 다시 선택해 주세요.",
  "Add to Hoard": "Hoard에 추가",
  "Sync with Hoard now": "지금 Hoard와 동기화",
  "Open in Hoard": "Hoard에서 열기",

@@ -34,6 +34,8 @@ manager counts as installed when its own folder is in your home folder.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import plistlib
 import shlex
@@ -57,6 +59,7 @@ OPTIONS = (("add", "Add to Hoard", False, "Hoard - Add"),
 DOLPHIN = ("hoard-add.desktop", "hoard-folder.desktop")
 NEMO = ("hoard-add", "hoard-sync", "hoard-sync-here", "hoard-open", "hoard-open-here")
 PBS = "/System/Library/CoreServices/pbs"   # (tells Finder's menu at once that Quick Actions changed)
+FINDER_PRINTS = "finder-icons.json"   # in file-manager/: the icon Hoard put on a folder in Finder, by its fingerprint
 
 
 def kind() -> str | None:
@@ -119,6 +122,14 @@ class System:
         """The environment this Hoard was started with (where an AppImage is, say)."""
         return dict(os.environ)
 
+    def finder_print(self, folder: Path) -> str | None:
+        """A fingerprint of the custom icon Finder shows on a folder (its Icon\\r file's resource fork, where Finder
+        keeps the picture), or None when it has none."""
+        try:
+            return hashlib.sha256((folder / FINDER_ICON / "..namedfork" / "rsrc").read_bytes()).hexdigest()
+        except OSError:
+            return None
+
 
 # ---- the icon
 
@@ -152,6 +163,40 @@ def _finder_icon(system: System, folder: Path, image: Path | None) -> bool:
     done = system.run(["osascript", "-l", "JavaScript", "-e", FINDER_SET_ICON, str(folder),
                        *([str(image)] if image else [])])
     return bool(done) and done.returncode == 0 and done.stdout.strip() == "yes"
+
+
+def _finder_prints(system: System, changes: dict | None = None) -> dict:
+    """The fingerprints of the icons Hoard put on folders in Finder ({folder: fingerprint}), with changes made to them
+    (a fingerprint, or None to forget a folder's). Hoard takes an icon off only while it's still the one it put on: one
+    you put on the folder since stays."""
+    from .safety import write_file_safely
+    path = system.helper_dir() / FINDER_PRINTS
+    try:
+        kept = json.loads(path.read_text("utf-8")) if path.is_file() and not path.is_symlink() else {}
+    except (OSError, ValueError):
+        kept = {}
+    kept = {k: v for k, v in kept.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(kept, dict) else {}
+    before = dict(kept)
+    for folder, value in (changes or {}).items():
+        if value:
+            kept[folder] = value
+        else:
+            kept.pop(folder, None)
+    if kept != before:
+        try:
+            if kept:
+                write_file_safely(path, json.dumps(kept, ensure_ascii=False, indent=1))
+            else:
+                path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return kept
+
+
+def _finder_still_ours(system: System, folder: Path) -> bool:
+    """Is the icon Finder shows on this folder still the one Hoard put on it (or is there no note of what that was)?"""
+    kept = _finder_prints(system).get(str(folder))
+    return kept is None or system.finder_print(folder) == kept
 
 
 def _gvfs_icon(system: System, folder: Path):
@@ -198,13 +243,19 @@ def _kde_section(lines: list[str]) -> tuple[int, int] | None:
 
 
 def _kde_write(folder: Path, lines: list[str]) -> None:
-    """Write the .directory file, or take it away when nothing but headings is left in it."""
+    """Write the .directory file (keeping who may read it, as it was: anyone, when it's new), or take it away when
+    nothing but headings is left in it."""
     from .safety import write_file_safely
     path = folder / DIRECTORY
     if not [ln for ln in lines if ln.strip() and not ln.strip().startswith("[")]:
         path.unlink(missing_ok=True)
-    else:
-        write_file_safely(path, "\n".join(lines) + "\n", root=folder)
+        return
+    try:
+        mode = path.stat().st_mode & 0o777
+    except OSError:
+        mode = 0o644
+    write_file_safely(path, "\n".join(lines) + "\n", root=folder)
+    path.chmod(mode)
 
 
 def _kde_mark(folder: Path, icon: Path) -> bool:
@@ -231,11 +282,12 @@ def _kde_mark(folder: Path, icon: Path) -> bool:
         return False
 
 
-def _kde_unmark(folder: Path, icon: Path) -> None:
-    """Take Hoard's lines out of the folder's .directory (and the file, when that leaves nothing in it)."""
+def _kde_unmark(folder: Path, icon: Path) -> bool:
+    """Take Hoard's lines out of the folder's .directory (and the file, when that leaves nothing in it). False when
+    none were there."""
     lines = _kde_read(folder)
     if not lines or not any(ln.strip() in _kde_hoards(icon) for ln in lines):
-        return
+        return False
     rest = [ln for ln in lines if ln.strip() not in _kde_hoards(icon)]
     at = _kde_section(rest)
     if at and not [ln for ln in rest[at[0] + 1:at[1]] if ln.strip()]:   # (its section, when only Hoard's was in it)
@@ -244,6 +296,7 @@ def _kde_unmark(folder: Path, icon: Path) -> None:
         _kde_write(folder, rest)
     except OSError:
         pass
+    return True
 
 
 def mark(folder, system: System) -> tuple[bool, list[str]]:
@@ -253,45 +306,59 @@ def mark(folder, system: System) -> tuple[bool, list[str]]:
     if not folder.is_dir() or folder.is_symlink():
         return False, []
     mine = _ours(folder)
-    if system.kind == "finder" and (folder / FINDER_ICON).exists() and not mine:
+    if system.kind == "finder" and (folder / FINDER_ICON).exists() and not (mine and _finder_still_ours(system, folder)):
+        if mine:   # (you've put an icon of your own on it since: Hoard's picture goes, and yours stays)
+            (folder / ICON_NAME).unlink(missing_ok=True)
+            _finder_prints(system, {str(folder): None})
         return False, []   # (a custom icon of someone else's: left as it is)
+    if system.kind != "finder":
+        current = _gvfs_icon(system, folder)
+        if current not in (False, None, (folder / ICON_NAME).as_uri()):
+            return False, []   # (GNOME Files and Nemo show another icon: Dolphin isn't given Hoard's either)
     try:
         icon = _put_picture(folder)
     except OSError:
         return False, []
     if system.kind == "finder":
         if _finder_icon(system, folder, icon):
+            _finder_prints(system, {str(folder): system.finder_print(folder) or ""})
             return True, []
         icon.unlink(missing_ok=True)
         return False, []
     shown, cant = False, []
-    current = _gvfs_icon(system, folder)
     if current is False:
         cant = ["gvfs"] if system.flatpak() else []
-    elif current in (None, icon.as_uri()):
+    else:
         done = system.run(["gio", "set", str(folder), "metadata::custom-icon", icon.as_uri()])
         shown = bool(done) and done.returncode == 0
-    shown = _kde_mark(folder, icon) or shown
+    if _installed(system, "dolphin"):
+        shown = _kde_mark(folder, icon) or shown
     if not shown:
         icon.unlink(missing_ok=True)
     return shown, cant
 
 
 def unmark(folder, system: System) -> bool:
-    """Take Hoard's icon off a folder that's no longer the sync folder (only Hoard's: another's custom icon stays).
-    False when there was nothing of Hoard's."""
+    """Take Hoard's icon off a folder that's no longer the sync folder (only Hoard's: another's custom icon stays, and
+    in Finder one you put on it since). Also when Hoard's picture was deleted from it: GNOME's, Nemo's and Dolphin's
+    notes of it go too. False when there was nothing of Hoard's."""
     folder = Path(folder)
-    if not _ours(folder):
+    if not folder.is_dir() or folder.is_symlink():
         return False
     icon = folder / ICON_NAME
+    found = _ours(folder)
     if system.kind == "finder":
-        _finder_icon(system, folder, None)
+        if found and (folder / FINDER_ICON).exists() and _finder_still_ours(system, folder):
+            _finder_icon(system, folder, None)
+        _finder_prints(system, {str(folder): None})
     else:
         if _gvfs_icon(system, folder) == icon.as_uri():
             system.run(["gio", "set", "--type=unset", str(folder), "metadata::custom-icon"])
-        _kde_unmark(folder, icon)
-    icon.unlink(missing_ok=True)
-    return True
+            found = True
+        found = _kde_unmark(folder, icon) or found
+    if _ours(folder):
+        icon.unlink(missing_ok=True)
+    return found
 
 
 # ---- the menu
@@ -349,15 +416,25 @@ def _written(system: System) -> list[Path]:
     return out
 
 
-def helper_script(command: list[str], gone: list[Path]) -> str:
+def helper_script(command: list[str], gone: list[Path], helper_dir: Path) -> str:
     """Hoard's script for the options (see the module's notes): what it asks Hoard for, from what was chosen; or, when
-    Hoard's program is gone, Hoard's options taken away (gone)."""
+    Hoard's program is gone, Hoard's options taken away (gone: what register wrote, each taken only while it's still
+    Hoard's, its mark in it; helper_dir, Hoard's own folder for this script, last)."""
     q = shlex.quote
     return f"""#!/bin/sh
 {MARK}
 # Hoard's right-click options in your file manager run this. Settings' "Show it in ..." takes them away with it.
-if ! {_check(command)}; then   # (Hoard isn't there any more: its options go with it)
-  rm -rf -- {" ".join(q(str(p)) for p in gone)}
+if ! {{ {_check(command)}; }}; then   # (Hoard isn't there any more: its options go with it)
+  for f in {" ".join(q(str(p)) for p in gone)}; do
+    if [ -L "$f" ]; then
+      continue
+    elif [ -d "$f" ]; then   # (a Quick Action: only one that runs this script)
+      grep -qF {q("/" + HELPER)} "$f/Contents/document.wflow" 2>/dev/null && rm -rf -- "$f"
+    elif [ -f "$f" ] && grep -qF {q(MARK)} "$f" 2>/dev/null; then
+      rm -f -- "$f"
+    fi
+  done
+  [ -L {q(str(helper_dir))} ] || rm -rf -- {q(str(helper_dir))}
   exit 0
 fi
 what=$1
@@ -468,52 +545,62 @@ def _installed(system: System, name: str) -> bool:
 
 def register(command: list[str], system: System, lang: str = "en") -> bool:
     """Put Hoard's options in the file managers' right-click menus for this account, in lang: Hoard's script, and each
-    installed file manager's way of running it. False when none could be."""
+    installed file manager's way of running it. A file of yours with the same name as one of Hoard's is left as it is,
+    and Hoard's option goes without it. False when none could be put in place."""
     from . import i18n
     helper_dir = system.helper_dir()
     helper, icon = helper_dir / HELPER, helper_dir / "hoard-folder.png"
     words = {what: i18n.say(lang, english) for what, english, *_ in OPTIONS}
     unregister(system, keep_helper=True)   # (what an earlier start wrote: in another language, or for a file manager
-    try:                                    # that's gone since)
+    #   that's gone since; what's left where Hoard's go is someone else's)
+    free = [p for p in _targets(system, lang) if p != helper_dir and not (p.exists() or p.is_symlink())]
+    try:
         helper_dir.mkdir(parents=True, exist_ok=True)
-        _write(helper, helper_script(command, _targets(system, lang)), executable=True)
+        _write(helper, helper_script(command, free, helper_dir), executable=True)
         _write(icon, ICON_SOURCE.read_bytes())
     except OSError:
         return False
+
+    def put(path: Path, text, executable: bool = False) -> bool:
+        """One option's file, when its place is free."""
+        if path not in free:
+            return False
+        _write(path, text, executable)
+        return True
+
     done = False
     try:
         if system.kind == "finder":
             services = system.home() / "Library" / "Services"
             for what, _english, folders_only, name in OPTIONS:
-                _finder_workflow(services / f"{name}.workflow", words[what], folders_only,
-                                 f'{shlex.quote(str(helper))} {what} "$@"')
+                if services / f"{name}.workflow" in free:
+                    _finder_workflow(services / f"{name}.workflow", words[what], folders_only,
+                                     f'{shlex.quote(str(helper))} {what} "$@"')
+                    done = True
             system.run([PBS, "-update"])
-            return True
+            return done
         data = system.data_home()
         if _installed(system, "nautilus"):
             for (what, *_), name in zip(OPTIONS, _nautilus_names(lang)):
-                _write(data / "nautilus" / "scripts" / name,
-                       f'#!/bin/sh\n{MARK}\nexec {shlex.quote(str(helper))} {what} "$@"\n', executable=True)
-            done = True
+                done = put(data / "nautilus" / "scripts" / name,
+                           f'#!/bin/sh\n{MARK}\nexec {shlex.quote(str(helper))} {what} "$@"\n', True) or done
         if not _menu_safe(helper) or not _menu_safe(icon):
             return done
         if _installed(system, "dolphin"):
             menus = data / "kio" / "servicemenus"
-            _write(menus / DOLPHIN[0], _dolphin_menu(icon, "all/all", [
-                ("hoardAdd", words["add"], _exec_line(helper, "add %F"))]), executable=True)
-            _write(menus / DOLPHIN[1], _dolphin_menu(icon, "inode/directory", [
+            done = put(menus / DOLPHIN[0], _dolphin_menu(icon, "all/all", [
+                ("hoardAdd", words["add"], _exec_line(helper, "add %F"))]), True) or done
+            done = put(menus / DOLPHIN[1], _dolphin_menu(icon, "inode/directory", [
                 ("hoardSync", words["sync"], _exec_line(helper, "sync %f")),
-                ("hoardOpen", words["local"], _exec_line(helper, "local"))]), executable=True)
-            done = True
+                ("hoardOpen", words["local"], _exec_line(helper, "local"))]), True) or done
         if _installed(system, "nemo"):
             actions = data / "nemo" / "actions"
             for name, (what, run, selection, extensions) in zip(NEMO, (
                     ("add", "add %F", "notnone", "any"), ("sync", "sync %F", "s", "dir"),
                     ("sync", "sync %P", "none", "any"), ("local", "local", "s", "dir"),
                     ("local", "local", "none", "any"))):
-                _write(actions / f"{name}.nemo_action",
-                       _nemo_action(words[what], icon, _exec_line(helper, run), selection, extensions))
-            done = True
+                done = put(actions / f"{name}.nemo_action",
+                           _nemo_action(words[what], icon, _exec_line(helper, run), selection, extensions)) or done
     except OSError:
         return done
     return done

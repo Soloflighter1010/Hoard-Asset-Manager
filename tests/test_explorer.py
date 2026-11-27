@@ -289,8 +289,17 @@ class WhatTheMenuAsks(IsolatedTestCase):
                  {"do": "add", "path": "x" * 1001}, {"do": "sync", "path": str(self.sync)}, {"do": "sync", "path": "Sync"}]
         self.assertEqual(explorer.actions(given), [{"do": "add", "path": mine}, {"do": "sync"}, {"do": "local"},
                                                    {"do": "sync", "path": str(self.sync)}])
-        self.assertEqual(len(explorer.actions([{"do": "sync"}] * 50)), explorer.MAX_ACTIONS)
+        many = explorer.actions([{"do": "sync"}] * (explorer.MAX_ACTIONS + 100))
+        self.assertEqual(len(many), explorer.MAX_ACTIONS + 1)
+        self.assertEqual(many[-1], {"do": "more", "count": 100}, "how many were left out, for Hoard to say so")
+        self.assertEqual(explorer.actions([{"do": "local"}, {"do": "more", "count": 7}, {"do": "more", "count": True},
+                                           {"do": "more", "count": -3}, {"do": "more", "count": "9"}]),
+                         [{"do": "local"}, {"do": "more", "count": 7}], "the shell's count, checked")
         self.assertEqual(explorer.actions("add"), [])
+
+    def test_how_many_were_left_out_is_said(self):
+        self.assertEqual(explorer.do(self.srv, {"do": "more", "count": 30}),
+                         {"said": "more", "count": 30, "most": explorer.MAX_ACTIONS})
 
     def test_a_file_is_copied_into_the_sync_folder_never_over_one(self):
         hat = self.tmp / "hat.png"

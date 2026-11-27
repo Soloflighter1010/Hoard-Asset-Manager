@@ -6735,12 +6735,14 @@ const EXPLORER_SAID = {
   "no-sync": () => tr("There's no sync folder yet: choose one in Settings, under Local sync folder."),
   "not-sync": () => tr("That folder isn't Hoard's sync folder."),
   "local-off": () => tr("Local was turned off, so nothing was added. Turn it on in Settings, Features, and choose Add to Hoard again."),
+  more: x => tr("{0} more weren't added: Hoard takes {1} at a time. Choose them again.", x.count, x.most),
 };
 // File Explorer's menu brought Hoard to the front: Local, and what it did (the first few, when it was many).
 async function openFromExplorer(said) {
   await navigateApp("/downloads#store=Local");
   const words = (Array.isArray(said) ? said : []).filter(x => x && Object.prototype.hasOwnProperty.call(EXPLORER_SAID, x.said))
-    .map(x => EXPLORER_SAID[x.said]({ name: String(x.name || ""), mb: Number(x.mb) || 0, why: x.why }));
+    .map(x => EXPLORER_SAID[x.said]({ name: String(x.name || ""), mb: Number(x.mb) || 0, why: x.why,
+      count: Number(x.count) || 0, most: Number(x.most) || 0 }));
   if (words.length) toast(words.slice(0, 4).join(" ") + (words.length > 4 ? " " + tr("And {0} more.", words.length - 4) : ""));
 }
 // Open What's new.

@@ -293,7 +293,7 @@ Both servers share the rules in their "web safety" section:
   shell's own path and the sync folder's (one with a `"` in it is never written). They start the shell with
   `--hoard-add <path>`, `--hoard-sync-now` or `--hoard-open-local`; the shell passes these on in its hello, and a
   second start hands them to the running copy through `/api/show` (with its token), never as a `hoard://` link,
-  which any web page can fire. `explorer.actions` checks each (a known action, a full path, at most 20). Add to
+  which any web page can fire. `explorer.actions` checks each (a known action, a full path, at most 500 from one start, and how many more were left out, which Hoard says). Add to
   Hoard does only what you'd do in Hoard yourself: a file is copied into the sync folder under a new name (each name
   made in one step, so never over a file), and anything else goes through Add to Local's own checks
   (`local.check_source`). The sync folder's `desktop.ini` and icon are made new (never through a link), and one
@@ -304,10 +304,11 @@ Both servers share the rules in their "web safety" section:
   the shell (or the AppImage, the Flatpak, or a Mac's app with `open -n`) with the same arguments as Explorer's, each
   path made absolute and passed as its own argument, never through a shell's words; every path Hoard writes into a
   script is quoted, and one a service menu's `Exec=` line can't quote isn't written there. The script takes Hoard's
-  options away once Hoard's program is gone. Only files that carry Hoard's mark and name this app-data folder's
-  script are ever taken away. The folder's icon is set with the file manager's own call (`osascript` with the paths
-  as arguments, `gio set`) or a line in its `.directory`, never over another icon, and its picture is made new, never
-  through a link.
+  options away once Hoard's program is gone. Only files that carry Hoard's mark (and, from Hoard itself, name this
+  app-data folder's script) are ever taken away, and a file of yours where one of Hoard's would go is left as it is.
+  The folder's icon is set with the file manager's own call (`osascript` with the paths as arguments, `gio set`) or a
+  line in its `.directory`, never over another icon (in Finder, not one you put on since: Hoard keeps a fingerprint of
+  its own), and its picture is made new, never through a link.
 - Action endpoints only accept `Content-Type: application/json`, which other websites can't send
   without a CORS preflight that the servers never approve.
 - Every page carries a Content-Security-Policy that allows only its own inline script, by hash

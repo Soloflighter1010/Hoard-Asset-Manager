@@ -6,6 +6,7 @@ osascript, which programs are installed); the real calls are in filemanagers.Sys
 where they can."""
 from __future__ import annotations
 
+import hashlib
 import os
 import plistlib
 import shutil
@@ -76,6 +77,10 @@ class FakeSystem(filemanagers.System):
     def environ(self):
         return dict(self.env)
 
+    def finder_print(self, folder):
+        icon = folder / filemanagers.FINDER_ICON
+        return hashlib.sha256(icon.read_bytes()).hexdigest() if icon.is_file() else None
+
 
 class Case(IsolatedTestCase):
     def setUp(self):
@@ -90,7 +95,7 @@ class Case(IsolatedTestCase):
 
 class TheIcon(Case):
     def test_gnome_and_dolphin(self):
-        s = self.system()
+        s = self.system(programs=("gio", "dolphin"))
         self.assertEqual(filemanagers.mark(self.sync, s), (True, []))
         icon = self.sync / ICON
         self.assertEqual(icon.read_bytes(), filemanagers.ICON_SOURCE.read_bytes())
@@ -103,17 +108,44 @@ class TheIcon(Case):
         self.assertFalse(filemanagers.unmark(self.sync, s), "nothing to take off")
 
     def test_another_icon_stays(self):
-        s = self.system()
-        s.metadata[str(self.sync)] = "file:///home/me/mine.png"
+        s = self.system(programs=("gio", "dolphin"))
         (self.sync / ".directory").write_text("[Desktop Entry]\nIcon=folder-music\n", "utf-8")
+        self.assertEqual(filemanagers.mark(self.sync, s), (True, []), "GNOME's")
+        self.assertEqual((self.sync / ".directory").read_text("utf-8"), "[Desktop Entry]\nIcon=folder-music\n")
+        filemanagers.unmark(self.sync, s)
+        s.metadata[str(self.sync)] = "file:///home/me/mine.png"
+        (self.sync / ".directory").unlink()
         self.assertEqual(filemanagers.mark(self.sync, s), (False, []))
         self.assertEqual(s.metadata, {str(self.sync): "file:///home/me/mine.png"})
-        self.assertEqual((self.sync / ".directory").read_text("utf-8"), "[Desktop Entry]\nIcon=folder-music\n")
+        self.assertFalse((self.sync / ".directory").exists(), "Dolphin isn't given Hoard's over GNOME's other one")
         self.assertFalse((self.sync / ICON).exists(), "no picture left for nothing")
-        self.assertNotIn(["gio", "set"], [a[:2] for a in s.ran])
+
+    def test_only_where_dolphin_is(self):
+        s = self.system()
+        self.assertEqual(filemanagers.mark(self.sync, s), (True, []))
+        self.assertEqual(sorted(p.name for p in self.sync.iterdir()), [ICON], "no .directory without Dolphin")
+
+    def test_the_picture_deleted(self):
+        s = self.system(programs=("gio", "dolphin"))
+        filemanagers.mark(self.sync, s)
+        (self.sync / ICON).unlink()
+        self.assertTrue(filemanagers.unmark(self.sync, s), "what points to it goes too")
+        self.assertEqual(s.metadata, {})
+        self.assertEqual(list(self.sync.iterdir()), [])
+
+    @unittest.skipIf(os.name == "nt", "who may read a file is Linux's and a Mac's")
+    def test_who_may_read_directory(self):
+        s = self.system(programs=("dolphin",))
+        filemanagers.mark(self.sync, s)
+        self.assertEqual((self.sync / ".directory").stat().st_mode & 0o777, 0o644, "anyone, as a new one is")
+        filemanagers.unmark(self.sync, s)
+        (self.sync / ".directory").write_text("[Dolphin]\nViewMode=1\n", "utf-8")
+        (self.sync / ".directory").chmod(0o664)
+        filemanagers.mark(self.sync, s)
+        self.assertEqual((self.sync / ".directory").stat().st_mode & 0o777, 0o664, "as it was")
 
     def test_dolphins_own_settings_kept(self):
-        s = self.system(programs=())
+        s = self.system(programs=("dolphin",))
         before = "[Dolphin]\nTimestamp=2026,11,1,10,0,0\nViewMode=1\n\n[Desktop Entry]\nComment=Mine\n"
         (self.sync / ".directory").write_text(before, "utf-8")
         self.assertEqual(filemanagers.mark(self.sync, s), (True, []))
@@ -129,7 +161,7 @@ class TheIcon(Case):
     def test_dolphin_wrote_it_since(self):
         """Dolphin writes the file again when it keeps a folder's view, and may drop the mark: Hoard's lines are known by
         what they say."""
-        s = self.system(programs=())
+        s = self.system(programs=("dolphin",))
         filemanagers.mark(self.sync, s)
         text = (self.sync / ".directory").read_text("utf-8").replace(filemanagers.MARK + "\n", "")
         (self.sync / ".directory").write_text(text + "\n[Dolphin]\nViewMode=2\n", "utf-8")
@@ -143,6 +175,8 @@ class TheIcon(Case):
 
     def test_flatpak(self):
         s = self.system(flatpak=True)
+        s.config_home().mkdir(parents=True)
+        (s.config_home() / "dolphinrc").write_text("", "utf-8")   # (Dolphin's, as the sandbox sees it's there)
         self.assertEqual(filemanagers.mark(self.sync, s), (True, ["gvfs"]), "Dolphin's only, and Settings says so")
         self.assertEqual([a for a in s.ran if a[0] == "gio"], [], "its sandbox keeps it from GVfs")
         self.assertTrue((self.sync / ".directory").is_file())
@@ -174,6 +208,24 @@ class TheIcon(Case):
         self.assertTrue(filemanagers.unmark(self.sync, s))
         self.assertEqual(s.ran[-1][5:], [str(self.sync)], "taken off")
         self.assertEqual(list(self.sync.iterdir()), [])
+
+    def test_finder_keeps_an_icon_you_put_on_since(self):
+        s = self.system("finder")
+        filemanagers.mark(self.sync, s)
+        (self.sync / filemanagers.FINDER_ICON).write_bytes(b"yours")   # (Get Info, and an icon pasted on)
+        self.assertEqual(filemanagers.mark(self.sync, s), (False, []), "not Hoard's to put back")
+        self.assertEqual((self.sync / filemanagers.FINDER_ICON).read_bytes(), b"yours")
+        self.assertFalse((self.sync / ICON).exists())
+        filemanagers.mark(self.sync, s)   # (and it's never taken off)
+        filemanagers.unmark(self.sync, s)
+        self.assertEqual((self.sync / filemanagers.FINDER_ICON).read_bytes(), b"yours")
+        other = self.tmp / "Other"
+        other.mkdir()
+        filemanagers.mark(other, s)
+        (other / filemanagers.FINDER_ICON).write_bytes(b"yours too")
+        self.assertTrue(filemanagers.unmark(other, s))
+        self.assertEqual((other / filemanagers.FINDER_ICON).read_bytes(), b"yours too", "one you put on since stays")
+        self.assertFalse((other / ICON).exists())
 
     def test_finder_keeps_anothers_icon(self):
         s = self.system("finder")
@@ -256,9 +308,11 @@ class TheMenu(Case):
                                                  "utf-8")
         (scripts / "Add to Hoard").write_text("#!/bin/sh\necho mine too\n", "utf-8")
         filemanagers.register(["/opt/Hoard/hoard"], s)
-        self.assertIn(filemanagers.MARK, (scripts / "Add to Hoard").read_text("utf-8"), "the same name: Hoard's now")
+        self.assertEqual((scripts / "Add to Hoard").read_text("utf-8"), "#!/bin/sh\necho mine too\n",
+                         "the same name: yours, left as it is")
+        self.assertIn(filemanagers.MARK, (scripts / "Open in Hoard").read_text("utf-8"))
         filemanagers.unregister(s)
-        self.assertEqual(sorted(p.name for p in scripts.iterdir()), ["Another Hoard's", "Mine"])
+        self.assertEqual(sorted(p.name for p in scripts.iterdir()), ["Add to Hoard", "Another Hoard's", "Mine"])
         self.assertFalse(s.helper_dir().exists())
 
     def test_a_path_the_menus_cant_quote(self):
@@ -339,11 +393,31 @@ class TheScript(Case):
         self.assertEqual(self.run_it("local", "/home/me/Sync"), ["--hoard-open-local"])
 
     def test_gone_with_hoard(self):
+        scripts = self.s.data_home() / "nautilus" / "scripts"
+        (scripts / "Add to Hoard").unlink()
+        (scripts / "Add to Hoard").write_text("#!/bin/sh\necho yours\n", "utf-8")   # (yours, there since)
         self.program.unlink()
         self.assertIsNone(self.run_it("add", "/home/me/a.png"))
         self.assertEqual(list(self.s.data_home().rglob("*.nemo_action")), [])
-        self.assertEqual([p for p in (self.s.data_home() / "nautilus/scripts").iterdir()], [])
+        self.assertEqual([p.name for p in scripts.iterdir()], ["Add to Hoard"], "only Hoard's own")
         self.assertFalse(self.s.helper_dir().exists(), "and the script itself")
+
+    def test_the_flatpak(self):
+        bin_ = self.tmp / "bin"
+        bin_.mkdir()
+        flatpak = bin_ / "flatpak"
+        flatpak.write_text(f'#!/bin/sh\n[ "$1" = info ] && exit "$(cat "{self.tmp}/installed")"\n'
+                           f'for a in "$@"; do printf "%s\\n" "$a"; done > "{self.said}"\n', "utf-8")
+        flatpak.chmod(0o755)
+        (self.tmp / "installed").write_text("0", "utf-8")
+        filemanagers.register(["flatpak", "run", filemanagers.FLATPAK_ID], self.s)
+        with mock.patch.dict(os.environ, {"PATH": f"{bin_}{os.pathsep}{os.environ.get('PATH', '')}"}):
+            self.assertEqual(self.run_it("add", "/home/me/a.png"),
+                             ["run", filemanagers.FLATPAK_ID, "--hoard-add", "/home/me/a.png"])
+            (self.tmp / "installed").write_text("1", "utf-8")   # (Hoard's Flatpak uninstalled, flatpak still there)
+            self.assertIsNone(self.run_it("add", "/home/me/a.png"))
+        self.assertFalse(self.s.helper_dir().exists(), "its options taken away")
+        self.assertEqual(list(self.s.data_home().rglob("*.nemo_action")), [])
 
 
 class Applying(Case):
