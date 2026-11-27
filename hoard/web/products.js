@@ -192,10 +192,9 @@ document.addEventListener("click", async e => {
   const b = e.target.closest ? e.target.closest("[data-adult-mark]") : null;
   if (b) {
     b.disabled = true;
-    const r = await apiPost("/api/marks", { kind: b.dataset.adultMark, keys: [b.dataset.key], on: true });
-    if (!r.ok) { b.disabled = false; toast(r.data.error || "That didn't work."); return; }
-    await load();
-    toast(b.dataset.adultMark === "adult" ? "Marked as 18+." : "Marked as not for adults.");
+    const kind = b.dataset.adultMark;   // (shown at once, the details drawn again: shared.js's adultMarked, issue #443)
+    if (!(await adultMarked([b.dataset.key], kind))) { b.disabled = false; return; }
+    toast(kind === "adult" ? "Marked as 18+." : "Marked as not for adults.");
     return;
   }
   const art = e.target.closest ? e.target.closest("#detail .d-art.adult") : null;   // a blurred picture, shown or blurred again

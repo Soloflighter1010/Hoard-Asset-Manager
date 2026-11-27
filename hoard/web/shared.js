@@ -1363,13 +1363,46 @@ function ADULT_ACTIONS() {
 async function markAdult(list, kind) {
   const keys = [...new Set(list.filter(a => a && a.tag_key).map(a => a.tag_key))];
   if (!keys.length) { toast("Select some items first."); return; }
-  const r = await apiPost("/api/marks", { kind, keys, on: true });
-  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
-  sel.ids.clear();   // (done with them, as with Archive and Hide)
-  await T.reload();
+  if (!(await adultMarked(keys, kind))) return;   // (said no to: they stay chosen, to try again)
+  sel.ids.clear(); T.render();   // (done with them, as with Archive and Hide)
   const one = keys.length === 1;
   toast(kind === "adult" ? (one ? tr("Marked as 18+.") : tr("Marked {0} products as 18+.", keys.length))
                          : (one ? tr("Marked as not for adults.") : tr("Marked {0} products as not for adults.", keys.length)));
+}
+// Issue #443: your word on these products (kind: "adult" or "not_adult") shows the moment you give it, on both pages
+// (each tile's blur and 18+ mark, and the details), and Hoard keeps it; the library's read again behind it, not
+// before (that took a few seconds in a large one). Said no to, it goes back as it was. Whether Hoard kept it.
+async function adultMarked(keys, kind) {
+  if (kind === "adult" && !featureOn("adult")) {   // (Products for adults off: they go from the page, as it's read again)
+    const r = await apiPost("/api/marks", { kind, keys, on: true });
+    if (!r.ok) { toast(r.data.error || "That didn't work."); return false; }
+    await T.reload();
+    return true;
+  }
+  const want = new Set(keys), was = [];
+  for (const view of Object.values(APP.views))
+    for (const a of (view.DATA && (view.DATA.items || view.DATA.assets)) || [])
+      if (want.has(a.tag_key)) {
+        was.push([a, a.adult, a.adult_from, a.not_adult]);
+        Object.assign(a, kind === "adult" ? { adult: true, adult_from: "you", not_adult: false }
+                                          : { adult: false, adult_from: null, not_adult: true });   // (adult.why's "you")
+      }
+  // The page drawn again with them as they are now: the tiles, and the details when one of them is open.
+  const redraw = () => {
+    T.render();
+    const open = T.open && T.open();
+    if (open && want.has(open.tag_key)) showDetail(open, false);
+  };
+  redraw();
+  const r = await apiPost("/api/marks", { kind, keys, on: true });
+  if (!r.ok) {
+    for (const [a, adult, from, not] of was) Object.assign(a, { adult, adult_from: from, not_adult: not });
+    redraw();
+    toast(r.data.error || "That didn't work.");
+    return false;
+  }
+  T.reload();   // (behind it: what else the mark changes, such as a set's own 18+)
+  return true;
 }
 
 /* ---------- the search's prefixes (issue #220): one kind of thing, as creator:mochi, tag:hoodie or settings:language.

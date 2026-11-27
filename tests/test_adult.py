@@ -498,6 +498,50 @@ class InHoard(IsolatedTestCase):
             browser.close()
 
 
+    @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
+    def test_it_shows_at_once(self):
+        """Issue #443: after Mark as 18+ (or It isn't for adults) the tile took a few seconds to blur and show its mark,
+        as the whole library was read again first. It shows the moment you choose it, in the tile and the details,
+        with the library read behind it (here, as slow as a large one's)."""
+        import time
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1400, "height": 900})
+            errors = []
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(self.srv.entry_url())
+            tile = lambda name: page.locator("#grid .slot", has_text=name)   # noqa: E731
+            tile("Straw Hat").wait_for()
+            slow = lambda route: (time.sleep(3), route.continue_())   # noqa: E731
+            page.route("**/api/library*", slow)
+            page.route("**/api/assets*", slow)
+            tile("Straw Hat").click(button="right")
+            page.locator(".selmenu [role=menuitem]", has_text="Mark as 18+").click()
+            started = time.monotonic()
+            page.wait_for_function("() => [...document.querySelectorAll('#grid .slot.adult')]"
+                                   ".some(s => s.querySelector('.adult-mark') && s.textContent.includes('Straw Hat'))",
+                                   timeout=2500)
+            self.assertLess(time.monotonic() - started, 1.5, "at once, not after the library's read")
+            page.locator(".toast", has_text="Marked as 18+.").wait_for(timeout=2500)
+            self.assertIn(HAT, MarkStore().keys("adult"))
+            # and in the details: It isn't for adults, at once
+            read = "() => !APP.pending && !APP.dirty"   # (the read behind it, done: both answers, each slowed)
+            page.wait_for_function(read, timeout=15000)
+            tile("Straw Hat").click()
+            page.locator("#detail .adult-chip").wait_for()
+            page.locator("#detail [data-adult-mark]", has_text="It isn't for adults").click()
+            started = time.monotonic()
+            page.locator("#detail .adult-chip").wait_for(state="detached", timeout=2500)
+            self.assertLess(time.monotonic() - started, 1.5)
+            self.assertNotIn("adult", tile("Straw Hat").get_attribute("class"))
+            page.wait_for_timeout(200)
+            page.wait_for_function(read, timeout=15000)
+            self.assertIn(HAT, MarkStore().keys("not_adult"))
+            self.assertNotIn("adult", tile("Straw Hat").get_attribute("class"), "and so it stays, once read again")
+            self.assertEqual(errors, [])
+            browser.close()
+
+
 @unittest.skipUnless(BROWSER, "needs Playwright's Chromium (python -m playwright install chromium)")
 class TheViewerAsks(IsolatedTestCase):
     """Issue #337: an Adult set's link asks whether its viewer is 18 or older before showing it, and keeps the answer
