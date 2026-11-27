@@ -620,6 +620,25 @@ class AccessKey(IsolatedTestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_each_view_has_its_icon(self):
+        """Issue #448: the filters' views (Library, Archive...; Downloads, Asset updates, Disk space...) were words only:
+        each has its icon before it, from Hoard's own set, on both pages, and is chosen as before."""
+        page, refused = self.open(self.srv.entry_url())
+        page.locator("#grid .slot").first.wait_for()
+        views = lambda: page.locator("#views [data-view]").evaluate_all(  # noqa: E731
+            "bs => bs.map(b => [b.dataset.view, !!b.querySelector('.vi svg'), b.getAttribute('aria-checked')])")
+        self.assertTrue(views() and all(icon for _, icon, _ in views()), views())
+        self.assertEqual([v for v, _, on in views() if on == "true"], ["library"])
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_function("() => APP.active === 'downloads' && document.querySelector('#views [data-view=downloads]')")
+        got = views()
+        self.assertIn("updates", [v for v, _, _ in got])
+        self.assertTrue(all(icon for _, icon, _ in got), got)
+        page.click('#views [data-view="updates"]')
+        page.wait_for_function("() => document.querySelector('#views [data-view=updates]').getAttribute('aria-checked') === 'true'")
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_acknowledgements(self):
         """Issue #227: Settings lists everything Hoard uses or ships, with its license, and shows a license's text."""
         page, refused = self.open(self.srv.entry_url())

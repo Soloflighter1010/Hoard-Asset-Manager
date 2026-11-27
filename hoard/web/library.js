@@ -1304,6 +1304,9 @@ function stackNote(a) {
 
 /* ---------- archive, hide and remove; the hidden library and its PIN */
 const VIEWS = { library: "Library", archive: "Archive", removed: "Removed", hidden: "Hidden" };
+// Each view's icon (ui/Icon.svelte, issue #448): a box for the library, an archive box, a bin, and an eye with a line
+// through it (a lock is how Hidden says it's locked).
+const VIEW_ICONS = { library: "package", archive: "archive", removed: "trash", hidden: "eye-off" };
 // Whether a product belongs in the view shown (Library, Archive, Hidden or Removed).
 const inView = a => state.view === "library" ? !a.mark : state.view === "archive" ? a.mark === "archived" : a.mark === state.view;
 // The view a product is in.
@@ -1314,10 +1317,9 @@ function renderViews() {
   for (const a of DATA.items) if (shown(a.store)) (count[viewOf(a)] ||= new Set()).add(a.key);   // as the grid counts
   // How many products a view has.
   const n = v => (count[v] || new Set()).size;
-  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "library" || v === "archive" || state.view === v
+  HoardUI.views.show($("#views"), Object.keys(VIEWS).filter(v => v === "library" || v === "archive" || state.view === v
       || (v === "removed" && n(v)) || (v === "hidden" && p.pin_set)).map(v =>
-    `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
-    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>` : `<span class="n">${n(v)}</span>`) + `</button>`).join("");
+    ({ key: v, label: VIEWS[v], icon: VIEW_ICONS[v], count: n(v), checked: state.view === v, locked: v === "hidden" && !p.unlocked })));
   const bar = $("#viewBar");
   bar.hidden = state.view === "library";
   bar.innerHTML = state.view === "archive" ? `<p>Your archive: older products set aside, out of your main library but still yours. Gumroad's archived purchases start here too.</p>`
