@@ -132,6 +132,14 @@
   @media (prefers-reduced-motion: reduce) { .set-switch input, .set-switch input::after { transition: none; } }
   :global(body.less-motion) .set-switch input, :global(body.less-motion) .set-switch input::after { transition: none; }
   .set-none { margin: 30px 0; }
+  /* Issue #433: a wide window's room used: the cards in two columns, each card whole in one (not one narrow column
+     with the rest of the window empty), and Settings centred in the window (the page's own .win-body). By Settings'
+     own width, not the window's: a larger text size (a zoom on the page) leaves it less room. */
+  @container (min-width: 1500px) {
+    :global(#settingsPanel.win) .set-body { max-width: 1240px; columns: 2; column-gap: 22px; }
+    .set-saved, .set-none { column-span: all; }
+    .set-card { break-inside: avoid; }
+  }
   :global([data-style="workbench"]) .set-card { border-radius: 6px; }
   :global([data-style="treasure"]) .set-card { border-radius: 18px; }
 </style>

@@ -3748,6 +3748,23 @@ class WindowsTabsAndTasks(IsolatedTestCase):
             got = page.evaluate("apiPost('/api/folders/open', {id: '/etc'})")
             self.assertEqual(got["data"]["error"], "That isn't one of Hoard's folders.")
             self.assertEqual(len(opened), 1)
+            # Issue #433: a wide window's room used: the cards in two columns, each whole, and Settings centred
+            page.set_viewport_size({"width": 1920, "height": 1000})
+            page.wait_for_timeout(200)
+            nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()
+            self.assertGreater(body["width"], 1000, "wider than one column")
+            self.assertLess(abs(nav["x"] - (1920 - (body["x"] + body["width"]))), 60, "centred: as much room either side")
+            cards = page.locator(".set-card:not([hidden])").evaluate_all(
+                "cs => cs.map(c => { const r = c.getClientRects(); return [Math.round(r[0].left), r.length]; })")
+            self.assertEqual(len({left for left, _ in cards}), 2, ("two columns", cards))
+            self.assertEqual({n for _, n in cards}, {1}, "each card whole in one column")
+            # at a larger text size (the page zoomed), by Settings' own width: one column where two have no room
+            page.set_viewport_size({"width": 1600, "height": 1000})
+            page.evaluate("() => { document.documentElement.style.zoom = '1.5'; }")
+            page.wait_for_timeout(200)
+            lefts = page.locator(".set-card:not([hidden])").evaluate_all("cs => cs.map(c => Math.round(c.getBoundingClientRect().left))")
+            self.assertEqual(len(set(lefts)), 1, ("one column at 150%", lefts))
+            page.evaluate("() => { document.documentElement.style.zoom = ''; }")
             # a narrow window: its parts along the top again
             page.set_viewport_size({"width": 700, "height": 800})
             nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()
