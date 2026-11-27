@@ -124,8 +124,8 @@
       if (mark) p.mark = on ? mark : (p.mark === mark ? null : p.mark);
       else if (body.kind === "unarchived") p.mark = p.mark === "archived" ? null : p.mark;
       else if (body.kind === "apart") p.apart = on;
-      else if (body.kind === "adult") { p.adult = on; p.adult_from = on ? ["you"] : []; if (on) p.not_adult = false; }
-      else if (body.kind === "not_adult") { p.not_adult = on; if (on) { p.adult = false; p.adult_from = []; } }
+      else if (body.kind === "adult") { p.adult = on; p.adult_from = on ? "you" : null; if (on) p.not_adult = false; }   // (adult.why's)
+      else if (body.kind === "not_adult") { p.not_adult = on; if (on) { p.adult = false; p.adult_from = null; } }
       else return needs("That mark");
     }
     keep("/api/library", "/api/assets");
