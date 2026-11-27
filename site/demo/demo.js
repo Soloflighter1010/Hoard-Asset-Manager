@@ -322,7 +322,9 @@
   const CHANGES = { "/api/tags": tagsChange, "/api/marks": marksChange, "/api/sets": setsChange, "/api/settings": settingsChange,
                     "/api/unlock/touch": () => json({ unlocked: false, lock_in: 0 }), "/api/sets/prices": quiet,
                     "/api/picture-looks": quiet, "/api/tasks/pictures": quiet, "/api/tasks/background": quiet,
-                    "/api/unity-picture": quiet };
+                    "/api/unity-picture": quiet,
+                    // Settings' Local sync folder, read (a POST with nothing in it, as the build kept it); a change needs Hoard
+                    "/api/local/sync": body => Object.keys(body).length ? needs("Local's sync folder") : json(at("/api/local/sync") || { ok: true }) };
 
   // An answer saying what needs Hoard itself, and the note that says so on the page.
   function needs(what) {
@@ -426,7 +428,24 @@
 .demo-note a { padding: 6px 12px; border-radius: 999px; background: var(--accent, #F2A93B); color: var(--on-accent, #211C18);
   font-weight: 700; text-decoration: none; white-space: nowrap; }
 .demo-note.said { outline: 2px solid var(--accent, #F2A93B); }
-@media (max-width: 600px) { .demo-note { right: 16px; border-radius: 14px; } }`;
+.demo-fold { display: none; flex: none; width: 28px; height: 28px; margin-left: -4px; border: 0; border-radius: 50%; padding: 0;
+  background: transparent; color: inherit; font: 20px/1 system-ui, sans-serif; cursor: pointer; opacity: .75; }
+@media (max-width: 600px) {
+  .demo-note { right: 16px; border-radius: 14px; font-size: 12.5px; padding: 6px 6px 6px 12px; }
+  .demo-fold { display: inline-block; }
+  .demo-note.folded { left: auto; right: 12px; bottom: 12px; padding: 4px; }   /* (Download Hoard alone, at the corner) */
+  .demo-note.folded > span, .demo-note.folded .demo-fold { display: none; }
+  body { padding-bottom: 72px; }   /* (the note never covers the last row) */
+  .demo-cover { padding: 10px; }
+  .demo-card { padding: 20px 18px; border-radius: 16px; font-size: 14px; }
+  .demo-card h1 { font-size: 24px; }
+  .demo-card p { margin-bottom: 10px; }
+  .demo-store { padding: 8px 12px; margin: 8px 0; }
+  .demo-store b { margin-bottom: 2px; }
+  .demo-store label { grid-template-columns: 72px 1fr; margin: 2px 0; }
+  .demo-store input { padding: 4px 8px; }
+  .demo-go { margin-top: 6px; padding: 11px; }
+}`;
 
   // An element, with its text (never markup).
   function el(tag, props = {}, ...children) {
@@ -438,10 +457,14 @@
   let note = null, noteText = null, noteTimer = 0;
   const SAYS = "This is the demo: nothing leaves your browser.";
   // The demo's note, at the page's corner: that it's the demo, with Download Hoard.
+  // On a phone it folds down to Download Hoard alone (its ×), and opens again to say what needs Hoard.
   function drawNote() {
     noteText = el("span", { textContent: SAYS });
+    const fold = el("button", { className: "demo-fold", type: "button", textContent: "×", title: "Hide this note" });
+    fold.setAttribute("aria-label", "Hide this note");
+    fold.addEventListener("click", () => note.classList.add("folded"));
     note = el("div", { className: "demo-note", role: "status" }, noteText,
-              el("a", { href: DOWNLOAD, textContent: "Download Hoard", target: "_top" }));
+              el("a", { href: DOWNLOAD, textContent: "Download Hoard", target: "_top" }), fold);
     document.body.append(note);
   }
   // Say on the note what needs Hoard itself, for a while.
@@ -449,6 +472,7 @@
     if (!note) return;
     noteText.textContent = (what ? what + ": " : "") + "that needs Hoard on your computer.";
     note.classList.add("said");
+    note.classList.remove("folded");
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => { noteText.textContent = SAYS; note.classList.remove("said"); }, 6000);
   }
@@ -479,7 +503,7 @@
         cover.remove();
         drawNote();
         signedInNow();
-      }, 700);
+      }, 350);   // (a moment, as Hoard reading a library is: not long, on a phone)
     });
     document.body.append(cover);
     go.focus();

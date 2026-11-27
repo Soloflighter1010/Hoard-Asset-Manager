@@ -50,6 +50,7 @@ PHOTO_HOSTS = ("https://i.imgur.com", "https://i.gyazo.com", "https://pbs.twimg.
 SHARE_SERVER = "https://hoard-share.furryup.link"   # a short link's locked set, fetched when one's added (demo.js)
 OLD = "2026-09-01T10:00:00+00:00"   # when the demo's products were bought (and its stores first read)
 SHOWN_HOME = "C:/Users/You"   # where the demo's folders seem to be (the build's own folder is never shown)
+READS = ("/api/local/sync",)   # what the pages ask for with a POST and nothing in it, only to read (demo.js answers them)
 # what the walk through the pages does on each, as scripts/i18n_strings.py does: a selector to click, "Escape", or ""
 STEPS = {
     "/": ["", ".slot >> nth=0", "Escape", ".slot >> nth=3", "Escape", "#menuBtn", "#tagsBtn", "Escape", "#menuBtn",
@@ -63,6 +64,19 @@ STEPS = {
 }
 
 
+def lighter(url: str) -> str:
+    """A store picture's address asking for one no bigger than the demo shows it, where the store's image host can make
+    one (Jinxxy's: Cloudflare's image resizing, which it already asks for its format): a phone opening Try Hoard loads
+    a fraction of each picture. Gumroad's have no size to ask for."""
+    u = urlparse(url)
+    prefix = "/cdn-cgi/image/"
+    if u.hostname == "jinxxy-c.jinxxy-cdn.com" and u.path.startswith(prefix) and "/" in u.path[len(prefix):]:
+        options = u.path[len(prefix):].split("/", 1)[0]
+        if "width=" not in options:
+            return url.replace(f"{prefix}{options}/", f"{prefix}width=640,{options}/", 1)
+    return url
+
+
 def products() -> list[dict]:
     """The demo's products (products.json), each checked: a store Hoard reads, a link to its own page there."""
     from hoard import library
@@ -70,7 +84,7 @@ def products() -> list[dict]:
     for p in json.loads(PRODUCTS.read_text("utf-8"))["products"]:
         if library.store_link(p["store"], p["url"]) != p["url"] or not library.safe_url(p.get("thumbnail")):
             raise SystemExit(f"products.json: {p.get('url')} isn't a store page with a picture on its store's host")
-        out.append(p)
+        out.append({**p, "thumbnail": lighter(p["thumbnail"])})
     return out
 
 
@@ -225,9 +239,12 @@ def record(srv) -> dict:
     answers: dict[str, object] = {}
 
     def kept(response):
-        """One answer to a page's request: kept when it's Hoard's JSON."""
+        """One answer to a page's request: kept when it's Hoard's JSON, to a GET or to a read that's sent as a POST
+        with nothing in it (READS: Settings' Local sync folder)."""
         req = response.request
-        if req.method != "GET" or not urlparse(req.url).path.startswith("/api/") or response.status != 200:
+        path = urlparse(req.url).path
+        read = req.method == "GET" or (req.method == "POST" and path in READS and (req.post_data or "{}").strip() == "{}")
+        if not read or not path.startswith("/api/") or response.status != 200:
             return
         try:
             answers[answer_key(req.url)] = response.json()
@@ -281,8 +298,10 @@ def page(name: str, cfg: dict, data: dict) -> bytes:
     policy = (f"default-src 'none'; script-src 'self' {hashes}; style-src 'self' 'unsafe-inline'; font-src 'self'; "
               f"img-src 'self' data: {' '.join(IMAGE_HOSTS + PHOTO_HOSTS)}; connect-src {SHARE_SERVER}; "
               "base-uri 'none'; form-action 'none'")
+    hosts = sorted({urlparse(p["thumbnail"]).hostname for p in data.get("products", []) if p.get("thumbnail")})
+    early = "".join(f'<link rel="preconnect" href="https://{h}">\n' for h in hosts)   # (the pictures' hosts, ahead of them)
     meta = (f'<meta http-equiv="Content-Security-Policy" content="{policy}">\n'
-            '<meta name="robots" content="noindex">\n').encode()
+            '<meta name="robots" content="noindex">\n' + early).encode()
     src = src.replace(b'<meta charset="utf-8">', b'<meta charset="utf-8">\n' + meta, 1)
     return re.sub(rb"<title>[^<]*</title>", b"<title>Try Hoard</title>", src, count=1)
 
@@ -341,11 +360,14 @@ def build(out: Path, root: Path) -> None:
                        if any(p["store"] == s for p in chosen)]}
     for name, file in (("library.html", "index.html"), ("downloads.html", "downloads.html")):
         (out / file).write_bytes(page(name, cfg, data))
+    # the app's fonts, as the website has them where it does: the Latin letters only (about 15 KB each, where the
+    # app's, with Japanese and Korean, are over 1 MB: the demo is in English, and mostly opened on a phone)
     fonts = out / "fonts"
     fonts.mkdir(exist_ok=True)
     for f in (REPO / "hoard" / "web" / "fonts").iterdir():
         if f.suffix in (".woff2", ".txt"):
-            shutil.copy2(f, fonts / f.name)
+            site = REPO / "site" / "fonts" / f.name
+            shutil.copy2(site if site.is_file() else f, fonts / f.name)
     shutil.copy2(REPO / "site" / "demo" / STAND_IN, out / STAND_IN)
     print(f"Try Hoard: {len(answers)} answers, {len(chosen)} products, in {out}")
 

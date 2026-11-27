@@ -237,6 +237,53 @@ class TryHoard(IsolatedTestCase):
         party = self.evaluate("fetch('/api/sets').then(r => r.json()).then(d => d.sets.find(s => s.name === 'Party night'))")
         self.assertEqual(len(party["items"]), len({i["key"] for i in party["items"]}), "each product once")
 
+    def test_on_a_phone(self):
+        """Try Hoard is mostly opened on a phone: nothing wider than its screen (the page, a product's details, the
+        Menu), on a large phone and the smallest; Settings opens without saying something needs Hoard; the demo's note
+        folds away and opens again to say so; and it's light to load (the website's own Latin fonts, Jinxxy's pictures
+        asked for at the size they're shown)."""
+        for device in ("Pixel 7", "iPhone SE"):
+            ctx = self.browser.new_context(**self.pw.devices[device])
+            self.addCleanup(ctx.close)
+            ctx.route("**/*", self.answer)
+            page = ctx.new_page()
+            page.on("pageerror", lambda e: self.errors.append(str(e)))
+            fonts = {}
+            page.on("response", lambda r: fonts.__setitem__(r.url, len(r.body())) if r.url.endswith(".woff2") else None)
+            page.goto(self.base + "/demo/")
+            page.locator(".demo-go").tap()
+            page.locator(".slot").first.wait_for(timeout=15000)
+            page.wait_for_timeout(600)
+            wide = "() => document.documentElement.scrollWidth - innerWidth"
+            self.assertEqual(page.evaluate(wide), 0, f"{device}: the library, no wider than the screen")
+            on_screen = "s => { const r = document.querySelector(s).getBoundingClientRect(); return r.left >= -1 && r.right <= innerWidth + 1; }"
+            page.locator(".slot").first.tap()
+            page.locator("#detail.open").wait_for()
+            page.wait_for_timeout(400)
+            self.assertTrue(page.evaluate(on_screen, "#detail"), f"{device}: a product's details, all on the screen")
+            page.keyboard.press("Escape")
+            page.locator("#menuBtn").tap()
+            page.locator("#barMenu:not([hidden])").wait_for()
+            self.assertTrue(page.evaluate(on_screen, "#barMenu"), f"{device}: the Menu, all on the screen")
+            page.locator("#settingsBtn").tap()
+            page.locator("#settingsPanel:not([hidden])").wait_for()
+            page.wait_for_timeout(1500)
+            self.assertNotIn("needs Hoard", page.locator(".demo-note").text_content(), f"{device}: Settings, just opened")
+            page.keyboard.press("Escape")
+            page.locator(".demo-fold").tap()
+            self.assertIn("folded", page.locator(".demo-note").get_attribute("class"))
+            self.assertTrue(page.locator(".demo-note a", has_text="Download Hoard").is_visible(), "Download Hoard stays")
+            page.evaluate("fetch('/api/download', {method: 'POST', body: '{}'})")
+            page.wait_for_function("() => !document.querySelector('.demo-note').classList.contains('folded')")
+            page.locator('.apptabs a[href="/downloads"]').tap()
+            page.wait_for_function("() => APP.active === 'downloads'")
+            page.wait_for_timeout(600)
+            self.assertEqual(page.evaluate(wide), 0, f"{device}: Downloads, no wider than the screen")
+            self.assertTrue(fonts and max(fonts.values()) < 100_000, (device, "the Latin fonts", fonts))
+        jinxxy = [p["thumbnail"] for p in self.data["products"] if p["store"] == "jinxxy"]
+        self.assertTrue(jinxxy and all("/cdn-cgi/image/width=640," in u for u in jinxxy), jinxxy)
+        self.assertEqual(self.errors, [])
+
     def test_the_policy(self):
         html = self.root.joinpath("demo", "index.html").read_text("utf-8")
         policy = html.split('http-equiv="Content-Security-Policy" content="', 1)[1].split('"', 1)[0]
