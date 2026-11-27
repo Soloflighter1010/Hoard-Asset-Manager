@@ -361,7 +361,11 @@ def main(argv: list[str]) -> int:
         os.environ.update(HOARD_DATA_DIR=str(Path(tmp) / "data"), HOARD_VCC_DIR="")
         if "hoard.paths" in sys.modules:
             raise SystemExit("Hoard was imported before its data folder was chosen (scripts/build_site_demo.py)")
-        build(Path(argv[0]).resolve(), Path(tmp))
+        try:
+            build(Path(argv[0]).resolve(), Path(tmp))
+        finally:   # (its database closed before its folder goes: Windows won't delete a file that's open)
+            if "hoard.storage" in sys.modules:
+                sys.modules["hoard.storage"].close_all()
     return 0
 
 
