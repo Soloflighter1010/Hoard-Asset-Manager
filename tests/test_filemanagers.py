@@ -376,19 +376,20 @@ class TheScript(Case):
         self.s = self.system(programs=("nautilus", "nemo"))
         filemanagers.register([str(self.program)], self.s)
         self.helper = self.s.helper_dir() / filemanagers.HELPER
+        self.here = self.sync.resolve()   # (as the shell's $PWD says it: on a Mac, /var is /private/var)
 
     def run_it(self, *args, cwd=None):
         self.said.unlink(missing_ok=True)
-        done = subprocess.run([str(self.helper), *args], cwd=cwd or self.sync, capture_output=True, text=True, timeout=30)
+        done = subprocess.run([str(self.helper), *args], cwd=cwd or self.here, capture_output=True, text=True, timeout=30)
         self.assertEqual(done.returncode, 0, done.stderr)
         return self.said.read_text("utf-8").splitlines() if self.said.exists() else None
 
     def test_what_it_asks_for(self):
         self.assertEqual(self.run_it("add", "/home/me/a b.png", "c.zip", "-n"),
-                         ["--hoard-add", "/home/me/a b.png", "--hoard-add", f"{self.sync}/c.zip",
-                          "--hoard-add", f"{self.sync}/-n"], "each chosen, as a full path")
+                         ["--hoard-add", "/home/me/a b.png", "--hoard-add", f"{self.here}/c.zip",
+                          "--hoard-add", f"{self.here}/-n"], "each chosen, as a full path")
         self.assertIsNone(self.run_it("add"), "nothing chosen: nothing asked")
-        self.assertEqual(self.run_it("sync"), ["--hoard-sync-now", str(self.sync)], "inside a folder")
+        self.assertEqual(self.run_it("sync"), ["--hoard-sync-now", str(self.here)], "inside a folder")
         self.assertEqual(self.run_it("sync", "/home/me/Sync"), ["--hoard-sync-now", "/home/me/Sync"])
         self.assertEqual(self.run_it("local", "/home/me/Sync"), ["--hoard-open-local"])
 
@@ -467,6 +468,13 @@ class RealMac(Case):
         s = filemanagers.System()
         self.assertEqual(filemanagers.mark(self.sync, s), (True, []))
         self.assertTrue((self.sync / filemanagers.FINDER_ICON).exists(), "Finder's Icon\\r")
+        kept = filemanagers._finder_prints(s).get(str(self.sync))
+        self.assertTrue(kept, "a fingerprint of the icon Hoard put on")
+        self.assertEqual(s.finder_print(self.sync), kept, "the same when it's read again")
+        done = s.run(["osascript", "-l", "JavaScript", "-e", filemanagers.FINDER_SET_ICON, str(self.sync)])
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "yes"), f"Finder's call to take it off: {done.stderr}")
+        self.assertFalse((self.sync / filemanagers.FINDER_ICON).exists(), "taken off by Finder's own call")
+        filemanagers.mark(self.sync, s)
         self.assertTrue(filemanagers.unmark(self.sync, s))
         self.assertEqual(list(self.sync.iterdir()), [])
 

@@ -152,7 +152,7 @@ def _put_picture(folder: Path) -> Path:
 # Finder's own call for a folder's icon (an image's path to set it, none to take it off), in JavaScript for Automation:
 # osascript is on every Mac, and Hoard brings no Objective-C bridge of its own. The paths come as arguments, never as
 # part of the script.
-FINDER_SET_ICON = ('function run(argv) { ObjC.import("AppKit"); var image = null; '
+FINDER_SET_ICON = ('function run(argv) { ObjC.import("AppKit"); var image = $(); '   # ($(): nil, to take it off)
                    'if (argv.length > 1) { image = $.NSImage.alloc.initWithContentsOfFile(argv[1]); '
                    'if (image.isNil()) { return "no"; } } '
                    'return $.NSWorkspace.sharedWorkspace.setIconForFileOptions(image, argv[0], 0) ? "yes" : "no"; }')
@@ -349,7 +349,8 @@ def unmark(folder, system: System) -> bool:
     found = _ours(folder)
     if system.kind == "finder":
         if found and (folder / FINDER_ICON).exists() and _finder_still_ours(system, folder):
-            _finder_icon(system, folder, None)
+            if not _finder_icon(system, folder, None):   # (Finder's call refused: its picture taken away, which Finder
+                (folder / FINDER_ICON).unlink(missing_ok=True)   # then shows as an ordinary folder)
         _finder_prints(system, {str(folder): None})
     else:
         if _gvfs_icon(system, folder) == icon.as_uri():
