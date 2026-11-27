@@ -408,6 +408,11 @@ class AccessKey(IsolatedTestCase):
                 self.assertTrue(got["hit"], (style, size, "a click on the box reaches it"))
                 if style == "workbench":
                     self.assertIsNone(got["badge"], "Workbench says it in the tile's row")
+                    # Issue #434: its picture large enough to tell products apart, sized by the tile slider (shown)
+                    art = tile.locator(".art").bounding_box()
+                    self.assertEqual(round(art["width"]), {120: 48, 300: 120}[size], (size, art))
+                    self.assertGreaterEqual(tile.bounding_box()["height"], art["height"] + 12, "the row fits it")
+                    self.assertTrue(page.locator(".zoom input:visible").count(), "the slider shows")
                     continue
                 b, t = got["badge"], got["tick"]
                 self.assertIsNotNone(b, (style, size))

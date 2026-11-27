@@ -446,21 +446,22 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 [data-style="workbench"] .seg button[aria-checked="true"] { color: var(--bone); box-shadow: inset 0 -3px 0 var(--c, var(--gold)); }
 [data-style="workbench"] .seg .drives .tabsep { margin-top: 0; }
 [data-style="workbench"] .shelf-tools { padding-bottom: 4px; align-self: center; }
-[data-style="workbench"] .shelf-tools .zoom, [data-style="workbench"] .tools .zoom { display: none; }   /* (no tiles to size) */
 [data-style="workbench"] main { padding-top: 16px; }
 [data-style="workbench"] .side { padding: 14px 16px 24px 20px; }
 [data-style="workbench"] .side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-/* the tiles become a list: a small picture, the name over its creator, then its store, where it is, and when it came */
+/* the tiles become a list: a picture, the name over its creator, then its store, where it is, and when it came. The
+   picture is large enough to tell products apart (issue #434: it was 40 px), and follows the tile size slider */
+[data-style="workbench"] .grid .slot { --wb-pic: clamp(40px, calc(var(--slot-size, 172px) * .4), var(--wb-pic-max, 120px)); }
 [data-style="workbench"] .grid { display: flex; flex-direction: column; gap: 0; border-radius: 8px; background: var(--ledge);
   box-shadow: inset 0 0 0 1px var(--seam); overflow: hidden; }
 [data-style="workbench"] .status ~ .grid { margin-top: 14px; }
-[data-style="workbench"] .grid .slot { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "art nm meta" "art cr meta";
-  align-items: center; gap: 0 12px; min-height: 52px; padding: 6px 12px; border-top: 1px solid var(--seam); border-radius: 0; }
+[data-style="workbench"] .grid .slot { position: relative; display: grid; grid-template-columns: var(--wb-pic) minmax(0, 1fr) auto; grid-template-areas: "art nm meta" "art cr meta";
+  align-items: center; gap: 0 12px; min-height: calc(var(--wb-pic) + 12px); padding: 6px 12px; border-top: 1px solid var(--seam); border-radius: 0; }
 [data-style="workbench"] .grid .slot:first-child { border-top: 0; }
 [data-style="workbench"] .grid .slot:hover { background: var(--stone); }
 [data-style="workbench"] .grid .slot:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
 [data-style="workbench"] .grid .slot[aria-current="true"] { background: var(--stone); box-shadow: inset 3px 0 0 var(--gold); }
-[data-style="workbench"] .grid .art { grid-area: art; width: 40px; height: 40px; aspect-ratio: auto; border-radius: 6px; transform: none !important; outline: none !important; }
+[data-style="workbench"] .grid .art { grid-area: art; width: var(--wb-pic); height: var(--wb-pic); aspect-ratio: auto; border-radius: 6px; transform: none !important; outline: none !important; }
 [data-style="workbench"] .grid .slot.stacked .art { box-shadow: 3px -3px 0 -1px var(--seam); }
 [data-style="workbench"] .grid .slot.stacked .art > img, [data-style="workbench"] .grid .slot.stacked .art > .ph { border-radius: 6px; }
 [data-style="workbench"] .grid .ph b { font-size: 14px; }
@@ -487,27 +488,30 @@ html:not([data-style="workbench"]):not([data-cards="outlined"]) .slot :is(.nm-t,
 /* sets and wishlists in the list: the set's picture small, and a product you don't have yet with its price and links */
 [data-style="workbench"] .grid .settile .nm-t { font-size: 14px; }
 [data-style="workbench"] .grid .slot.ext { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "main price row"; }
-[data-style="workbench"] .slot.ext .ext-main { grid-area: main; display: grid; grid-template-columns: 40px minmax(0, 1fr); grid-template-areas: "art nm" "art cr";
+[data-style="workbench"] .slot.ext .ext-main { grid-area: main; display: grid; grid-template-columns: var(--wb-pic) minmax(0, 1fr); grid-template-areas: "art nm" "art cr";
   gap: 0 12px; align-items: center; }
 [data-style="workbench"] .slot.ext .ext-price { grid-area: price; margin: 0; }
 [data-style="workbench"] .slot.ext .ext-row { grid-area: row; margin: 0; gap: 10px; }
 /* (a placeholder's Replace: on a line of its own under its name, which keeps its room) */
 [data-style="workbench"] .grid .slot.ext.planned { grid-template-areas: "main price row" "ph ph ph"; }
-[data-style="workbench"] .slot.ext .ext-ph { grid-area: ph; margin: 4px 0 0 50px; }
+[data-style="workbench"] .slot.ext .ext-ph { grid-area: ph; margin: 4px 0 0 calc(var(--wb-pic) + 12px); }
 [data-style="workbench"] .ext-out span { display: none; }   /* (a list: the bin alone, its name said by its label) */
 [data-style="workbench"] .setview .sethead > .art { max-width: 160px; }
 /* as the list gets narrower (a smaller window, a larger text size, a product's details open beside it), the row keeps
    its name readable: when it came goes first, then the store, and at the narrowest only where it is shows */
 [data-style="workbench"] .grid { container-type: inline-size; }
 @container (max-width: 860px) {   /* (OpenDyslexic's wider words make way sooner) */
+  [data-style="workbench"] .grid .slot { --wb-pic-max: 56px; }   /* (the picture smaller too: the name keeps its room) */
   [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: 110px 192px; gap: 10px; }
   [data-style="workbench"][data-font="dyslexic"] .grid .row-meta .rm-when { display: none; }
 }
 @container (max-width: 760px) {
+  [data-style="workbench"] .grid .slot { --wb-pic-max: 48px; }
   [data-style="workbench"] .grid .row-meta { grid-template-columns: 96px 152px; gap: 10px; }
   [data-style="workbench"] .grid .row-meta .rm-when { display: none; }
 }
 @container (max-width: 640px) {
+  [data-style="workbench"] .grid .slot { --wb-pic-max: 40px; }
   [data-style="workbench"][data-font="dyslexic"] .grid .row-meta { grid-template-columns: auto; }
   [data-style="workbench"][data-font="dyslexic"] .grid .row-meta > :not(.rm-state) { display: none; }
 }
