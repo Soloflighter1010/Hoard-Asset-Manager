@@ -396,6 +396,13 @@ class Switches(IsolatedTestCase):
         page.click("nav.apptabs a[href='/downloads']")
         page.locator("#grid .slot", has_text="Rusk").wait_for()
         self.assertNotIn("Night Dress", self.shown(page), "Downloads")
+        # turned on and off again from here (its switch alone): the Library's products, out of sight, are filtered again
+        library = "() => APP.views.library.DATA.items.map(a => a.name)"
+        page.evaluate("setFeature('adult', true)")
+        page.wait_for_function(f"() => ({library})().includes('Night Dress')", timeout=5000)
+        page.evaluate("setFeature('adult', false)")
+        page.wait_for_function(f"() => !({library})().includes('Night Dress')", timeout=5000)
+        self.kept("adult", False)
         page.fill("#q", "night")
         page.wait_for_timeout(300)
         self.assertEqual(self.shown(page), [], "nor found")

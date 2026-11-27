@@ -1648,6 +1648,39 @@ class LargeLibrary(IsolatedTestCase):
         self.assertEqual(self.drawn(page), 1000, "scrolling draws them all")
         page.close()
 
+    def test_the_last_tab_clicked_wins(self):
+        """Issue #435: clicking tabs one after another faster than a view is drawn, a switch still under way finished
+        after a later one, and Hoard jumped back. The tab clicked shows as chosen at once, a switch overtaken by
+        another stops, and the page ends on the last one clicked."""
+        page = self.open()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.evaluate("const go = goToAddress; window.finished = 0; window.goToAddress = () => { finished++; go(); }; 0")
+        tabs = ["/downloads", "/#store=Sets", "/downloads#store=Local", "/"]
+        marked = page.evaluate("""tabs => tabs.map(h => { document.querySelector(`.apptabs a[href="${h}"]`).click();
+            return document.querySelector('.apptabs a[aria-current]').getAttribute('href'); })""", tabs)
+        self.assertEqual(marked, tabs, "each tab is marked the moment it's clicked")
+        page.wait_for_function("() => APP.active === 'library' && !document.querySelector('#grid .slot:not([data-key])') && finished > 0")
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate("finished"), 1, "only the last switch finished")
+        self.assertEqual(page.evaluate("location.pathname + location.hash"), "/")
+        self.assertEqual(page.evaluate("document.querySelector('.apptabs a[aria-current]').getAttribute('href')"), "/")
+        self.assertGreater(self.drawn(page), 0, "the library's own tiles")
+        # a switch overtaken by another isn't done until that one is: what waits on it carries on where the page ends up
+        got = page.evaluate("""async () => { const before = finished, first = navigateApp('/downloads'); navigateApp('/#store=Sets');
+            await first; return [APP.active, location.pathname + location.hash, finished - before]; }""")
+        self.assertEqual(got, ["library", "/#store=Sets", 1], "the later switch done when the first one says it is")
+        # and by the pointer, as fast as it goes, each way round
+        for last in ("/downloads", "/#store=Sets", "/"):
+            for h in [x for x in tabs if x != last] + [last]:
+                page.click(f'.apptabs a[href="{h}"]', no_wait_after=True)
+            page.wait_for_timeout(600)
+            self.assertEqual(page.evaluate("location.pathname + location.hash"), last)
+            self.assertEqual(page.evaluate("APP.active"), "downloads" if last == "/downloads" else "library")
+            self.assertEqual(page.evaluate("document.querySelector('.apptabs a[aria-current]').getAttribute('href')"), last)
+        self.assertEqual(errors, [])
+        page.close()
+
     def test_a_tile_stays_where_it_was_clicked(self):
         """Issue #329: a product's details opening leaves fewer tiles to a row, and its tile went rows away, out of
         sight. It stays where it was on screen: opened, closed, and by Back and Forward."""
