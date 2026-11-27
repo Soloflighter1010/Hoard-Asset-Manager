@@ -3461,16 +3461,21 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         Wishlists, Tasks, Projects), the search, then Hoard's own links (its version, GitHub, Discord, Hoard updates,
         Report a problem), Menu and Sync, at every width, text size and style; in a wide window the search is in the
         middle of it; when there isn't room, Hoard's links go in the Menu, then the search goes under the rest, and
-        nothing else hides or overlaps. The footer keeps the rest."""
+        nothing else hides or overlaps (on a phone the logo and the pages are one row that scrolls). The footer keeps
+        the rest."""
         page = self.open()
         check = """() => {
           const bar = document.querySelector('.bar').getBoundingClientRect(), search = document.querySelector('.bar .search').getBoundingClientRect();
           const shown = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
+          // (on a phone the logo and the pages are one row that scrolls sideways: a page past its edge is scrolled to,
+          // and the row itself is inside the bar)
+          const row = document.querySelector('.bar > .bar-side'), scrolls = getComputedStyle(row).overflowX === 'auto';
           const parts = [...document.querySelectorAll('.bar .brand, .bar .apptabs > *, .bar .search, .bar .bar-links > *, .bar .tools > *')]
-            .filter(shown).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect()]);
+            .filter(shown).map(el => [el.id || el.className || el.textContent, el.getBoundingClientRect(), scrolls && row.contains(el)]);
           const over = [];
-          for (const [i, [a, ra]] of parts.entries()) {
-            if (ra.left < bar.left - 1 || ra.right > bar.right + 1) over.push(a + ' is out of the bar');
+          if (scrolls) { const rr = row.getBoundingClientRect(); if (rr.left < bar.left - 1 || rr.right > bar.right + 1) over.push('the row of pages is out of the bar'); }
+          for (const [i, [a, ra, inRow]] of parts.entries()) {
+            if (!inRow && (ra.left < bar.left - 1 || ra.right > bar.right + 1)) over.push(a + ' is out of the bar');
             for (const [b, rb] of parts.slice(i + 1))
               if (Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 1 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 1) over.push(a + ' over ' + b);
           }
