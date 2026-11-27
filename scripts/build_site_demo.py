@@ -25,8 +25,6 @@ Hoard's requirements and Playwright's Chromium (as the tests do).
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import os
 import re
@@ -115,7 +113,7 @@ def seed(root: Path, chosen: list[dict]):
             srv.lib.data["stores"][s] = {"count": sum(p["store"] == s for p in owned), "error": None,
                                          "source": "refresh", "first_read": OLD, "updated": common.now_iso()}
     for p in owned[:2] + [p for p in owned if p["store"] == "gumroad"][:1]:   # downloaded: their files in place
-        store = library.STORES[p["store"]]["label"] if hasattr(library, "STORES") else p["store"].title()
+        store = downloader.STORE_DIRS[p["store"]]   # (the store's own folder, as Hoard keeps its downloads)
         man = downloader.Manifest(root / "Hoard" / store)
         rec = man.record(f"{p['store']}:{p['id']}", p["creator"], p["name"])
         folder = root / "Hoard" / store / rec["folder"]
@@ -182,6 +180,37 @@ def made_up_project(root: Path, chosen: list[dict]) -> dict:
     return {"HOARD_VCC_DIR": str(vcc)}
 
 
+def homed(value, forms: list[str]):
+    """value (an answer: a text, or lists and dicts of them) with the build's folder (each of its forms: as given, with
+    /, and its real path, as a Mac's /var is /private/var) shown as SHOWN_HOME in each text, and the rest of a path in
+    it written with /, on every system. (Never in an answer's JSON, where a Windows path's backslashes are doubled.)"""
+    at_root = re.compile("(?:" + "|".join(map(re.escape, sorted(set(forms), key=len, reverse=True))) +
+                         r")((?:[\\/][^\\/\"'<>\n:]*)*)")
+    def walk(v):
+        """v, shown."""
+        if isinstance(v, str):
+            return at_root.sub(lambda m: SHOWN_HOME + m.group(1).replace("\\", "/"), v)
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        if isinstance(v, dict):
+            return {walk(k) if isinstance(k, str) else k: walk(x) for k, x in v.items()}
+        return v
+    return walk(value)
+
+
+def texts(value):
+    """Every text in an answer, its keys too."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, list):
+        for v in value:
+            yield from texts(v)
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            yield from texts(k)
+            yield from texts(v)
+
+
 def answer_key(url: str) -> str:
     """How the stand-in finds an answer: its path, and its query in order, without the access key."""
     u = urlparse(url)
@@ -233,21 +262,22 @@ def page(name: str, cfg: dict, data: dict) -> bytes:
     beside it, the stand-in and its data before the app's script, and a policy that lets nothing leave the browser but
     a short link's set, asked for."""
     from hoard import server
-    from hoard.safety import inline_scripts
+    from hoard.safety import content_security_policy
     src = server.page_source(name, cfg)
     given = b"const keyed = url => "
     if src.count(given) != 1:
         raise SystemExit("The page's keyed() isn't as the demo expects (scripts/build_site_demo.py)")
     src = src.replace(given, b"const keyed = url => window.HOARD_DEMO ? window.HOARD_DEMO.keyed(url) : ", 1)
     src = src.replace(b'url("/fonts/', b'url("fonts/')
+    # the page's own scripts, by their hashes as Hoard's server gives them (safety.content_security_policy): the
+    # stand-in is a file, and its data is JSON that's never run
+    hashes = re.search(r"script-src ([^;]+);", content_security_policy(src)).group(1).replace("'none'", "").strip()
     blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("<", "\\u003c")
     head = (f'<script type="application/json" id="demo-data">{blob}</script>\n'
             f'<script src="{STAND_IN}"></script>\n').encode()
     if src.count(b"\n<script>\n") != 1:
         raise SystemExit("The page's script isn't where the demo expects it (scripts/build_site_demo.py)")
     src = src.replace(b"\n<script>\n", b"\n" + head + b"<script>\n", 1)
-    hashes = " ".join("'sha256-" + base64.b64encode(hashlib.sha256(s.replace(b"\r\n", b"\n")).digest()).decode() + "'"
-                      for s in inline_scripts(src) if s.strip() and not s.lstrip().startswith(b"{"))
     policy = (f"default-src 'none'; script-src 'self' {hashes}; style-src 'self' 'unsafe-inline'; font-src 'self'; "
               f"img-src 'self' data: {' '.join(IMAGE_HOSTS + PHOTO_HOSTS)}; connect-src {SHARE_SERVER}; "
               "base-uri 'none'; form-action 'none'")
@@ -277,9 +307,11 @@ def build(out: Path, root: Path) -> None:
     for need in ("/api/library", "/api/sets", "/api/settings", "/api/vpm"):
         if need not in answers:
             raise SystemExit(f"The walk through the pages never asked for {need}: see STEPS (scripts/build_site_demo.py)")
+    forms = [str(root), root.as_posix(), str(root.resolve()), root.resolve().as_posix()]
+
     def home(text: str) -> str:
         """The build's folder, in what's shown, as SHOWN_HOME."""
-        return text.replace(str(root), SHOWN_HOME)
+        return homed(text, forms)
 
     def rekeyed(key: str) -> str:
         """An answer's key with the build's folder in its query (as a page asks for it) as SHOWN_HOME."""
@@ -287,8 +319,8 @@ def build(out: Path, root: Path) -> None:
         query = sorted((k, home(v)) for k, v in parse_qsl(u.query, keep_blank_values=True))
         return u.path + ("?" + urlencode(query) if query else "")
 
-    shown = {rekeyed(k): json.loads(home(json.dumps(v))) for k, v in answers.items()}
-    if str(root) in json.dumps(shown):
+    shown = {rekeyed(k): homed(v, forms) for k, v in answers.items()}
+    if any(root.name in t for t in texts(shown)):   # (its name: hoard-demo-..., in any of its forms)
         raise SystemExit("The build's own folder is still in the demo's answers (scripts/build_site_demo.py)")
     # "New here" notes (shared.js's NEW_SPOTS) are for someone who's updated Hoard: seen, in the demo
     spots = re.findall(r'\{ id: "([a-z0-9-]+)", at:', (REPO / "hoard" / "web" / "shared.js").read_text("utf-8"))

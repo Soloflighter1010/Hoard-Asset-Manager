@@ -146,6 +146,12 @@
   // A set's code unpacked (hoard/sets.py's _pack, as the set viewer reads it): its JSON. Throws when it isn't one.
   async function unpack(code) {
     if (!code.startsWith("H1.") || code.length > 256 * 1024) throw new Error("That isn't a Hoard set code. A set's code starts with H1.");
+    try { return await unpacked(code); }
+    catch (e) { throw e instanceof TooLarge ? e : new Error("That set code is damaged, or cut short: copy all of it, and try again."); }
+  }
+  class TooLarge extends Error {}
+  // A set code's JSON (unpack, which says what's wrong with one in Hoard's words).
+  async function unpacked(code) {
     const b64 = code.slice(3).replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(atob(b64 + "===".slice((b64.length + 3) % 4)), c => c.charCodeAt(0));
     const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")).getReader(), parts = [];
@@ -154,18 +160,18 @@
       const { done, value } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 1024 * 1024) { reader.cancel(); throw new Error("That set is too large."); }
+      if (size > 1024 * 1024) { reader.cancel(); throw new TooLarge("That set is too large."); }
       parts.push(value);
     }
     return JSON.parse(new TextDecoder().decode(await new Blob(parts).arrayBuffer()));
   }
   // A product a shared set or a set's file brings, checked as Hoard checks one: its store, name, creator, store page
   // and picture (from its store's own host). null when it isn't one.
-  function product(store, name, creator, url, picture, adult) {
+  function product(store, id, name, creator, url, picture, adult) {
     store = String(store || "").toLowerCase();
     name = text(name, 300);
     if (!PICTURE_HOSTS[store] || !name) return null;
-    return { store, name, creator: text(creator, 200), url: https(url, [STORE_SITES[store]], true),
+    return { store, id: text(id == null ? "" : String(id), 120), name, creator: text(creator, 200), url: https(url, [STORE_SITES[store]], true),
              picture: https(picture, PICTURE_HOSTS[store]), adult: adult === true || adult === 1 };
   }
   // A shared set from its code, or a link with it (hoard/sets.py's from_code).
@@ -174,7 +180,7 @@
     if (code.includes("#")) code = code.split("#")[1];
     const doc = await unpack(code.replace(/\s+/g, ""));
     if (!doc || doc.v !== 1 || !Array.isArray(doc.i)) throw new Error("That isn't a Hoard set code.");
-    const items = doc.i.slice(0, 500).filter(Array.isArray).map(r => product(r[0], r[2], r[3], r[4], r[5], r[6])).filter(Boolean);
+    const items = doc.i.slice(0, 500).filter(Array.isArray).map(r => product(r[0], r[1], r[2], r[3], r[4], r[5], r[6])).filter(Boolean);
     if (!items.length) throw new Error("That set has no products Hoard can show.");
     const photos = (Array.isArray(doc.p) ? doc.p.slice(0, 8) : []).map(u => https(u, PHOTO_HOSTS)).filter(Boolean);
     const note = typeof doc.d === "string" ? doc.d.split(/\r?\n/).slice(0, 20).map(l => text(l, 1000)).join("\n").trim() : "";
@@ -185,7 +191,7 @@
     const s = raw && raw.format === "hoard-set" && raw.version === 1 && raw.set;
     if (!s || !Array.isArray(s.items) || !text(s.name, 60)) throw new Error("That file isn't a set's or wishlist's JSON.");
     const known = s.products && typeof s.products === "object" ? s.products : {};
-    const items = s.items.slice(0, 500).map(k => { const p = known[k] || {}; return product(p.store, p.name, p.creator, p.url || p.page, p.thumbnail || p.picture, p.adult); })
+    const items = s.items.slice(0, 500).map(k => { const p = known[k] || {}; return product(p.store, p.id, p.name, p.creator, p.url || p.page, p.thumbnail || p.picture, p.adult); })
       .filter(Boolean);
     return { name: text(s.name, 60), note: typeof s.note === "string" ? s.note.slice(0, 4000) : "",
              photos: (Array.isArray(s.photos) ? s.photos.slice(0, 8) : []).map(u => https(u, PHOTO_HOSTS)).filter(Boolean),
@@ -225,19 +231,23 @@
     let name = got.name;
     for (let n = 2; broughtIn && view.sets.some(s => s.name === name); n++) name = `${got.name} (${n})`;
     const id = Math.random().toString(16).slice(2, 10);
+    const seen = new Set();
     const items = got.items.map(p => {
-      const mine = library.find(i => i.tag_key === p.key) ||
+      // the library's own product: by its key, its store page, its id there, or its name (as Hoard matches them)
+      const mine = library.find(i => i.tag_key === p.key) || (p.url && library.find(i => i.url === p.url)) ||
+                   (p.id && library.find(i => i.store === p.store && String(i.id) === p.id)) ||
                    library.find(i => i.store === p.store && i.name.toLowerCase() === String(p.name).toLowerCase());
-      return { key: mine ? mine.tag_key : `${p.store}:${p.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`, store: p.store,
+      return { key: mine ? mine.tag_key : `${p.store}:${p.id || p.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}`, store: p.store,
                name: mine ? mine.name : p.name, creator: mine ? mine.creator : p.creator, url: (mine && mine.url) || p.url,
                pic: "", picture: (mine && mine.thumbnail) || p.picture, owned: !!mine, lib: null, download: null, local: false,
                placeholder: false, mark: null, adult: !!(p.adult || (mine && mine.adult)) };
-    });
+    }).filter(i => !seen.has(i.key) && seen.add(i.key));   // (each product once, as Hoard keeps a set)
     view.sets.push({ id, name, note: got.note || "", dependencies: [], photos: got.photos || [], marks: {}, photo_p: [],
                      cover: null, short: null, short_ended: null, items, ...(got.kind === "wishlist" ? { kind: "wishlist" } : {}) });
     summary.push({ id, name, kind: got.kind === "wishlist" ? "wishlist" : null, items: items.map(i => i.key),
                    owned: items.filter(i => i.owned).length, adult: items.some(i => i.adult) });
-    keep("/api/sets", "/api/library");
+    downloadsSets();
+    keep("/api/sets", "/api/library", "/api/assets");
     return id;
   }
 
@@ -272,8 +282,20 @@
       short.items = one.items.map(i => i.key);
       short.owned = short.items.filter(k => byKey.has(k)).length;
     } else return needs("That change to a set");
-    keep("/api/sets", "/api/library");
+    downloadsSets();
+    keep("/api/sets", "/api/library", "/api/assets");
     return json({ ok: true });
+  }
+
+  // Downloads' own list of the sets (hoard/api/downloads.py's), from the Sets tab's: each set with what of it is
+  // downloaded, so a set made, renamed or deleted shows there too.
+  function downloadsSets() {
+    const downloads = at("/api/assets"), view = at("/api/sets");
+    if (!downloads || !view) return;
+    const downloaded = new Set((downloads.assets || []).map(a => a.tag_key)), was = new Map((downloads.sets || []).map(s => [s.id, s]));
+    downloads.sets = view.sets.map(s => ({ ...(was.get(s.id) || {}), id: s.id, name: s.name, note: s.note || "",
+                                           ...(s.kind ? { kind: s.kind } : {}), items: s.items.map(i => i.key).filter(k => downloaded.has(k)),
+                                           adult: s.items.some(i => i.adult) }));
   }
 
   // Settings: how Hoard looks (its theme, style, text and the rest) changes here; the rest needs Hoard.
@@ -366,9 +388,14 @@
     history[name] = (s, title, url) => real(s, title, url === undefined ? url : here(String(url)));
   }
   // A link opened in a new tab (middle click, or with a key held) opens the demo's page, not the website's.
+  // (for that click only: the link's own address is back straight after, for the app's tabs to go on working)
   const newTab = e => {
     const a = e.target.closest && e.target.closest("a[href^='/']");
-    if (a && (e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey)) a.setAttribute("href", here(a.getAttribute("href")));
+    if (!a || !(e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey)) return;
+    const was = a.getAttribute("href"), demo = here(was);
+    if (demo === was) return;
+    a.setAttribute("href", demo);
+    setTimeout(() => { if (a.getAttribute("href") === demo) a.setAttribute("href", was); });
   };
   window.addEventListener("click", newTab, true);
   window.addEventListener("auxclick", newTab, true);

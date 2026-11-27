@@ -105,8 +105,7 @@ class TryHoard(IsolatedTestCase):
 
     def code(self) -> str:
         """A set's code, as Hoard shares one: a product in the demo's library, and one that isn't."""
-        os.environ.setdefault("HOARD_DATA_DIR", tempfile.mkdtemp())
-        from hoard import sets
+        from hoard import sets   # (in this test's own data folder: IsolatedTestCase)
         owned = next(p for p in self.data["products"] if p["place"] == "library")
         got, _ = sets.share_code({"name": "Party night", "note": "Shared with you", "items": ["a", "b"], "products": {
             "a": {"store": owned["store"], "id": owned["id"], "name": owned["name"], "creator": owned["creator"],
@@ -200,6 +199,43 @@ class TryHoard(IsolatedTestCase):
         self.assertIn("needs Hoard on your computer", self.page.locator(".demo-note").text_content())
         self.assertEqual(self.page.locator(".demo-note a").get_attribute("href"), "/#download")
 
+    def test_a_set_shows_in_downloads_too(self):
+        """Downloads keeps its own list of the sets: one made, renamed or deleted shows there as in the Library."""
+        self.signed_in()
+        key = self.data["answers"]["/api/assets"]["assets"][0]["tag_key"]
+        made = self.evaluate("key => fetch('/api/sets', {method: 'POST', body: JSON.stringify({action: 'create', name: 'Mine', items: [key]})}).then(r => r.json())", key)
+        downloads = lambda: {s["id"]: s for s in self.evaluate("fetch('/api/assets').then(r => r.json()).then(d => d.sets)")}  # noqa: E731
+        self.assertEqual((downloads()[made["made"]]["name"], downloads()[made["made"]]["items"]), ("Mine", [key]))
+        self.evaluate("id => fetch('/api/sets', {method: 'POST', body: JSON.stringify({action: 'rename', id, name: 'Ours'})})", made["made"])
+        self.assertEqual(downloads()[made["made"]]["name"], "Ours")
+        spooky = next(s["id"] for s in self.data["answers"]["/api/sets"]["sets"] if s["name"] == "Spooky night")
+        self.evaluate("id => fetch('/api/sets', {method: 'POST', body: JSON.stringify({action: 'delete', id})})", spooky)
+        self.assertNotIn(spooky, downloads())
+
+    def test_a_tab_opened_in_a_new_tab(self):
+        """Ctrl+click on a tab opens the demo's own page in a new tab, and the tab goes on working as one here."""
+        self.signed_in()
+        tab = self.page.locator("nav.apptabs a", has_text="Downloads")
+        with self.page.context.expect_page() as opened:
+            tab.click(modifiers=["Control"])
+        self.assertTrue(opened.value.url.endswith("/demo/downloads"), opened.value.url)
+        opened.value.close()
+        self.page.wait_for_timeout(100)
+        self.assertEqual(tab.get_attribute("href"), "/downloads", "its own address, back")
+        tab.click()
+        self.page.wait_for_function("document.querySelector('.apptabs a[aria-current]')?.textContent === 'Downloads'")
+        self.assertTrue(self.page.url.endswith("/demo/downloads"))
+        self.assertEqual(self.evaluate("performance.getEntriesByType('navigation').length"), 1, "in the page, not loaded again")
+
+    def test_a_damaged_code_says_so(self):
+        self.signed_in()
+        got = self.evaluate("fetch('/api/sets', {method: 'POST', body: JSON.stringify({action: 'import', code: 'H1.abc$'})}).then(r => r.json())")
+        self.assertEqual(got["error"], "That set code is damaged, or cut short: copy all of it, and try again.")
+        twice = self.code()
+        self.evaluate("code => fetch('/api/sets', {method: 'POST', body: JSON.stringify({action: 'import', code})})", twice)
+        party = self.evaluate("fetch('/api/sets').then(r => r.json()).then(d => d.sets.find(s => s.name === 'Party night'))")
+        self.assertEqual(len(party["items"]), len({i["key"] for i in party["items"]}), "each product once")
+
     def test_the_policy(self):
         html = self.root.joinpath("demo", "index.html").read_text("utf-8")
         policy = html.split('http-equiv="Content-Security-Policy" content="', 1)[1].split('"', 1)[0]
@@ -208,6 +244,25 @@ class TryHoard(IsolatedTestCase):
         self.assertNotIn("hoard-demo-", html, "the build's own folder is never shown")
         self.signed_in()
         self.assertEqual([e for e in self.errors if "Content Security Policy" in e], [], "everything it runs is allowed")
+
+
+class ShownPaths(IsolatedTestCase):
+    """The build's own folder is never in the demo: on Windows, a Mac (whose /var is /private/var) or Linux."""
+
+    def test_every_form_of_it(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("build_site_demo", REPO / "scripts" / "build_site_demo.py")
+        demo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(demo)
+        windows = "C:\\Users\\Someone\\AppData\\Local\\Temp\\hoard-demo-ab12"
+        got = demo.homed({"path": windows + "\\Unity\\My Avatar\\Assets", "said": f"Couldn't read {windows}\\x.zip: denied",
+                          windows + "\\Hoard": [1, "/var/folders/q/hoard-demo-cd34/Hoard/Jinxxy"]},
+                         [windows, "/var/folders/q/hoard-demo-cd34", "/private/var/folders/q/hoard-demo-cd34"])
+        self.assertEqual(got, {"path": "C:/Users/You/Unity/My Avatar/Assets", "said": "Couldn't read C:/Users/You/x.zip: denied",
+                               "C:/Users/You/Hoard": [1, "C:/Users/You/Hoard/Jinxxy"]})
+        self.assertEqual(demo.homed("/private/var/folders/q/hoard-demo-cd34/Hoard", ["/var/folders/q/hoard-demo-cd34",
+                                    "/private/var/folders/q/hoard-demo-cd34"]), "C:/Users/You/Hoard")
+        self.assertFalse(any("hoard-demo-" in t for t in demo.texts(got)))
 
 
 if __name__ == "__main__":
