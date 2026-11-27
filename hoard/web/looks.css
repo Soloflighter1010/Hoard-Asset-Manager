@@ -153,7 +153,8 @@ body.less-motion .pj-tile-art { transition: none; }
 .ext-ph select { flex: 1 1 120px; min-width: 0; width: auto; }
 .ext-ph > button { width: auto; max-width: 100%; margin: 0; white-space: normal; height: auto; min-height: var(--btn-h-sm, 34px);
   padding-top: 4px; padding-bottom: 4px; line-height: 1.25; }   /* (its words on two lines in a narrow tile, never cut off) */
-.converted { margin-right: 6px; color: var(--dust); font-size: 12.5px; }
+/* a wishlist product's price in the store's own currency, beside the badge with yours (Convert prices to: #451) */
+.store-price { color: var(--dust); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* what a wishlist's products, or a set's not yours yet, cost in all (issue #381) */
 .price-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 6px 0 12px; font-size: 14px; color: var(--dust); }
 .price-total strong { color: var(--bone); font-size: 15px; }

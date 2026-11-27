@@ -5643,12 +5643,16 @@ document.addEventListener("change", async e => {
   }
   setViewShown = null; drawSets();
 });
-function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
+// What a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed. Converted to
+// your currency (Convert prices to), that's the badge, the one you'd read first, and the store's own price is beside it,
+// smaller (issue #451: the estimate was faint grey beside the store's price in bold).
+function priceHTML(i) {
   if (!i.price || !featureOn("prices")) return "";
-  const amount = convertedPrice(i.price);
-  const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>`;
-  return estimate + `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
-    (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
+  const amount = convertedPrice(i.price), trend = cheaper(i) ? " down" : dearer(i) ? " up" : "";
+  const was = i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "";
+  if (amount == null) return `<span class="price${trend}" translate="no">${esc(i.price.text)}</span>` + was;
+  return `<span class="price${trend}" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>` +
+    ` <span class="store-price" translate="no">${esc(i.price.text)}</span>` + was;
 }
 // What a set (or wishlist) has: how many downloaded, owned but not downloaded, and still to buy, in words.
 function setCounts(s) {

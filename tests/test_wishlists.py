@@ -442,6 +442,16 @@ class InHoard(IsolatedTestCase):
             hoodie = page.locator(".slot.ext", has_text="Fox Hoodie")
             self.assertEqual(hoodie.locator(".price.down").inner_text(), "1,200 JPY")
             self.assertEqual(" ".join(hoodie.locator(".was").inner_text().split()), "was 1,500 JPY", "struck through, read as was")
+            # Issue #451: converted to your currency, that's the badge you read first, the store's price beside it, smaller
+            page.route("**/api/wishlists/rates*", lambda route: route.fulfill(
+                status=200, content_type="application/json", body=json.dumps({"base": "USD", "rates": {"USD": 1, "JPY": 150}})))
+            page.locator("[data-wishconvert]").select_option("USD")
+            page.locator(".slot.ext", has_text="Fox Hoodie").locator(".store-price").wait_for()
+            hoodie = page.locator(".slot.ext", has_text="Fox Hoodie")
+            self.assertEqual(hoodie.locator(".price.down").inner_text(), "≈ $8")
+            self.assertEqual(hoodie.locator(".store-price").inner_text(), "1,200 JPY")
+            size = lambda sel: float(hoodie.locator(sel).evaluate("e => parseFloat(getComputedStyle(e).fontSize) * (getComputedStyle(e).fontWeight / 400)"))  # noqa: E731
+            self.assertGreater(size(".price"), size(".store-price"), "yours larger and bolder than the store's")
             self.assertEqual(page.locator('details[data-fold="wish-yours"] .nm-t').all_inner_texts(), ["Mochi Boots"],
                              "yours: under Yours already")
             self.assertEqual(page.locator(".slot.wanted", has_text="Mochi Boots").count(), 0, "not one to buy")
