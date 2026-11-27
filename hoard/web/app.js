@@ -81,22 +81,19 @@ async function load(rescan = false, cached = false) {
   drawHeap();
   return (current.assets || current.items || []).length;
 }
-// The browser draws the page: what's changed so far shows (the tab just chosen) before a view's drawn, which can
-// take a moment in a large library. (A page out of sight draws nothing: it goes on soon all the same.)
-const painted = () => new Promise(done => { requestAnimationFrame(() => setTimeout(done)); setTimeout(done, 100); });
 // Change the view without replacing the document, windows, access key, data cache or background polling. The last
-// tab asked for wins (issue #435): one clicked (asked) is marked at once, and drawn once that's shown; a switch that's
-// still under way when another is asked for stops where it is, so it never finishes after the later one, or draws a
-// view no longer wanted. (Back, Forward and the first start draw at once, as the browser keeps the page's place.)
-// A switch overtaken by another isn't done until that one is: what waits on it (a link opening a product, Downloads
-// opened to choose for a project) carries on once the page is where it ends up.
-function activateView(restoreWindows = true, asked = false) {
-  const run = switchView(restoreWindows, asked);
+// tab asked for wins (issue #435): its tab is marked first, and the view is shown and drawn from what Hoard has read
+// before the click is done (the pages, and their tests, count on that), then read again; a switch whose read is still
+// under way when another is asked for stops there, so it never finishes after the later one, or draws a view no
+// longer wanted. A switch overtaken by another isn't done until that one is: what waits on it (a link opening a
+// product, Downloads opened to choose for a project) carries on once the page is where it ends up.
+function activateView(restoreWindows = true) {
+  const run = switchView(restoreWindows);
   APP.latest = run;
   return run;
 }
 // The switch itself (activateView): undefined once it's done, or the one that overtook it, to wait for.
-async function switchView(restoreWindows, asked) {
+async function switchView(restoreWindows) {
   const turn = ++APP.turn;
   const next = /\/downloads$/.test(location.pathname) ? "downloads" : "library";
   markBar(next === "library" ? "/" : "/downloads");   // (until the view says which of its pages it's on)
@@ -106,8 +103,6 @@ async function switchView(restoreWindows, asked) {
   // open, as Back closes them) writes its own place over it. A later switch's own, once it's begun.
   NAV.quiet = true;
   try {
-    if (asked) await painted();
-    if (turn !== APP.turn) return APP.latest;
     if (next !== APP.active) {
       APP.views[APP.active].closeDetail();
       APP.active = next; APP.generation++;
@@ -140,7 +135,7 @@ function navigateApp(raw) {
   if (url.origin !== location.origin || !["/", "/index.html", "/downloads"].includes(url.pathname)) { location.href = raw; return; }
   if (url.href !== location.href) history.pushState(null, "", url.pathname + url.search + url.hash);
   NAV.at = null; NAV.back = null;
-  return activateView(true, true);
+  return activateView();
 }
 // Adapt old shared helpers to the active view; a unique window (Stores/Look inside) uses its owning view.
 function connectViews() {
