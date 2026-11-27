@@ -512,9 +512,11 @@ class InHoard(IsolatedTestCase):
             page.goto(self.srv.entry_url())
             tile = lambda name: page.locator("#grid .slot", has_text=name)   # noqa: E731
             tile("Straw Hat").wait_for()
-            slow = lambda route: (time.sleep(3), route.continue_())   # noqa: E731
-            page.route("**/api/library*", slow)
-            page.route("**/api/assets*", slow)
+            # the library's reads as slow as a large one's, in the page (a route handler that waited would hold up
+            # Playwright itself, and this test's own waits with it)
+            page.evaluate("""() => { const f = window.fetch;
+                window.fetch = (url, ...rest) => /\\/api\\/(?:library|assets)/.test(String(url))
+                  ? new Promise(done => setTimeout(done, 3000)).then(() => f(url, ...rest)) : f(url, ...rest); }""")
             tile("Straw Hat").click(button="right")
             page.locator(".selmenu [role=menuitem]", has_text="Mark as 18+").click()
             started = time.monotonic()
