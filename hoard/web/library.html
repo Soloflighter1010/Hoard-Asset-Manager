@@ -95,6 +95,7 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .bar[data-fit="stack"] .search { order: 1; }
 .bar[data-fit="stack"] :is(.bar-side, .apptabs, .tools) { flex-wrap: wrap; }
 .bar[data-fit="stack"] .bar-end { justify-content: flex-start; }
+.bar[data-fit="stack"] .barmenu { right: auto; left: 0; }   /* (Menu at the bar's left: it opens rightwards, on the screen) */
 /* Hoard's own links (issue #270): its version, GitHub, Discord, Hoard updates (new versions of Hoard, never your
    assets') and Report a problem, between the search and Menu. In a window without room for them, fitBar puts them in
    the Menu instead (data-links="menu"); they're still measured there, so the bar doesn't flip back and forth. */
@@ -104,7 +105,8 @@ a { color: var(--gold-text); text-underline-offset: 3px; }
 .star-us svg.star { vertical-align: -2px; margin-right: 4px; color: var(--gold); }   /* (issue #380) */
 .bar-ver { font-variant-numeric: tabular-nums; }
 .bar-links .bar-upd { color: var(--gold-text); font-weight: 700; white-space: nowrap; }
-.bar[data-links="menu"] .bar-links { position: absolute; visibility: hidden; pointer-events: none; }
+.bar[data-links="menu"] .bar-links { position: absolute; left: 0; top: 0; max-width: 100%; overflow: hidden;
+  visibility: hidden; pointer-events: none; }   /* (kept inside the window: on a phone it made the page wider than the screen) */
 .barmenu-links { display: none; }
 .bar[data-links="menu"] .barmenu-links { display: grid; gap: 2px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--seam); }
 .barmenu-ver { padding: 4px 12px; color: var(--dust); font-size: 12px; font-weight: 600; }
@@ -1221,7 +1223,7 @@ details.task summary b { overflow-wrap: anywhere; }
 
 @media (max-width: 860px) {
   .shelf { position: static; padding: 6px 12px 0; flex-wrap: wrap; }
-  .shelf-tools { order: -1; width: 100%; padding: 0 0 6px; }
+  .shelf-tools { order: -1; width: 100%; padding: 0 0 6px; flex-wrap: wrap; }   /* (Downloads' tools: on two lines on a phone) */
   .shelf-tools .zoom { display: none; }
   .win { top: 8px; width: calc(var(--vw) - 16px); max-height: calc(var(--vh) - 16px); }
   body.side-folded .layout { grid-template-columns: minmax(0, 1fr); }
@@ -1325,6 +1327,15 @@ input[type=checkbox], input[type=radio] { accent-color: var(--gold); }
 body.less-motion .tour-ring, body.less-motion .tour-card { transition: none; }
 body.less-motion .tour-try::before { animation: none; }
 @media (prefers-reduced-motion: reduce) { .tour-ring, .tour-card { transition: none; } .tour-try::before { animation: none; } }
+/* a phone (Try Hoard on the website is mostly opened on one): the logo and the pages in one row you can scroll sideways,
+   not two lines of tabs over the search, and nothing wider than the screen */
+@media (max-width: 560px) {
+  .bar[data-fit="stack"] > .bar-side:first-child { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    margin: 0 -16px; padding: 0 16px; }
+  .bar[data-fit="stack"] > .bar-side:first-child::-webkit-scrollbar { display: none; }
+  .bar[data-fit="stack"] > .bar-side:first-child .apptabs { flex-wrap: nowrap; }
+  .bar[data-fit="stack"] > .bar-side:first-child :is(.apptabs a, .apptabs button) { white-space: nowrap; }
+}
 </style>
 </head>
 <body>
