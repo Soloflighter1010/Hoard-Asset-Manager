@@ -2862,5 +2862,12 @@
  "They're hidden while Products for adults is turned off.": "「成人向けの商品」がオフの間は表示されません。",
  "Left out, still downloading in BB's Library Manager: {0} ({1}).": "BB's Library Managerでまだダウンロード中のため取り込まないもの: {0}({1})。",
  "Can't be brought in: {0} ({1}).": "取り込めないもの: {0}({1})。",
- "Left out, with a meta.json that can't be read: {0}.": "meta.jsonを読み込めないため取り込まないもの: {0}。"
+ "Left out, with a meta.json that can't be read: {0}.": "meta.jsonを読み込めないため取り込まないもの: {0}。",
+ "Tools Hoard works with": "Hoardと一緒に使うツール",
+ "Hoard brings in its library: Settings, Bring in from KonoAsset...": "Hoardがそのライブラリーを取り込みます(設定の「KonoAssetから取り込む...」)",
+ "Hoard brings in its library: Settings, Bring in from BB's Library Manager...": "Hoardがそのライブラリーを取り込みます(設定の「BB's Library Managerから取り込む...」)",
+ "Projects keeps the same list of projects and package listings": "プロジェクトは同じプロジェクトの一覧とパッケージのリスティングを使います",
+ "Projects keeps the same list of projects": "プロジェクトは同じプロジェクトの一覧を使います",
+ "Hoard for Unity is laid out and released as it does": "Hoard for Unityはその形で作られ、リリースされます",
+ "Builds Hoard for Unity's listing for the Creator Companion": "Creator Companion向けのHoard for Unityのリスティングを作ります"
 }

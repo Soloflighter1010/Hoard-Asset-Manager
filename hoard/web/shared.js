@@ -3031,7 +3031,7 @@ async function showAcks() {
   box.dataset.read = "1";
   box.innerHTML = (await r.json()).groups.map(g => `<h4>${esc(tr(g.title))}</h4><ul>${g.items.map(i =>
     `<li><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(i.name)}</a>` +
-    `<span class="lic" translate="no">${esc(i.license)}</span>` +
+    (i.about ? `<span class="lic">${esc(tr(i.about))}</span>` : `<span class="lic" translate="no">${esc(i.license)}</span>`) +   // (a tool Hoard works with: what it does with it)
     (i.text ? `<button class="linkish" data-ack="${esc(i.name)}">${esc(tr("License"))}</button>` : "") + `</li>`).join("")}</ul>`).join("");
 }
 // Show one of the Acknowledgements' license texts.

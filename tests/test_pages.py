@@ -626,6 +626,13 @@ class AccessKey(IsolatedTestCase):
         self.assertIn("BSD-2-Clause", page.locator("#acksList li", has_text="Apprise").inner_text())
         self.assertGreater(page.locator("#acksList li").count(), 40)
         self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
+        # issue #438: the tools Hoard works with, each with what Hoard does with it (none of them is in Hoard)
+        kono = page.locator("#acksList li", has_text="KonoAsset")
+        self.assertIn("Hoard brings in its library", kono.inner_text())
+        self.assertEqual(kono.locator("a").get_attribute("href"), "https://github.com/siloneco/KonoAsset")
+        self.assertEqual(page.locator("#acksList li", has_text="BB's Library Manager").locator("a").get_attribute("href"),
+                         "https://github.com/BunBnnuy/BBLM")
+        self.assertEqual(kono.get_by_role("button", name="License").count(), 0)
         page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
         dialog = page.locator("dialog.hd[open]")
         dialog.locator(".ack-text").wait_for()

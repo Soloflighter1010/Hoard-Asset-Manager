@@ -2862,5 +2862,12 @@
  "They're hidden while Products for adults is turned off.": "'성인용 상품'이 꺼져 있는 동안에는 숨겨져요.",
  "Left out, still downloading in BB's Library Manager: {0} ({1}).": "BB's Library Manager에서 아직 다운로드 중이라 빼는 것: {0}({1}).",
  "Can't be brought in: {0} ({1}).": "가져올 수 없는 것: {0}({1}).",
- "Left out, with a meta.json that can't be read: {0}.": "meta.json을 읽을 수 없어서 빼는 것: {0}."
+ "Left out, with a meta.json that can't be read: {0}.": "meta.json을 읽을 수 없어서 빼는 것: {0}.",
+ "Tools Hoard works with": "Hoard와 함께 쓰는 도구",
+ "Hoard brings in its library: Settings, Bring in from KonoAsset...": "Hoard가 그 라이브러리를 가져옵니다(설정의 “KonoAsset에서 가져오기...”)",
+ "Hoard brings in its library: Settings, Bring in from BB's Library Manager...": "Hoard가 그 라이브러리를 가져옵니다(설정의 “BB's Library Manager에서 가져오기...”)",
+ "Projects keeps the same list of projects and package listings": "프로젝트는 같은 프로젝트 목록과 패키지 리스팅을 씁니다",
+ "Projects keeps the same list of projects": "프로젝트는 같은 프로젝트 목록을 씁니다",
+ "Hoard for Unity is laid out and released as it does": "Hoard for Unity는 그 방식대로 만들어지고 릴리스됩니다",
+ "Builds Hoard for Unity's listing for the Creator Companion": "Creator Companion용 Hoard for Unity 리스팅을 만듭니다"
 }

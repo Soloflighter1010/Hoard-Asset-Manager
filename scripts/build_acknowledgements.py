@@ -19,8 +19,9 @@ import site_chrome  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 PAGE = REPO / "site" / "acknowledgements.html"
 WHERE = {"all": "Every copy of Hoard", "windows": "The Windows app", "mac": "The Mac app", "linux": "The Linux apps",
-         "build": "Only to build the apps"}
-DESCRIPTION = "Everything Hoard uses or ships, from the browser it drives to the fonts it shows, with each one's license."
+         "build": "Only to build the apps", "with": "Works alongside Hoard"}
+DESCRIPTION = ("Everything Hoard uses or ships, from the browser it drives to the fonts it shows, with each one's license, "
+               "and the tools it works with.")
 
 
 def where(value: str) -> str:
@@ -36,7 +37,8 @@ def render() -> str:
     for g in credits["groups"]:
         rows = "\n".join(
             f'          <li><a href="{html.escape(i["url"])}">{html.escape(i["name"])}</a>'
-            f' <span class="lic">{html.escape(i["license"])}</span> <span class="where">{html.escape(where(i["in"]))}</span></li>'
+            f' <span class="lic">{html.escape(i.get("license") or i["about"])}</span>'   # (a tool Hoard works with: what it does with it)
+            f' <span class="where">{html.escape(where(i["in"]))}</span></li>'
             for i in g["items"])
         groups.append(f"""      <section class="acks" aria-labelledby="ack{len(groups)}">
         <h2 id="ack{len(groups)}">{html.escape(g["title"])}</h2>
