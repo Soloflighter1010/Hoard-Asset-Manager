@@ -245,17 +245,25 @@ def _kde_section(lines: list[str]) -> tuple[int, int] | None:
 def _kde_write(folder: Path, lines: list[str]) -> None:
     """Write the .directory file (keeping who may read it, as it was: anyone, when it's new), or take it away when
     nothing but headings is left in it."""
-    from .safety import write_file_safely
+    import tempfile
     path = folder / DIRECTORY
     if not [ln for ln in lines if ln.strip() and not ln.strip().startswith("[")]:
         path.unlink(missing_ok=True)
         return
     try:
-        mode = path.stat().st_mode & 0o777
+        mode = os.lstat(path).st_mode & 0o666
     except OSError:
         mode = 0o644
-    write_file_safely(path, "\n".join(lines) + "\n", root=folder)
-    path.chmod(mode)
+    fd, made = tempfile.mkstemp(prefix=".tmp-", dir=folder)   # (made new, given its mode, then put in place whole: never
+    try:                                                         #  through a link, nor changed after it's there)
+        with os.fdopen(fd, "wb") as w:
+            if hasattr(os, "fchmod"):
+                os.fchmod(w.fileno(), mode)
+            w.write(("\n".join(lines) + "\n").encode("utf-8"))
+        os.replace(made, path)
+    finally:
+        if os.path.exists(made):
+            os.unlink(made)
 
 
 def _kde_mark(folder: Path, icon: Path) -> bool:
