@@ -2846,6 +2846,19 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         page.mouse.up()
         self.assertEqual(page.locator("dialog[open]").count(), 0)
         page.keyboard.press("Escape")
+        # issue #436: with a larger text size (the page zoomed), it's still beside the pointer, and follows it
+        for size in (130, 150):
+            page.evaluate(f"document.documentElement.style.zoom = '{size / 100}'")
+            x, y = drag("Rusk", "Anko")
+            ghost.wait_for()
+            box = ghost.bounding_box()
+            self.assertTrue(x < box["x"] < x + 40 and y < box["y"] < y + 40, (size, "beside the pointer", x, y, box))
+            page.mouse.move(x + 30, y + 20)
+            self.assertAlmostEqual(ghost.bounding_box()["x"], box["x"] + 30, delta=2, msg=(size, "it follows the pointer"))
+            page.keyboard.press("Escape")
+            ghost.wait_for(state="detached")
+            page.mouse.up()
+        page.evaluate("document.documentElement.style.zoom = ''")
         self.assertEqual(self.errors, [])
         page.close()
 
