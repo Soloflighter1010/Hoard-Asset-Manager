@@ -248,11 +248,25 @@ class Applying(IsolatedTestCase):
         explorer.apply(cfg, self.exe, str(self.b), self.win)
         self.assertEqual([k for k in self.win.reg.keys if "hoard" in k], [])
 
-    def test_nothing_off_windows(self):
+    def test_off_windows_the_file_managers_have_it(self):
+        from hoard import filemanagers
+        asked = []
+        cfg = {"local_sync": str(self.a)}
         with mock.patch.object(explorer, "here", lambda: False), \
-                mock.patch.object(explorer, "Windows", side_effect=AssertionError("never asked")):
-            self.assertEqual(explorer.apply({"local_sync": str(self.a)}, self.exe), {"icon": False, "menu": False})
-        self.assertEqual(list(self.a.iterdir()), [])
+                mock.patch.object(explorer, "Windows", side_effect=AssertionError("never asked")), \
+                mock.patch.object(filemanagers, "apply", lambda *a: asked.append(a) or {"icon": True, "menu": False}):
+            self.assertEqual(explorer.apply(cfg, self.exe, "was"), {"icon": True, "menu": False})
+        self.assertEqual(asked, [(cfg, self.exe, "was")], "issue #411: Finder's, or Linux's file managers'")
+        self.assertEqual(list(self.a.iterdir()), [], "nothing of Windows'")
+
+    def test_which_file_manager(self):
+        from hoard import filemanagers
+        with mock.patch.object(explorer, "here", lambda: True):
+            self.assertEqual(explorer.where(), "explorer")
+        with mock.patch.object(explorer, "here", lambda: False), mock.patch.object(filemanagers, "kind", lambda: "finder"):
+            self.assertEqual(explorer.where(), "finder")
+        with mock.patch.object(explorer, "here", lambda: False), mock.patch.object(filemanagers, "kind", lambda: None):
+            self.assertIsNone(explorer.where())
 
 
 class WhatTheMenuAsks(IsolatedTestCase):
@@ -479,7 +493,7 @@ class InSettings(IsolatedTestCase):
                 (cfg.get("local_sync"), cfg.get("explorer"), was)) or {"icon": True, "menu": False}), \
                 mock.patch.object(explorer, "here", lambda: True), mock.patch.object(localsync, "tick"):
             got = self.post({})
-            self.assertEqual(got["explorer"], {"here": True, "on": True, "icon": False, "menu": False})
+            self.assertEqual(got["explorer"], {"here": True, "kind": "explorer", "on": True, "icon": False, "menu": False})
             self.assertEqual(applied, [], "only a change applies it")
             got = self.post({"folder": str(self.tmp / "Sync")})
             kept = self.srv.cfg["local_sync"]   # (as check_folder keeps it)
@@ -527,8 +541,10 @@ class OnThePage(IsolatedTestCase):
             self.assertEqual(errors, [])
             browser.close()
 
-    def test_the_switch_shows_on_windows_only(self):
+    def test_the_switch_names_the_file_manager(self):
         from playwright.sync_api import sync_playwright
+        shown = """[...document.querySelectorAll('#syncExplorerRow [data-fm]')].filter(e => !e.hidden)
+                   .map(e => e.dataset.fm + ':' + e.textContent.replace(/\\s+/g, ' ').trim())"""
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = browser.new_page()
@@ -539,4 +555,28 @@ class OnThePage(IsolatedTestCase):
             page.evaluate("showSyncFolder({ folder: 'D:\\\\Sync', skipped: [], last: {}, explorer: { here: true, on: false, icon: false } })")
             self.assertFalse(page.evaluate("document.querySelector('#syncExplorerRow').hidden"))
             self.assertFalse(page.evaluate("document.querySelector('#syncExplorer').checked"))
+            self.assertEqual(page.evaluate(shown), [   # (an older Hoard's answer, with no kind: Windows')
+                "explorer:Show it in File Explorer: Hoard's icon on the folder, and Add to Hoard when you right-click a file or folder",
+                "explorer:On Windows 11, Hoard's options are under Show more options."])
+            for kind, words, refused in (
+                    ("finder", ["finder:Show it in Finder: Hoard's icon on the folder, and Add to Hoard in Quick Actions when "
+                                "you right-click a file or folder", "finder:In Finder, Hoard's options are under Quick Actions."],
+                     "macOS didn't let Hoard put its icon on this folder (it has a custom icon of its own, or the folder "
+                     "can't be changed)."),
+                    ("files", ["files:Show it in your file manager: Hoard's icon on the folder, and Add to Hoard when you "
+                               "right-click a file or folder", "files:GNOME Files has Hoard's options under Scripts; Dolphin "
+                               "and Nemo show them with their own."],
+                     "Hoard couldn't put its icon on this folder (it has a custom icon of its own, or the folder can't be "
+                     "changed).")):
+                page.evaluate("k => showSyncFolder({ folder: '/home/me/Sync', skipped: [], last: {}, "
+                              "explorer: { here: true, kind: k, on: true, icon: false } })", kind)
+                self.assertEqual(page.evaluate(shown), words)
+                self.assertEqual(page.locator("#syncMsg").text_content(), refused)
+            page.evaluate("showSyncFolder({ folder: '/home/me/Sync', skipped: [], last: {}, "
+                          "explorer: { here: true, kind: 'files', on: true, icon: true, cant: ['gvfs'] } })")
+            self.assertEqual(page.locator("#syncMsg").text_content(),
+                             "In the Flatpak, GNOME Files and Nemo can't show Hoard's icon on the folder; Dolphin can.")
+            page.evaluate("showSyncFolder({ folder: '/home/me/Sync', skipped: [], last: {}, "
+                          "explorer: { here: true, kind: 'files', on: true, icon: true, menu: true } })")
+            self.assertEqual(page.locator("#syncMsg").text_content(), "")
             browser.close()

@@ -51,6 +51,10 @@ the field. The title bar says **Saved**.
     folder (never over one there) or lists a folder in Local where it is; on the sync folder, **Sync with Hoard now**
     and **Open in Hoard** are there too. On Windows 11 they're under **Show more options**. Uninstalling Hoard takes
     them away.
+  - **Show it in Finder** (a Mac) or **Show it in your file manager** (Linux: GNOME Files, Dolphin, Nemo; 5.2.0 beta
+    14): the same, with Hoard's options as Quick Actions in Finder, under **Scripts** in GNOME Files, and with the
+    file manager's own options in Dolphin and Nemo. In the Flatpak, only Dolphin shows the folder's icon. Once Hoard is
+    uninstalled, its options take themselves away the next time you choose one.
 - **Stores:** which stores Hoard shows and reads, with a few options:
   - Booth: **Include gifts** and **Include free downloads**.
   - Gumroad: **Include archived purchases**.
@@ -230,7 +234,7 @@ window, that needs a part that's off says so, and turns it on if you say so.
 
 - **Local:** your own packages, textures and materials ([Your own packages](Your-Own-Packages)): Local's tab, its
   products in Downloads, **Add your own**, and the **Local sync folder** setting. The sync folder is left as it is, and
-  Hoard doesn't look in it until Local is on again; File Explorer's **Add to Hoard** adds nothing meanwhile. A set's
+  Hoard doesn't look in it until Local is on again; **Add to Hoard** (in File Explorer, Finder or your file manager) adds nothing meanwhile. A set's
   placeholders stay: they aren't Local products.
 - **Sets and Wishlists:** [Sets](Sets), with your wishlists: their tab, the **Sets** group in the right-click menu,
   a product's **Sets** in its details, and a product dragged onto another to make a set. **Wishlists** and **Prices**

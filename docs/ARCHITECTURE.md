@@ -34,6 +34,7 @@ hoard/                 the app (python -m hoard); each piece of code exists once
   wishlists.py         wishlists: reading them from the stores and saved pages, and a product from its store link
   shortlinks.py        short links for shared sets: Hoard's share server (share/), through egress.send
   explorer.py          Windows' File Explorer (issue #410): the Local sync folder's icon, and Hoard's right-click options
+  filemanagers.py      the same in macOS's Finder and Linux's GNOME Files, Dolphin and Nemo (issue #411)
   backup.py            Backup and restore: settings, tags, sets, choices and the library list in one file
   jobs.py              background work, one job at a time: refresh, sign in or out, download, install the
                        browser; Schedule, the routine check
@@ -297,6 +298,16 @@ Both servers share the rules in their "web safety" section:
   made in one step, so never over a file), and anything else goes through Add to Local's own checks
   (`local.check_source`). The sync folder's `desktop.ini` and icon are made new (never through a link), and one
   that isn't Hoard's is left as it is; the uninstaller (`shell/installer/hooks.nsh`) takes away only what's Hoard's.
+- Finder's and Linux's file managers' right-click options (issue #411, `hoard/filemanagers.py`) are files in this
+  account's own folders (Quick Actions in `~/Library/Services`; `~/.local/share/nautilus/scripts`, `kio/servicemenus`,
+  `nemo/actions`), each running one script Hoard writes in its app-data folder (`file-manager/hoard-files`). It starts
+  the shell (or the AppImage, the Flatpak, or a Mac's app with `open -n`) with the same arguments as Explorer's, each
+  path made absolute and passed as its own argument, never through a shell's words; every path Hoard writes into a
+  script is quoted, and one a service menu's `Exec=` line can't quote isn't written there. The script takes Hoard's
+  options away once Hoard's program is gone. Only files that carry Hoard's mark and name this app-data folder's
+  script are ever taken away. The folder's icon is set with the file manager's own call (`osascript` with the paths
+  as arguments, `gio set`) or a line in its `.directory`, never over another icon, and its picture is made new, never
+  through a link.
 - Action endpoints only accept `Content-Type: application/json`, which other websites can't send
   without a CORS preflight that the servers never approve.
 - Every page carries a Content-Security-Policy that allows only its own inline script, by hash

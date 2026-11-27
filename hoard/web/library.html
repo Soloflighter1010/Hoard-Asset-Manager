@@ -1556,9 +1556,17 @@ body.less-motion .tour-try::before { animation: none; }
     <button class="ghost sm" id="syncUse">Use it</button>
     <button class="ghost sm" id="syncOff">Turn off</button></div>
   <div id="syncExplorerRow" hidden>
-    <label class="check"><input type="checkbox" id="syncExplorer"> Show it in File Explorer: Hoard's icon on the folder,
-      and Add to Hoard when you right-click a file or folder</label>
-    <p class="hint">On Windows 11, Hoard's options are under <b>Show more options</b>.</p>
+    <label class="check"><input type="checkbox" id="syncExplorer">
+      <span data-fm="explorer">Show it in File Explorer: Hoard's icon on the folder, and Add to Hoard when you right-click
+        a file or folder</span>
+      <span data-fm="finder" hidden>Show it in Finder: Hoard's icon on the folder, and Add to Hoard in Quick Actions when
+        you right-click a file or folder</span>
+      <span data-fm="files" hidden>Show it in your file manager: Hoard's icon on the folder, and Add to Hoard when you
+        right-click a file or folder</span></label>
+    <p class="hint" data-fm="explorer">On Windows 11, Hoard's options are under <b>Show more options</b>.</p>
+    <p class="hint" data-fm="finder" hidden>In Finder, Hoard's options are under <b>Quick Actions</b>.</p>
+    <p class="hint" data-fm="files" hidden>GNOME Files has Hoard's options under <b>Scripts</b>; Dolphin and Nemo show
+      them with their own.</p>
   </div>
   <p class="hint" id="syncMsg" role="status"></p>
   <div id="syncSkipped"></div>

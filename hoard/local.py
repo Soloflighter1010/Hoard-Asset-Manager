@@ -37,7 +37,8 @@ from .storage import write_document as write_file_safely
 LOCAL = STORE_DIRS["local"]
 MAX_FILES = 20000
 MAX_PICTURE = 20 * 1024 * 1024   # bytes: a bigger image isn't copied for the picture
-SKIP = {".ds_store", "thumbs.db", "desktop.ini", "_manifest.json", "asset.json"}   # system clutter, and Hoard's own
+# system clutter (Finder's Icon\r holds a folder's custom icon: issue #411), and Hoard's own
+SKIP = {".ds_store", "thumbs.db", "desktop.ini", "icon\r", "_manifest.json", "asset.json"}
 
 
 # Local's records are read, changed and saved whole (_manifest.json): one change at a time, so none is saved over
