@@ -16,7 +16,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 PYTHON = ("hoard", "scripts", "packaging")
-SCRIPTS = ("hoard/web/*.js", "hoard/web/*.html", "site/*.js", "share/*.mjs", "Website/*.js")
+SCRIPTS = ("hoard/web/*.js", "hoard/web/*.html", "site/*.js", "site/demo/*.js", "share/*.mjs", "Website/*.js")
 CSHARP = ("Packages/soloflighter.hoard/**/*.cs", "tests/unity/*.cs")   # (com.vrchat.core.bootstrap is VRChat's own)
 # a function: declared, or a const/let/var given an arrow function or a function expression
 JS_FUNCTION = re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|"

@@ -97,6 +97,8 @@ Hoard가 있으면 탭을 네 개나 열지 않아도 답을 알 수 있어요.
 ---
 
 <a id="install-windows"></a>
+**먼저 브라우저에서 써 보세요:** [Hoard 체험](https://hoard.furryup.link/demo/)에서는 실제 상품 라이브러리와 가짜 로그인으로 Hoard의 화면을 그대로 써 볼 수 있어요(영어). 거기서 무엇을 해도 브라우저 밖으로 나가지 않아요.
+
 ## 설치 (Windows)
 
 5.2.0 beta 6부터 Hoard는 새로운 방식(창은 Tauri, 서버는 Nuitka로 컴파일)으로 만들어지고, 새 앱으로 설치돼요. 먼저 지금 쓰는 Hoard를 제거하세요. 방법은 [Hoard 설치](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoard-설치#새-hoard로-옮기기)에 있어요. 라이브러리, 설정, 로그인은 그대로 남아요.

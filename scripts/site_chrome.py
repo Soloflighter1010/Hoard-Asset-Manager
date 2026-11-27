@@ -24,7 +24,7 @@ MARK = ('<svg viewBox="0 0 64 64" aria-hidden="true" width="22" height="22"><g c
         f'{heap.boxes_svg(heap.FULL, line_style="stroke: var(--cave)", indent="  ")}\n</g></svg>')
 DISCORD = "https://discord.gg/psNsAGj75Q"   # Hoard's Discord server (issue #204)
 COMPARE = "docs/Hoard-and-Other-Tools.html"   # Hoard with the Creator Companion, ALCOM and KonoAsset (issue #293)
-TABS = [("./", "Home"), ("how-it-works.html", "How it works"), (COMPARE, "Compare"), ("trust.html", "Trust"), ("./#unity", "Unity"),
+TABS = [("./", "Home"), ("demo/", "Try it"), ("how-it-works.html", "How it works"), (COMPARE, "Compare"), ("trust.html", "Trust"), ("./#unity", "Unity"),
         ("docs/", "Docs"), ("changelog.html", "What's new"), ("testers.html", "Testers")]
 FOOT_LINKS = [("docs/", "Docs"), ("how-it-works.html", "How it works"), (COMPARE, "Hoard and other tools"), ("changelog.html", "What's new"),
               ("testers.html", "Testers"), ("credits.html", "Picture credits"), (f"{GITHUB}/issues", "Report a problem"),

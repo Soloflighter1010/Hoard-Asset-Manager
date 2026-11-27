@@ -97,6 +97,8 @@ Hoardなら、タブを4つも開かずに答えが分かります。
 ---
 
 <a id="install-windows"></a>
+**まずはブラウザーで試せます:** [Hoardを試す](https://hoard.furryup.link/demo/)では、本物の商品のライブラリーと仮のサインインで、Hoard自身の画面を動かせます(英語)。そこで何をしても、ブラウザーの外には出ません。
+
 ## インストール(Windows)
 
 5.2.0 beta 6から、Hoardは新しい作り方(ウィンドウはTauri、サーバーはNuitkaでコンパイル)で作られていて、新しいアプリとしてインストールされます。先に今のHoardをアンインストールしてください。方法は[Hoardのインストール](https://github.com/Soloflighter1010/Hoard-Asset-Manager/wiki/Hoardのインストール#新しいhoardに移る)にあります。ライブラリ、設定、サインインはそのまま残ります。

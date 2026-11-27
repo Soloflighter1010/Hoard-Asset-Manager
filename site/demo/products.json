@@ -1,0 +1,229 @@
+{
+ "//": [
+  "Try Hoard's products (issue #394): the maintainer's own, or ones whose creators agreed to be shown.",
+  "Read from each store's public page by scripts/build_site_demo.py --read-products: name, creator,",
+  "price, and its picture's address on the store's own image host. place: in the demo's library, or",
+  "on its wishlist."
+ ],
+ "products": [
+  {
+   "store": "jinxxy",
+   "id": "BirthdayHat",
+   "url": "https://jinxxy.com/Fara/BirthdayHat",
+   "name": "Birthday Hat FREE (VRCHAT)",
+   "creator": "Fara",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/3b0bdd5a-a04a-511b-8ab6-11bc65726c77/3423373389035734553/738270129147564032.png",
+   "store_tags": [
+    "free",
+    "hat",
+    "accessories",
+    "birthday"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "jinxxy",
+   "id": "HalfToneFilter",
+   "url": "https://jinxxy.com/Fara/HalfToneFilter",
+   "name": "Substance Painter Half Tone Filter",
+   "creator": "Fara",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/3b0bdd5a-a04a-511b-8ab6-11bc65726c77/3875950063163278450/964557927964088320.jpeg",
+   "store_tags": [
+    "substance",
+    "painter",
+    "filter",
+    "half-tone"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "jinxxy",
+   "id": "MOGI",
+   "url": "https://jinxxy.com/LoafeVR/MOGI",
+   "name": "MOGI - Mechanical Organism for General Interaction 【PC/Quest/IOS】",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/89e0f78b-4fa0-59ed-a672-a2dbc2dc6c06/3911723743403050537/982447842526373888.png",
+   "store_tags": [
+    "vrchat",
+    "robot"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "jinxxy",
+   "id": "pazuzu-keychain-toy",
+   "url": "https://jinxxy.com/LoafeVR/pazuzu-keychain-toy",
+   "name": "Pazuzu Keychain Pet - VRChat Asset",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/89e0f78b-4fa0-59ed-a672-a2dbc2dc6c06/3680471011725149466/866842399701164032.png",
+   "store_tags": [
+    "keychain",
+    "24k"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "jinxxy",
+   "id": "aquatailpack",
+   "url": "https://jinxxy.com/LoafeVR/aquatailpack",
+   "name": "Aqua Tail Pack - VR Avatar Assets",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/89e0f78b-4fa0-59ed-a672-a2dbc2dc6c06/3670194992720118818/861681321788828672.png",
+   "store_tags": [
+    "fish",
+    "shark",
+    "orca",
+    "tail"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "jinxxy",
+   "id": "Warg",
+   "url": "https://jinxxy.com/LoafeVR/Warg",
+   "name": "The Warg Halloween Avatar Vrchat 3.0 [PC] & [Quest]",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.00 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://jinxxy-c.jinxxy-cdn.com/cdn-cgi/image/format=auto,onerror=redirect/89e0f78b-4fa0-59ed-a672-a2dbc2dc6c06/3514868591197423539/784017138045943808.png",
+   "store_tags": [
+    "halloween",
+    "horror"
+   ],
+   "place": "library"
+  },
+  {
+   "store": "gumroad",
+   "id": "FaraFTEarsAddon",
+   "url": "https://farafox.gumroad.com/l/FaraFTEarsAddon",
+   "name": "Free - Fara Rex - FT Ears Addon",
+   "creator": "Fara McCaw",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/hyt6nqhm6jpd1gx7cb6zpo6exrki",
+   "store_tags": [],
+   "place": "library"
+  },
+  {
+   "store": "gumroad",
+   "id": "FaraRex",
+   "url": "https://farafox.gumroad.com/l/FaraRex",
+   "name": "Fara Rexouium Mod - Info Page",
+   "creator": "Fara McCaw",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/i5bvyue7m398oqzmlp4an2bfcb98",
+   "store_tags": [],
+   "place": "library"
+  },
+  {
+   "store": "gumroad",
+   "id": "FaraPathGradient",
+   "url": "https://farafox.gumroad.com/l/FaraPathGradient",
+   "name": "Substance Painter Path Gradient Brush",
+   "creator": "Fara McCaw",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/pjqcfvuglxa589xg2uquxmgmnjgm",
+   "store_tags": [],
+   "place": "library"
+  },
+  {
+   "store": "gumroad",
+   "id": "DreamMerchant",
+   "url": "https://loafevr.gumroad.com/l/DreamMerchant",
+   "name": "Dream Merchant (Masc) Vrchat 3.0 (PC & Quest)",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/woeg0eqqqvug9i86fa8z3tuelrwy",
+   "store_tags": [],
+   "place": "wishlist"
+  },
+  {
+   "store": "gumroad",
+   "id": "JACKALITH",
+   "url": "https://loafevr.gumroad.com/l/JACKALITH",
+   "name": "JACKALITH Avatar (Masc) Vrchat 3.0 (PC & Quest)",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/rcw63qnrvmxly4cp3sn69cwa3obl",
+   "store_tags": [],
+   "place": "wishlist"
+  },
+  {
+   "store": "gumroad",
+   "id": "snek",
+   "url": "https://loafevr.gumroad.com/l/snek",
+   "name": "Snek the Cybernetic Snake Avatar Vrchat 3.0 [PC] & [Quest]",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/0g64al7txqson0g6f1fbxjle6h18",
+   "store_tags": [],
+   "place": "library"
+  },
+  {
+   "store": "gumroad",
+   "id": "AquaPot",
+   "url": "https://loafevr.gumroad.com/l/AquaPot",
+   "name": "Aqua Pot Avatar Vrchat 3.0 (PC) & (QUEST)",
+   "creator": "LoafeVR",
+   "price": {
+    "text": "0.0 USD",
+    "amount": 0.0,
+    "currency": "USD"
+   },
+   "thumbnail": "https://public-files.gumroad.com/3gepx57jeeolafnce5bum1r06xd0",
+   "store_tags": [],
+   "place": "library"
+  }
+ ]
+}
