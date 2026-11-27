@@ -4211,6 +4211,32 @@ class ChosenFiles(IsolatedTestCase):
             self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.blend"), "not listed: left out before")
             self.assertTrue(downloader.left_out(everything, report, "itch", "Tail Pack", "Tail.psd"), "not listed: the rule")
 
+    def test_a_file_you_left_out_is_not_an_update(self):
+        """Issue #446: a check for updates doesn't list a file you left out of a product (chose not to download, or a
+        rule leaves out), new or changed; one new on the store that you haven't said no to is, and so is a changed one
+        you have."""
+        from types import SimpleNamespace
+        rules = downloader.file_rules({"file_rules": [{"store": "all", "kind": "layered"}]})
+        args = SimpleNamespace(dry_run=True, rules=rules, remembered={tags.tag_key("booth", "Jex"): {"Jex SPP.zip"}})
+        report = downloader.Report()
+        had = {"files": {"Jex.unitypackage": {}}}
+        said = []
+        with common.capture_log(said.append):
+            downloader.would_get(args, report, "booth", had, "Jex", "Kuda", "Jex SPP.zip", False)   # left out before
+            downloader.would_get(args, report, "booth", had, "Jex", "Kuda", "Jex.psd", False)   # a rule
+            downloader.would_get(args, report, "booth", had, "Jex", "Kuda", "Jex v2.unitypackage", False)   # new
+            downloader.would_get(args, report, "booth", had, "Jex", "Kuda", "Jex.psd", True)   # changed, but a rule's
+            downloader.would_get(args, report, "booth", had, "Jex", "Kuda", "Jex.unitypackage", True)   # changed since
+        self.assertEqual([(a["file"], a["kind"]) for a in report.available],
+                         [("Jex v2.unitypackage", "new"), ("Jex.unitypackage", "changed")],
+                         "one left out isn't an update even changed: Update leaves it out as a download does")
+        self.assertFalse([s for s in said if "would" in s and ("SPP" in s or ".psd" in s)], "nor said to be one")
+        self.assertTrue([s for s in said if "not an update (left out, as you chose before): Jex SPP.zip" in s])
+        report = downloader.Report()   # (no choices or rules: every new file is one)
+        with common.capture_log(lambda line: None):
+            downloader.would_get(SimpleNamespace(dry_run=True), report, "booth", had, "Jex", "Kuda", "Jex SPP.zip", False)
+        self.assertEqual([a["file"] for a in report.available], ["Jex SPP.zip"])
+
     def test_a_listing_is_found_by_the_name_it_was_asked_for(self):
         """Choose files on a Jinxxy item whose page names it differently from your library: what it lists is filed
         under both names, so the page asking by its library name finds it."""

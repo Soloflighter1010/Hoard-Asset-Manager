@@ -199,8 +199,15 @@ def would_get(args, report: Report, store: str, rec: dict, name: str, creator: s
     changed or added goes on the list of updates the Downloads page shows (issue #26); one downloaded before and
     since deleted from disk, unchanged, isn't an update (it's downloaded again all the same). also: the product's name
     in your library, when its page names it differently (a chosen Jinxxy item's)."""
+    listing, product_id = getattr(args, "listing", False), rec.get("library_id") or rec.get("key")
+    # Issue #446: a file you left out of a product you have (chose not to download, or one your rules leave out) isn't
+    # an update to it, new or changed on the store: Update wouldn't download it either (left_out)
+    if not listing and rec.get("files") and not deleted_here and \
+            (why := declined(args, store, name, file, *([also] if also else []), product_id=product_id)):
+        log(f"    not an update ({why}): {file}")
+        return
     log(f"    would {'update' if changed else 'download again' if deleted_here else 'download'}: {file}")
-    if getattr(args, "listing", False):   # what's there to choose from (issue #225), and not an update either way
+    if listing:   # what's there to choose from (issue #225), and not an update either way
         entry = report.listed.setdefault(tag_key(store, name, rec.get("library_id") or rec.get("key")), {"store": store, "name": name, "creator": creator, "files": []})
         if also:   # (the same list, under the name it was asked for by)
             report.listed.setdefault(tag_key(store, also, rec.get("library_id") or rec.get("key")), entry)
@@ -269,6 +276,19 @@ def remembered_files(cfg: dict) -> dict[str, set]:
             if isinstance(k, str) and 0 < len(k) <= 400 and isinstance(v, list)}
 
 
+def declined(args, store: str, name: str, file: str, *also: str, product_id=None) -> str | None:
+    """Why this is a file you leave out of this product, or None: one you left out of it before (args.remembered), or
+    one your rules name (args.rules). A check for updates doesn't count one of these as an update, new on the store or
+    changed (issue #446): you chose not to download it, and Update leaves it out as a download does."""
+    keys = [tag_key(store, n, product_id) for n in (name, *also) if n]
+    remembered = getattr(args, "remembered", None)
+    if isinstance(remembered, dict) and any(file in remembered.get(k, ()) for k in keys):
+        return "left out, as you chose before"
+    rules = getattr(args, "rules", None)   # (only what a sync gave it: a stand-in's arguments may have anything)
+    rule = ruled_out(rules if isinstance(rules, list) else [], store, file)
+    return f"left out by your rule ({rule})" if rule else None
+
+
 def left_out(args, report: Report, store: str, name: str, file: str, *also: str, product_id=None) -> bool:
     """A file left out of this download. First what you chose for it now (args.files: {tag_key: {"shown": the files
     listed, "chosen": the ones ticked}}): only a file that was listed and unticked is left out, and one you ticked is
@@ -287,14 +307,10 @@ def left_out(args, report: Report, store: str, name: str, file: str, *also: str,
         if file in pick.get("chosen", ()):
             return False
         why = "left out, as you chose"
-    elif isinstance(remembered := getattr(args, "remembered", None), dict) and any(file in remembered.get(k, ()) for k in keys):
-        why = "left out, as you chose before"
     else:
-        rules = getattr(args, "rules", None)   # (only what a sync gave it: a stand-in's arguments may have anything)
-        rule = ruled_out(rules if isinstance(rules, list) else [], store, file)
-        if not rule:
+        why = declined(args, store, name, file, *also, product_id=product_id)
+        if not why:
             return False
-        why = f"left out by your rule ({rule})"
     log(f"    {why}: {file}")
     report.skipped.append(f"{label}: {name} / {file} - {why}")
     return True
