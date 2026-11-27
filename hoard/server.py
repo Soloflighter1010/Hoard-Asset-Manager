@@ -505,7 +505,8 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
         self.show_token = None
         self._link, self._link_lock = None, threading.Lock()   # a hoard:// link for the page, once (ask_open)
         self.explorer_exe = None   # (issue #410) the program Explorer's right-click menu runs: the shell's, from its hello
-        self.explorer_state = {"icon": False, "menu": False}   # what's in place in File Explorer (explorer.apply)
+        self.explorer_state = {"icon": False, "menu": False}   # what's in File Explorer, or Finder or Linux's file
+        #   managers (#411): explorer.apply
         self._explorer_lock = threading.Lock()   # (one change to it at a time: as Hoard starts, and from Settings)
         self.last_seen = time.time()
         self.cfg, self.lan, self.config_path = cfg, lan, config_path
@@ -657,14 +658,15 @@ class AppServer(TLSServerMixin, ThreadingHTTPServer):
                 pass
 
     def apply_explorer(self, was: str | None = None) -> dict:
-        """Issue #410: make File Explorer show what Settings says (the sync folder's icon, Hoard in its right-click
-        menu), taking the icon off the folder that was the sync folder (was). Never stops what asked for it."""
+        """Issue #410: make File Explorer (or Finder, or Linux's file managers: #411) show what Settings says (the sync
+        folder's icon, Hoard in its right-click menu), taking the icon off the folder that was the sync folder (was).
+        Never stops what asked for it."""
         from . import explorer
         with self._explorer_lock:
             try:
                 self.explorer_state = explorer.apply(self.cfg, self.explorer_exe, was)
-            except Exception as e:   # (Windows refused: Hoard carries on without them)
-                print(f"File Explorer's icon and menu couldn't be set: {type(e).__name__}: {e}", flush=True)
+            except Exception as e:   # (the system refused: Hoard carries on without them)
+                print(f"The file manager's icon and menu couldn't be set: {type(e).__name__}: {e}", flush=True)
                 self.explorer_state = {"icon": False, "menu": False}
             return self.explorer_state
 

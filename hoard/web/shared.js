@@ -1794,12 +1794,23 @@ function showSyncFolder(v) {
   $("#syncSkipped").innerHTML = v.folder && v.skipped.length
     ? `<p class="hint">${esc(tr("Not added:"))}</p><ul class="sync-skipped">${v.skipped.map(x => `<li><b translate="no">${esc(x.name)}</b> <span class="muted">${esc(tr(x.why))}</span></li>`).join("")}</ul>` : "";
   $("#syncMsg").textContent = v.folder && (v.last || {}).error ? v.last.error : "";
-  const ex = v.explorer || {};   // (issue #410: Windows' File Explorer only)
+  const ex = v.explorer || {};   // (issue #410: Windows' File Explorer; #411: Finder, Linux's file managers)
+  const kind = ex.kind || (ex.here ? "explorer" : "");
   $("#syncExplorerRow").hidden = !ex.here;
+  for (const el of $("#syncExplorerRow").querySelectorAll("[data-fm]")) el.hidden = el.dataset.fm !== kind;
   $("#syncExplorer").checked = ex.on !== false;
-  if (ex.here && ex.on !== false && v.folder && !ex.icon && !$("#syncMsg").textContent)
-    $("#syncMsg").textContent = tr("Windows didn't let Hoard put its icon on this folder (a desktop.ini of another program's is in it, or the folder can't be changed).");
+  if (ex.here && ex.on !== false && v.folder && !$("#syncMsg").textContent) {
+    if (!ex.icon) $("#syncMsg").textContent = (ICON_REFUSED[kind] || ICON_REFUSED.files)();
+    else if (Array.isArray(ex.cant) && ex.cant.includes("gvfs"))
+      $("#syncMsg").textContent = tr("In the Flatpak, GNOME Files and Nemo can't show Hoard's icon on the folder; Dolphin can.");
+  }
 }
+// Why the sync folder hasn't Hoard's icon, by the file manager (explorer.where).
+const ICON_REFUSED = {
+  explorer: () => tr("Windows didn't let Hoard put its icon on this folder (a desktop.ini of another program's is in it, or the folder can't be changed)."),
+  finder: () => tr("macOS didn't let Hoard put its icon on this folder (it has a custom icon of its own, or the folder can't be changed)."),
+  files: () => tr("Hoard couldn't put its icon on this folder (it has a custom icon of its own, or the folder can't be changed)."),
+};
 async function loadSyncFolder(body = {}) {   // (body: a change, or a look now)
   const r = await apiPost("/api/local/sync", body);
   if (!r.ok) { $("#syncMsg").textContent = r.data.error || tr("That folder can't be used."); return false; }
@@ -6708,8 +6719,8 @@ async function openFromLink(key) {
   closeDetail();   // (nothing to show: no details stay open, and no open= stays in the address)
   toast(tr("That product isn't in your library."));
 }
-// Issue #410: what Hoard did for File Explorer's right-click menu (Add to Hoard, Sync with Hoard now), by its code
-// (hoard/explorer.py's do), in your language.
+// Issue #410: what Hoard did for File Explorer's right-click menu (Add to Hoard, Sync with Hoard now), or Finder's or
+// a Linux file manager's (#411), by its code (hoard/explorer.py's do), in your language.
 const EXPLORER_SAID = {
   copied: x => tr("{0} is in the sync folder: Hoard adds it to Local.", x.name),
   there: x => tr("{0} is in the sync folder already.", x.name),
@@ -6723,13 +6734,15 @@ const EXPLORER_SAID = {
   looking: () => tr("Hoard is looking at the sync folder."),
   "no-sync": () => tr("There's no sync folder yet: choose one in Settings, under Local sync folder."),
   "not-sync": () => tr("That folder isn't Hoard's sync folder."),
-  "local-off": () => tr("Local was turned off, so nothing was added. Choose it in File Explorer again."),
+  "local-off": () => tr("Local was turned off, so nothing was added. Turn it on in Settings, Features, and choose Add to Hoard again."),
+  more: x => tr("{0} more weren't added: Hoard takes {1} at a time. Choose them again.", x.count, x.most),
 };
 // File Explorer's menu brought Hoard to the front: Local, and what it did (the first few, when it was many).
 async function openFromExplorer(said) {
   await navigateApp("/downloads#store=Local");
   const words = (Array.isArray(said) ? said : []).filter(x => x && Object.prototype.hasOwnProperty.call(EXPLORER_SAID, x.said))
-    .map(x => EXPLORER_SAID[x.said]({ name: String(x.name || ""), mb: Number(x.mb) || 0, why: x.why }));
+    .map(x => EXPLORER_SAID[x.said]({ name: String(x.name || ""), mb: Number(x.mb) || 0, why: x.why,
+      count: Number(x.count) || 0, most: Number(x.most) || 0 }));
   if (words.length) toast(words.slice(0, 4).join(" ") + (words.length > 4 ? " " + tr("And {0} more.", words.length - 4) : ""));
 }
 // Open What's new.

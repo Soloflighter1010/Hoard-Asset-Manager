@@ -23,7 +23,8 @@ Settings' "Show it in File Explorer" (the explorer setting) turns the icon and t
 off takes them away too, and so does uninstalling: Hoard notes the folder with its icon in the registry
 (NOTE_KEY), for the uninstaller (shell/installer/hooks.nsh), which never runs Hoard.
 
-Everything here does nothing off Windows; macOS and Linux are issue #411."""
+Off Windows, apply() hands over to hoard/filemanagers.py: the same in macOS's Finder and Linux's file managers (issue
+#411). do() and add() are the same everywhere."""
 from __future__ import annotations
 
 import contextlib
@@ -58,6 +59,13 @@ INVALID = 0xFFFFFFFF
 def here() -> bool:
     """Whether this is Windows, where Explorer reads all this."""
     return sys.platform == "win32"
+
+
+def where() -> str | None:
+    """Which file manager Settings' "Show it in ..." is about: "explorer" (Windows), "finder" (macOS), "files" (Linux's:
+    hoard/filemanagers.py), or None."""
+    from . import filemanagers
+    return "explorer" if here() else filemanagers.kind()
 
 
 class Windows:
@@ -275,9 +283,11 @@ def on(cfg: dict) -> bool:
 def apply(cfg: dict, exe: str | None, was: str | None = None, win: Windows | None = None) -> dict:
     """Make Explorer show what Hoard's settings say: the icon on the sync folder (and off the one it was, was), and the
     right-click options while there's a sync folder, Settings shows Hoard in Explorer (on), and Hoard knows the program
-    to run (the Tauri shell's, from its hello). {"icon": bool, "menu": bool}: what's in place now."""
+    to run (the Tauri shell's, from its hello). {"icon": bool, "menu": bool}: what's in place now. Off Windows,
+    hoard/filemanagers.py's apply (which may add "cant")."""
     if not here() and win is None:
-        return {"icon": False, "menu": False}
+        from . import filemanagers
+        return filemanagers.apply(cfg, exe, was)
     win = win or Windows()
     sync = str(cfg.get("local_sync") or "").strip()
     if was and os.path.normcase(str(was)) != os.path.normcase(sync):
@@ -300,7 +310,8 @@ def apply(cfg: dict, exe: str | None, was: str | None = None, win: Windows | Non
 # ---- what the menu asks of the Hoard that's running (from a second start, over /api/show)
 
 ACTIONS = ("add", "sync", "local")
-MAX_ACTIONS = 20
+MAX_ACTIONS = 500   # (the shell's own: Explorer starts Hoard once for each file chosen, Finder and the others once
+#   for them all)
 
 
 def _full_path(p) -> bool:
@@ -310,12 +321,16 @@ def _full_path(p) -> bool:
 
 def actions(given) -> list[dict]:
     """The menu's requests, checked: [{"do": "add", "path": a full path}, {"do": "sync", "path": the folder it was
-    chosen on, if it says}, {"do": "local"}], at most MAX_ACTIONS (Explorer starts Hoard once for each file chosen)."""
-    out = []
+    chosen on, if it says}, {"do": "local"}], at most MAX_ACTIONS; then {"do": "more", "count": n} when n more were
+    left out (here, or by the shell), so Hoard says so."""
+    out, more = [], 0
     for a in given if isinstance(given, list) else []:
-        if not isinstance(a, dict) or a.get("do") not in ACTIONS:
+        if not isinstance(a, dict) or a.get("do") not in (*ACTIONS, "more"):
             continue
-        if a["do"] == "add":
+        if a["do"] == "more":
+            count = a.get("count")
+            more += count if isinstance(count, int) and not isinstance(count, bool) and 0 < count <= 10 ** 6 else 0
+        elif a["do"] == "add":
             if _full_path(a.get("path")):
                 out.append({"do": "add", "path": a["path"]})
         elif a["do"] == "sync" and "path" in a:
@@ -323,13 +338,16 @@ def actions(given) -> list[dict]:
                 out.append({"do": "sync", "path": a["path"]})
         else:
             out.append({"do": a["do"]})
-    return out[:MAX_ACTIONS]
+    more += max(0, len(out) - MAX_ACTIONS)
+    return out[:MAX_ACTIONS] + ([{"do": "more", "count": min(more, 10 ** 6)}] if more else [])
 
 
 def do(srv, action: dict) -> dict | None:
     """One of the menu's requests (checked by actions()), done. What Hoard says about it, for its page, as a code with
     what goes in its words ({"said": "copied", "name": ...}: shared.js has the words); None: nothing to say."""
     from .config import feature_on
+    if action["do"] == "more":
+        return {"said": "more", "count": action["count"], "most": MAX_ACTIONS}
     if action["do"] in ("add", "sync") and not feature_on(srv.cfg, "local"):
         return {"said": "local-off"}   # (Local turned off in Settings, Features, issue #422: nothing's added)
     if action["do"] == "add":

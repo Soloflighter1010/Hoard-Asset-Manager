@@ -172,8 +172,9 @@ def _local(self, path: str, body: dict):
 def post_api_local_sync(self, path, body, query):
     """POST /api/local/sync {folder ("" turns it off), look, explorer}. Issue #388: the Local sync folder, checked (on
     this computer, answering, not inside a library folder); look: look at it now; explorer: show it in File Explorer
-    (issue #410: its icon, and Hoard in the right-click menu). What it holds and skipped, as view(), and explorer:
-    whether that's on, can be here (Windows), and what's in place."""
+    (issue #410: its icon, and Hoard in the right-click menu; #411: Finder's, Linux's file managers'). What it holds and
+    skipped, as view(), and explorer: whether that's on, which file manager is here (kind: explorer, finder, files), and
+    what's in place."""
     from .. import explorer, localsync
     srv = self.server
     was = str(srv.cfg.get("local_sync") or "")
@@ -189,7 +190,8 @@ def post_api_local_sync(self, path, body, query):
         srv.save_settings()
     if "folder" in body or "explorer" in body:
         srv.apply_explorer(was)
-    shown = {"explorer": {"here": explorer.here(), "on": explorer.on(srv.cfg), **srv.explorer_state}}
+    kind = explorer.where()
+    shown = {"explorer": {"here": kind is not None, "kind": kind, "on": explorer.on(srv.cfg), **srv.explorer_state}}
     if body.get("look") is True and not app.feature_on(srv.cfg, "local"):   # (turned off in Settings, Features: #422)
         return self._json({"error": "Local is turned off in Settings, Features."}, 409)
     if srv.cfg.get("local_sync") and (body.get("look") is True or "folder" in body):

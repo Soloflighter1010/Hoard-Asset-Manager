@@ -107,6 +107,16 @@ jobs:
           sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf ccache
       - name: Install the locked dependencies and Nuitka (every file hash-checked)
         run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.txt -r requirements-nuitka.txt
+      # Issue #411: the sync folder's icon and right-click options, on the system itself (Check's tests run on Linux and
+      # Windows): Finder's icon call and Quick Actions that macOS reads; GNOME's, where GVfs keeps metadata.
+      - name: The sync folder in Finder, or GNOME Files
+        if: runner.os != 'Windows'
+        run: |
+          if command -v dbus-run-session >/dev/null; then
+            dbus-run-session -- python -m unittest -v tests.test_filemanagers
+          else
+            python -m unittest -v tests.test_filemanagers
+          fi
       # Nuitka's compiler cache (ccache on Linux and macOS, clcache on Windows, all in NUITKA_CACHE_DIR), kept from the
       # last build on this system: only the C files that changed are compiled again, where each of the ~670 took most
       # of the build's time. A cached file is found by what it compiles, so an older cache is never wrong, only less

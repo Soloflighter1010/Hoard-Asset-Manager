@@ -66,30 +66,43 @@ fn start_link() -> Option<String> {
     std::env::args_os().skip(1).filter_map(|a| a.into_string().ok()).find(|a| is_link(a))
 }
 
-/// What File Explorer's right-click menu started this copy for (issue #410, hoard/explorer.py): Add to Hoard
-/// (--hoard-add, then the file or folder), Sync with Hoard now (--hoard-sync-now, then the folder it was chosen on)
-/// and Open in Hoard (--hoard-open-local). Hoard checks each; a second start hands them to the Hoard that's running.
+/// What File Explorer's right-click menu started this copy for (issue #410, hoard/explorer.py), or Finder's or a Linux
+/// file manager's (#411, hoard/filemanagers.py): Add to Hoard (--hoard-add, then the file or folder), Sync with Hoard
+/// now (--hoard-sync-now, then the folder it was chosen on) and Open in Hoard (--hoard-open-local). Hoard checks each;
+/// a second start hands them to the Hoard that's running. Explorer starts Hoard once for each file chosen, Finder and
+/// the others once for them all: past MAX_ACTIONS, how many were left out ({"do": "more"}), for Hoard to say so.
+const MAX_ACTIONS: usize = 500;
+
 fn start_actions() -> Vec<Value> {
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     let mut out = Vec::new();
+    let mut more = 0usize;
     let mut i = 0;
-    while i < args.len() && out.len() < 20 {
-        match args[i].as_str() {
+    while i < args.len() {
+        let action = match args[i].as_str() {
             "--hoard-add" if i + 1 < args.len() => {
-                out.push(json!({"do": "add", "path": args[i + 1]}));
                 i += 1;
+                Some(json!({"do": "add", "path": args[i]}))
             }
             "--hoard-sync-now" => match args.get(i + 1).filter(|a| !a.starts_with("--hoard-")) {
                 Some(folder) => {
-                    out.push(json!({"do": "sync", "path": folder}));
                     i += 1;
+                    Some(json!({"do": "sync", "path": folder}))
                 }
-                None => out.push(json!({"do": "sync"})),
+                None => Some(json!({"do": "sync"})),
             },
-            "--hoard-open-local" => out.push(json!({"do": "local"})),
-            _ => {}
+            "--hoard-open-local" => Some(json!({"do": "local"})),
+            _ => None,
+        };
+        match action {
+            Some(a) if out.len() < MAX_ACTIONS => out.push(a),
+            Some(_) => more += 1,
+            None => {}
         }
         i += 1;
+    }
+    if more > 0 {
+        out.push(json!({"do": "more", "count": more}));
     }
     out
 }

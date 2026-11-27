@@ -8,7 +8,7 @@ writes packaging/icons/hoard-128.png, -256.png and -512.png (Linux's, the Flatpa
 listing's favicon.ico (64), the VCC listing's banner (Website/banner.png: the logo, "for Unity" and a line
 under it, in the site's fonts), Hoard for Unity's logo (its Look.cs, as base64: the package ships code only) and the
 sync folder's icon (hoard/web/icons/sync-folder.ico, issue #410: heap.folder, which Hoard puts on the Local sync
-folder in File Explorer). The files are kept in the repository: run it after the logo changes; --folder writes only
+folder in File Explorer; and sync-folder.png, 512 px, for Finder and Linux's file managers, issue #411). The files are kept in the repository: run it after the logo changes; --folder writes only
 the sync folder's icon. Needs Playwright (as the tests do); with Pillow
 too, Hoard for Unity's logo is made smaller, in 64 colours.
 """
@@ -93,17 +93,20 @@ def unity_logos(page) -> None:
 
 
 FOLDER_ICON = REPO / "hoard" / "web" / "icons" / "sync-folder.ico"
+FOLDER_PNG = FOLDER_ICON.with_suffix(".png")   # (Finder's and Linux's file managers', issue #411: one picture, 512 px)
 
 
 def folder_icon(page) -> None:
-    """The sync folder's icon (issue #410), drawn at each of Windows' sizes and written as one .ico."""
+    """The sync folder's icon (issue #410), drawn at each of Windows' sizes and written as one .ico, and at 512 px as a
+    PNG (issue #411)."""
     pictures = {}
-    for s in ICO_SIZES:
+    for s in (*ICO_SIZES, 512):
         page.set_viewport_size({"width": s, "height": s})
         page.set_content(f'<body style="margin:0;background:transparent">{heap.folder(size=s)}</body>')
         pictures[s] = page.screenshot(clip={"x": 0, "y": 0, "width": s, "height": s}, omit_background=True)
     FOLDER_ICON.parent.mkdir(parents=True, exist_ok=True)
-    FOLDER_ICON.write_bytes(ico(pictures))
+    FOLDER_ICON.write_bytes(ico({s: pictures[s] for s in ICO_SIZES}))
+    FOLDER_PNG.write_bytes(pictures[512])
 
 
 def main() -> int:

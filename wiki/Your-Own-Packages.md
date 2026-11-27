@@ -42,6 +42,14 @@ to Hoard** (on Windows 11, under **Show more options**): a file is copied into t
 here where it is. Right-click the sync folder for **Sync with Hoard now** or **Open in Hoard**. Settings' **Show it in
 File Explorer** turns them off.
 
+On a Mac (5.2.0 beta 14) it's the same in Finder: the sync folder has Hoard's icon, and **Add to Hoard**, **Sync with
+Hoard now** and **Open in Hoard** are Quick Actions, under **Quick Actions** when you right-click. On Linux, Hoard puts
+its icon on the folder in GNOME Files, Dolphin and Nemo, and its options in whichever of them you have: in GNOME Files
+they're under **Scripts**, and Dolphin and Nemo show them with their own. In the Flatpak, only Dolphin shows the icon
+(the sandbox keeps Hoard from where GNOME Files and Nemo keep a folder's icon). Settings' **Show it in Finder** or
+**Show it in your file manager** turns them off. If Hoard is uninstalled, its options take themselves away the next
+time you choose one.
+
 ### Make a Unity package
 
 **Make a Unity package** (5.2.0), in a Local item's details, makes a `.unitypackage` of it without opening Unity, in
