@@ -61,9 +61,13 @@ class Acknowledgements(IsolatedTestCase):
         names = [i["name"] for i in credits.items()]
         self.assertEqual(len(names), len(set(names)), "each once")
         for i in credits.items():
-            self.assertTrue(i["license"], i["name"])
+            self.assertTrue(bool(i.get("license")) != bool(i.get("about")), i["name"])   # (a license, or what Hoard does with it)
             self.assertTrue(i["url"].startswith("https://"), i["name"])
-            self.assertTrue(set(i["in"].split()) <= {"all", "windows", "mac", "linux", "build"}, i["name"])
+            self.assertTrue(set(i["in"].split()) <= {"all", "windows", "mac", "linux", "build", "with"}, i["name"])
+        # issue #438: the tools Hoard brings libraries in from, works alongside, or is made and listed as
+        for name in ("KonoAsset", "BB's Library Manager (BBLM)", "VRChat Creator Companion", "ALCOM",
+                     "VRChat's template-package", "VRChat's package-list-action"):
+            self.assertIn(name, names)
         for name in ("Python", "Chromium (Playwright's build)", "Microsoft Edge WebView2", "Dela Gothic One",
                      "Zen Maru Gothic", "OpenDyslexic", "vrc-get's VRChat project templates (Projects)"):
             self.assertIn(name, names, "not a package, but shipped or used all the same")

@@ -2,7 +2,7 @@
 // View closures keep their filters and details; global getters are a compatibility boundary for shared.js while
 // older sections are migrated to explicit models. New product components receive their inputs as arguments.
 const APP = { active: /\/downloads$/.test(location.pathname) ? "downloads" : "library", views: {}, generation: 0, pending: null,
-  cache: null, dirty: true, revision: 0, rescan: false };
+  cache: null, dirty: true, revision: 0, rescan: false, turn: 0, given: {} };
 
 // Shared listeners have one owner and are installed exactly once.
 function shellListen(target, type, callback, options) { target.addEventListener(type, callback, options); }
@@ -68,45 +68,66 @@ async function load(rescan = false, cached = false) {
   // (the Menu's version line: its own mark, as a project's packages carry data-version for theirs, issue #398)
   for (const node of document.querySelectorAll("[data-hoard-version]")) node.textContent = `Hoard ${current.version || ""}`;
   if (!UPDATE) showUpdate();
-  // Inactive indexes are prepared first so shared windows can access either kind of product immediately.
+  // Inactive indexes are prepared first so shared windows can access either kind of product immediately. One that
+  // already has this snapshot isn't prepared again: changing tabs did it for both views each time (issue #435).
+  // (prepared for the parts of Hoard turned on now, too: a part turned off or on in Settings filters it again)
   const other = APP.active === "library" ? "downloads" : "library";
-  await APP.views[other].refreshView(data[other]);
+  const off = featuresOff(), had = APP.given[other];
+  if (!had || had.data !== data[other] || had.off !== off) { APP.given[other] = { data: data[other], off }; await APP.views[other].refreshView(data[other]); }
   if (generation !== APP.generation) return;
+  APP.given[APP.active] = { data: current, off };
   await APP.views[APP.active].refreshView(current);
   syncBrowse();   // canPick reads the active view's DATA, which refreshView has now replaced
   drawHeap();
   return (current.assets || current.items || []).length;
 }
-// Change the view without replacing the document, windows, access key, data cache or background polling.
-async function activateView(restoreWindows = true) {
+// Change the view without replacing the document, windows, access key, data cache or background polling. The last
+// tab asked for wins (issue #435): its tab is marked first, and the view is shown and drawn from what Hoard has read
+// before the click is done (the pages, and their tests, count on that), then read again; a switch whose read is still
+// under way when another is asked for stops there, so it never finishes after the later one, or draws a view no
+// longer wanted. A switch overtaken by another isn't done until that one is: what waits on it (a link opening a
+// product, Downloads opened to choose for a project) carries on once the page is where it ends up.
+function activateView(restoreWindows = true) {
+  const run = switchView(restoreWindows);
+  APP.latest = run;
+  return run;
+}
+// The switch itself (activateView): undefined once it's done, or the one that overtook it, to wait for.
+async function switchView(restoreWindows) {
+  const turn = ++APP.turn;
   const next = /\/downloads$/.test(location.pathname) ? "downloads" : "library";
-  const changing = next !== APP.active;
-  if (changing) {
-    NAV.quiet = true;
-    try { APP.views[APP.active].closeDetail(); } finally { NAV.quiet = false; }
-    APP.active = next; APP.generation++;
-    closeBarMenu();
-    sel.ids.clear(); sel.on = false; sel.anchor = null;
-    if (selMenu) closeSelMenu();
-  }
-  document.documentElement.dataset.appView = next;
-  $("#libraryStyles").media = next === "library" ? "all" : "not all";
-  $("#downloadsStyles").media = next === "downloads" ? "all" : "not all";
-  for (const node of document.querySelectorAll("[data-app-view]")) if (node !== document.documentElement)
-    node.hidden = node.dataset.appView !== next;
   markBar(next === "library" ? "/" : "/downloads");   // (until the view says which of its pages it's on)
-  if (next === "downloads" && !$("#drives")) $("#storeSeg").replaceChildren($("#downloadsStores").content.cloneNode(true));
-  const tile = UI[next === "downloads" ? "dl_tile_size" : "tile_size"];
-  if (tile) setZoom(tile);
+  const tab = document.querySelector(`.apptabs a[href="${CSS.escape(location.pathname + location.hash)}"]`);
+  if (tab) markBar(tab.getAttribute("href"));   // (a tab for this very page, as Local's and Sets': marked as it's chosen)
+  // Until it's shown, the address is the place asked for: nothing the page draws meanwhile (a product's details still
+  // open, as Back closes them) writes its own place over it. A later switch's own, once it's begun.
   NAV.quiet = true;
   try {
+    if (next !== APP.active) {
+      APP.views[APP.active].closeDetail();
+      APP.active = next; APP.generation++;
+      closeBarMenu();
+      sel.ids.clear(); sel.on = false; sel.anchor = null;
+      if (selMenu) closeSelMenu();
+    }
+    document.documentElement.dataset.appView = next;
+    $("#libraryStyles").media = next === "library" ? "all" : "not all";
+    $("#downloadsStyles").media = next === "downloads" ? "all" : "not all";
+    for (const node of document.querySelectorAll("[data-app-view]")) if (node !== document.documentElement)
+      node.hidden = node.dataset.appView !== next;
+    if (next === "downloads" && !$("#drives")) $("#storeSeg").replaceChildren($("#downloadsStores").content.cloneNode(true));
+    const tile = UI[next === "downloads" ? "dl_tile_size" : "tile_size"];
+    if (tile) setZoom(tile);
     APP.views[next].readHash();
     if (APP.cache) APP.views[next].render();
     await load(false, true);
-  } finally { NAV.quiet = false; }
+  } finally { if (turn === APP.turn) NAV.quiet = false; }   // (a later switch's own, until it's done)
+  if (turn !== APP.turn) return APP.latest;
   if (restoreWindows) goToAddress();
   else { NAV.at = null; saveHash(); }   // a fresh launch keeps the established behavior: windows start closed
-  tourResume(); if (next === "downloads") pickResume();
+  tourResume();
+  if (next === "downloads") pickResume();
+  else { try { sessionStorage.removeItem(PICK_KEY); } catch (e) { /* no storage: nothing kept */ } }   // (Downloads, left before it opened)
 }
 // Preserve / and /downloads links, modifiers, downloads and external links, but keep ordinary navigation in-app.
 function navigateApp(raw) {

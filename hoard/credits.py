@@ -70,7 +70,8 @@ def license_text(name: str) -> str | None:
 
 
 def view() -> dict:
-    """For Settings: the groups and their credits, each saying whether its license text can be shown."""
+    """For Settings: the groups and their credits, each saying whether its license text can be shown. A tool Hoard works
+    with has no license here (none of it is in Hoard): it says what Hoard does with it ("about")."""
     return {"groups": [{"title": g["title"], "items": [
-        {"name": i["name"], "license": i["license"], "url": i["url"], "in": i["in"],
+        {"name": i["name"], "license": i.get("license", ""), "about": i.get("about", ""), "url": i["url"], "in": i["in"],
          "text": bool(i.get("text") or i.get("package"))} for i in g["items"]]} for g in load()["groups"]]}

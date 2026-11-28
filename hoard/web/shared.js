@@ -1363,13 +1363,46 @@ function ADULT_ACTIONS() {
 async function markAdult(list, kind) {
   const keys = [...new Set(list.filter(a => a && a.tag_key).map(a => a.tag_key))];
   if (!keys.length) { toast("Select some items first."); return; }
-  const r = await apiPost("/api/marks", { kind, keys, on: true });
-  if (!r.ok) { toast(r.data.error || "That didn't work."); return; }
-  sel.ids.clear();   // (done with them, as with Archive and Hide)
-  await T.reload();
+  if (!(await adultMarked(keys, kind))) return;   // (said no to: they stay chosen, to try again)
+  sel.ids.clear(); T.render();   // (done with them, as with Archive and Hide)
   const one = keys.length === 1;
   toast(kind === "adult" ? (one ? tr("Marked as 18+.") : tr("Marked {0} products as 18+.", keys.length))
                          : (one ? tr("Marked as not for adults.") : tr("Marked {0} products as not for adults.", keys.length)));
+}
+// Issue #443: your word on these products (kind: "adult" or "not_adult") shows the moment you give it, on both pages
+// (each tile's blur and 18+ mark, and the details), and Hoard keeps it; the library's read again behind it, not
+// before (that took a few seconds in a large one). Said no to, it goes back as it was. Whether Hoard kept it.
+async function adultMarked(keys, kind) {
+  if (kind === "adult" && !featureOn("adult")) {   // (Products for adults off: they go from the page, as it's read again)
+    const r = await apiPost("/api/marks", { kind, keys, on: true });
+    if (!r.ok) { toast(r.data.error || "That didn't work."); return false; }
+    await T.reload();
+    return true;
+  }
+  const want = new Set(keys), was = [];
+  for (const view of Object.values(APP.views))
+    for (const a of (view.DATA && (view.DATA.items || view.DATA.assets)) || [])
+      if (want.has(a.tag_key)) {
+        was.push([a, a.adult, a.adult_from, a.not_adult]);
+        Object.assign(a, kind === "adult" ? { adult: true, adult_from: "you", not_adult: false }
+                                          : { adult: false, adult_from: null, not_adult: true });   // (adult.why's "you")
+      }
+  // The page drawn again with them as they are now: the tiles, and the details when one of them is open.
+  const redraw = () => {
+    T.render();
+    const open = T.open && T.open();
+    if (open && want.has(open.tag_key)) showDetail(open, false);
+  };
+  redraw();
+  const r = await apiPost("/api/marks", { kind, keys, on: true });
+  if (!r.ok) {
+    for (const [a, adult, from, not] of was) Object.assign(a, { adult, adult_from: from, not_adult: not });
+    redraw();
+    toast(r.data.error || "That didn't work.");
+    return false;
+  }
+  T.reload();   // (behind it: what else the mark changes, such as a set's own 18+)
+  return true;
 }
 
 /* ---------- the search's prefixes (issue #220): one kind of thing, as creator:mochi, tag:hoodie or settings:language.
@@ -2998,7 +3031,7 @@ async function showAcks() {
   box.dataset.read = "1";
   box.innerHTML = (await r.json()).groups.map(g => `<h4>${esc(tr(g.title))}</h4><ul>${g.items.map(i =>
     `<li><a href="${esc(safeUrl(i.url))}" target="_blank" rel="noopener noreferrer" translate="no">${esc(i.name)}</a>` +
-    `<span class="lic" translate="no">${esc(i.license)}</span>` +
+    (i.about ? `<span class="lic">${esc(tr(i.about))}</span>` : `<span class="lic" translate="no">${esc(i.license)}</span>`) +   // (a tool Hoard works with: what it does with it)
     (i.text ? `<button class="linkish" data-ack="${esc(i.name)}">${esc(tr("License"))}</button>` : "") + `</li>`).join("")}</ul>`).join("");
 }
 // Show one of the Acknowledgements' license texts.
@@ -5610,12 +5643,16 @@ document.addEventListener("change", async e => {
   }
   setViewShown = null; drawSets();
 });
-function priceHTML(i) {   // what a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed
+// What a product on a wishlist costs (a badge: issue #213), and what it cost before, when that changed. Converted to
+// your currency (Convert prices to), that's the badge, the one you'd read first, and the store's own price is beside it,
+// smaller (issue #451: the estimate was faint grey beside the store's price in bold).
+function priceHTML(i) {
   if (!i.price || !featureOn("prices")) return "";
-  const amount = convertedPrice(i.price);
-  const estimate = amount == null ? "" : ` <span class="converted" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>`;
-  return estimate + `<span class="price${cheaper(i) ? " down" : dearer(i) ? " up" : ""}" translate="no">${esc(i.price.text)}</span>` +
-    (i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "");
+  const amount = convertedPrice(i.price), trend = cheaper(i) ? " down" : dearer(i) ? " up" : "";
+  const was = i.was ? ` <s class="was" translate="no"><span class="visually-hidden">${esc(tr("was"))} </span>${esc(i.was.text)}</s>` : "";
+  if (amount == null) return `<span class="price${trend}" translate="no">${esc(i.price.text)}</span>` + was;
+  return `<span class="price${trend}" translate="no">≈ ${esc(money(amount, WISH_FX.target))}</span>` +
+    ` <span class="store-price" translate="no">${esc(i.price.text)}</span>` + was;
 }
 // What a set (or wishlist) has: how many downloaded, owned but not downloaded, and still to buy, in words.
 function setCounts(s) {

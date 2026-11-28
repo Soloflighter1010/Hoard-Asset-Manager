@@ -408,6 +408,11 @@ class AccessKey(IsolatedTestCase):
                 self.assertTrue(got["hit"], (style, size, "a click on the box reaches it"))
                 if style == "workbench":
                     self.assertIsNone(got["badge"], "Workbench says it in the tile's row")
+                    # Issue #434: its picture large enough to tell products apart, sized by the tile slider (shown)
+                    art = tile.locator(".art").bounding_box()
+                    self.assertEqual(round(art["width"]), {120: 48, 300: 120}[size], (size, art))
+                    self.assertGreaterEqual(tile.bounding_box()["height"], art["height"] + 12, "the row fits it")
+                    self.assertTrue(page.locator(".zoom input:visible").count(), "the slider shows")
                     continue
                 b, t = got["badge"], got["tick"]
                 self.assertIsNotNone(b, (style, size))
@@ -615,6 +620,25 @@ class AccessKey(IsolatedTestCase):
         self.assertEqual(refused, [])
         page.close()
 
+    def test_each_view_has_its_icon(self):
+        """Issue #448: the filters' views (Library, Archive...; Downloads, Asset updates, Disk space...) were words only:
+        each has its icon before it, from Hoard's own set, on both pages, and is chosen as before."""
+        page, refused = self.open(self.srv.entry_url())
+        page.locator("#grid .slot").first.wait_for()
+        views = lambda: page.locator("#views [data-view]").evaluate_all(  # noqa: E731
+            "bs => bs.map(b => [b.dataset.view, !!b.querySelector('.vi svg'), b.getAttribute('aria-checked')])")
+        self.assertTrue(views() and all(icon for _, icon, _ in views()), views())
+        self.assertEqual([v for v, _, on in views() if on == "true"], ["library"])
+        page.click("nav.apptabs a[href='/downloads']")
+        page.wait_for_function("() => APP.active === 'downloads' && document.querySelector('#views [data-view=downloads]')")
+        got = views()
+        self.assertIn("updates", [v for v, _, _ in got])
+        self.assertTrue(all(icon for _, icon, _ in got), got)
+        page.click('#views [data-view="updates"]')
+        page.wait_for_function("() => document.querySelector('#views [data-view=updates]').getAttribute('aria-checked') === 'true'")
+        self.assertEqual(refused, [])
+        page.close()
+
     def test_acknowledgements(self):
         """Issue #227: Settings lists everything Hoard uses or ships, with its license, and shows a license's text."""
         page, refused = self.open(self.srv.entry_url())
@@ -626,6 +650,13 @@ class AccessKey(IsolatedTestCase):
         self.assertIn("BSD-2-Clause", page.locator("#acksList li", has_text="Apprise").inner_text())
         self.assertGreater(page.locator("#acksList li").count(), 40)
         self.assertEqual(page.locator("#acksList h4").first.inner_text(), "What Hoard runs on")
+        # issue #438: the tools Hoard works with, each with what Hoard does with it (none of them is in Hoard)
+        kono = page.locator("#acksList li", has_text="KonoAsset")
+        self.assertIn("Hoard brings in its library", kono.inner_text())
+        self.assertEqual(kono.locator("a").get_attribute("href"), "https://github.com/siloneco/KonoAsset")
+        self.assertEqual(page.locator("#acksList li", has_text="BB's Library Manager").locator("a").get_attribute("href"),
+                         "https://github.com/BunBnnuy/BBLM")
+        self.assertEqual(kono.get_by_role("button", name="License").count(), 0)
         page.locator("#acksList li", has_text="Zen Maru Gothic").get_by_role("button", name="License").click()
         dialog = page.locator("dialog.hd[open]")
         dialog.locator(".ack-text").wait_for()
@@ -1646,6 +1677,39 @@ class LargeLibrary(IsolatedTestCase):
         self.assertLessEqual(self.drawn(page), 240, "a batch or two, not all 1,000")
         self.scroll_until(page, 1000)
         self.assertEqual(self.drawn(page), 1000, "scrolling draws them all")
+        page.close()
+
+    def test_the_last_tab_clicked_wins(self):
+        """Issue #435: clicking tabs one after another faster than a view is drawn, a switch still under way finished
+        after a later one, and Hoard jumped back. The tab clicked shows as chosen at once, a switch overtaken by
+        another stops, and the page ends on the last one clicked."""
+        page = self.open()
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.evaluate("const go = goToAddress; window.finished = 0; window.goToAddress = () => { finished++; go(); }; 0")
+        tabs = ["/downloads", "/#store=Sets", "/downloads#store=Local", "/"]
+        marked = page.evaluate("""tabs => tabs.map(h => { document.querySelector(`.apptabs a[href="${h}"]`).click();
+            return document.querySelector('.apptabs a[aria-current]').getAttribute('href'); })""", tabs)
+        self.assertEqual(marked, tabs, "each tab is marked the moment it's clicked")
+        page.wait_for_function("() => APP.active === 'library' && !document.querySelector('#grid .slot:not([data-key])') && finished > 0")
+        page.wait_for_timeout(500)
+        self.assertEqual(page.evaluate("finished"), 1, "only the last switch finished")
+        self.assertEqual(page.evaluate("location.pathname + location.hash"), "/")
+        self.assertEqual(page.evaluate("document.querySelector('.apptabs a[aria-current]').getAttribute('href')"), "/")
+        self.assertGreater(self.drawn(page), 0, "the library's own tiles")
+        # a switch overtaken by another isn't done until that one is: what waits on it carries on where the page ends up
+        got = page.evaluate("""async () => { const before = finished, first = navigateApp('/downloads'); navigateApp('/#store=Sets');
+            await first; return [APP.active, location.pathname + location.hash, finished - before]; }""")
+        self.assertEqual(got, ["library", "/#store=Sets", 1], "the later switch done when the first one says it is")
+        # and by the pointer, as fast as it goes, each way round
+        for last in ("/downloads", "/#store=Sets", "/"):
+            for h in [x for x in tabs if x != last] + [last]:
+                page.click(f'.apptabs a[href="{h}"]', no_wait_after=True)
+            page.wait_for_timeout(600)
+            self.assertEqual(page.evaluate("location.pathname + location.hash"), last)
+            self.assertEqual(page.evaluate("APP.active"), "downloads" if last == "/downloads" else "library")
+            self.assertEqual(page.evaluate("document.querySelector('.apptabs a[aria-current]').getAttribute('href')"), last)
+        self.assertEqual(errors, [])
         page.close()
 
     def test_a_tile_stays_where_it_was_clicked(self):
@@ -2846,6 +2910,19 @@ class WindowsTabsAndTasks(IsolatedTestCase):
         page.mouse.up()
         self.assertEqual(page.locator("dialog[open]").count(), 0)
         page.keyboard.press("Escape")
+        # issue #436: with a larger text size (the page zoomed), it's still beside the pointer, and follows it
+        for size in (130, 150):
+            page.evaluate(f"document.documentElement.style.zoom = '{size / 100}'")
+            x, y = drag("Rusk", "Anko")
+            ghost.wait_for()
+            box = ghost.bounding_box()
+            self.assertTrue(x < box["x"] < x + 40 and y < box["y"] < y + 40, (size, "beside the pointer", x, y, box))
+            page.mouse.move(x + 30, y + 20)
+            self.assertAlmostEqual(ghost.bounding_box()["x"], box["x"] + 30, delta=2, msg=(size, "it follows the pointer"))
+            page.keyboard.press("Escape")
+            ghost.wait_for(state="detached")
+            page.mouse.up()
+        page.evaluate("document.documentElement.style.zoom = ''")
         self.assertEqual(self.errors, [])
         page.close()
 
@@ -3695,6 +3772,23 @@ class WindowsTabsAndTasks(IsolatedTestCase):
             got = page.evaluate("apiPost('/api/folders/open', {id: '/etc'})")
             self.assertEqual(got["data"]["error"], "That isn't one of Hoard's folders.")
             self.assertEqual(len(opened), 1)
+            # Issue #433: a wide window's room used: the cards in two columns, each whole, and Settings centred
+            page.set_viewport_size({"width": 1920, "height": 1000})
+            page.wait_for_timeout(200)
+            nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()
+            self.assertGreater(body["width"], 1000, "wider than one column")
+            self.assertLess(abs(nav["x"] - (1920 - (body["x"] + body["width"]))), 60, "centred: as much room either side")
+            cards = page.locator(".set-card:not([hidden])").evaluate_all(
+                "cs => cs.map(c => { const r = c.getClientRects(); return [Math.round(r[0].left), r.length]; })")
+            self.assertEqual(len({left for left, _ in cards}), 2, ("two columns", cards))
+            self.assertEqual({n for _, n in cards}, {1}, "each card whole in one column")
+            # at a larger text size (the page zoomed), by Settings' own width: one column where two have no room
+            page.set_viewport_size({"width": 1600, "height": 1000})
+            page.evaluate("() => { document.documentElement.style.zoom = '1.5'; }")
+            page.wait_for_timeout(200)
+            lefts = page.locator(".set-card:not([hidden])").evaluate_all("cs => cs.map(c => Math.round(c.getBoundingClientRect().left))")
+            self.assertEqual(len(set(lefts)), 1, ("one column at 150%", lefts))
+            page.evaluate("() => { document.documentElement.style.zoom = ''; }")
             # a narrow window: its parts along the top again
             page.set_viewport_size({"width": 700, "height": 800})
             nav, body = page.locator(".setjump").bounding_box(), page.locator(".set-body").bounding_box()

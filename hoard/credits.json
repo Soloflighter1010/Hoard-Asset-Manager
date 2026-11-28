@@ -1,5 +1,5 @@
 {
- "_about": "Everything Hoard uses or ships, with its license (issue #227): shown in Settings, Acknowledgements, and on the website (scripts/build_acknowledgements.py). \"in\": all (every copy of Hoard), windows, mac, linux (the Flatpak), build (only to build the apps, not in them). tests/test_credits.py checks every locked package is here: Python's (\"package\", requirements*.txt) and npm's (\"npm\", package-lock.json; esbuild's per-platform builds are esbuild's).",
+ "_about": "Everything Hoard uses or ships, with its license (issue #227): shown in Settings, Acknowledgements, and on the website (scripts/build_acknowledgements.py). \"in\": all (every copy of Hoard), windows, mac, linux (the Flatpak), build (only to build the apps, not in them). tests/test_credits.py checks every locked package is here: Python's (\"package\", requirements*.txt) and npm's (\"npm\", package-lock.json; esbuild's per-platform builds are esbuild's). \"with\": the tools Hoard works with or learned from (issue #438), which have no part in it: each says what Hoard does with it (\"about\") in place of a license.",
  "groups": [
   {
    "title": "What Hoard runs on",
@@ -527,6 +527,47 @@
      "license": "MIT",
      "url": "https://github.com/sveltejs/zimmerframe",
      "in": "build"
+    }
+   ]
+  },
+  {
+   "title": "Tools Hoard works with",
+   "items": [
+    {
+     "name": "KonoAsset",
+     "url": "https://github.com/siloneco/KonoAsset",
+     "in": "with",
+     "about": "Hoard brings in its library: Settings, Bring in from KonoAsset..."
+    },
+    {
+     "name": "BB's Library Manager (BBLM)",
+     "url": "https://github.com/BunBnnuy/BBLM",
+     "in": "with",
+     "about": "Hoard brings in its library: Settings, Bring in from BB's Library Manager..."
+    },
+    {
+     "name": "VRChat Creator Companion",
+     "url": "https://vcc.docs.vrchat.com/",
+     "in": "with",
+     "about": "Projects keeps the same list of projects and package listings"
+    },
+    {
+     "name": "ALCOM",
+     "url": "https://vrc-get.anatawa12.com/en/alcom/",
+     "in": "with",
+     "about": "Projects keeps the same list of projects"
+    },
+    {
+     "name": "VRChat's template-package",
+     "url": "https://github.com/vrchat-community/template-package",
+     "in": "build",
+     "about": "Hoard for Unity is laid out and released as it does"
+    },
+    {
+     "name": "VRChat's package-list-action",
+     "url": "https://github.com/vrchat-community/package-list-action",
+     "in": "build",
+     "about": "Builds Hoard for Unity's listing for the Creator Companion"
     }
    ]
   }

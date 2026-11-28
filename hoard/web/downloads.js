@@ -141,6 +141,10 @@ function render() {
 
 /* ---------- views: the Library's archive, removed and hidden, for what's downloaded (issue #29) */
 const VIEWS = { downloads: "Downloads", updates: "Asset updates", problems: "Problems", archive: "Archive", removed: "Removed", hidden: "Hidden", space: "Disk space" };
+// Each view's icon (ui/Icon.svelte, issue #448): a download arrow, a refresh for updates, a warning, an archive box, a
+// bin, an eye with a line through it (a lock is how Hidden says it's locked) and a disk.
+const VIEW_ICONS = { downloads: "download", updates: "refresh", problems: "alert", archive: "archive", removed: "trash", hidden: "eye-off",
+                     space: "disk" };
 // The view a download is in (Downloads, Archive, Hidden or Removed).
 const viewOf = a => !a.mark ? "downloads" : a.mark === "archived" ? "archive" : a.mark;
 // Updates: what the last check found, from the Downloads and the Archive (issue #26)
@@ -160,11 +164,10 @@ function renderViews() {
   // How many downloads a view has.
   const n = v => count[v] || 0;
   const onDisk = DATA.assets.filter(takesSpace).reduce((t, a) => t + a.size, 0);   // Disk space: its count is the size
-  $("#views").innerHTML = Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
+  HoardUI.views.show($("#views"), Object.keys(VIEWS).filter(v => v === "downloads" || v === "updates" || v === state.view || n(v)
       || (v === "hidden" && p.pin_set) || (v === "space" && onDisk)).map(v =>
-    `<button role="radio" data-view="${v}" aria-checked="${state.view === v}">${VIEWS[v]}` +
-    (v === "hidden" && !p.unlocked ? ` <span aria-label="locked">&#128274;</span>`
-      : `<span class="n">${v === "space" ? sizeText(onDisk) : n(v)}</span>`) + `</button>`).join("");
+    ({ key: v, label: VIEWS[v], icon: VIEW_ICONS[v], count: v === "space" ? sizeText(onDisk) : n(v), checked: state.view === v,
+       locked: v === "hidden" && !p.unlocked })));
   const bar = $("#viewBar");
   bar.hidden = state.view === "downloads";
   bar.innerHTML = state.view === "updates" ? updatesBar(n("updates")) : state.view === "space" ? spaceBar()

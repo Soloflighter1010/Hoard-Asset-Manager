@@ -1,5 +1,5 @@
 <script>
-  // The few line icons Hoard's pop-ups use (drawn as the bar's are: a 24-unit box, round ends).
+  // The few line icons Hoard's Svelte parts use (its pop-ups, the filters' views) (drawn as the bar's are: a 24-unit box, round ends).
   let { name, size = 18 } = $props();
 </script>
 
@@ -39,6 +39,16 @@
     <path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21.5l8.8-8.8a5 5 0 0 0 0-7.1Z"/>
   {:else if name === "pencil"}
     <path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+  {:else if name === "download"}
+    <path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>
+  {:else if name === "refresh"}
+    <path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>
+  {:else if name === "eye-off"}
+    <path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5.5 0 9 5.5 9 7a12 12 0 0 1-2.6 3.4M6.5 6.6C4.4 8 3 10.6 3 12c0 1.5 3.5 7 9 7a9 9 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>
+  {:else if name === "lock"}
+    <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+  {:else if name === "disk"}
+    <rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5.5 13 8 5h8l2.5 8M7 16.5h.01M11 16.5h.01"/>
   {:else}
     <circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>
   {/if}
